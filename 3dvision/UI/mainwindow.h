@@ -4,6 +4,7 @@
 #include <QtGui/QMainWindow>
 #include <QGraphicsScene>
 #include <QThread>
+#include <QTextStream>
 
 namespace Ui
 {
@@ -17,11 +18,12 @@ class ProcessThread :public QThread{
 protected:
 	MainWindow *mw;
 	QStringList image_filenames;
+	QString output_filename;
 public:
 	ProcessThread();
 	void setUi(MainWindow *nw=NULL);
 
-	void extract(QStringList image_filenames);
+	void extract(QStringList image_filenames,QString output_filename="");
 	void run();//the main thread loop
 signals:
 	void processStarted(QString statusBarText);
@@ -45,6 +47,7 @@ private:
 private slots:
 	void on_pushButton_clicked();
 	void on_pushButton_2_clicked();
+	void on_pushButton_3_clicked();
 
 	void processStarted(QString statusBarText);
 	void processStopped(QStringList image_filenames,QImage result);

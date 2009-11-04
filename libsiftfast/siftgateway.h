@@ -21,11 +21,14 @@ namespace SIFT{
 		float distance(const Keypoint&)const;
 		float getX()const;
 		float getY()const;
+
+		static float getDistanceThreshold();
 	};
 
 	class Extractor{
 	protected:
 		static QMutex mutex;
+		QImage resizeImage(const QImage& src,int scalingFactor)const;
 	public:
 		Extractor();
 		virtual ~Extractor();

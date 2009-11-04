@@ -6,7 +6,7 @@ TARGET = 3dvision
 TEMPLATE = app
 SOURCES += main.cpp \
     UI/mainwindow.cpp \
-	SIFT/process.cpp
+    SIFT/process.cpp
 HEADERS += UI/mainwindow.h \
     SIFT/process.h
 FORMS += UI/mainwindow.ui

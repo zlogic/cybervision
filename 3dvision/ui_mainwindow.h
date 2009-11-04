@@ -1,7 +1,7 @@
 /********************************************************************************
 ** Form generated from reading ui file 'mainwindow.ui'
 **
-** Created: Sun 25. Oct 22:42:22 2009
+** Created: Wed 4. Nov 16:55:17 2009
 **      by: Qt User Interface Compiler version 4.5.3
 **
 ** WARNING! All changes made in this file will be lost when recompiling ui file!
@@ -33,6 +33,7 @@ public:
     QVBoxLayout *verticalLayout;
     QFrame *frame;
     QHBoxLayout *horizontalLayout;
+    QPushButton *pushButton_3;
     QPushButton *pushButton;
     QPushButton *pushButton_2;
     QGraphicsView *graphicsView;
@@ -58,6 +59,11 @@ public:
         horizontalLayout->setMargin(11);
         horizontalLayout->setObjectName(QString::fromUtf8("horizontalLayout"));
         horizontalLayout->setContentsMargins(0, -1, 0, -1);
+        pushButton_3 = new QPushButton(frame);
+        pushButton_3->setObjectName(QString::fromUtf8("pushButton_3"));
+
+        horizontalLayout->addWidget(pushButton_3);
+
         pushButton = new QPushButton(frame);
         pushButton->setObjectName(QString::fromUtf8("pushButton"));
 
@@ -90,8 +96,9 @@ public:
     void retranslateUi(QMainWindow *MainWindow)
     {
         MainWindow->setWindowTitle(QApplication::translate("MainWindow", "MainWindow", 0, QApplication::UnicodeUTF8));
-        pushButton->setText(QApplication::translate("MainWindow", "Open", 0, QApplication::UnicodeUTF8));
-        pushButton_2->setText(QApplication::translate("MainWindow", "Save", 0, QApplication::UnicodeUTF8));
+        pushButton_3->setText(QApplication::translate("MainWindow", "Open && save resulting data", 0, QApplication::UnicodeUTF8));
+        pushButton->setText(QApplication::translate("MainWindow", "Open && display result", 0, QApplication::UnicodeUTF8));
+        pushButton_2->setText(QApplication::translate("MainWindow", "Save result image", 0, QApplication::UnicodeUTF8));
         Q_UNUSED(MainWindow);
     } // retranslateUi
 

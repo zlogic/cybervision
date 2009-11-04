@@ -31,9 +31,16 @@
         <number>0</number>
        </property>
        <item>
+        <widget class="QPushButton" name="pushButton_3">
+         <property name="text">
+          <string>Open &amp;&amp; save resulting data</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QPushButton" name="pushButton">
          <property name="text">
-          <string>Open</string>
+          <string>Open &amp;&amp; display result</string>
          </property>
         </widget>
        </item>
@@ -43,7 +50,7 @@
           <bool>false</bool>
          </property>
          <property name="text">
-          <string>Save</string>
+          <string>Save result image</string>
          </property>
         </widget>
        </item>

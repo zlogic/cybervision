@@ -22,7 +22,7 @@ typedef QPair<QPoint,QPoint> KeypointMatch;
 
 Process::Process(){}
 
-QImage Process::run(QString filename1,QString filename2){
+bool Process::run(QString filename1,QString filename2,OutputMode outputMode,QImage& outputImage,QTextStream& outputTextStream){
 	QImage img1(filename1),img2(filename2);
 	QList <SIFT::Keypoint> keypoints1,keypoints2;
 	{
@@ -80,32 +80,43 @@ QImage Process::run(QString filename1,QString filename2){
 	}
 
 	//Output result
-	QImage result(qMax(img1.width(),img2.width()),img1.height()+img2.height(),QImage::Format_RGB32);
-	QPainter painter(&result);
-	painter.drawImage(0,0,img1);
-	painter.drawImage(0,img1.height(),img2);
-	painter.setPen(QPen(QColor("orange")));
-	int height= img1.height();
-	//Draw lines
-	for(QMap<float,QList<KeypointMatch> >::const_iterator it= matchlist.begin();it!=matchlist.end();it++){
-		if(it.key()>=0.4)
-			break;
-		for(QList<KeypointMatch>::ConstIterator jt=it.value().begin();jt!=it.value().end();jt++){
-			//qDebug()<<"drawing line from"<<(*jt).first<<" to "<<QPoint((*jt).second.x(),(*jt).second.y()+height);
-			painter.drawLine((*jt).first,QPoint((*jt).second.x(),(*jt).second.y()+height));
+	if((outputMode&PROCESS_OUTPUT_IMAGE)==PROCESS_OUTPUT_IMAGE){
+		outputImage=QImage(qMax(img1.width(),img2.width()),img1.height()+img2.height(),QImage::Format_RGB32);
+		QPainter painter(&outputImage);
+		painter.drawImage(0,0,img1);
+		painter.drawImage(0,img1.height(),img2);
+		painter.setPen(QPen(QColor("orange")));
+		int height= img1.height();
+		//Draw lines
+		for(QMap<float,QList<KeypointMatch> >::const_iterator it= matchlist.begin();it!=matchlist.end();it++){
+			if(it.key()>=SIFT::Keypoint::getDistanceThreshold())
+				break;
+			for(QList<KeypointMatch>::ConstIterator jt=it.value().begin();jt!=it.value().end();jt++){
+				//qDebug()<<"drawing line from"<<(*jt).first<<" to "<<QPoint((*jt).second.x(),(*jt).second.y()+height);
+				painter.drawLine((*jt).first,QPoint((*jt).second.x(),(*jt).second.y()+height));
+			}
 		}
+
+		//Draw points
+		painter.setPen(QPen(QColor("yellow")));
+		for(QList<SIFT::Keypoint>::const_iterator it= keypoints1.begin();it!=keypoints1.end();it++)
+			painter.drawPoint((int)it->getX(),(int)it->getY());
+		for(QList<SIFT::Keypoint>::const_iterator it= keypoints2.begin();it!=keypoints2.end();it++)
+			painter.drawPoint((int)it->getX(),(int)it->getY()+height);
+
+		painter.end();
+	}else if((outputMode&PROCESS_OUTPUT_STRING)==PROCESS_OUTPUT_STRING){
+		outputTextStream<<"X1\tY1\tX2\tY2\tDistance\r\n";
+		for(QMap<float,QList<KeypointMatch> >::const_iterator it= matchlist.begin();it!=matchlist.end();it++){
+			if(it.key()>=SIFT::Keypoint::getDistanceThreshold())
+				break;
+			for(QList<KeypointMatch>::ConstIterator jt=it.value().begin();jt!=it.value().end();jt++){
+				outputTextStream<<(*jt).first.x()<<"\t"<<(*jt).first.y()<<"\t"<<(*jt).second.x()<<"\t"<<(*jt).second.y()<<"\t"<<it.key()<<"\r\n";
+			}
+		}
+		outputTextStream.flush();
 	}
-
-	//Draw points
-	painter.setPen(QPen(QColor("yellow")));
-	for(QList<SIFT::Keypoint>::const_iterator it= keypoints1.begin();it!=keypoints1.end();it++)
-		painter.drawPoint((int)it->getX(),(int)it->getY());
-	for(QList<SIFT::Keypoint>::const_iterator it= keypoints2.begin();it!=keypoints2.end();it++)
-		painter.drawPoint((int)it->getX(),(int)it->getY()+height);
-
-	painter.end();
-
-	return result;
+	return true;
 }
 
 QImage Process::run(QString filename){
