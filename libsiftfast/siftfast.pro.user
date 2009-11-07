@@ -249,11 +249,6 @@
     <value type="QString" >LANG=en</value>
     <value type="QString" >LOCALAPPDATA=C:\Users\Zlogic\AppData\Local</value>
     <value type="QString" >LOGONSERVER=\\OCTANE</value>
-    <value type="QString" >MPCONFIG_PRODUCTAPPDATAPATH=C:\ProgramData\Microsoft\Microsoft Antimalware</value>
-    <value type="QString" >MPCONFIG_PRODUCTCODENAME=Salt Lake City</value>
-    <value type="QString" >MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MIF707~1</value>
-    <value type="QString" >MPCONFIG_PRODUCTUSERAPPDATAPATH=C:\Users\Zlogic\AppData\Local\Microsoft\Microsoft Antimalware</value>
-    <value type="QString" >MPCONFIG_REPORTINGGUID=A3CA5F79-6285-460E-B5CB-BCB3507B3F47</value>
     <value type="QString" >NUMBER_OF_PROCESSORS=2</value>
     <value type="QString" >OS=Windows_NT</value>
     <value type="QString" >PATH=C:\Qt\2009.04\mingw\bin;C:\Qt\2009.04\qt\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files\ATI Technologies\ATI.ACE\Core-Static;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files\QT Lite\QTSystem;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
@@ -276,7 +271,6 @@
     <value type="QString" >USERNAME=Zlogic</value>
     <value type="QString" >USERPROFILE=C:\Users\Zlogic</value>
     <value type="QString" >VBOX_INSTALL_PATH=C:\Program Files\Sun\VirtualBox\</value>
-    <value type="QString" >VS90COMNTOOLS=c:\Program Files\Microsoft Visual Studio 9.0\Common7\Tools\</value>
     <value type="QString" >WINDIR=C:\Windows</value>
    </valuelist>
    <valuelist key="abstractProcess.arguments" type="QVariantList" >
@@ -312,11 +306,6 @@
     <value type="QString" >LANG=en</value>
     <value type="QString" >LOCALAPPDATA=C:\Users\Zlogic\AppData\Local</value>
     <value type="QString" >LOGONSERVER=\\OCTANE</value>
-    <value type="QString" >MPCONFIG_PRODUCTAPPDATAPATH=C:\ProgramData\Microsoft\Microsoft Antimalware</value>
-    <value type="QString" >MPCONFIG_PRODUCTCODENAME=Salt Lake City</value>
-    <value type="QString" >MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MIF707~1</value>
-    <value type="QString" >MPCONFIG_PRODUCTUSERAPPDATAPATH=C:\Users\Zlogic\AppData\Local\Microsoft\Microsoft Antimalware</value>
-    <value type="QString" >MPCONFIG_REPORTINGGUID=A3CA5F79-6285-460E-B5CB-BCB3507B3F47</value>
     <value type="QString" >NUMBER_OF_PROCESSORS=2</value>
     <value type="QString" >OS=Windows_NT</value>
     <value type="QString" >PATH=C:\Qt\2009.04\mingw\bin;C:\Qt\2009.04\qt\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files\ATI Technologies\ATI.ACE\Core-Static;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files\QT Lite\QTSystem;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
@@ -339,7 +328,6 @@
     <value type="QString" >USERNAME=Zlogic</value>
     <value type="QString" >USERPROFILE=C:\Users\Zlogic</value>
     <value type="QString" >VBOX_INSTALL_PATH=C:\Program Files\Sun\VirtualBox\</value>
-    <value type="QString" >VS90COMNTOOLS=c:\Program Files\Microsoft Visual Studio 9.0\Common7\Tools\</value>
     <value type="QString" >WINDIR=C:\Windows</value>
    </valuelist>
    <valuelist key="abstractProcess.arguments" type="QVariantList" >
@@ -366,11 +354,6 @@
     <value type="QString" >LANG=en</value>
     <value type="QString" >LOCALAPPDATA=C:\Users\Zlogic\AppData\Local</value>
     <value type="QString" >LOGONSERVER=\\OCTANE</value>
-    <value type="QString" >MPCONFIG_PRODUCTAPPDATAPATH=C:\ProgramData\Microsoft\Microsoft Antimalware</value>
-    <value type="QString" >MPCONFIG_PRODUCTCODENAME=Salt Lake City</value>
-    <value type="QString" >MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MIF707~1</value>
-    <value type="QString" >MPCONFIG_PRODUCTUSERAPPDATAPATH=C:\Users\Zlogic\AppData\Local\Microsoft\Microsoft Antimalware</value>
-    <value type="QString" >MPCONFIG_REPORTINGGUID=A3CA5F79-6285-460E-B5CB-BCB3507B3F47</value>
     <value type="QString" >NUMBER_OF_PROCESSORS=2</value>
     <value type="QString" >OS=Windows_NT</value>
     <value type="QString" >PATH=C:\Qt\2009.04\mingw\bin;C:\Qt\2009.04\qt\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files\ATI Technologies\ATI.ACE\Core-Static;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files\QT Lite\QTSystem;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
@@ -393,7 +376,6 @@
     <value type="QString" >USERNAME=Zlogic</value>
     <value type="QString" >USERPROFILE=C:\Users\Zlogic</value>
     <value type="QString" >VBOX_INSTALL_PATH=C:\Program Files\Sun\VirtualBox\</value>
-    <value type="QString" >VS90COMNTOOLS=c:\Program Files\Microsoft Visual Studio 9.0\Common7\Tools\</value>
     <value type="QString" >WINDIR=C:\Windows</value>
    </valuelist>
    <valuelist key="abstractProcess.arguments" type="QVariantList" >

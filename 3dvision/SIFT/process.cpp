@@ -6,7 +6,7 @@
 #include <QMap>
 #include <QPainter>
 #include <QPair>
-//#include <QDebug>
+#include <QDebug>
 
 bool operator<(const QPoint p1,const QPoint p2){
 	if(p1.y()<p2.y())
@@ -120,15 +120,18 @@ bool Process::run(QString filename1,QString filename2,OutputMode outputMode,QIma
 }
 
 QImage Process::run(QString filename){
-	QImage bitmap(filename);
+	QImage bitmap= QImage(filename).convertToFormat(QImage::Format_RGB32);
 	SIFT::Extractor extractor;
 	QList <SIFT::Keypoint> keypoints= extractor.extract(bitmap);
 
 	//Output result
+	qDebug()<<"run completed, drawing...";
 	QPainter painter(&bitmap);
 	painter.setPen(QColor("yellow"));
-	for(QList<SIFT::Keypoint>::const_iterator it= keypoints.begin();it!=keypoints.end();it++)
+	for(QList<SIFT::Keypoint>::const_iterator it= keypoints.begin();it!=keypoints.end();it++){
+	qDebug()<<"run completed, drawing point at"<<(int)it->getX()<<","<<(int)it->getY();
 		painter.drawPoint((int)it->getX(),(int)it->getY());
+	}
 
 	painter.end();
 

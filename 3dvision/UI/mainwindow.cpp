@@ -50,6 +50,8 @@ void MainWindow::on_pushButton_3_clicked(){
 	QString saveFilter= "Combination data (*.txt)";
 	QString saveFileName = QFileDialog::getSaveFileName(this,"Save the result","",saveFilter,0,0);
 
+	if(saveFileName.isNull())
+		saveFileName="";
 	thread.extract(filenames,saveFileName);
 }
 
