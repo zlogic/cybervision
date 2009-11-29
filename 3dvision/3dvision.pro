@@ -10,3 +10,4 @@ SOURCES += main.cpp \
 HEADERS += UI/mainwindow.h \
     SIFT/process.h
 FORMS += UI/mainwindow.ui
+OTHER_FILES += 
