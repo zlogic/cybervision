@@ -50,7 +50,7 @@
  </data>
  <data>
   <variable>activebuildconfiguration</variable>
-  <value type="QString">Release</value>
+  <value type="QString">Debug</value>
  </data>
  <data>
   <variable>buildConfiguration-Debug</variable>
@@ -81,7 +81,9 @@
    <valuelist key="abstractProcess.Environment" type="QVariantList">
     <value type="QString">ALLUSERSPROFILE=C:\ProgramData</value>
     <value type="QString">APPDATA=C:\Users\Zlogic\AppData\Roaming</value>
-    <value type="QString">COMMONPROGRAMFILES=C:\Program Files\Common Files</value>
+    <value type="QString">COMMONPROGRAMFILES=C:\Program Files (x86)\Common Files</value>
+    <value type="QString">COMMONPROGRAMFILES(X86)=C:\Program Files (x86)\Common Files</value>
+    <value type="QString">COMMONPROGRAMW6432=C:\Program Files\Common Files</value>
     <value type="QString">COMPUTERNAME=OCTANE</value>
     <value type="QString">COMSPEC=C:\Windows\system32\cmd.exe</value>
     <value type="QString">FP_NO_HOST_CHECK=NO</value>
@@ -90,47 +92,44 @@
     <value type="QString">LANG=en</value>
     <value type="QString">LOCALAPPDATA=C:\Users\Zlogic\AppData\Local</value>
     <value type="QString">LOGONSERVER=\\OCTANE</value>
-    <value type="QString">MPCONFIG_PRODUCTAPPDATAPATH=C:\ProgramData\Microsoft\Microsoft Antimalware</value>
-    <value type="QString">MPCONFIG_PRODUCTCODENAME=Salt Lake City</value>
-    <value type="QString">MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MIF707~1</value>
-    <value type="QString">MPCONFIG_PRODUCTUSERAPPDATAPATH=C:\Users\Zlogic\AppData\Local\Microsoft\Microsoft Antimalware</value>
-    <value type="QString">MPCONFIG_REPORTINGGUID=A3CA5F79-6285-460E-B5CB-BCB3507B3F47</value>
     <value type="QString">NUMBER_OF_PROCESSORS=2</value>
     <value type="QString">OS=Windows_NT</value>
-    <value type="QString">PATH=C:\Qt\2009.04\mingw\bin;C:\Qt\2009.04\qt\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files\ATI Technologies\ATI.ACE\Core-Static;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files\QT Lite\QTSystem;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
+    <value type="QString">PATH=C:\Qt\2009.05\mingw\bin;C:\Qt\2009.05\qt\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files (x86)\QT Lite\QTSystem;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
     <value type="QString">PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC</value>
     <value type="QString">PROCESSOR_ARCHITECTURE=x86</value>
-    <value type="QString">PROCESSOR_IDENTIFIER=x86 Family 6 Model 15 Stepping 2, GenuineIntel</value>
+    <value type="QString">PROCESSOR_ARCHITEW6432=AMD64</value>
+    <value type="QString">PROCESSOR_IDENTIFIER=Intel64 Family 6 Model 15 Stepping 2, GenuineIntel</value>
     <value type="QString">PROCESSOR_LEVEL=6</value>
     <value type="QString">PROCESSOR_REVISION=0f02</value>
     <value type="QString">PROGRAMDATA=C:\ProgramData</value>
-    <value type="QString">PROGRAMFILES=C:\Program Files</value>
+    <value type="QString">PROGRAMFILES=C:\Program Files (x86)</value>
+    <value type="QString">PROGRAMFILES(X86)=C:\Program Files (x86)</value>
+    <value type="QString">PROGRAMW6432=C:\Program Files</value>
     <value type="QString">PSMODULEPATH=C:\Windows\system32\WindowsPowerShell\v1.0\Modules\</value>
     <value type="QString">PUBLIC=C:\Users\Public</value>
-    <value type="QString">QTDIR=C:/Qt/2009.04/qt</value>
+    <value type="QString">QTDIR=C:/Qt/2009.05/qt</value>
     <value type="QString">SESSIONNAME=Console</value>
     <value type="QString">SYSTEMDRIVE=C:</value>
     <value type="QString">SYSTEMROOT=C:\Windows</value>
     <value type="QString">TEMP=C:\Users\Zlogic\AppData\Local\Temp</value>
     <value type="QString">TMP=C:\Users\Zlogic\AppData\Local\Temp</value>
-    <value type="QString">USERDOMAIN=octane</value>
+    <value type="QString">USERDOMAIN=Octane</value>
     <value type="QString">USERNAME=Zlogic</value>
     <value type="QString">USERPROFILE=C:\Users\Zlogic</value>
     <value type="QString">VBOX_INSTALL_PATH=C:\Program Files\Sun\VirtualBox\</value>
-    <value type="QString">VS90COMNTOOLS=c:\Program Files\Microsoft Visual Studio 9.0\Common7\Tools\</value>
     <value type="QString">WINDIR=C:\Windows</value>
    </valuelist>
    <valuelist key="abstractProcess.arguments" type="QVariantList">
-    <value type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/3dvision/3dvision/3dvision.pro</value>
+    <value type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/Code/3dvision/3dvision.pro</value>
     <value type="QString">-spec</value>
     <value type="QString">win32-g++</value>
     <value type="QString">-r</value>
     <value type="QString">INCLUDEPATH+=../libsiftfast</value>
     <value type="QString">LIBS+=../libsiftfast/debug/libsiftfast.a</value>
    </valuelist>
-   <value key="abstractProcess.command" type="QString">C:/Qt/2009.04/qt/bin/qmake.exe</value>
-   <value key="abstractProcess.enabled" type="bool">false</value>
-   <value key="abstractProcess.workingDirectory" type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/3dvision/3dvision</value>
+   <value key="abstractProcess.command" type="QString">c:/qt/2009.05/qt/bin/qmake.exe</value>
+   <value key="abstractProcess.enabled" type="bool">true</value>
+   <value key="abstractProcess.workingDirectory" type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/Code/3dvision</value>
    <value key="buildConfiguration" type=""></value>
    <valuelist key="qmakeArgs" type="QVariantList">
     <value type="QString">INCLUDEPATH+=../libsiftfast</value>
@@ -145,7 +144,9 @@
    <valuelist key="abstractProcess.Environment" type="QVariantList">
     <value type="QString">ALLUSERSPROFILE=C:\ProgramData</value>
     <value type="QString">APPDATA=C:\Users\Zlogic\AppData\Roaming</value>
-    <value type="QString">COMMONPROGRAMFILES=C:\Program Files\Common Files</value>
+    <value type="QString">COMMONPROGRAMFILES=C:\Program Files (x86)\Common Files</value>
+    <value type="QString">COMMONPROGRAMFILES(X86)=C:\Program Files (x86)\Common Files</value>
+    <value type="QString">COMMONPROGRAMW6432=C:\Program Files\Common Files</value>
     <value type="QString">COMPUTERNAME=OCTANE</value>
     <value type="QString">COMSPEC=C:\Windows\system32\cmd.exe</value>
     <value type="QString">FP_NO_HOST_CHECK=NO</value>
@@ -154,42 +155,40 @@
     <value type="QString">LANG=en</value>
     <value type="QString">LOCALAPPDATA=C:\Users\Zlogic\AppData\Local</value>
     <value type="QString">LOGONSERVER=\\OCTANE</value>
-    <value type="QString">MPCONFIG_PRODUCTAPPDATAPATH=C:\ProgramData\Microsoft\Microsoft Antimalware</value>
-    <value type="QString">MPCONFIG_PRODUCTCODENAME=Salt Lake City</value>
-    <value type="QString">MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MIF707~1</value>
-    <value type="QString">MPCONFIG_PRODUCTUSERAPPDATAPATH=C:\Users\Zlogic\AppData\Local\Microsoft\Microsoft Antimalware</value>
-    <value type="QString">MPCONFIG_REPORTINGGUID=A3CA5F79-6285-460E-B5CB-BCB3507B3F47</value>
     <value type="QString">NUMBER_OF_PROCESSORS=2</value>
     <value type="QString">OS=Windows_NT</value>
-    <value type="QString">PATH=C:\Qt\2009.04\mingw\bin;C:\Qt\2009.04\qt\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files\ATI Technologies\ATI.ACE\Core-Static;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files\QT Lite\QTSystem;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
+    <value type="QString">PATH=C:\Qt\2009.05\mingw\bin;C:\Qt\2009.05\qt\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files (x86)\QT Lite\QTSystem;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
     <value type="QString">PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC</value>
     <value type="QString">PROCESSOR_ARCHITECTURE=x86</value>
-    <value type="QString">PROCESSOR_IDENTIFIER=x86 Family 6 Model 15 Stepping 2, GenuineIntel</value>
+    <value type="QString">PROCESSOR_ARCHITEW6432=AMD64</value>
+    <value type="QString">PROCESSOR_IDENTIFIER=Intel64 Family 6 Model 15 Stepping 2, GenuineIntel</value>
     <value type="QString">PROCESSOR_LEVEL=6</value>
     <value type="QString">PROCESSOR_REVISION=0f02</value>
     <value type="QString">PROGRAMDATA=C:\ProgramData</value>
-    <value type="QString">PROGRAMFILES=C:\Program Files</value>
+    <value type="QString">PROGRAMFILES=C:\Program Files (x86)</value>
+    <value type="QString">PROGRAMFILES(X86)=C:\Program Files (x86)</value>
+    <value type="QString">PROGRAMW6432=C:\Program Files</value>
     <value type="QString">PSMODULEPATH=C:\Windows\system32\WindowsPowerShell\v1.0\Modules\</value>
     <value type="QString">PUBLIC=C:\Users\Public</value>
-    <value type="QString">QTDIR=C:/Qt/2009.04/qt</value>
+    <value type="QString">QTDIR=C:/Qt/2009.05/qt</value>
     <value type="QString">SESSIONNAME=Console</value>
     <value type="QString">SYSTEMDRIVE=C:</value>
     <value type="QString">SYSTEMROOT=C:\Windows</value>
     <value type="QString">TEMP=C:\Users\Zlogic\AppData\Local\Temp</value>
     <value type="QString">TMP=C:\Users\Zlogic\AppData\Local\Temp</value>
-    <value type="QString">USERDOMAIN=octane</value>
+    <value type="QString">USERDOMAIN=Octane</value>
     <value type="QString">USERNAME=Zlogic</value>
     <value type="QString">USERPROFILE=C:\Users\Zlogic</value>
     <value type="QString">VBOX_INSTALL_PATH=C:\Program Files\Sun\VirtualBox\</value>
-    <value type="QString">VS90COMNTOOLS=c:\Program Files\Microsoft Visual Studio 9.0\Common7\Tools\</value>
     <value type="QString">WINDIR=C:\Windows</value>
    </valuelist>
+   <value key="abstractProcess.IgnoreReturnValue" type="bool">false</value>
    <valuelist key="abstractProcess.arguments" type="QVariantList">
     <value type="QString">-w</value>
    </valuelist>
-   <value key="abstractProcess.command" type="QString">C:/Qt/2009.04/mingw/bin/mingw32-make.exe</value>
+   <value key="abstractProcess.command" type="QString">C:/Qt/2009.05/mingw/bin/mingw32-make.exe</value>
    <value key="abstractProcess.enabled" type="bool">true</value>
-   <value key="abstractProcess.workingDirectory" type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/3dvision/3dvision</value>
+   <value key="abstractProcess.workingDirectory" type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/Code/3dvision</value>
   </valuemap>
  </data>
  <data>
@@ -245,6 +244,10 @@
    <value key="abstractProcess.command" type="QString">C:/Qt/2009.04/mingw/bin/mingw32-make.exe</value>
    <value key="abstractProcess.enabled" type="bool">true</value>
    <value key="abstractProcess.workingDirectory" type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/3dvision/3dvision</value>
+   <value key="cleanConfig" type="bool">true</value>
+   <valuelist key="makeargs" type="QVariantList">
+    <value type="QString">clean</value>
+   </valuelist>
   </valuemap>
  </data>
  <data>
@@ -254,7 +257,9 @@
    <valuelist key="abstractProcess.Environment" type="QVariantList">
     <value type="QString">ALLUSERSPROFILE=C:\ProgramData</value>
     <value type="QString">APPDATA=C:\Users\Zlogic\AppData\Roaming</value>
-    <value type="QString">COMMONPROGRAMFILES=C:\Program Files\Common Files</value>
+    <value type="QString">COMMONPROGRAMFILES=C:\Program Files (x86)\Common Files</value>
+    <value type="QString">COMMONPROGRAMFILES(X86)=C:\Program Files (x86)\Common Files</value>
+    <value type="QString">COMMONPROGRAMW6432=C:\Program Files\Common Files</value>
     <value type="QString">COMPUTERNAME=OCTANE</value>
     <value type="QString">COMSPEC=C:\Windows\system32\cmd.exe</value>
     <value type="QString">FP_NO_HOST_CHECK=NO</value>
@@ -265,28 +270,31 @@
     <value type="QString">LOGONSERVER=\\OCTANE</value>
     <value type="QString">MPCONFIG_PRODUCTAPPDATAPATH=C:\ProgramData\Microsoft\Microsoft Antimalware</value>
     <value type="QString">MPCONFIG_PRODUCTCODENAME=Salt Lake City</value>
-    <value type="QString">MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MIF707~1</value>
+    <value type="QString">MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MICROS~2</value>
     <value type="QString">MPCONFIG_PRODUCTUSERAPPDATAPATH=C:\Users\Zlogic\AppData\Local\Microsoft\Microsoft Antimalware</value>
-    <value type="QString">MPCONFIG_REPORTINGGUID=A3CA5F79-6285-460E-B5CB-BCB3507B3F47</value>
+    <value type="QString">MPCONFIG_REPORTINGGUID=826B690B-B607-41C6-8853-A89EAA76AABA</value>
     <value type="QString">NUMBER_OF_PROCESSORS=2</value>
     <value type="QString">OS=Windows_NT</value>
-    <value type="QString">PATH=C:\Qt\2009.05-rc1\mingw\bin;C:\Qt\2009.05-rc1\qt\bin;%CommonProgramFiles%\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files\ATI Technologies\ATI.ACE\Core-Static;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files\QT Lite\QTSystem;C:\Program Files\Calibre2\;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
+    <value type="QString">PATH=C:\Qt\2009.05\mingw\bin;C:\Qt\2009.05\qt\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files (x86)\QT Lite\QTSystem;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
     <value type="QString">PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC</value>
     <value type="QString">PROCESSOR_ARCHITECTURE=x86</value>
-    <value type="QString">PROCESSOR_IDENTIFIER=x86 Family 6 Model 15 Stepping 2, GenuineIntel</value>
+    <value type="QString">PROCESSOR_ARCHITEW6432=AMD64</value>
+    <value type="QString">PROCESSOR_IDENTIFIER=Intel64 Family 6 Model 15 Stepping 2, GenuineIntel</value>
     <value type="QString">PROCESSOR_LEVEL=6</value>
     <value type="QString">PROCESSOR_REVISION=0f02</value>
     <value type="QString">PROGRAMDATA=C:\ProgramData</value>
-    <value type="QString">PROGRAMFILES=C:\Program Files</value>
+    <value type="QString">PROGRAMFILES=C:\Program Files (x86)</value>
+    <value type="QString">PROGRAMFILES(X86)=C:\Program Files (x86)</value>
+    <value type="QString">PROGRAMW6432=C:\Program Files</value>
     <value type="QString">PSMODULEPATH=C:\Windows\system32\WindowsPowerShell\v1.0\Modules\</value>
     <value type="QString">PUBLIC=C:\Users\Public</value>
-    <value type="QString">QTDIR=C:/Qt/2009.05-rc1/qt</value>
+    <value type="QString">QTDIR=C:/Qt/2009.05/qt</value>
     <value type="QString">SESSIONNAME=Console</value>
     <value type="QString">SYSTEMDRIVE=C:</value>
     <value type="QString">SYSTEMROOT=C:\Windows</value>
     <value type="QString">TEMP=C:\Users\Zlogic\AppData\Local\Temp</value>
     <value type="QString">TMP=C:\Users\Zlogic\AppData\Local\Temp</value>
-    <value type="QString">USERDOMAIN=octane</value>
+    <value type="QString">USERDOMAIN=Octane</value>
     <value type="QString">USERNAME=Zlogic</value>
     <value type="QString">USERPROFILE=C:\Users\Zlogic</value>
     <value type="QString">VBOX_INSTALL_PATH=C:\Program Files\Sun\VirtualBox\</value>
@@ -299,15 +307,15 @@
     <value type="QString">-r</value>
     <value type="QString">CONFIG+=release</value>
     <value type="QString">INCLUDEPATH+=../libsiftfast</value>
-    <value type="QString">LIBS+=../libsiftfast/release/libsiftfast.a</value>
+    <value type="QString">QMAKE_LIBS+=-L../libsiftfast/release/ -lsiftfast</value>
    </valuelist>
-   <value key="abstractProcess.command" type="QString">c:/qt/2009.05-rc1/qt/bin/qmake.exe</value>
+   <value key="abstractProcess.command" type="QString">c:/qt/2009.05/qt/bin/qmake.exe</value>
    <value key="abstractProcess.enabled" type="bool">true</value>
    <value key="abstractProcess.workingDirectory" type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/Code/3dvision</value>
    <value key="buildConfiguration" type=""></value>
    <valuelist key="qmakeArgs" type="QVariantList">
     <value type="QString">INCLUDEPATH+=../libsiftfast</value>
-    <value type="QString">LIBS+=../libsiftfast/release/libsiftfast.a</value>
+    <value type="QString">QMAKE_LIBS+=-L../libsiftfast/release/ -lsiftfast</value>
    </valuelist>
   </valuemap>
  </data>
@@ -318,7 +326,9 @@
    <valuelist key="abstractProcess.Environment" type="QVariantList">
     <value type="QString">ALLUSERSPROFILE=C:\ProgramData</value>
     <value type="QString">APPDATA=C:\Users\Zlogic\AppData\Roaming</value>
-    <value type="QString">COMMONPROGRAMFILES=C:\Program Files\Common Files</value>
+    <value type="QString">COMMONPROGRAMFILES=C:\Program Files (x86)\Common Files</value>
+    <value type="QString">COMMONPROGRAMFILES(X86)=C:\Program Files (x86)\Common Files</value>
+    <value type="QString">COMMONPROGRAMW6432=C:\Program Files\Common Files</value>
     <value type="QString">COMPUTERNAME=OCTANE</value>
     <value type="QString">COMSPEC=C:\Windows\system32\cmd.exe</value>
     <value type="QString">FP_NO_HOST_CHECK=NO</value>
@@ -329,28 +339,31 @@
     <value type="QString">LOGONSERVER=\\OCTANE</value>
     <value type="QString">MPCONFIG_PRODUCTAPPDATAPATH=C:\ProgramData\Microsoft\Microsoft Antimalware</value>
     <value type="QString">MPCONFIG_PRODUCTCODENAME=Salt Lake City</value>
-    <value type="QString">MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MIF707~1</value>
+    <value type="QString">MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MICROS~2</value>
     <value type="QString">MPCONFIG_PRODUCTUSERAPPDATAPATH=C:\Users\Zlogic\AppData\Local\Microsoft\Microsoft Antimalware</value>
-    <value type="QString">MPCONFIG_REPORTINGGUID=A3CA5F79-6285-460E-B5CB-BCB3507B3F47</value>
+    <value type="QString">MPCONFIG_REPORTINGGUID=826B690B-B607-41C6-8853-A89EAA76AABA</value>
     <value type="QString">NUMBER_OF_PROCESSORS=2</value>
     <value type="QString">OS=Windows_NT</value>
-    <value type="QString">PATH=C:\Qt\2009.05-rc1\mingw\bin;C:\Qt\2009.05-rc1\qt\bin;%CommonProgramFiles%\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files\ATI Technologies\ATI.ACE\Core-Static;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files\QT Lite\QTSystem;C:\Program Files\Calibre2\;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
+    <value type="QString">PATH=C:\Qt\2009.05\mingw\bin;C:\Qt\2009.05\qt\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files (x86)\QT Lite\QTSystem;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
     <value type="QString">PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC</value>
     <value type="QString">PROCESSOR_ARCHITECTURE=x86</value>
-    <value type="QString">PROCESSOR_IDENTIFIER=x86 Family 6 Model 15 Stepping 2, GenuineIntel</value>
+    <value type="QString">PROCESSOR_ARCHITEW6432=AMD64</value>
+    <value type="QString">PROCESSOR_IDENTIFIER=Intel64 Family 6 Model 15 Stepping 2, GenuineIntel</value>
     <value type="QString">PROCESSOR_LEVEL=6</value>
     <value type="QString">PROCESSOR_REVISION=0f02</value>
     <value type="QString">PROGRAMDATA=C:\ProgramData</value>
-    <value type="QString">PROGRAMFILES=C:\Program Files</value>
+    <value type="QString">PROGRAMFILES=C:\Program Files (x86)</value>
+    <value type="QString">PROGRAMFILES(X86)=C:\Program Files (x86)</value>
+    <value type="QString">PROGRAMW6432=C:\Program Files</value>
     <value type="QString">PSMODULEPATH=C:\Windows\system32\WindowsPowerShell\v1.0\Modules\</value>
     <value type="QString">PUBLIC=C:\Users\Public</value>
-    <value type="QString">QTDIR=C:/Qt/2009.05-rc1/qt</value>
+    <value type="QString">QTDIR=C:/Qt/2009.05/qt</value>
     <value type="QString">SESSIONNAME=Console</value>
     <value type="QString">SYSTEMDRIVE=C:</value>
     <value type="QString">SYSTEMROOT=C:\Windows</value>
     <value type="QString">TEMP=C:\Users\Zlogic\AppData\Local\Temp</value>
     <value type="QString">TMP=C:\Users\Zlogic\AppData\Local\Temp</value>
-    <value type="QString">USERDOMAIN=octane</value>
+    <value type="QString">USERDOMAIN=Octane</value>
     <value type="QString">USERNAME=Zlogic</value>
     <value type="QString">USERPROFILE=C:\Users\Zlogic</value>
     <value type="QString">VBOX_INSTALL_PATH=C:\Program Files\Sun\VirtualBox\</value>
@@ -360,7 +373,7 @@
    <valuelist key="abstractProcess.arguments" type="QVariantList">
     <value type="QString">-w</value>
    </valuelist>
-   <value key="abstractProcess.command" type="QString">C:/Qt/2009.05-rc1/mingw/bin/mingw32-make.exe</value>
+   <value key="abstractProcess.command" type="QString">C:/Qt/2009.05/mingw/bin/mingw32-make.exe</value>
    <value key="abstractProcess.enabled" type="bool">true</value>
    <value key="abstractProcess.workingDirectory" type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/Code/3dvision</value>
   </valuemap>
@@ -372,7 +385,9 @@
    <valuelist key="abstractProcess.Environment" type="QVariantList">
     <value type="QString">ALLUSERSPROFILE=C:\ProgramData</value>
     <value type="QString">APPDATA=C:\Users\Zlogic\AppData\Roaming</value>
-    <value type="QString">COMMONPROGRAMFILES=C:\Program Files\Common Files</value>
+    <value type="QString">COMMONPROGRAMFILES=C:\Program Files (x86)\Common Files</value>
+    <value type="QString">COMMONPROGRAMFILES(X86)=C:\Program Files (x86)\Common Files</value>
+    <value type="QString">COMMONPROGRAMW6432=C:\Program Files\Common Files</value>
     <value type="QString">COMPUTERNAME=OCTANE</value>
     <value type="QString">COMSPEC=C:\Windows\system32\cmd.exe</value>
     <value type="QString">FP_NO_HOST_CHECK=NO</value>
@@ -383,28 +398,31 @@
     <value type="QString">LOGONSERVER=\\OCTANE</value>
     <value type="QString">MPCONFIG_PRODUCTAPPDATAPATH=C:\ProgramData\Microsoft\Microsoft Antimalware</value>
     <value type="QString">MPCONFIG_PRODUCTCODENAME=Salt Lake City</value>
-    <value type="QString">MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MIF707~1</value>
+    <value type="QString">MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MICROS~2</value>
     <value type="QString">MPCONFIG_PRODUCTUSERAPPDATAPATH=C:\Users\Zlogic\AppData\Local\Microsoft\Microsoft Antimalware</value>
-    <value type="QString">MPCONFIG_REPORTINGGUID=A3CA5F79-6285-460E-B5CB-BCB3507B3F47</value>
+    <value type="QString">MPCONFIG_REPORTINGGUID=826B690B-B607-41C6-8853-A89EAA76AABA</value>
     <value type="QString">NUMBER_OF_PROCESSORS=2</value>
     <value type="QString">OS=Windows_NT</value>
-    <value type="QString">PATH=C:\Qt\2009.05-rc1\mingw\bin;C:\Qt\2009.05-rc1\qt\bin;%CommonProgramFiles%\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files\ATI Technologies\ATI.ACE\Core-Static;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files\QT Lite\QTSystem;C:\Program Files\Calibre2\;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
+    <value type="QString">PATH=C:\Qt\2009.05\mingw\bin;C:\Qt\2009.05\qt\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files (x86)\QT Lite\QTSystem;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
     <value type="QString">PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC</value>
     <value type="QString">PROCESSOR_ARCHITECTURE=x86</value>
-    <value type="QString">PROCESSOR_IDENTIFIER=x86 Family 6 Model 15 Stepping 2, GenuineIntel</value>
+    <value type="QString">PROCESSOR_ARCHITEW6432=AMD64</value>
+    <value type="QString">PROCESSOR_IDENTIFIER=Intel64 Family 6 Model 15 Stepping 2, GenuineIntel</value>
     <value type="QString">PROCESSOR_LEVEL=6</value>
     <value type="QString">PROCESSOR_REVISION=0f02</value>
     <value type="QString">PROGRAMDATA=C:\ProgramData</value>
-    <value type="QString">PROGRAMFILES=C:\Program Files</value>
+    <value type="QString">PROGRAMFILES=C:\Program Files (x86)</value>
+    <value type="QString">PROGRAMFILES(X86)=C:\Program Files (x86)</value>
+    <value type="QString">PROGRAMW6432=C:\Program Files</value>
     <value type="QString">PSMODULEPATH=C:\Windows\system32\WindowsPowerShell\v1.0\Modules\</value>
     <value type="QString">PUBLIC=C:\Users\Public</value>
-    <value type="QString">QTDIR=C:/Qt/2009.05-rc1/qt</value>
+    <value type="QString">QTDIR=C:/Qt/2009.05/qt</value>
     <value type="QString">SESSIONNAME=Console</value>
     <value type="QString">SYSTEMDRIVE=C:</value>
     <value type="QString">SYSTEMROOT=C:\Windows</value>
     <value type="QString">TEMP=C:\Users\Zlogic\AppData\Local\Temp</value>
     <value type="QString">TMP=C:\Users\Zlogic\AppData\Local\Temp</value>
-    <value type="QString">USERDOMAIN=octane</value>
+    <value type="QString">USERDOMAIN=Octane</value>
     <value type="QString">USERNAME=Zlogic</value>
     <value type="QString">USERPROFILE=C:\Users\Zlogic</value>
     <value type="QString">VBOX_INSTALL_PATH=C:\Program Files\Sun\VirtualBox\</value>
@@ -415,7 +433,7 @@
     <value type="QString">clean</value>
     <value type="QString">-w</value>
    </valuelist>
-   <value key="abstractProcess.command" type="QString">C:/Qt/2009.05-rc1/mingw/bin/mingw32-make.exe</value>
+   <value key="abstractProcess.command" type="QString">C:/Qt/2009.05/mingw/bin/mingw32-make.exe</value>
    <value key="abstractProcess.enabled" type="bool">true</value>
    <value key="abstractProcess.workingDirectory" type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/Code/3dvision</value>
    <value key="cleanConfig" type="bool">true</value>

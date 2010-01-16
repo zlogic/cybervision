@@ -4,7 +4,7 @@
 QT -= 
 TARGET = siftfast
 TEMPLATE = lib
-CONFIG += staticlib
+CONFIG += dll
 SOURCES += libsiftfast-1.1-src/libsiftfast.cpp \
     siftgateway.cpp
 HEADERS += siftgateway.h \

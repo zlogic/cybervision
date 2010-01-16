@@ -1,10 +1,10 @@
 /********************************************************************************
-** Form generated from reading ui file 'mainwindow.ui'
+** Form generated from reading UI file 'mainwindow.ui'
 **
-** Created: Sat 7. Nov 15:43:06 2009
-**      by: Qt User Interface Compiler version 4.5.3
+** Created: Thu 14. Jan 01:31:15 2010
+**      by: Qt User Interface Compiler version 4.6.0
 **
-** WARNING! All changes made in this file will be lost when recompiling ui file!
+** WARNING! All changes made in this file will be lost when recompiling UI file!
 ********************************************************************************/
 
 #ifndef UI_MAINWINDOW_H
@@ -48,7 +48,7 @@ public:
         centralWidget->setObjectName(QString::fromUtf8("centralWidget"));
         verticalLayout = new QVBoxLayout(centralWidget);
         verticalLayout->setSpacing(6);
-        verticalLayout->setMargin(11);
+        verticalLayout->setContentsMargins(11, 11, 11, 11);
         verticalLayout->setObjectName(QString::fromUtf8("verticalLayout"));
         frame = new QFrame(centralWidget);
         frame->setObjectName(QString::fromUtf8("frame"));
@@ -56,7 +56,7 @@ public:
         frame->setFrameShadow(QFrame::Raised);
         horizontalLayout = new QHBoxLayout(frame);
         horizontalLayout->setSpacing(6);
-        horizontalLayout->setMargin(11);
+        horizontalLayout->setContentsMargins(11, 11, 11, 11);
         horizontalLayout->setObjectName(QString::fromUtf8("horizontalLayout"));
         horizontalLayout->setContentsMargins(0, -1, 0, -1);
         pushButton_3 = new QPushButton(frame);
@@ -99,7 +99,6 @@ public:
         pushButton_3->setText(QApplication::translate("MainWindow", "Open && save resulting data", 0, QApplication::UnicodeUTF8));
         pushButton->setText(QApplication::translate("MainWindow", "Open && display result", 0, QApplication::UnicodeUTF8));
         pushButton_2->setText(QApplication::translate("MainWindow", "Save result image", 0, QApplication::UnicodeUTF8));
-        Q_UNUSED(MainWindow);
     } // retranslateUi
 
 };
