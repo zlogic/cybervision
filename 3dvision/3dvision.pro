@@ -7,9 +7,13 @@ TEMPLATE = app
 SOURCES += main.cpp \
     UI/mainwindow.cpp \
     SIFT/process.cpp \
-    Utils/svd.cpp
+    Reconstruction/svd.cpp \
+    Reconstruction/reconstructor.cpp \
+    Reconstruction/options.cpp
 HEADERS += UI/mainwindow.h \
     SIFT/process.h \
-    Utils/svd.h
+    Reconstruction/svd.h \
+    Reconstruction/reconstructor.h \
+    Reconstruction/options.h
 FORMS += UI/mainwindow.ui
 OTHER_FILES += 

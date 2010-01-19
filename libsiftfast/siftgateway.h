@@ -21,8 +21,6 @@ namespace SIFT{
 		float distance(const Keypoint&)const;
 		float getX()const;
 		float getY()const;
-
-		static float getDistanceThreshold();
 	};
 
 	class Extractor{

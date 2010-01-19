@@ -62,12 +62,6 @@ float SIFT::Keypoint::distance(const Keypoint& keypoint)const{
 float SIFT::Keypoint::getX()const{return x;}
 float SIFT::Keypoint::getY()const{return y;}
 
-float SIFT::Keypoint::getDistanceThreshold(){
-	//return 0.4;//too unreliable!
-	//return 0.25;
-	return 0.5;
-}
-
 //Class for accessing the libsiftfast library
 QMutex SIFT::Extractor::mutex;//static declaration
 

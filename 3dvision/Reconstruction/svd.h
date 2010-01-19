@@ -2,6 +2,7 @@
 #define SVD_H
 
 #include <QGenericMatrix>
+#include <QString>
 
 /*
   This is a Qt-friendly implementation of the matrix SVD operation.
@@ -19,7 +20,7 @@ protected:
 	QGenericMatrix<N,M,T> U;
 	QGenericMatrix<N,N,T> Sigma;
 	QGenericMatrix<N,N,T> V;
-	bool ok;
+	QString error_str;
 
 	void compute(const QGenericMatrix<N,M,T>& source);
 
@@ -33,11 +34,9 @@ public:
 	const QGenericMatrix <N,M,T>& getU()const;
 	const QGenericMatrix <N,N,T>& getSigma()const;
 	const QGenericMatrix <N,N,T>& getV()const;
+
+	bool isOK()const;
+	QString getErrorString()const;
 };
-
-
-void test_svd();
-
-
 
 #endif // SVD_H

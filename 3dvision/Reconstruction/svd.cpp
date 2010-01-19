@@ -30,11 +30,10 @@ public:
 template<int N,int M,typename T> const  int SVD<N,M,T>::max_iterations= 30;
 
 template<int N,int M,typename T> SVD<N,M,T>::SVD(const QGenericMatrix<N,M,T>& source){
-	ok= true;
 	try{
-	compute(source);
+		compute(source);
 	}catch(SVDError& error){
-		ok=false;
+		error_str= QString(error.what());
 	}
 }
 
@@ -42,10 +41,11 @@ template<int N,int M,typename T> const QGenericMatrix <N,M,T>& SVD<N,M,T>::getU(
 template<int N,int M,typename T> const QGenericMatrix <N,N,T>& SVD<N,M,T>::getSigma()const{ return Sigma; }
 template<int N,int M,typename T> const QGenericMatrix <N,N,T>& SVD<N,M,T>::getV()const{ return V; }
 
+template<int N,int M,typename T> bool SVD<N,M,T>::isOK()const{ return error_str.isEmpty() || error_str.isNull(); }
+template<int N,int M,typename T> QString SVD<N,M,T>::getErrorString()const{ return error_str; }
 
 template<int N,int M,typename T> void SVD<N,M,T>::compute(const QGenericMatrix<N,M,T>& source){
 	U=source;
-	ok= false;
 	QVector<T> rv1(N), W(N);
 
 	T anorm=0.0;
@@ -289,21 +289,3 @@ template<int N,int M,typename T> inline T SVD<N,M,T>::pythag(T a, T b)const{
 template<int N,int M,typename T> inline T SVD<N,M,T>::sqr(T arg)const{return arg*arg;}
 template<int N,int M,typename T> inline T SVD<N,M,T>::sign(T a,T b)const{return b>=0.0?fabs(a):-fabs(a);}
 
-void test_svd(){
-	QGenericMatrix<3,3,double> matrix;
-	matrix.fill(0);
-	/*
-	//U=[3 67 46;56 19 98;88 37 16];
-	matrix(0,0)= 3; matrix(0,1)= 67; matrix(0,2)= 46;
-	matrix(1,0)= 56; matrix(1,1)= 19; matrix(1,2)= 98;
-	matrix(2,0)= 88; matrix(2,1)= 37; matrix(2,2)= 16;
-	*/
-	//U=[1 12 9;1 14 7;8 2 0];
-	matrix(0,0)= 1; matrix(0,1)= 12; matrix(0,2)= 9;
-	matrix(1,0)= 1; matrix(1,1)= 14; matrix(1,2)= 7;
-	matrix(2,0)= 8; matrix(2,1)= 2; matrix(2,2)= 0;
-	SVD<3,3,double> mysvd(matrix);
-	QGenericMatrix<3,3,double> result= mysvd.getU()*mysvd.getSigma()*(mysvd.getV().transposed());
-
-	QGenericMatrix<3,3,double> resultDelta= result-matrix;
-}

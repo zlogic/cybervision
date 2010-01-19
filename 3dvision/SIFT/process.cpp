@@ -20,6 +20,12 @@ bool operator<(const QPoint p1,const QPoint p2){
 
 typedef QPair<QPoint,QPoint> KeypointMatch;
 
+float Process::getDistanceThreshold(){
+	//return 0.4;//too unreliable!
+	//return 0.25;
+	return 0.5;
+}
+
 Process::Process(){}
 
 bool Process::run(QString filename1,QString filename2,OutputMode outputMode,QImage& outputImage,QTextStream& outputTextStream){
@@ -89,7 +95,7 @@ bool Process::run(QString filename1,QString filename2,OutputMode outputMode,QIma
 		int height= img1.height();
 		//Draw lines
 		for(QMap<float,QList<KeypointMatch> >::const_iterator it= matchlist.begin();it!=matchlist.end();it++){
-			if(it.key()>=SIFT::Keypoint::getDistanceThreshold())
+			if(it.key()>=getDistanceThreshold())
 				break;
 			for(QList<KeypointMatch>::ConstIterator jt=it.value().begin();jt!=it.value().end();jt++){
 				//qDebug()<<"drawing line from"<<(*jt).first<<" to "<<QPoint((*jt).second.x(),(*jt).second.y()+height);
@@ -108,7 +114,7 @@ bool Process::run(QString filename1,QString filename2,OutputMode outputMode,QIma
 	}else if((outputMode&PROCESS_OUTPUT_STRING)==PROCESS_OUTPUT_STRING){
 		outputTextStream<<"X1\tY1\tX2\tY2\tDistance\r\n";
 		for(QMap<float,QList<KeypointMatch> >::const_iterator it= matchlist.begin();it!=matchlist.end();it++){
-			if(it.key()>=SIFT::Keypoint::getDistanceThreshold())
+			if(it.key()>=getDistanceThreshold())
 				break;
 			for(QList<KeypointMatch>::ConstIterator jt=it.value().begin();jt!=it.value().end();jt++){
 				outputTextStream<<(*jt).first.x()<<"\t"<<(*jt).first.y()<<"\t"<<(*jt).second.x()<<"\t"<<(*jt).second.y()<<"\t"<<it.key()<<"\r\n";
