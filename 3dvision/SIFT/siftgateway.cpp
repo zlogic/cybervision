@@ -123,6 +123,7 @@ QList<SIFT::Keypoint> SIFT::Extractor::extract(const QImage& sourceImg)const{
 	DestroyAllImages();
 
 	//Return SIFT features
+
 	QList<SIFT::Keypoint> points;
 	while(keypoints){
 		points.append(SIFT::Keypoint(keypoints->row*scalingFactor,keypoints->col*scalingFactor,keypoints->scale,keypoints->ori,keypoints->descrip));
@@ -132,3 +133,4 @@ QList<SIFT::Keypoint> SIFT::Extractor::extract(const QImage& sourceImg)const{
 
 	return points;
 }
+
