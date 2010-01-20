@@ -31,21 +31,14 @@
         <number>0</number>
        </property>
        <item>
-        <widget class="QPushButton" name="pushButton_3">
-         <property name="text">
-          <string>Open &amp;&amp; save resulting data</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="pushButton">
+        <widget class="QPushButton" name="startProcessButton">
          <property name="text">
           <string>Open &amp;&amp; display result</string>
          </property>
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="pushButton_2">
+        <widget class="QPushButton" name="saveButton">
          <property name="enabled">
           <bool>false</bool>
          </property>
@@ -58,7 +51,26 @@
      </widget>
     </item>
     <item>
-     <widget class="QGraphicsView" name="graphicsView"/>
+     <widget class="QGroupBox" name="logGroupBox">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="title">
+       <string>Log</string>
+      </property>
+      <layout class="QHBoxLayout" name="horizontalLayout_2">
+       <item>
+        <widget class="QPlainTextEdit" name="logTextEdit">
+         <property name="readOnly">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
     </item>
    </layout>
   </widget>

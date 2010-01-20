@@ -9,11 +9,17 @@ SOURCES += main.cpp \
     SIFT/process.cpp \
     Reconstruction/svd.cpp \
     Reconstruction/reconstructor.cpp \
-    Reconstruction/options.cpp
+    Reconstruction/options.cpp \
+    UI/processthread.cpp \
+    SIFT/siftgateway.cpp \
+    SIFT/libsiftfast.cpp
 HEADERS += UI/mainwindow.h \
     SIFT/process.h \
     Reconstruction/svd.h \
     Reconstruction/reconstructor.h \
-    Reconstruction/options.h
+    Reconstruction/options.h \
+    UI/processthread.h \
+    SIFT/siftgateway.h \
+    SIFT/siftfast.h
 FORMS += UI/mainwindow.ui
-OTHER_FILES += 
+OTHER_FILES += SIFT/optimization_flags.txt

@@ -1,1 +1,0 @@
-QMAKE_CXXFLAGS+=-fopenmp QMAKE_CXXFLAGS+=-lgomp QMAKE_CXXFLAGS+=-msse3

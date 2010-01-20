@@ -1,5 +1,5 @@
 #include "siftgateway.h"
-#include "libsiftfast-1.1-src/siftfast.h"
+#include <SIFT/siftfast.h>
 #include <cmath>
 
 #include <QDebug>
@@ -65,8 +65,7 @@ float SIFT::Keypoint::getY()const{return y;}
 //Class for accessing the libsiftfast library
 QMutex SIFT::Extractor::mutex;//static declaration
 
-SIFT::Extractor::Extractor(){
-}
+SIFT::Extractor::Extractor(){}
 
 SIFT::Extractor::~Extractor(){
 	QMutexLocker locker(&mutex);

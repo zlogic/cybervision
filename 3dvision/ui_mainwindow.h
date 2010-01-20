@@ -1,8 +1,8 @@
 /********************************************************************************
 ** Form generated from reading UI file 'mainwindow.ui'
 **
-** Created: Thu 14. Jan 01:31:15 2010
-**      by: Qt User Interface Compiler version 4.6.0
+** Created: Wed 20. Jan 23:02:15 2010
+**      by: Qt User Interface Compiler version 4.6.1
 **
 ** WARNING! All changes made in this file will be lost when recompiling UI file!
 ********************************************************************************/
@@ -15,10 +15,11 @@
 #include <QtGui/QApplication>
 #include <QtGui/QButtonGroup>
 #include <QtGui/QFrame>
-#include <QtGui/QGraphicsView>
+#include <QtGui/QGroupBox>
 #include <QtGui/QHBoxLayout>
 #include <QtGui/QHeaderView>
 #include <QtGui/QMainWindow>
+#include <QtGui/QPlainTextEdit>
 #include <QtGui/QPushButton>
 #include <QtGui/QStatusBar>
 #include <QtGui/QVBoxLayout>
@@ -33,10 +34,11 @@ public:
     QVBoxLayout *verticalLayout;
     QFrame *frame;
     QHBoxLayout *horizontalLayout;
-    QPushButton *pushButton_3;
-    QPushButton *pushButton;
-    QPushButton *pushButton_2;
-    QGraphicsView *graphicsView;
+    QPushButton *startProcessButton;
+    QPushButton *saveButton;
+    QGroupBox *logGroupBox;
+    QHBoxLayout *horizontalLayout_2;
+    QPlainTextEdit *logTextEdit;
     QStatusBar *statusBar;
 
     void setupUi(QMainWindow *MainWindow)
@@ -59,29 +61,39 @@ public:
         horizontalLayout->setContentsMargins(11, 11, 11, 11);
         horizontalLayout->setObjectName(QString::fromUtf8("horizontalLayout"));
         horizontalLayout->setContentsMargins(0, -1, 0, -1);
-        pushButton_3 = new QPushButton(frame);
-        pushButton_3->setObjectName(QString::fromUtf8("pushButton_3"));
+        startProcessButton = new QPushButton(frame);
+        startProcessButton->setObjectName(QString::fromUtf8("startProcessButton"));
 
-        horizontalLayout->addWidget(pushButton_3);
+        horizontalLayout->addWidget(startProcessButton);
 
-        pushButton = new QPushButton(frame);
-        pushButton->setObjectName(QString::fromUtf8("pushButton"));
+        saveButton = new QPushButton(frame);
+        saveButton->setObjectName(QString::fromUtf8("saveButton"));
+        saveButton->setEnabled(false);
 
-        horizontalLayout->addWidget(pushButton);
-
-        pushButton_2 = new QPushButton(frame);
-        pushButton_2->setObjectName(QString::fromUtf8("pushButton_2"));
-        pushButton_2->setEnabled(false);
-
-        horizontalLayout->addWidget(pushButton_2);
+        horizontalLayout->addWidget(saveButton);
 
 
         verticalLayout->addWidget(frame);
 
-        graphicsView = new QGraphicsView(centralWidget);
-        graphicsView->setObjectName(QString::fromUtf8("graphicsView"));
+        logGroupBox = new QGroupBox(centralWidget);
+        logGroupBox->setObjectName(QString::fromUtf8("logGroupBox"));
+        QSizePolicy sizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
+        sizePolicy.setHorizontalStretch(0);
+        sizePolicy.setVerticalStretch(0);
+        sizePolicy.setHeightForWidth(logGroupBox->sizePolicy().hasHeightForWidth());
+        logGroupBox->setSizePolicy(sizePolicy);
+        horizontalLayout_2 = new QHBoxLayout(logGroupBox);
+        horizontalLayout_2->setSpacing(6);
+        horizontalLayout_2->setContentsMargins(11, 11, 11, 11);
+        horizontalLayout_2->setObjectName(QString::fromUtf8("horizontalLayout_2"));
+        logTextEdit = new QPlainTextEdit(logGroupBox);
+        logTextEdit->setObjectName(QString::fromUtf8("logTextEdit"));
+        logTextEdit->setReadOnly(true);
 
-        verticalLayout->addWidget(graphicsView);
+        horizontalLayout_2->addWidget(logTextEdit);
+
+
+        verticalLayout->addWidget(logGroupBox);
 
         MainWindow->setCentralWidget(centralWidget);
         statusBar = new QStatusBar(MainWindow);
@@ -96,9 +108,9 @@ public:
     void retranslateUi(QMainWindow *MainWindow)
     {
         MainWindow->setWindowTitle(QApplication::translate("MainWindow", "MainWindow", 0, QApplication::UnicodeUTF8));
-        pushButton_3->setText(QApplication::translate("MainWindow", "Open && save resulting data", 0, QApplication::UnicodeUTF8));
-        pushButton->setText(QApplication::translate("MainWindow", "Open && display result", 0, QApplication::UnicodeUTF8));
-        pushButton_2->setText(QApplication::translate("MainWindow", "Save result image", 0, QApplication::UnicodeUTF8));
+        startProcessButton->setText(QApplication::translate("MainWindow", "Open && display result", 0, QApplication::UnicodeUTF8));
+        saveButton->setText(QApplication::translate("MainWindow", "Save result image", 0, QApplication::UnicodeUTF8));
+        logGroupBox->setTitle(QApplication::translate("MainWindow", "Log", 0, QApplication::UnicodeUTF8));
     } // retranslateUi
 
 };

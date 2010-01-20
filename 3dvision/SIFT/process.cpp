@@ -1,5 +1,5 @@
 #include "process.h"
-#include <siftgateway.h>
+#include <SIFT/siftgateway.h>
 
 #include <limits>
 

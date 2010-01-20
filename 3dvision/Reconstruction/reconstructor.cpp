@@ -1,6 +1,6 @@
 #include "reconstructor.h"
 
-#include <siftgateway.h>
+#include <SIFT/siftgateway.h>
 
 #include <limits>
 #include <ctime>
@@ -16,16 +16,22 @@ namespace cybervision{
 		srand(time(NULL));
 	}
 
-
-	Reconstructor::SortedKeypointMatches Reconstructor::extractMatches(const QString& filename1,const QString& filename2)const{
+	Reconstructor::SortedKeypointMatches Reconstructor::extractMatches(const QString& filename1,const QString& filename2){
+		emit sgnStatusMessage("Detecting SIFT keypoints..");
+		emit sgnLogMessage("Starting SIFT keypoint detection");
+		emit sgnLogMessage(QString("Loading images %1 and %2").arg(filename1).arg(filename2));
 		QImage img1(filename1),img2(filename2);
 		QList <SIFT::Keypoint> keypoints1,keypoints2;
 		{
 			SIFT::Extractor extractor;
+			emit sgnLogMessage(QString("Extracting keypoints from %1").arg(filename1));
 			keypoints1= extractor.extract(img1);
+			emit sgnLogMessage(QString("Extracting keypoints from %2").arg(filename2));
 			keypoints2= extractor.extract(img2);
 		}
 
+		emit sgnStatusMessage("Matching SIFT keypoints..");
+		emit sgnLogMessage(QString("Matching keypoints from %1 to %2").arg(filename1).arg(filename2));
 		SortedKeypointMatches matches;
 		//match first image with second
 		for(QList<SIFT::Keypoint>::const_iterator it1= keypoints1.begin();it1!=keypoints1.end();it1++){
@@ -45,6 +51,7 @@ namespace cybervision{
 					dst.append(match);
 			}
 		}
+		emit sgnLogMessage(QString("Matching keypoints from %1 to %2").arg(filename2).arg(filename1));
 		//match second image with first
 		for(QList<SIFT::Keypoint>::const_iterator it2= keypoints2.begin();it2!=keypoints2.end();it2++){
 			KeypointMatch match;
@@ -63,10 +70,13 @@ namespace cybervision{
 					dst.append(match);
 			}
 		}
+
+		emit sgnLogMessage(QString("Found %1 keypoint matches").arg(matches.size()));
 		return matches;
 	}
 
 	bool Reconstructor::computePose(SortedKeypointMatches& matches){
+		emit sgnStatusMessage("Estimating pose...");
 		//Use the RANSAC algorithm to estimate camera poses
 
 		KeypointMatches best_consensus_set;
@@ -91,7 +101,10 @@ namespace cybervision{
 						it1.value().at(random_pos)
 					)
 				);
+
+				emit sgnLogMessage("Added item to consensus set");
 			}
+			emit sgnLogMessage("Completed consensus set");
 		}
 		return true;
 	}
@@ -100,14 +113,21 @@ namespace cybervision{
 		//Extract and sort matches by distance
 		SortedKeypointMatches matches= extractMatches(filename1,filename2);
 		if(matches.isEmpty()){
-			errorString= QT_TR_NOOP("No matches found");
+			errorString= "No matches found";
 			return false;
 		}
 		if(matches.size()<Options::MinMatches){
-			errorString= QString(QT_TR_NOOP("Not enough matches (%1), need at least %2")).arg(matches.size()).arg(Options::MinMatches);
+			errorString= QString("Not enough matches (%1), need at least %2").arg(matches.size()).arg(Options::MinMatches);
+			return false;
+		}
+		//Estimate camera poses
+		if(!Reconstructor::computePose(matches)){
 			return false;
 		}
 		return true;
 	}
 
+	//Getters
+	bool Reconstructor::isOk()const{ return !errorString.isNull()&&!errorString.isEmpty(); }
+	QString Reconstructor::getError()const{ return errorString; }
 }

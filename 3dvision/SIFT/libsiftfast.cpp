@@ -326,6 +326,18 @@ Keypoint GetKeypoints(Image porgimage)
     
         if( InitSigma > fnewscale ) {
             GaussianBlur(pimage, pimage, sqrtf(InitSigma*InitSigma - fnewscale*fnewscale));
+//            {
+//                FILE* f = fopen("test.txt","w");
+//                int rows = pimage->rows, cols = pimage->cols, stride = pimage->stride;
+//                float *_pdst = pimage->pixels;
+//                for(int j = 0; j < rows; ++j, _pdst += stride ) {
+//                    for(int k = 0; k < cols; ++k) {
+//                        fprintf(f,"%f ",_pdst[k]);
+//                    }
+//                    fprintf(f,"\n");
+//                }
+//                fclose(f);
+//            }
         }
 
         // create the images
@@ -749,7 +761,7 @@ void ConvVerticalFast(Image image, float* kernel, int ksize)
 
     DVSTARTPROFILE();
 
-    int convsize = max(100000,32*(image->rows + ksize));
+    int convsize = max(100000,32*(image->rows + ksize+4));
 
     if( s_listconvbuf.size() == 0 || s_convbufsize < convsize ) {
         for(LISTBUF::iterator it = s_listconvbuf.begin(); it != s_listconvbuf.end(); ++it)
@@ -761,7 +773,6 @@ void ConvVerticalFast(Image image, float* kernel, int ksize)
         s_listconvbuf.push_back((float*)sift_aligned_malloc(convsize,16));
         s_convbufsize = convsize;
     }
-
 
 #ifdef _OPENMP
     for(int i = s_listconvbuf.size(); i < omp_get_max_threads(); ++i) {
@@ -784,7 +795,7 @@ void ConvVerticalFast(Image image, float* kernel, int ksize)
         
 #ifdef _OPENMP
         float* pconvbuf;
-        
+
         // need to get a free buffer
         #pragma omp critical
         {
@@ -838,15 +849,18 @@ void ConvVerticalFast(Image image, float* kernel, int ksize)
             _mm_store_ps(buf,mprev);
             buf += 8;
         }
+        // have to pad rest with zeros
+        memset(buf,0,convsize-((char*)buf-(char*)pconvbuf));
 
         //// finally convolve
         buf = pconvbuf;
+
         for(int i = 0; i < rows; ++i, buf += 8) {
             __m128 maccum = _mm_load_ps(buf+4);
             if( ksize > 3 ) {
-                for(int j = 3; j < ksize; j += 4) {
-                    float* psrc = buf + 8*j;
-                    __m128 mkerall = _mm_load_ps(kernel+j);
+                for(int k = 3; k < ksize; k += 4) {
+                    float* psrc = buf + 8*k;
+                    __m128 mkerall = _mm_load_ps(kernel+k);
                     __m128 mnew0 = _mm_load_ps(psrc);
                     mker0 = _mm_shuffle_ps(mkerall,mkerall,0);
                     __m128 mnew1 = _mm_load_ps(psrc + 8);
@@ -893,14 +907,14 @@ Keypoint FindMaxMin(Image* imdiff, Image* imgaus, float fscale, Keypoint keypts)
     memset(s_MaxMinArray,0,rows*cols);
 
     for( int index = 1; index < Scales+1; ++index) {
-        
+
 #if !defined(_MSC_VER) && defined(__SSE__)
         GradOriImagesFast(imgaus[index],s_imgrad,s_imorient);
 #else
         GradOriImages(imgaus[index],s_imgrad,s_imorient);
 #endif
         assert( imdiff[index]->stride == stride );
-        float* _diffpixels = imdiff[index]->pixels;
+        float* _diffpixels = imdiff[index]->pixels;        
         
 //        for(int i = 0; i < rows; ++i) {
 //            for(int j = 0; j < cols; ++j) {
@@ -917,7 +931,7 @@ Keypoint FindMaxMin(Image* imdiff, Image* imgaus, float fscale, Keypoint keypts)
 ////                }
 //            }
 //        }
-        
+
         #pragma omp parallel for schedule(dynamic,8)
         for( int rowstart = 5; rowstart < rows-5; ++rowstart ) {
             Keypoint newkeypts = NULL;
@@ -1760,8 +1774,8 @@ inline vec_float4 __attribute__((__always_inline__))
       VEC_XOR(x, sign);
       
       /* range reduction */
-      a1 = VEC_GT (x , CF4_2414213562373095 );
-      a2 = VEC_GT (x , CF4_04142135623730950 );
+      a1 = (vec_int4)VEC_GT (x , CF4_2414213562373095 );
+      a2 = (vec_int4)VEC_GT (x , CF4_04142135623730950 );
       a3 = ~a2; 
       a2 ^= a1;
 
@@ -1799,8 +1813,8 @@ inline vec_float4  __attribute__((__always_inline__))
       vec_float4 y_negativ_2 = CF4_2;
       VEC_AND(y_negativ_2, VEC_GT( CF4_0, y ));
 
-      vec_int4 i_x_zero  = VEC_EQ ( CF4_0, x );
-      vec_int4 i_y_zero  = VEC_EQ ( CF4_0, y );
+      vec_int4 i_x_zero  = (vec_int4)VEC_EQ ( CF4_0, x );
+      vec_int4 i_y_zero  = (vec_int4)VEC_EQ ( CF4_0, y );
       vec_float4 x_zero_PIO2 = CF4_PIO2F;
       VEC_AND(x_zero_PIO2, i_x_zero);
       vec_float4 y_zero    = CF4_1;
