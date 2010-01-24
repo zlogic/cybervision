@@ -7,7 +7,6 @@ TEMPLATE = app
 SOURCES += main.cpp \
     UI/mainwindow.cpp \
     SIFT/process.cpp \
-    Reconstruction/svd.cpp \
     Reconstruction/reconstructor.cpp \
     Reconstruction/options.cpp \
     UI/processthread.cpp \
