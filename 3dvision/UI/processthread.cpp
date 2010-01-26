@@ -1,7 +1,6 @@
 #include "processthread.h"
 #include "mainwindow.h"
 
-#include <SIFT/process.h>
 #include <Reconstruction/reconstructor.h>
 
 #include <QSharedPointer>
@@ -38,7 +37,7 @@ void ProcessThread::run(){
 		if(reconstructor.run(image_filenames.first(),image_filenames.last()))
 			emit processStopped(QString());
 		else
-			emit processStopped(reconstructor.getError());
+			emit processStopped(reconstructor.getErrorString());
 	}else
 		emit processStopped("Need exactly 2 images for reconstruction");
 }

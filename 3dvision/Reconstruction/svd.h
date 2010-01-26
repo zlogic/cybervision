@@ -4,8 +4,10 @@
 #include <QGenericMatrix>
 #include <QString>
 #include <stdexcept>
+
+#define _USE_MATH_DEFINES
 #include <cmath>
-#include <string>
+
 
 //Exception class
 class SVDError : public std::exception {
@@ -13,7 +15,7 @@ public:
 	enum Reason{ERROR_NO_CONVERGENCE, ERROR_OTHER};
 protected:
 	const Reason reason;
-	std::string reason_str;
+	const char* reason_str;
 public:
 	explicit SVDError (const Reason reason):reason(reason){
 		switch(reason){
@@ -27,7 +29,7 @@ public:
 	}
 
 	virtual ~SVDError() throw(){};
-	virtual const char* what() const throw(){return reason_str.c_str();}
+	virtual const char* what() const throw(){return reason_str;}
 };
 
 

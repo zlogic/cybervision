@@ -130,7 +130,7 @@
     <value type="QString">win32-g++</value>
     <value type="QString">-r</value>
     <value type="QString">QMAKE_LIBS+=-static -lgomp -lpthread</value>
-    <value type="QString">QMAKE_CXXFLAGS+=-msse3</value>
+    <value type="QString">QMAKE_CXXFLAGS+=-msse3 -fopenmp</value>
     <value type="QString">QMAKE_CXXFLAGS+=-U_WIN32</value>
    </valuelist>
    <value key="abstractProcess.command" type="QString">c:/qt/2010.01/qt/bin/qmake.exe</value>

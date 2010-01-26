@@ -74,7 +74,7 @@ namespace cybervision{
 		return matches;
 	}
 
-	bool Reconstructor::computePose(SortedKeypointMatches& matches){
+	QList<Reconstructor::StereopairPosition> Reconstructor::computePose(SortedKeypointMatches& matches){
 		emit sgnStatusMessage("Estimating pose...");
 
 		//Increase speed with precomputed lists
@@ -93,7 +93,7 @@ namespace cybervision{
 		double best_error= std::numeric_limits<float>::infinity();
 		QGenericMatrix<3,3,double> best_E;
 
-		//TODO: convert shit to OpenMP
+		//TODO: convert this to OpenMP
 		for(int i=0;i<Options::RANSAC_k;i++){
 			if(i%50==0)
 				emit sgnLogMessage(QString("RANSAC %1% complete").arg((i*100)/Options::RANSAC_k));
@@ -153,11 +153,26 @@ namespace cybervision{
 
 		if(best_consensus_set.empty()){
 			emit sgnLogMessage("No RANSAC consensus found");
-			return false;
+			return QList<Reconstructor::StereopairPosition>();
 		}else{
 			emit sgnLogMessage(QString("RANSAC consensus found, error=%1, size=%2").arg(best_error,0,'g',4).arg(best_consensus_set.size()));
 		}
-		return true;
+
+		QList<StereopairPosition> RTList= computeRT(best_E);
+		//Output R,T matrices to log
+		/*
+		QString RT_str;
+		for(QList<StereopairPosition>::const_iterator i= RTList.begin();i!=RTList.end();i++){
+			RT_str.append("R%1T\n").arg(QString(""),40);
+			for(int j=0;j<3;j++){
+				qreal T_value_i= j==0? i->T.x(): (j==1?i->T.y():i->T.z());//Extract i-th value from QVector3D
+				QString matrix_row= QString("%1 %2 %3 %4\n").arg(i->R(j,0),6,'g',6).arg(i->R(j,1),6,'g',6).arg(i->R(j,2),6,'g',6).arg(T_value_i,6,'g',6);
+				RT_str.append(matrix_row);
+			}
+		}
+		emit sgnLogMessage(QString("Resulting camera poses\n").append(RT_str));
+		*/
+		return RTList;
 	}
 
 
@@ -193,6 +208,7 @@ namespace cybervision{
 			E(0,2)=V_chi(6,8), E(1,2)=V_chi(7,8), E(2,2)=V_chi(8,8);
 		}
 		//"Normalize" E
+		//(Project into essential space (do we need this?))
 		{
 			SVD<3,3,double> svd(E);
 			QGenericMatrix<3,3,double> Sigma_new;
@@ -210,6 +226,45 @@ namespace cybervision{
 		return fabs(result(0,0));
 	}
 
+
+	QMatrix3x3 Reconstructor::computeRT_rzfunc(double angle) const{
+		QMatrix3x3 result;
+		result.fill(0.0);
+		result(0,1)= angle>=0?angle:-angle;
+		result(1,0)= angle>=0?-angle:angle;
+		result(2,2)= 1.0;
+		return result;
+	}
+
+	QList<Reconstructor::StereopairPosition> Reconstructor::computeRT(const QGenericMatrix<3,3,double>&Essential_matrix) const{
+		SVD<3,3,double> svd(Essential_matrix);
+
+		QList<Reconstructor::StereopairPosition> RTList;
+		QList<double> pi_values;
+		pi_values<<M_PI_2<<-M_PI_2;
+
+		QMatrix3x3 U= svd.getU(),Ut= svd.getU(),Sigma=svd.getSigma(), V=svd.getV(),Vt=svd.getV().transposed();
+
+		for(QList<double>::const_iterator i= pi_values.begin();i!=pi_values.end();i++){
+			double PI_R= *i;
+			QMatrix3x3 R= U*computeRT_rzfunc(PI_R).transposed()*Vt;
+			for(QList<double>::const_iterator j= pi_values.begin();j!=pi_values.end();j++){
+				double PI_T=*j;
+				QMatrix3x3 T= U*computeRT_rzfunc(PI_T)*Sigma*Ut;
+				QVector3D T_unhatted(
+						(T(2,1)+T(1,2))/2,
+						(T(0,2)+T(2,0))/2,
+						(T(1,0)+T(0,1)/2)
+					);
+				StereopairPosition RT;
+				RT.R= R, RT.T= T_unhatted;
+				RTList<<RT;
+			}
+		}
+
+		return RTList;
+	}
+
 	bool Reconstructor::run(const QString& filename1,const QString& filename2){
 		//Extract and sort matches by distance
 		SortedKeypointMatches matches= extractMatches(filename1,filename2);
@@ -222,14 +277,16 @@ namespace cybervision{
 			return false;
 		}
 		//Estimate camera poses
-		if(!Reconstructor::computePose(matches)){
+		QList<Reconstructor::StereopairPosition> RTList= Reconstructor::computePose(matches);
+		if(RTList.empty()){
 			errorString= "Error when estimating pose";
 			return false;
 		}
+
 		return true;
 	}
 
 	//Getters
 	bool Reconstructor::isOk()const{ return !errorString.isNull()&&!errorString.isEmpty(); }
-	QString Reconstructor::getError()const{ return errorString; }
+	QString Reconstructor::getErrorString()const{ return errorString; }
 }
