@@ -13,12 +13,6 @@ void ProcessThread::extract(QStringList image_filenames,QString output_filename)
 	this->image_filenames= image_filenames;
 	this->output_filename= output_filename;
 
-	QObject::connect(this, SIGNAL(processStarted()),
-					 mw, SLOT(processStarted()),Qt::AutoConnection);
-	QObject::connect(this, SIGNAL(processStopped(QString)),
-					 mw, SLOT(processStopped(QString)),Qt::AutoConnection);
-	QObject::connect(this, SIGNAL(processUpdated(QString,QString)),
-					 mw, SLOT(processUpdated(QString,QString)),Qt::AutoConnection);
 	start();
 }
 
@@ -43,7 +37,22 @@ void ProcessThread::run(){
 }
 
 void ProcessThread::setUi(MainWindow* mw){
+	if(this->mw){
+		QObject::disconnect(this, SIGNAL(processStarted()),
+							this->mw, SLOT(processStarted()));
+		QObject::disconnect(this, SIGNAL(processStopped(QString)),
+							this->mw, SLOT(processStopped(QString)));
+		QObject::disconnect(this, SIGNAL(processUpdated(QString,QString)),
+							this->mw, SLOT(processUpdated(QString,QString)));
+	}
 	this->mw=mw;
+
+	QObject::connect(this, SIGNAL(processStarted()),
+					 mw, SLOT(processStarted()),Qt::AutoConnection);
+	QObject::connect(this, SIGNAL(processStopped(QString)),
+					 mw, SLOT(processStopped(QString)),Qt::AutoConnection);
+	QObject::connect(this, SIGNAL(processUpdated(QString,QString)),
+					 mw, SLOT(processUpdated(QString,QString)),Qt::AutoConnection);
 }
 
 //Message passing to MainWindow

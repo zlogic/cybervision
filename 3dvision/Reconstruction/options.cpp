@@ -3,7 +3,7 @@
 
 namespace cybervision{
 	const float Options::MaxKeypointDistance= 0.5;
-	const float Options::ReliableDistance= 0.25;
+	const float Options::ReliableDistance= 0.4;
 	const int Options::MinMatches= 16;
 
 	const int Options::RANSAC_k= 500;

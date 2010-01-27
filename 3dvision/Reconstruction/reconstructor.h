@@ -28,7 +28,7 @@ namespace cybervision{
 		typedef QMultiMap<float,KeypointMatch > SortedKeypointMatches;
 		//Class for storing stereo pair's R and T matrix pairs
 		struct StereopairPosition{
-			QMatrix3x3 R;
+			QGenericMatrix<3,3,double> R;
 			QVector3D T;
 		};
 
@@ -36,19 +36,25 @@ namespace cybervision{
 		QString errorString;
 
 		//Internal procedures
+
 		//Finds and extracts all valid keypoint matches on two images
 		SortedKeypointMatches extractMatches(const QString& filename1,const QString& filename2);
 		//Estimates the best pose (R and T matrices) and essential matrix with RANSAC; filters the point list by removing outliers
 		QList<Reconstructor::StereopairPosition> computePose(SortedKeypointMatches&);
 
 		//Computes the essential matrix from N points
-		QGenericMatrix<3,3,double> computeEssentialMatrix(const KeypointMatches&);
+		QGenericMatrix<3,3,double> computeEssentialMatrix(const KeypointMatches&,const QPointF& centroidA,const QPointF& centroidB,double scalingA,double scalingB);
 		//Computes a keypoint match's error when used with the essential matrix E
-		float computeEssentialMatrixError(const QGenericMatrix<3,3,double>&E, const KeypointMatch&) const;
+		double computeEssentialMatrixError(const QGenericMatrix<3,3,double>&E, const KeypointMatch&,const QPointF& centroidA,const QPointF& centroidB,double scalingA,double scalingB) const;
 		//Computes possible R and T matrices from essential matrix
 		QList<StereopairPosition> computeRT(const QGenericMatrix<3,3,double>&Essential_matrix) const;
 		//Helper function to construct Rz matrix for computeRT
-		QMatrix3x3 computeRT_rzfunc(double angle)const;
+		QGenericMatrix<3,3,double> computeRT_rzfunc(double angle)const;
+
+		//Triangulates a point in 3D space
+		QList<QVector3D> compute3DPoints(const SortedKeypointMatches&matches,const QList<StereopairPosition>& RTList);
+		QList<QVector3D> computeTriangulatedPoints(const SortedKeypointMatches&matches,const QGenericMatrix<3,3,double>&R,const QVector3D& T);
+
 	public:
 		Reconstructor();
 

@@ -54,7 +54,7 @@ protected:
 
 public:
 	SVD(const QGenericMatrix<N,M,T>& source){
-		max_iterations= 30;
+		max_iterations= 75;
 		try{
 			compute(source);
 		}catch(SVDError& error){
