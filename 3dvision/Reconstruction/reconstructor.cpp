@@ -8,6 +8,12 @@
 
 #include <QImage>
 
+#ifdef USE_PRECOMPUTED_DATA
+#include <QFileInfo>
+#include <QDir>
+#include <QTextStream>
+#endif
+
 namespace cybervision{
 
 
@@ -18,6 +24,26 @@ namespace cybervision{
 	}
 
 	Reconstructor::SortedKeypointMatches Reconstructor::extractMatches(const QString& filename1,const QString& filename2){
+#ifdef USE_PRECOMPUTED_DATA
+		QFileInfo file1(filename1), file2(filename2);
+		QString precomputed_filename(file1.fileName()+" "+file2.fileName()+".txt");
+		QFile precomputed_file(QFileInfo(file1.absoluteDir(),precomputed_filename).absoluteFilePath());
+		if(precomputed_file.exists()){
+			precomputed_file.open(QFile::ReadOnly);
+			QTextStream out_stream(&precomputed_file);
+
+			SortedKeypointMatches matches;
+			while(!out_stream.atEnd()){
+				double distance;
+				KeypointMatch match;
+				out_stream>>distance>>match.a.rx()>>match.a.ry()>>match.b.rx()>>match.b.ry();
+				matches.insert(distance,match);
+			}
+			precomputed_file.close();
+			return matches;
+		}
+#endif
+
 		emit sgnStatusMessage("Detecting SIFT keypoints...");
 		emit sgnLogMessage("Starting SIFT keypoint detection");
 		emit sgnLogMessage(QString("Loading images %1 and %2").arg(filename1).arg(filename2));
@@ -30,6 +56,7 @@ namespace cybervision{
 			emit sgnLogMessage(QString("Extracting keypoints from %2").arg(filename2));
 			keypoints2= extractor.extract(img2);
 		}
+
 
 		emit sgnStatusMessage("Matching SIFT keypoints...");
 		emit sgnLogMessage(QString("Matching keypoints from %1 to %2").arg(filename1).arg(filename2));
@@ -71,6 +98,18 @@ namespace cybervision{
 		}
 
 		emit sgnLogMessage(QString("Found %1 keypoint matches").arg(matches.size()));
+
+#ifdef USE_PRECOMPUTED_DATA
+		{
+			precomputed_file.open(QFile::WriteOnly);
+			QTextStream out_stream(&precomputed_file);
+
+			for(SortedKeypointMatches::const_iterator it=matches.begin();it!=matches.end();it++)
+				out_stream<<it.key()<<"\t"<<it.value().a.x()<<"\t"<<it.value().a.y()<<"\t"<<it.value().b.x()<<"\t"<<it.value().b.y()<<"\n";
+			precomputed_file.close();
+		}
+#endif
+
 		return matches;
 	}
 
@@ -90,6 +129,7 @@ namespace cybervision{
 		//Compute centroid and scaling factor (normalise2dpts)
 		QPointF centroidA,centroidB;
 		double scalingA, scalingB;
+		QGenericMatrix<3,3,double> T1,T2;
 		{
 			double sumAX=0,sumAY=0,sumBX=0,sumBY=0;
 			for(SortedKeypointMatches::const_iterator it1= matches.begin();it1!=matches.end();it1++){
@@ -109,6 +149,15 @@ namespace cybervision{
 			distB/= matches.size();
 			scalingA= sqrt(2)/distA;
 			scalingB= sqrt(2)/distB;
+
+
+			//De-normalize2dpts
+			T1.fill(0.0);
+			T1(0,0)= scalingA, T1(1,1)= scalingA, T1(2,2)= 1;
+			T1(0,2)= -scalingA*centroidA.x(), T1(1,2)= -scalingA*centroidA.y();
+			T2.fill(0.0);
+			T2(0,0)= scalingB, T1(1,1)= scalingB, T1(2,2)= 1;
+			T2(0,2)= -scalingB*centroidB.x(), T1(1,2)= -scalingB*centroidB.y();
 		}
 
 		//Use the RANSAC algorithm to estimate camera poses
@@ -123,7 +172,7 @@ namespace cybervision{
 				emit sgnLogMessage(QString("RANSAC %1% complete").arg((i*100)/Options::RANSAC_k));
 
 			//Extract RANSAC_n random values
-			KeypointMatches consensus_set;
+			KeypointMatches consensus_set,consensus_set_normalized;
 			SortedKeypointMatches master_consensus_set;
 
 			while(consensus_set.size()<Options::RANSAC_n){
@@ -141,17 +190,34 @@ namespace cybervision{
 				if(!master_consensus_set.contains(new_match.first,new_match.second)){
 					master_consensus_set.insert(new_match.first,new_match.second);
 					consensus_set.push_back(new_match);
+
+					//Create normalized point
+					QPointF x1; x1.setX((new_match.second.a.x()-centroidA.x())*scalingA),x1.setY((new_match.second.a.y()-centroidA.y())*scalingA);
+					QPointF x2; x2.setX((new_match.second.b.x()-centroidB.x())*scalingB),x2.setY((new_match.second.b.y()-centroidB.y())*scalingB);
+					KeypointMatch new_match_normalized_points;
+					new_match_normalized_points.a=x1, new_match_normalized_points.b=x2;
+					QPair<float,KeypointMatch> new_match_normalized(random_distance,new_match_normalized_points);
+					consensus_set_normalized.push_back(new_match_normalized);
 				}
 			}
 
 			double error=0;
 			//Compute E from the random values
-			QGenericMatrix<3,3,double> E=computeEssentialMatrix(consensus_set,centroidA,centroidB,scalingA,scalingB);
+			QGenericMatrix<3,3,double> E_normalized=computeEssentialMatrix(consensus_set_normalized);
+			QGenericMatrix<3,3,double> E= computeEssentialMatrix(consensus_set);
+			//QGenericMatrix<3,3,double> E=computeEssentialMatrix(consensus_set);
 
 			//Expand consensus set
 			for(SortedKeypointMatches::const_iterator it1= matches.begin();it1!=matches.end();it1++){
+				//Normalize point for error computation
+
+				QPointF x1; x1.setX((it1.value().a.x()-centroidA.x())*scalingA),x1.setY((it1.value().a.y()-centroidA.y())*scalingA);
+				QPointF x2; x2.setX((it1.value().b.x()-centroidB.x())*scalingB),x2.setY((it1.value().b.y()-centroidB.y())*scalingB);
+				KeypointMatch match_normalized; match_normalized.a=x1, match_normalized.b=x2;
 				//Check error
-				double current_error= computeEssentialMatrixError(E,it1.value(),centroidA,centroidB,scalingA,scalingB);
+				//double current_error= computeEssentialMatrixError(E,it1.value());
+				double current_error= computeEssentialMatrixError(E_normalized,match_normalized);
+
 				//Check if match exists in master consensus set
 				if(master_consensus_set.contains(it1.key(),it1.value())){
 					//Add to global error
@@ -168,7 +234,8 @@ namespace cybervision{
 			if(consensus_set.size()>Options::RANSAC_d){
 				//Error was already computed, normalize it
 				error/= consensus_set.size();
-				if(consensus_set.size()>best_consensus_set.size() || (consensus_set.size()==best_consensus_set.size() && error<best_error)){
+				if(error<best_error){
+				//if(consensus_set.size()>best_consensus_set.size() || (consensus_set.size()==best_consensus_set.size() && error<best_error)){
 					best_consensus_set= consensus_set;
 					best_error= error;
 					best_E= E;
@@ -206,7 +273,7 @@ namespace cybervision{
 	}
 
 
-	QGenericMatrix<3,3,double> Reconstructor::computeEssentialMatrix(const KeypointMatches& matches,const QPointF& centroidA,const QPointF& centroidB,double scalingA,double scalingB){
+	QGenericMatrix<3,3,double> Reconstructor::computeEssentialMatrix(const KeypointMatches& matches){
 		if(matches.size()!=8){
 			emit sgnLogMessage(QString("Wrong consensus set size (%1), should be %2").arg(matches.size()).arg(8));
 			/*
@@ -221,9 +288,6 @@ namespace cybervision{
 			int i=0;
 			for(KeypointMatches::const_iterator it= matches.begin();it!=matches.end();it++,i++){
 				qreal x1= it->second.a.x(), x2=it->second.b.x(), y1=it->second.a.y(), y2=it->second.b.y(), z1=1, z2=1;
-				//Normalize2dpts
-				//x1= (x1-centroidA.x())*scalingA, x2= (x2-centroidB.x())*scalingB;
-				//y1= (y1-centroidA.y())*scalingA, y2= (y2-centroidB.y())*scalingB;
 				//Kronecker product
 				chi(i,0)= x1*x2, chi(i,1)= x1*y2, chi(i,2)= x1*z2;
 				chi(i,3)= y1*x2, chi(i,4)= y1*y2, chi(i,5)= y1*z2;
@@ -244,39 +308,37 @@ namespace cybervision{
 		//(Project into essential space (do we need this?))
 		{
 			SVD<3,3,double> svd(E);
-
+/*
 			QGenericMatrix<3,3,double> Sigma_new;
 			Sigma_new.fill(0.0);
 			Sigma_new(0,0)= 1.0, Sigma_new(1,1)= 1.0;
-
+*/
 			QGenericMatrix<3,3,double> Sigma= svd.getSigma();
+			/*
+			for(int i=0;i<3;i++){
+				int curr_max_i=i;
+				for(int j=i+1;j<3;j++)
+					if(Sigma(j,j)>Sigma(curr_max_i,curr_max_i))
+						curr_max_i= j;
+				std::swap(Sigma(i,i),Sigma(curr_max_i,curr_max_i));
+			}*/
+
 			Sigma(2,2)= 0.0;
 
 			E= svd.getU()*Sigma*(svd.getV().transposed());
 		}
-		//De-normalize2dpts
-		/*
-		QGenericMatrix<3,3,double> T1;
-		T1.fill(0.0);
-		T1(0,0)= scalingA, T1(1,1)= scalingA, T1(2,2)= 1;
-		T1(0,2)= -scalingA*centroidA.x(), T1(1,2)= -scalingA*centroidA.y();
-		QGenericMatrix<3,3,double> T2;
-		T2.fill(0.0);
-		T2(0,0)= scalingB, T1(1,1)= scalingB, T1(2,2)= 1;
-		T2(0,2)= -scalingB*centroidB.x(), T1(1,2)= -scalingB*centroidB.y();
-		*/
-		return E;
 
-		//return T2.transposed()*E*T1;
+		return E;
 	}
 
-	double Reconstructor::computeEssentialMatrixError(const QGenericMatrix<3,3,double>&E, const KeypointMatch& match,const QPointF& centroidA,const QPointF& centroidB,double scalingA,double scalingB) const{
+	double Reconstructor::computeEssentialMatrixError(const QGenericMatrix<3,3,double>&E, const KeypointMatch& match) const{
 		QGenericMatrix<1,3,double> x1; x1(0,0)=match.a.x(), x1(1,0)=match.a.y(), x1(2,0)=1;
 		QGenericMatrix<1,3,double> x2; x2(0,0)=match.b.x(), x2(1,0)=match.b.y(), x2(2,0)=1;
-		QGenericMatrix<1,1,double> x2tEx1= x2.transposed()*E*x1;
 
+		QGenericMatrix<1,1,double> x2tEx1= x2.transposed()*E*x1;
 		QGenericMatrix<1,3,double> Ex1=E*x1,Etx2=E.transposed()*x2;
 		return fabs(x2tEx1(0,0)*x2tEx1(0,0)/(Ex1(0,0)*Ex1(0,0)+Ex1(1,0)*Ex1(1,0)+Etx2(0,0)*Etx2(0,0)+Etx2(1,0)*Etx2(1,0)));
+		//return fabs(x2tEx1(0,0));
 	}
 
 
@@ -296,20 +358,21 @@ namespace cybervision{
 		QList<double> pi_values;
 		pi_values<<M_PI_2<<-M_PI_2;
 
-		QGenericMatrix<3,3,double> U= svd.getU(),Ut= U.transposed(),Sigma=svd.getSigma(), V=svd.getV(),Vt=V.transposed();
+		QGenericMatrix<3,3,double> U= svd.getU(),Sigma=svd.getSigma(), V=svd.getV();
 
-		Sigma.fill(0.0); Sigma(0,0)= 1.0, Sigma(1,1)= 1.0;
+		//Sigma.fill(0.0); Sigma(0,0)= 1.0, Sigma(1,1)= 1.0;
 		for(QList<double>::const_iterator i= pi_values.begin();i!=pi_values.end();i++){
 			double PI_R= *i;
-			QGenericMatrix<3,3,double> R= U*(computeRT_rzfunc(PI_R).transposed())*Vt;
+			QGenericMatrix<3,3,double> R= U*(computeRT_rzfunc(PI_R).transposed())*(V.transposed());
 			for(QList<double>::const_iterator j= pi_values.begin();j!=pi_values.end();j++){
 				double PI_T=*j;
-				QGenericMatrix<3,3,double> T= U*computeRT_rzfunc(PI_T)*Sigma*Ut;
+				QGenericMatrix<3,3,double> T= U*computeRT_rzfunc(PI_T)*Sigma*(U.transposed());
 				QVector3D T_unhatted(
-						(T(2,1)+T(1,2))/2,
-						(T(0,2)+T(2,0))/2,
-						(T(1,0)+T(0,1))/2
+						(T(2,1)-T(1,2))/2,
+						(T(0,2)-T(2,0))/2,
+						(T(1,0)-T(0,1))/2
 					);
+				//T_unhatted=QVector3D(U(0,2),U(1,2),U(2,2))*(PI_T>=0?1:-1);
 				StereopairPosition RT;
 				RT.R= R, RT.T= T_unhatted;
 				RTList.push_back(RT);
@@ -345,8 +408,14 @@ namespace cybervision{
 
 			emit sgnLogMessage(QString("Minimum depth is %1").arg(min_depth));
 
-			if(min_depth>0)
+			/*
+			if(min_depth>0){
+				best_max_depth= max_depth;
+				best_min_depth= min_depth;
+				best_Points3d= Points3d;
 				break;
+			}
+			*/
 		}
 
 		if(best_max_depth<0)
@@ -365,42 +434,47 @@ namespace cybervision{
 			for(int j=0;j<3;j++)
 				P2(i,j)= R(i,j);
 		P2(0,3)= T.x(), P2(1,3)= T.y(), P2(2,3)= T.z();
+		QGenericMatrix<3,4,double> P1t=P1.transposed(),P2t=P2.transposed();
 
 		//Search for maximums
 		double max_x=0, max_y=0;
 		for(SortedKeypointMatches::const_iterator it=matches.begin();it!=matches.end();it++){
-			if(it.value().a.x()>max_x)
-				max_x= it.value().a.x();
-			if(it.value().b.x()>max_x)
-				max_x= it.value().b.x();
-			if(it.value().a.y()>max_y)
-				max_y= it.value().a.y();
-			if(it.value().b.y()>max_y)
-				max_y= it.value().b.y();
+			if(fabs(it.value().a.x())>max_x)
+				max_x= fabs(it.value().a.x());
+			if(fabs(it.value().b.x())>max_x)
+				max_x= fabs(it.value().b.x());
+			if(fabs(it.value().a.y())>max_y)
+				max_y= fabs(it.value().a.y());
+			if(fabs(it.value().b.y())>max_y)
+				max_y= fabs(it.value().b.y());
 		}
 
 		max_x*=10, max_y*=10;
+		//max_x*=0, max_y*=0;
 		QList<QVector3D> resultPoints;
 
-		QGenericMatrix<3,4,double> A;
+		QGenericMatrix<4,4,double> A;
+
 		for(SortedKeypointMatches::const_iterator it=matches.begin();it!=matches.end();it++){
 			QPointF x1= it.value().a, x2= it.value().b;
-			for(int i=0;i<3;i++){
+/*
+  this should not work!!
+  P1(3,0) cannot exist here because P1 has only 3 rows
+  */
+			for(int i=0;i<4;i++){
 				A(0,i)= (x1.x()+max_x)*P1(i,2)-P1(i,0);
 				A(1,i)= (x1.y()+max_y)*P1(i,2)-P1(i,1);
 				A(2,i)= (x2.x()+max_x)*P2(i,2)-P2(i,0);
 				A(3,i)= (x2.y()+max_y)*P2(i,2)-P2(i,1);
 			}
-			SVD<3,4,double> svd(A);
-			QGenericMatrix<3,3,double> Sigma= svd.getSigma();
-			QGenericMatrix<3,3,double> V= svd.getV();
-			QGenericMatrix<1,3,double> V_col3;
-			for(int i=0;i<3;i++)
-				V_col3(i,0)= V(i,2);
-			QGenericMatrix<1,3,double> X= Sigma*V_col3;
+			SVD<4,4,double> svd(A);
+			QGenericMatrix<4,4,double> Sigma= svd.getSigma();
+			QGenericMatrix<4,4,double> V= svd.getV();
+			QGenericMatrix<1,4,double> V_col3;
+			for(int i=0;i<4;i++)
+				V_col3(i,0)= V(i,3);
+			QGenericMatrix<1,4,double> X= Sigma*V_col3;
 
-
-			//emit sgnLogMessage(QString("X=%1 %2 %3").arg(X(0,0)).arg(X(1,0)).arg(X(2,0)));
 			QVector3D resultPoint(x1.x(),x1.y(),X(2,0));
 
 			resultPoints.push_back(resultPoint);
@@ -436,7 +510,7 @@ namespace cybervision{
 		//log points to console
 		QString pointsStr="A=[";
 		for(QList<QVector3D>::const_iterator it2=Points3D.begin();it2!=Points3D.end();it2++)
-			pointsStr.append(QString("%1 %2 %3%4").arg(it2->x()).arg(it2->y()).arg(it2->z()).arg(it2!=(Points3D.end()-1)?";":""));
+			pointsStr.append(QString("%1 %2 %3%4").arg(it2->x()).arg(it2->y()).arg(-it2->z(),0,'g',12).arg(it2!=(Points3D.end()-1)?";":""));
 		pointsStr.append("];");
 
 		emit sgnLogMessage(QString(pointsStr));

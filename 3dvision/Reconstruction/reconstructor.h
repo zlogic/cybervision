@@ -43,9 +43,9 @@ namespace cybervision{
 		QList<Reconstructor::StereopairPosition> computePose(SortedKeypointMatches&);
 
 		//Computes the essential matrix from N points
-		QGenericMatrix<3,3,double> computeEssentialMatrix(const KeypointMatches&,const QPointF& centroidA,const QPointF& centroidB,double scalingA,double scalingB);
+		QGenericMatrix<3,3,double> computeEssentialMatrix(const KeypointMatches&);
 		//Computes a keypoint match's error when used with the essential matrix E
-		double computeEssentialMatrixError(const QGenericMatrix<3,3,double>&E, const KeypointMatch&,const QPointF& centroidA,const QPointF& centroidB,double scalingA,double scalingB) const;
+		double computeEssentialMatrixError(const QGenericMatrix<3,3,double>&E, const KeypointMatch&) const;
 		//Computes possible R and T matrices from essential matrix
 		QList<StereopairPosition> computeRT(const QGenericMatrix<3,3,double>&Essential_matrix) const;
 		//Helper function to construct Rz matrix for computeRT

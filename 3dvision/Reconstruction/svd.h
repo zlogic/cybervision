@@ -106,15 +106,14 @@ protected:
 						g= -sign(sqrt(s),f);
 						T h= f*g-s;
 						U(i,i)= f-g;
-						if(i!=(N-1))
-							for(int j=l;j<N;j++){
-								s=0.0;
-								for(int k=i;k<M;k++)
-									s+= U(k,i)*U(k,j);
-								f=s/h;
-								for(int k=i;k<M;k++)
-									U(k,j)+= f*U(k,i);
-							}
+						for(int j=l;j<N;j++){
+							s=0.0;
+							for(int k=i;k<M;k++)
+								s+= U(k,i)*U(k,j);
+							f=s/h;
+							for(int k=i;k<M;k++)
+								U(k,j)+= f*U(k,i);
+						}
 						for(int k=i;k<M;k++)
 							U(k,i)*= scale;
 					}
@@ -136,14 +135,13 @@ protected:
 						U(i,l)= f-g;
 						for(int k=l;k<N;k++)
 							rv1[k]= U(i,k)/h;
-						if(i!=(M-1))
-							for(int j=l;j<M;j++){
-								s=0.0;
-								for(int k=l;k<N;k++)
-									s+= U(j,k)*U(i,k);
-								for(int k=l;k<N;k++)
-									U(j,k)+= s*rv1[k];
-							}
+						for(int j=l;j<M;j++){
+							s=0.0;
+							for(int k=l;k<N;k++)
+								s+= U(j,k)*U(i,k);
+							for(int k=l;k<N;k++)
+								U(j,k)+= s*rv1[k];
+						}
 						for(int k=l;k<N;k++)
 							U(i,k)*= scale;
 					}
@@ -224,7 +222,7 @@ protected:
 						//Cancellation of rv1[l], if l>1
 						T c= 0.0;
 						T s= 1.0;
-						for(int i=l;i<k;i++){
+						for(int i=l;i<=k;i++){
 							T f= s*rv1[i];
 							rv1[i]= c*rv1[i];
 							if((T)(fabs(f)+anorm) == (T)anorm)
