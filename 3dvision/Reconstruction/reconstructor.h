@@ -29,7 +29,7 @@ namespace cybervision{
 		//Class for storing stereo pair's R and T matrix pairs
 		struct StereopairPosition{
 			QGenericMatrix<3,3,double> R;
-			QVector3D T;
+			QGenericMatrix<1,3,double> T;
 		};
 
 		//State
@@ -53,7 +53,7 @@ namespace cybervision{
 
 		//Triangulates a point in 3D space
 		QList<QVector3D> compute3DPoints(const SortedKeypointMatches&matches,const QList<StereopairPosition>& RTList);
-		QList<QVector3D> computeTriangulatedPoints(const SortedKeypointMatches&matches,const QGenericMatrix<3,3,double>&R,const QVector3D& T);
+		QList<QVector3D> computeTriangulatedPoints(const SortedKeypointMatches&matches,const QGenericMatrix<3,3,double>&R,const QGenericMatrix<1,3,double>& T);
 
 	public:
 		Reconstructor();

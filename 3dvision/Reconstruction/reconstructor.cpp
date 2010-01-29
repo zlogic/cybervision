@@ -347,7 +347,7 @@ namespace cybervision{
 		result.fill(0.0);
 		result(0,1)= angle>=0?1:(-1);
 		result(1,0)= -(angle>=0?1:(-1));
-		result(2,2)= 1.0;
+		//result(2,2)= 1.0;
 		return result;
 	}
 
@@ -367,12 +367,36 @@ namespace cybervision{
 			for(QList<double>::const_iterator j= pi_values.begin();j!=pi_values.end();j++){
 				double PI_T=*j;
 				QGenericMatrix<3,3,double> T= U*computeRT_rzfunc(PI_T)*Sigma*(U.transposed());
-				QVector3D T_unhatted(
-						(T(2,1)-T(1,2))/2,
-						(T(0,2)-T(2,0))/2,
-						(T(1,0)-T(0,1))/2
-					);
+
+				//Normalize R,T
+				/*
+				{
+					double max_R= -std::numeric_limits<double>::infinity(), max_T=-std::numeric_limits<double>::infinity();
+					for(int ii=0;ii<3;ii++)
+						for(int jj=0;jj<3;jj++){
+							if(R(ii,jj)>max_R)
+								max_R= R(ii,jj);
+							if(T(ii,jj)>max_T)
+								max_T= T(ii,jj);
+						}
+
+					for(int ii=0;ii<3;ii++)
+						for(int jj=0;jj<3;jj++){
+							if((double)(fabs(R(ii,jj))+fabs(max_R))==(double)fabs(R(ii,jj)))
+								R(ii,jj)= 0;
+							if((double)(fabs(T(ii,jj))+fabs(max_T))==(double)fabs(T(ii,jj)))
+								T(ii,jj)= 0;
+						}
+
+				}
+				*/
+
+				QGenericMatrix<1,3,double> T_unhatted;
+				T_unhatted(0,0)= (T(2,1)-T(1,2))/2;
+				T_unhatted(1,0)= (T(0,2)-T(2,0))/2;
+				T_unhatted(2,0)= (T(1,0)-T(0,1))/2;
 				//T_unhatted=QVector3D(U(0,2),U(1,2),U(2,2))*(PI_T>=0?1:-1);
+
 				StereopairPosition RT;
 				RT.R= R, RT.T= T_unhatted;
 				RTList.push_back(RT);
@@ -423,18 +447,23 @@ namespace cybervision{
 		return best_Points3d;
 	}
 
-	QList<QVector3D> Reconstructor::computeTriangulatedPoints(const SortedKeypointMatches&matches,const QGenericMatrix<3,3,double>&R,const QVector3D& T){
+	QList<QVector3D> Reconstructor::computeTriangulatedPoints(const SortedKeypointMatches&matches,const QGenericMatrix<3,3,double>&R,const QGenericMatrix<1,3,double>& T){
 		QGenericMatrix<4,3,double> P1,P2;
 		P1.fill(0.0);
 		for(int i=0;i<3;i++)
 			P1(i,i)= 1;
 
+		for(int i=0;i<3;i++)
+			P1(i,3)= T(i,0);//This is a hack because our SVD procedure cannot process non-square matrices
+
 		P2.fill(0.0);
 		for(int i=0;i<3;i++)
 			for(int j=0;j<3;j++)
 				P2(i,j)= R(i,j);
-		P2(0,3)= T.x(), P2(1,3)= T.y(), P2(2,3)= T.z();
-		QGenericMatrix<3,4,double> P1t=P1.transposed(),P2t=P2.transposed();
+
+
+		for(int i=0;i<3;i++)
+			P2(i,3)= T(i,0);
 
 		//Search for maximums
 		double max_x=0, max_y=0;
@@ -462,10 +491,10 @@ namespace cybervision{
   P1(3,0) cannot exist here because P1 has only 3 rows
   */
 			for(int i=0;i<4;i++){
-				A(0,i)= (x1.x()+max_x)*P1(i,2)-P1(i,0);
-				A(1,i)= (x1.y()+max_y)*P1(i,2)-P1(i,1);
-				A(2,i)= (x2.x()+max_x)*P2(i,2)-P2(i,0);
-				A(3,i)= (x2.y()+max_y)*P2(i,2)-P2(i,1);
+				A(0,i)= (x1.x()+max_x)*P1(2,i)-P1(0,i);
+				A(1,i)= (x1.y()+max_y)*P1(2,i)-P1(1,i);
+				A(2,i)= (x2.x()+max_x)*P2(2,i)-P2(0,i);
+				A(3,i)= (x2.y()+max_y)*P2(2,i)-P2(1,i);
 			}
 			SVD<4,4,double> svd(A);
 			QGenericMatrix<4,4,double> Sigma= svd.getSigma();
@@ -473,7 +502,7 @@ namespace cybervision{
 			QGenericMatrix<1,4,double> V_col3;
 			for(int i=0;i<4;i++)
 				V_col3(i,0)= V(i,3);
-			QGenericMatrix<1,4,double> X= Sigma*V_col3;
+			QGenericMatrix<1,4,double> X= V_col3;
 
 			QVector3D resultPoint(x1.x(),x1.y(),X(2,0));
 
