@@ -27,13 +27,15 @@ private:
 	QGraphicsScene scene;
 	ProcessThread thread;
 private slots:
-	void on_saveButton_clicked();
+	void on_actionShowlog_toggled(bool );
+ void on_logDockWidget_visibilityChanged(bool visible);
+ void on_saveButton_clicked();
 	void on_startProcessButton_clicked();
 
 	//Slots for receiving messages from process thread
 	void processStarted();
 	void processUpdated(QString logMessage,QString statusBarText=QString());
-	void processStopped(QString resultText);
+	void processStopped(QString resultText,QList<QVector3D> points=QList<QVector3D>());
 };
 
 #endif // MAINWINDOW_H

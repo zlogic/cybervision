@@ -22,19 +22,25 @@ void MainWindow::processStarted(){
 
 
 void MainWindow::processUpdated(QString logMessage,QString statusBarText){
-	if(!logMessage.isNull()){
+	if(!logMessage.isNull())
 		ui->logTextEdit->appendPlainText(logMessage+"\n");
-	}if(!statusBarText.isNull())
+	if(!statusBarText.isNull())
 		ui->statusBar->showMessage(statusBarText);
+
+	if(logMessage.isNull() && !statusBarText.isNull())
+		ui->logTextEdit->appendPlainText(statusBarText+"\n");
 }
 
-void MainWindow::processStopped(QString resultText){
+void MainWindow::processStopped(QString resultText,QList<QVector3D> points){
 	ui->statusBar->clearMessage();
 	ui->startProcessButton->setEnabled(true);
 	if(!resultText.isNull() && !resultText.isEmpty()){
 		ui->saveButton->setEnabled(true);
 		ui->logTextEdit->appendHtml("<b>"+resultText+"</b>");
 	}
+
+	if(!points.empty())
+		ui->openGLViewport->setPoints3D(points);
 }
 
 
@@ -60,4 +66,12 @@ void MainWindow::on_saveButton_clicked(){
 		}
 	}
 	*/
+}
+
+void MainWindow::on_logDockWidget_visibilityChanged(bool visible){
+	ui->actionShowlog->setChecked(visible);
+}
+
+void MainWindow::on_actionShowlog_toggled(bool checked){
+	ui->logDockWidget->setVisible(checked);
 }

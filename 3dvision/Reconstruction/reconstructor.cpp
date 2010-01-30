@@ -15,8 +15,6 @@
 #endif
 
 namespace cybervision{
-
-
 	bool Reconstructor::KeypointMatch::operator==(const KeypointMatch&m)const{ return a==m.a && b==m.b; }
 
 	Reconstructor::Reconstructor(){
@@ -29,6 +27,7 @@ namespace cybervision{
 		QString precomputed_filename(file1.fileName()+" "+file2.fileName()+".txt");
 		QFile precomputed_file(QFileInfo(file1.absoluteDir(),precomputed_filename).absoluteFilePath());
 		if(precomputed_file.exists()){
+			emit sgnLogMessage("Loading precomputed SIFT matches from "+QDir::convertSeparators(precomputed_file.fileName()));
 			precomputed_file.open(QFile::ReadOnly);
 			QTextStream out_stream(&precomputed_file);
 
@@ -101,6 +100,7 @@ namespace cybervision{
 
 #ifdef USE_PRECOMPUTED_DATA
 		{
+			emit sgnLogMessage("Saving computed SIFT matches to "+QDir::convertSeparators(precomputed_file.fileName()));
 			precomputed_file.open(QFile::WriteOnly);
 			QTextStream out_stream(&precomputed_file);
 
@@ -513,6 +513,7 @@ namespace cybervision{
 	}
 
 	bool Reconstructor::run(const QString& filename1,const QString& filename2){
+		Points3D.clear();
 		//Extract and sort matches by distance
 		SortedKeypointMatches matches= extractMatches(filename1,filename2);
 		if(matches.isEmpty()){
@@ -531,22 +532,26 @@ namespace cybervision{
 		}
 
 		//Triangulate points
-		QList<QVector3D> Points3D= compute3DPoints(matches,RTList);
+		Points3D= compute3DPoints(matches,RTList);
 		if(Points3D.empty()){
 			errorString= "Error during 3D triangulation";
 			return false;
 		}
 		//log points to console
+		/*
 		QString pointsStr="A=[";
 		for(QList<QVector3D>::const_iterator it2=Points3D.begin();it2!=Points3D.end();it2++)
 			pointsStr.append(QString("%1 %2 %3%4").arg(it2->x()).arg(it2->y()).arg(-it2->z(),0,'g',12).arg(it2!=(Points3D.end()-1)?";":""));
 		pointsStr.append("];");
 
 		emit sgnLogMessage(QString(pointsStr));
+		*/
+
 		return true;
 	}
 
 	//Getters
 	bool Reconstructor::isOk()const{ return !errorString.isNull()&&!errorString.isEmpty(); }
 	QString Reconstructor::getErrorString()const{ return errorString; }
+	QList<QVector3D> Reconstructor::get3DPoints()const{ return Points3D; }
 }

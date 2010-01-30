@@ -34,6 +34,7 @@ namespace cybervision{
 
 		//State
 		QString errorString;
+		QList<QVector3D> Points3D;
 
 		//Internal procedures
 
@@ -63,6 +64,7 @@ namespace cybervision{
 		//Getters
 		bool isOk()const;
 		QString getErrorString()const;
+		QList<QVector3D> get3DPoints()const;
 	signals:
 		void sgnLogMessage(QString);
 		void sgnStatusMessage(QString);

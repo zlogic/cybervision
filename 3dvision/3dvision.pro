@@ -10,13 +10,15 @@ SOURCES += main.cpp \
     Reconstruction/options.cpp \
     UI/processthread.cpp \
     SIFT/siftgateway.cpp \
-    SIFT/libsiftfast.cpp
+    SIFT/libsiftfast.cpp \
+    UI/cybervisionviewer.cpp
 HEADERS += UI/mainwindow.h \
     Reconstruction/svd.h \
     Reconstruction/reconstructor.h \
     Reconstruction/options.h \
     UI/processthread.h \
     SIFT/siftgateway.h \
-    SIFT/siftfast.h
+    SIFT/siftfast.h \
+    UI/cybervisionviewer.h
 FORMS += UI/mainwindow.ui
 OTHER_FILES += SIFT/optimization_flags.txt

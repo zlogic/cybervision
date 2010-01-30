@@ -4,6 +4,8 @@
 #include <QThread>
 #include <QStringList>
 #include <QImage>
+#include <QVector3D>
+#include <QList>
 
 class MainWindow;
 class ProcessThread :public QThread{
@@ -21,7 +23,7 @@ public:
 signals:
 	void processStarted();
 	void processUpdated(QString logMessage,QString statusBarText);
-	void processStopped(QString resultText);
+	void processStopped(QString resultText,QList<QVector3D> points=QList<QVector3D>());
 private slots:
 	void sgnLogMessage(QString);
 	void sgnStatusMessage(QString);

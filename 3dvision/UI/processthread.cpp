@@ -29,7 +29,7 @@ void ProcessThread::run(){
 		//Prepare variables for output data
 
 		if(reconstructor.run(image_filenames.first(),image_filenames.last()))
-			emit processStopped(QString());
+			emit processStopped(QString(),reconstructor.get3DPoints());
 		else
 			emit processStopped(reconstructor.getErrorString());
 	}else
@@ -41,16 +41,17 @@ void ProcessThread::setUi(MainWindow* mw){
 		QObject::disconnect(this, SIGNAL(processStarted()),
 							this->mw, SLOT(processStarted()));
 		QObject::disconnect(this, SIGNAL(processStopped(QString)),
-							this->mw, SLOT(processStopped(QString)));
+							this->mw, SLOT(processStopped(QString,QList<QVector3D>)));
 		QObject::disconnect(this, SIGNAL(processUpdated(QString,QString)),
 							this->mw, SLOT(processUpdated(QString,QString)));
 	}
 	this->mw=mw;
+	qRegisterMetaType< QList<QVector3D> >("QList<QVector3D>");
 
 	QObject::connect(this, SIGNAL(processStarted()),
 					 mw, SLOT(processStarted()),Qt::AutoConnection);
-	QObject::connect(this, SIGNAL(processStopped(QString)),
-					 mw, SLOT(processStopped(QString)),Qt::AutoConnection);
+	QObject::connect(this, SIGNAL(processStopped(QString,QList<QVector3D>)),
+					 mw, SLOT(processStopped(QString,QList<QVector3D>)),Qt::AutoConnection);
 	QObject::connect(this, SIGNAL(processUpdated(QString,QString)),
 					 mw, SLOT(processUpdated(QString,QString)),Qt::AutoConnection);
 }
