@@ -11,6 +11,10 @@ class CybervisionViewer : public QGLWidget{
 protected:
 	QList<QVector3D> points;
 	QMutex pointsMutex;
+
+	//Viewport configuration
+	QVector3D vpRotation,vpTranslation;
+	QPoint lastMousePos;
 public:
 	CybervisionViewer(QWidget *parent);
 
@@ -18,9 +22,14 @@ public:
 
 protected:
 	//Inherited opengl stuff
-	 void initializeGL();
-	 void resizeGL(int w, int h);
-	 void paintGL();
+	void initializeGL();
+	void resizeGL(int w, int h);
+	void paintGL();
+
+	//Rotation/movement with mouse
+	float normalizeAngle(float angle)const;
+	void mousePressEvent(QMouseEvent *event);
+	void mouseMoveEvent(QMouseEvent *event);
 };
 
 #endif // CYBERVISIONVIEWER_H
