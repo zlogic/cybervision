@@ -8,6 +8,9 @@ namespace cybervision{
 
 	const int Options::RANSAC_k= 10000;
 	const int Options::RANSAC_n= 8;
-	const double Options::RANSAC_t= 1e-12;
+	const double Options::RANSAC_t= 1e-18;
 	const int Options::RANSAC_d= 32;
+
+
+	const int Options::surfaceSteps= 100;
 }

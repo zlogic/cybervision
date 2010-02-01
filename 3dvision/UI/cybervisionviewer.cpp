@@ -13,8 +13,8 @@ CybervisionViewer::CybervisionViewer(QWidget *parent): QGLWidget(parent){
 
 void CybervisionViewer::setPoints3D(const QList<QVector3D>&points){
 	{
-		QMutexLocker lock(&pointsMutex);
-		this->points= points;
+		QMutexLocker lock(&surfaceMutex);
+		surface= cybervision::Sculptor(points);
 	}
 	updateGL();
 }
@@ -36,8 +36,6 @@ void CybervisionViewer::initializeGL(){
 
 void CybervisionViewer::resizeGL(int w, int h){
 	// setup viewport, projection etc.:
-	int side = qMin(w, h);
-	//glViewport((w-side)/2, (h-side)/2, side, side);
 	glViewport(0, 0, w, h);
 
 	glMatrixMode(GL_PROJECTION);
@@ -55,21 +53,9 @@ void CybervisionViewer::paintGL(){
 	glRotatef(vpRotation.z(), 0.0, 0.0, 1.0);
 	glTranslatef(vpTranslation.x(), vpTranslation.y(), vpTranslation.z());
 
-
-	glBegin(GL_LINES);
-	glVertex3f(10.0e-1f, 10.0e-1f, 0.0e-1f); // origin of the FIRST line
-	glVertex3f(20.0e-1f, 14.0e-1f, 5.0e-1f); // ending point of the FIRST line
-	glVertex3f(12.0e-1f, 17.0e-1f, 10.0e-1f); // origin of the SECOND line
-	glVertex3f(24.0e-1f, 12.0e-1f, 5.0e-1f); // ending point of the SECOND line
-	glEnd( );
-
 	{
-		QMutexLocker lock(&pointsMutex);
-		glBegin(GL_POLYGON);
-		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
-			glVertex3f(it->x(),it->y(),it->z()*5e6F);
-		}
-		glEnd();
+		QMutexLocker lock(&surfaceMutex);
+		surface.glDraw();
 	}
 }
 

@@ -6,11 +6,13 @@
 #include <QVector3D>
 #include <QMutex>
 
+#include <Reconstruction/sculptor.h>
+
 class CybervisionViewer : public QGLWidget{
 	Q_OBJECT
 protected:
-	QList<QVector3D> points;
-	QMutex pointsMutex;
+	QMutex surfaceMutex;
+	cybervision::Sculptor surface;
 
 	//Viewport configuration
 	QVector3D vpRotation,vpTranslation;

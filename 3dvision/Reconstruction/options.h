@@ -8,6 +8,7 @@ namespace cybervision{
 
 class Options{
 public:
+	//Reconstructor options
 	static const double MaxKeypointDistance;//Maximum SIFT match vector distance, larger values get discarded
 	static const double ReliableDistance;//Maximum keypoint distance on which camera pose (E, R&T) can be computed
 	static const int MinMatches;//Minimum amount of matches needed for pose estimation
@@ -15,6 +16,9 @@ public:
 	static const int RANSAC_n;//RANSAC n parameter
 	static const double RANSAC_t;//RANSAC t parameter
 	static const int RANSAC_d;//RANSAC d parameter
+
+	//Surface options
+	static const int surfaceSteps;//Number of steps when triangulating surface from a point cloud
 };
 
 }

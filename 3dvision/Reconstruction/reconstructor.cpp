@@ -205,7 +205,6 @@ namespace cybervision{
 			//Compute E from the random values
 			QGenericMatrix<3,3,double> E_normalized=computeEssentialMatrix(consensus_set_normalized);
 			QGenericMatrix<3,3,double> E= computeEssentialMatrix(consensus_set);
-			//QGenericMatrix<3,3,double> E=computeEssentialMatrix(consensus_set);
 
 			//Expand consensus set
 			for(SortedKeypointMatches::const_iterator it1= matches.begin();it1!=matches.end();it1++){
@@ -215,8 +214,8 @@ namespace cybervision{
 				QPointF x2; x2.setX((it1.value().b.x()-centroidB.x())*scalingB),x2.setY((it1.value().b.y()-centroidB.y())*scalingB);
 				KeypointMatch match_normalized; match_normalized.a=x1, match_normalized.b=x2;
 				//Check error
-				//double current_error= computeEssentialMatrixError(E,it1.value());
-				double current_error= computeEssentialMatrixError(E_normalized,match_normalized);
+				double current_error= computeEssentialMatrixError(E,it1.value());
+				//double current_error= computeEssentialMatrixError(E_normalized,match_normalized);
 
 				//Check if match exists in master consensus set
 				if(master_consensus_set.contains(it1.key(),it1.value())){
@@ -323,7 +322,11 @@ namespace cybervision{
 				std::swap(Sigma(i,i),Sigma(curr_max_i,curr_max_i));
 			}*/
 
-			Sigma(2,2)= 0.0;
+			int min_sigma_i=0;
+			for(int i=0;i<3;i++)
+				if(fabs(Sigma(i,i))<fabs(Sigma(min_sigma_i,min_sigma_i)))
+					min_sigma_i=i;
+			Sigma(min_sigma_i,min_sigma_i)= 0.0;
 
 			E= svd.getU()*Sigma*(svd.getV().transposed());
 		}
@@ -424,13 +427,13 @@ namespace cybervision{
 					min_depth= it2->z();
 			}
 
-			if(max_depth>best_max_depth){
+			if(max_depth-min_depth>best_max_depth-best_min_depth){
 				best_max_depth= max_depth;
 				best_min_depth= min_depth;
 				best_Points3d= Points3d;
 			}
 
-			emit sgnLogMessage(QString("Minimum depth is %1").arg(min_depth));
+			emit sgnLogMessage(QString("Minimum depth is %1, maximum depth is %2").arg(min_depth).arg(max_depth));
 
 			/*
 			if(min_depth>0){
@@ -442,8 +445,12 @@ namespace cybervision{
 			*/
 		}
 
-		if(best_max_depth<0)
+		if(best_max_depth<0){
 			emit sgnLogMessage(QString("Warning: minimum depth is %1, less than zero!").arg(best_min_depth));
+			//Invert points
+			for(QList<QVector3D>::iterator it1=best_Points3d.begin();it1!=best_Points3d.end();it1++)
+				it1->setZ(-it1->z());
+		}
 		return best_Points3d;
 	}
 
