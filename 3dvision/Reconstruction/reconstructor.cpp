@@ -153,11 +153,11 @@ namespace cybervision{
 
 			//De-normalize2dpts
 			T1.fill(0.0);
-			T1(0,0)= scalingA, T1(1,1)= scalingA, T1(2,2)= 1;
+			T1(0,0)= scalingA, T1(1,1)= scalingA, T1(2,2)= 1.0;
 			T1(0,2)= -scalingA*centroidA.x(), T1(1,2)= -scalingA*centroidA.y();
 			T2.fill(0.0);
-			T2(0,0)= scalingB, T1(1,1)= scalingB, T1(2,2)= 1;
-			T2(0,2)= -scalingB*centroidB.x(), T1(1,2)= -scalingB*centroidB.y();
+			T2(0,0)= scalingB, T2(1,1)= scalingB, T2(2,2)= 1.0;
+			T2(0,2)= -scalingB*centroidB.x(), T2(1,2)= -scalingB*centroidB.y();
 		}
 
 		//Use the RANSAC algorithm to estimate camera poses
@@ -233,8 +233,8 @@ namespace cybervision{
 			if(consensus_set.size()>Options::RANSAC_d){
 				//Error was already computed, normalize it
 				error/= consensus_set.size();
-				if(error<best_error){
-				//if(consensus_set.size()>best_consensus_set.size() || (consensus_set.size()==best_consensus_set.size() && error<best_error)){
+				//if(error<best_error){
+				if(consensus_set.size()>best_consensus_set.size() || (consensus_set.size()==best_consensus_set.size() && error<best_error)){
 					best_consensus_set= consensus_set;
 					best_error= error;
 					best_E= E;
@@ -313,20 +313,7 @@ namespace cybervision{
 			Sigma_new(0,0)= 1.0, Sigma_new(1,1)= 1.0;
 */
 			QGenericMatrix<3,3,double> Sigma= svd.getSigma();
-			/*
-			for(int i=0;i<3;i++){
-				int curr_max_i=i;
-				for(int j=i+1;j<3;j++)
-					if(Sigma(j,j)>Sigma(curr_max_i,curr_max_i))
-						curr_max_i= j;
-				std::swap(Sigma(i,i),Sigma(curr_max_i,curr_max_i));
-			}*/
-
-			int min_sigma_i=0;
-			for(int i=0;i<3;i++)
-				if(fabs(Sigma(i,i))<fabs(Sigma(min_sigma_i,min_sigma_i)))
-					min_sigma_i=i;
-			Sigma(min_sigma_i,min_sigma_i)= 0.0;
+			Sigma(2,2)= 0.0;
 
 			E= svd.getU()*Sigma*(svd.getV().transposed());
 		}
@@ -363,36 +350,12 @@ namespace cybervision{
 
 		QGenericMatrix<3,3,double> U= svd.getU(),Sigma=svd.getSigma(), V=svd.getV();
 
-		//Sigma.fill(0.0); Sigma(0,0)= 1.0, Sigma(1,1)= 1.0;
 		for(QList<double>::const_iterator i= pi_values.begin();i!=pi_values.end();i++){
 			double PI_R= *i;
 			QGenericMatrix<3,3,double> R= U*(computeRT_rzfunc(PI_R).transposed())*(V.transposed());
 			for(QList<double>::const_iterator j= pi_values.begin();j!=pi_values.end();j++){
 				double PI_T=*j;
 				QGenericMatrix<3,3,double> T= U*computeRT_rzfunc(PI_T)*Sigma*(U.transposed());
-
-				//Normalize R,T
-				/*
-				{
-					double max_R= -std::numeric_limits<double>::infinity(), max_T=-std::numeric_limits<double>::infinity();
-					for(int ii=0;ii<3;ii++)
-						for(int jj=0;jj<3;jj++){
-							if(R(ii,jj)>max_R)
-								max_R= R(ii,jj);
-							if(T(ii,jj)>max_T)
-								max_T= T(ii,jj);
-						}
-
-					for(int ii=0;ii<3;ii++)
-						for(int jj=0;jj<3;jj++){
-							if((double)(fabs(R(ii,jj))+fabs(max_R))==(double)fabs(R(ii,jj)))
-								R(ii,jj)= 0;
-							if((double)(fabs(T(ii,jj))+fabs(max_T))==(double)fabs(T(ii,jj)))
-								T(ii,jj)= 0;
-						}
-
-				}
-				*/
 
 				QGenericMatrix<1,3,double> T_unhatted;
 				T_unhatted(0,0)= (T(2,1)-T(1,2))/2;
@@ -493,10 +456,6 @@ namespace cybervision{
 
 		for(SortedKeypointMatches::const_iterator it=matches.begin();it!=matches.end();it++){
 			QPointF x1= it.value().a, x2= it.value().b;
-/*
-  this should not work!!
-  P1(3,0) cannot exist here because P1 has only 3 rows
-  */
 			for(int i=0;i<4;i++){
 				A(0,i)= (x1.x()+max_x)*P1(2,i)-P1(0,i);
 				A(1,i)= (x1.y()+max_y)*P1(2,i)-P1(1,i);
@@ -508,7 +467,7 @@ namespace cybervision{
 			QGenericMatrix<4,4,double> V= svd.getV();
 			QGenericMatrix<1,4,double> V_col3;
 			for(int i=0;i<4;i++)
-				V_col3(i,0)= V(i,3);
+				V_col3(i,0)= V(i,2);
 			QGenericMatrix<1,4,double> X= V_col3;
 
 			QVector3D resultPoint(x1.x(),x1.y(),X(2,0));
