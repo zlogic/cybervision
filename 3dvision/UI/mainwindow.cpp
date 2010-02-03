@@ -32,6 +32,22 @@ void MainWindow::processUpdated(QString logMessage,QString statusBarText){
 }
 
 void MainWindow::processStopped(QString resultText,QList<QVector3D> points){
+	/*
+	*/
+	if(!resultText.isNull() && !resultText.isEmpty()){
+		ui->saveButton->setEnabled(true);
+		ui->logTextEdit->appendHtml("<b>"+resultText+"</b>");
+	}
+
+	if(!points.empty())
+		thread.surface(points);
+	else{
+		ui->statusBar->clearMessage();
+		ui->startProcessButton->setEnabled(true);
+	}
+}
+
+void MainWindow::processStopped(QString resultText,cybervision::Surface surface){
 	ui->statusBar->clearMessage();
 	ui->startProcessButton->setEnabled(true);
 	if(!resultText.isNull() && !resultText.isEmpty()){
@@ -39,8 +55,7 @@ void MainWindow::processStopped(QString resultText,QList<QVector3D> points){
 		ui->logTextEdit->appendHtml("<b>"+resultText+"</b>");
 	}
 
-	if(!points.empty())
-		ui->openGLViewport->setPoints3D(points);
+		ui->openGLViewport->setSurface3D(surface);
 }
 
 

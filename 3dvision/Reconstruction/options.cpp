@@ -12,5 +12,5 @@ namespace cybervision{
 	const int Options::RANSAC_d= 32;
 
 
-	const int Options::surfaceSteps= 100;
+	const int Options::surfaceSteps= 50;
 }

@@ -5,20 +5,13 @@
 #include <QVector3D>
 
 namespace cybervision{
+	class Surface;
 
 	//Class for interpolating a set of 3D points into a 3D surface. Also extracts additional info from the 3D point set.
 	class Sculptor{
 	protected:
-		//Internal classes
-		struct Triangle{
-			QVector3D a,b,c;
-			QVector3D normal;
-		};
 
-		QList<QVector3D> points;
-
-
-		QList<Triangle> triangles;//Surface data
+		cybervision::Surface surface;
 
 		//Interpolates points to create surface
 		void createSurface(const QList<QVector3D>& points);
@@ -28,8 +21,8 @@ namespace cybervision{
 		QVector3D calcNormal(const QVector3D& a, const QVector3D& b)const;
 	public:
 		Sculptor(const QList<QVector3D>& points=QList<QVector3D>());
-		//Draws the surface with OpenGL, should be called from paintGL
-		void glDraw()const;
+
+		cybervision::Surface getSurface()const;
 	};
 }
 

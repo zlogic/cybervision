@@ -6,13 +6,13 @@
 #include <QVector3D>
 #include <QMutex>
 
-#include <Reconstruction/sculptor.h>
+#include <Reconstruction/surface.h>
 
 class CybervisionViewer : public QGLWidget{
 	Q_OBJECT
 protected:
 	QMutex surfaceMutex;
-	cybervision::Sculptor surface;
+	cybervision::Surface surface;
 
 	//Viewport configuration
 	QVector3D vpRotation,vpTranslation;
@@ -20,7 +20,7 @@ protected:
 public:
 	CybervisionViewer(QWidget *parent);
 
-	void setPoints3D(const QList<QVector3D>&);
+	void setSurface3D(const cybervision::Surface&);
 
 protected:
 	//Inherited opengl stuff

@@ -36,6 +36,7 @@ private slots:
 	void processStarted();
 	void processUpdated(QString logMessage,QString statusBarText=QString());
 	void processStopped(QString resultText,QList<QVector3D> points=QList<QVector3D>());
+	void processStopped(QString resultText,cybervision::Surface);
 };
 
 #endif // MAINWINDOW_H

@@ -2,6 +2,7 @@
 
 #include <QMutexLocker>
 #include <QMouseEvent>
+#include <QThread>
 
 #define _USE_MATH_DEFINES
 #include <cmath>
@@ -11,10 +12,10 @@ CybervisionViewer::CybervisionViewer(QWidget *parent): QGLWidget(parent){
 }
 
 
-void CybervisionViewer::setPoints3D(const QList<QVector3D>&points){
+void CybervisionViewer::setSurface3D(const cybervision::Surface& surface){
 	{
 		QMutexLocker lock(&surfaceMutex);
-		surface= cybervision::Sculptor(points);
+		this->surface= surface;
 	}
 	updateGL();
 }
