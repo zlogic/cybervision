@@ -4,31 +4,26 @@
 #include <QList>
 #include <QVector3D>
 #include <QPolygonF>
+#include <Reconstruction/surface.h>
 
 namespace cybervision{
-	class Surface;
-
 	//Class for interpolating a set of 3D points into a 3D surface. Also extracts additional info from the 3D point set.
 	class Sculptor{
 	protected:
 
 		cybervision::Surface surface;
-		QPolygonF boundingBox;//For Voronoi cells, this gets clipped for every cell
 
-		QList<QVector3D> filterPoints(const QList<QVector3D>& points)const;//average points with the same (x,y) values
+		QList<QVector3D> filterPoints(const QList<QVector3D>& points);//average points with the same (x,y) values, change scale to better fit result
 
-		//Interpolates points to create surface
-		void createSurface(const QList<QVector3D>& points);
-		//Returns points belonging to a specific coordinate range
-		QList<QVector3D> getPointsInRange(const QList<QVector3D>& points,QVector3D min, QVector3D max, bool ignoreZ=true)const;
+		//Returns a triangle with computed normal and clockwise vertex placement
+		Surface::Triangle createTriangle(const QVector3D& a, const QVector3D& b, const QVector3D& c)const;
 		//Returns a normal for a 3D triangle
 		QVector3D calcNormal(const QVector3D& a, const QVector3D& b)const;
 
-
-		//Interpolates points to create surface (using Voronoi cells)
-		void createSurface2(const QList<QVector3D>& points);
-
-		QPolygonF voronoiCell(const QList<QVector3D>& points, const QVector3D& center);
+		//Code ported from http://local.wasp.uwa.edu.au/~pbourke/papers/triangulate/index.html
+		bool delaunayCircumCircle(const QPointF& p,const QPointF& a,const QPointF& b,const QPointF& c,QVector3D* circle=NULL)const;
+		//Interpolates points to create surface (using Delaunay triangulation)
+		void delaunayTriangulate(const QList<QVector3D>& points);
 	public:
 		Sculptor(const QList<QVector3D>& points=QList<QVector3D>());
 

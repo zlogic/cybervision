@@ -19,6 +19,8 @@ public:
 
 	//Surface options
 	static const int surfaceSteps;//Number of steps when triangulating surface from a point cloud
+	static const float surfaceSize;//Target size (width~height) of surface, to fit into opengl viewport
+	static const float surfaceDepth;//Target depth of surface, to fit into opengl viewport
 };
 
 }

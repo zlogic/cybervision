@@ -13,4 +13,7 @@ namespace cybervision{
 
 
 	const int Options::surfaceSteps= 50;
+
+	const float Options::surfaceSize= 15.0F;
+	const float Options::surfaceDepth= 2.5F;
 }
