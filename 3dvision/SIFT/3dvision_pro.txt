@@ -25,17 +25,19 @@ HEADERS += UI/mainwindow.h \
     Reconstruction/sculptor.h \
     Reconstruction/surface.h
 FORMS += UI/mainwindow.ui
-OTHER_FILES += SIFT/optimization_flags.txt \
-    SIFT/3dvision_pro.txt
+OTHER_FILES += SIFT/optimization_flags.txt
+
+
+
 QMAKE_CXXFLAGS += -msse3
-win32 { 
-    QMAKE_LIBS += -static \
-        -lgomp \
-        -lpthread
-    QMAKE_CXXFLAGS += -U_WIN32
+
+win32 {
+QMAKE_LIBS += -static -lgomp -lpthread
+QMAKE_CXXFLAGS += -U_WIN32
 }
-unix { 
-    QMAKE_LIBS += -lgomp \
-        -lpthread
-    QMAKE_CXXFLAGS += -fopenmp
+
+unix {
+QMAKE_LIBS += -lgomp -lpthread
+QMAKE_CXXFLAGS += -fopenmp
 }
+

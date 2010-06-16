@@ -57,7 +57,7 @@
   <valuemap type="QVariantMap">
    <value key="ProjectExplorer.BuildConfiguration.DisplayName" type="QString">Debug</value>
    <value key="QtVersionId" type="int">0</value>
-   <value key="ToolChain" type="int">2</value>
+   <value key="ToolChain" type="int">0</value>
    <value key="addQDumper" type=""></value>
    <value key="buildConfiguration" type="int">2</value>
    <value key="buildDirectory" type="QString">C:\Users\Zlogic\Documents\Klub\3dvision\3dvision\3dvision</value>
@@ -68,7 +68,7 @@
   <valuemap type="QVariantMap">
    <value key="ProjectExplorer.BuildConfiguration.DisplayName" type="QString">Release</value>
    <value key="QtVersionId" type="int">0</value>
-   <value key="ToolChain" type="int">2</value>
+   <value key="ToolChain" type="int">0</value>
    <value key="addQDumper" type=""></value>
    <value key="buildConfiguration" type="int">0</value>
    <value key="buildDirectory" type="QString">C:\Users\Zlogic\Documents\Klub\3dvision\3dvision\3dvision</value>
@@ -137,11 +137,7 @@
    <value key="abstractProcess.enabled" type="bool">true</value>
    <value key="abstractProcess.workingDirectory" type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/Code/3dvision</value>
    <value key="buildConfiguration" type=""></value>
-   <valuelist key="qmakeArgs" type="QVariantList">
-    <value type="QString">QMAKE_LIBS+=-static -lgomp -lpthread</value>
-    <value type="QString">QMAKE_CXXFLAGS+=-msse3</value>
-    <value type="QString">QMAKE_CXXFLAGS+=-U_WIN32</value>
-   </valuelist>
+   <valuelist key="qmakeArgs" type="QVariantList"/>
   </valuemap>
  </data>
  <data>
@@ -272,72 +268,49 @@
   <valuemap type="QVariantMap">
    <value key="ProjectExplorer.BuildConfiguration.DisplayName" type="QString">Release</value>
    <valuelist key="abstractProcess.Environment" type="QVariantList">
-    <value type="QString">ALLUSERSPROFILE=C:\ProgramData</value>
-    <value type="QString">APPDATA=C:\Users\Zlogic\AppData\Roaming</value>
-    <value type="QString">COMMONPROGRAMFILES=C:\Program Files (x86)\Common Files</value>
-    <value type="QString">COMMONPROGRAMFILES(X86)=C:\Program Files (x86)\Common Files</value>
-    <value type="QString">COMMONPROGRAMW6432=C:\Program Files\Common Files</value>
-    <value type="QString">COMPUTERNAME=OCTANE</value>
-    <value type="QString">COMSPEC=C:\Windows\system32\cmd.exe</value>
-    <value type="QString">FP_NO_HOST_CHECK=NO</value>
-    <value type="QString">HOMEDRIVE=C:</value>
-    <value type="QString">HOMEPATH=\Users\Zlogic</value>
-    <value type="QString">LANG=en</value>
-    <value type="QString">LOCALAPPDATA=C:\Users\Zlogic\AppData\Local</value>
-    <value type="QString">LOGONSERVER=\\OCTANE</value>
-    <value type="QString">MPCONFIG_PRODUCTAPPDATAPATH=C:\ProgramData\Microsoft\Microsoft Antimalware</value>
-    <value type="QString">MPCONFIG_PRODUCTCODENAME=Salt Lake City</value>
-    <value type="QString">MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MICROS~2</value>
-    <value type="QString">MPCONFIG_PRODUCTUSERAPPDATAPATH=C:\Users\Zlogic\AppData\Local\Microsoft\Microsoft Antimalware</value>
-    <value type="QString">MPCONFIG_REPORTINGGUID=826B690B-B607-41C6-8853-A89EAA76AABA</value>
-    <value type="QString">NUMBER_OF_PROCESSORS=2</value>
-    <value type="QString">OS=Windows_NT</value>
-    <value type="QString">PATH=c:\qt\2010.01\mingw\bin;C:\Qt\2010.01\qt\bin;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\Common Files\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files (x86)\QT Lite\QTSystem;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
-    <value type="QString">PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC</value>
-    <value type="QString">PROCESSOR_ARCHITECTURE=x86</value>
-    <value type="QString">PROCESSOR_ARCHITEW6432=AMD64</value>
-    <value type="QString">PROCESSOR_IDENTIFIER=Intel64 Family 6 Model 15 Stepping 2, GenuineIntel</value>
-    <value type="QString">PROCESSOR_LEVEL=6</value>
-    <value type="QString">PROCESSOR_REVISION=0f02</value>
-    <value type="QString">PROGRAMDATA=C:\ProgramData</value>
-    <value type="QString">PROGRAMFILES=C:\Program Files (x86)</value>
-    <value type="QString">PROGRAMFILES(X86)=C:\Program Files (x86)</value>
-    <value type="QString">PROGRAMW6432=C:\Program Files</value>
-    <value type="QString">PSMODULEPATH=C:\Windows\system32\WindowsPowerShell\v1.0\Modules\</value>
-    <value type="QString">PUBLIC=C:\Users\Public</value>
-    <value type="QString">QTDIR=C:/Qt/2010.01/qt</value>
-    <value type="QString">SESSIONNAME=Console</value>
-    <value type="QString">SYSTEMDRIVE=C:</value>
-    <value type="QString">SYSTEMROOT=C:\Windows</value>
-    <value type="QString">TEMP=C:\Users\Zlogic\AppData\Local\Temp</value>
-    <value type="QString">TMP=C:\Users\Zlogic\AppData\Local\Temp</value>
-    <value type="QString">USERDOMAIN=Octane</value>
-    <value type="QString">USERNAME=Zlogic</value>
-    <value type="QString">USERPROFILE=C:\Users\Zlogic</value>
-    <value type="QString">VBOX_INSTALL_PATH=C:\Program Files\Sun\VirtualBox\</value>
-    <value type="QString">WINDIR=C:\Windows</value>
+    <value type="QString">DBUS_SESSION_BUS_ADDRESS=unix:abstract=/tmp/dbus-KqFROH5eea,guid=b390fe21b045324c4ef77d654c18f4b9</value>
+    <value type="QString">DEFAULTS_PATH=/usr/share/gconf/gnome.default.path</value>
+    <value type="QString">DESKTOP_SESSION=gnome</value>
+    <value type="QString">DISPLAY=:0.0</value>
+    <value type="QString">GDMSESSION=gnome</value>
+    <value type="QString">GDM_KEYBOARD_LAYOUT=us</value>
+    <value type="QString">GDM_LANG=en_US.utf8</value>
+    <value type="QString">GNOME_DESKTOP_SESSION_ID=this-is-deprecated</value>
+    <value type="QString">GNOME_KEYRING_CONTROL=/tmp/keyring-wlJ5SZ</value>
+    <value type="QString">GNOME_KEYRING_PID=1374</value>
+    <value type="QString">GTK_MODULES=canberra-gtk-module</value>
+    <value type="QString">HOME=/home/zlogic</value>
+    <value type="QString">LANG=en_US.utf8</value>
+    <value type="QString">LD_LIBRARY_PATH=/usr/lib/qtcreator:</value>
+    <value type="QString">LOGNAME=zlogic</value>
+    <value type="QString">MANDATORY_PATH=/usr/share/gconf/gnome.mandatory.path</value>
+    <value type="QString">ORBIT_SOCKETDIR=/tmp/orbit-zlogic</value>
+    <value type="QString">PATH=/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games</value>
+    <value type="QString">PWD=/home/zlogic</value>
+    <value type="QString">QTDIR=/usr/share/qt4</value>
+    <value type="QString">SESSION_MANAGER=local/octane-linux:@/tmp/.ICE-unix/1392,unix/octane-linux:/tmp/.ICE-unix/1392</value>
+    <value type="QString">SHELL=/bin/bash</value>
+    <value type="QString">SPEECHD_PORT=7560</value>
+    <value type="QString">SSH_AGENT_PID=1426</value>
+    <value type="QString">SSH_AUTH_SOCK=/tmp/keyring-wlJ5SZ/ssh</value>
+    <value type="QString">USER=zlogic</value>
+    <value type="QString">USERNAME=zlogic</value>
+    <value type="QString">XAUTHORITY=/var/run/gdm/auth-for-zlogic-rpGXGq/database</value>
+    <value type="QString">XDG_CONFIG_DIRS=/etc/xdg/xdg-gnome:/etc/xdg</value>
+    <value type="QString">XDG_DATA_DIRS=/usr/share/gnome:/usr/local/share/:/usr/share/</value>
+    <value type="QString">XDG_SESSION_COOKIE=92aadb10fe523208750472684c17e96a-1276703928.838960-1848958870</value>
    </valuelist>
    <valuelist key="abstractProcess.arguments" type="QVariantList">
-    <value type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/Code/3dvision/3dvision.pro</value>
+    <value type="QString">/home/zlogic/Documents/Klub/3dvision/Code/3dvision/3dvision.pro</value>
     <value type="QString">-spec</value>
-    <value type="QString">win32-g++</value>
+    <value type="QString">linux-g++</value>
     <value type="QString">-r</value>
-    <value type="QString">CONFIG+=release</value>
-    <value type="QString">QMAKE_LIBS+=-static -lgomp -lpthread</value>
-    <value type="QString">QMAKE_CXXFLAGS+=-msse3</value>
-    <value type="QString">QMAKE_CXXFLAGS+=-U_WIN32</value>
-    <value type="QString">QMAKE_CXXFLAGS+=-I./External</value>
    </valuelist>
-   <value key="abstractProcess.command" type="QString">c:/qt/2010.01/qt/bin/qmake.exe</value>
-   <value key="abstractProcess.enabled" type="bool">true</value>
-   <value key="abstractProcess.workingDirectory" type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/Code/3dvision</value>
+   <value key="abstractProcess.command" type="QString">/usr/bin/qmake-qt4</value>
+   <value key="abstractProcess.enabled" type="bool">false</value>
+   <value key="abstractProcess.workingDirectory" type="QString">/home/zlogic/Documents/Klub/3dvision/Code/3dvision</value>
    <value key="buildConfiguration" type=""></value>
-   <valuelist key="qmakeArgs" type="QVariantList">
-    <value type="QString">QMAKE_LIBS+=-static -lgomp -lpthread</value>
-    <value type="QString">QMAKE_CXXFLAGS+=-msse3</value>
-    <value type="QString">QMAKE_CXXFLAGS+=-U_WIN32</value>
-    <value type="QString">QMAKE_CXXFLAGS+=-I./External</value>
-   </valuelist>
+   <valuelist key="qmakeArgs" type="QVariantList"/>
   </valuemap>
  </data>
  <data>
@@ -345,58 +318,45 @@
   <valuemap type="QVariantMap">
    <value key="ProjectExplorer.BuildConfiguration.DisplayName" type="QString">Release</value>
    <valuelist key="abstractProcess.Environment" type="QVariantList">
-    <value type="QString">ALLUSERSPROFILE=C:\ProgramData</value>
-    <value type="QString">APPDATA=C:\Users\Zlogic\AppData\Roaming</value>
-    <value type="QString">COMMONPROGRAMFILES=C:\Program Files (x86)\Common Files</value>
-    <value type="QString">COMMONPROGRAMFILES(X86)=C:\Program Files (x86)\Common Files</value>
-    <value type="QString">COMMONPROGRAMW6432=C:\Program Files\Common Files</value>
-    <value type="QString">COMPUTERNAME=OCTANE</value>
-    <value type="QString">COMSPEC=C:\Windows\system32\cmd.exe</value>
-    <value type="QString">FP_NO_HOST_CHECK=NO</value>
-    <value type="QString">HOMEDRIVE=C:</value>
-    <value type="QString">HOMEPATH=\Users\Zlogic</value>
-    <value type="QString">LANG=en</value>
-    <value type="QString">LOCALAPPDATA=C:\Users\Zlogic\AppData\Local</value>
-    <value type="QString">LOGONSERVER=\\OCTANE</value>
-    <value type="QString">MPCONFIG_PRODUCTAPPDATAPATH=C:\ProgramData\Microsoft\Microsoft Antimalware</value>
-    <value type="QString">MPCONFIG_PRODUCTCODENAME=Salt Lake City</value>
-    <value type="QString">MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MICROS~2</value>
-    <value type="QString">MPCONFIG_PRODUCTUSERAPPDATAPATH=C:\Users\Zlogic\AppData\Local\Microsoft\Microsoft Antimalware</value>
-    <value type="QString">MPCONFIG_REPORTINGGUID=826B690B-B607-41C6-8853-A89EAA76AABA</value>
-    <value type="QString">NUMBER_OF_PROCESSORS=2</value>
-    <value type="QString">OS=Windows_NT</value>
-    <value type="QString">PATH=c:\qt\2010.01\mingw\bin;C:\Qt\2010.01\qt\bin;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\Common Files\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files (x86)\QT Lite\QTSystem;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
-    <value type="QString">PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC</value>
-    <value type="QString">PROCESSOR_ARCHITECTURE=x86</value>
-    <value type="QString">PROCESSOR_ARCHITEW6432=AMD64</value>
-    <value type="QString">PROCESSOR_IDENTIFIER=Intel64 Family 6 Model 15 Stepping 2, GenuineIntel</value>
-    <value type="QString">PROCESSOR_LEVEL=6</value>
-    <value type="QString">PROCESSOR_REVISION=0f02</value>
-    <value type="QString">PROGRAMDATA=C:\ProgramData</value>
-    <value type="QString">PROGRAMFILES=C:\Program Files (x86)</value>
-    <value type="QString">PROGRAMFILES(X86)=C:\Program Files (x86)</value>
-    <value type="QString">PROGRAMW6432=C:\Program Files</value>
-    <value type="QString">PSMODULEPATH=C:\Windows\system32\WindowsPowerShell\v1.0\Modules\</value>
-    <value type="QString">PUBLIC=C:\Users\Public</value>
-    <value type="QString">QTDIR=C:/Qt/2010.01/qt</value>
-    <value type="QString">SESSIONNAME=Console</value>
-    <value type="QString">SYSTEMDRIVE=C:</value>
-    <value type="QString">SYSTEMROOT=C:\Windows</value>
-    <value type="QString">TEMP=C:\Users\Zlogic\AppData\Local\Temp</value>
-    <value type="QString">TMP=C:\Users\Zlogic\AppData\Local\Temp</value>
-    <value type="QString">USERDOMAIN=Octane</value>
-    <value type="QString">USERNAME=Zlogic</value>
-    <value type="QString">USERPROFILE=C:\Users\Zlogic</value>
-    <value type="QString">VBOX_INSTALL_PATH=C:\Program Files\Sun\VirtualBox\</value>
-    <value type="QString">WINDIR=C:\Windows</value>
+    <value type="QString">DBUS_SESSION_BUS_ADDRESS=unix:abstract=/tmp/dbus-KqFROH5eea,guid=b390fe21b045324c4ef77d654c18f4b9</value>
+    <value type="QString">DEFAULTS_PATH=/usr/share/gconf/gnome.default.path</value>
+    <value type="QString">DESKTOP_SESSION=gnome</value>
+    <value type="QString">DISPLAY=:0.0</value>
+    <value type="QString">GDMSESSION=gnome</value>
+    <value type="QString">GDM_KEYBOARD_LAYOUT=us</value>
+    <value type="QString">GDM_LANG=en_US.utf8</value>
+    <value type="QString">GNOME_DESKTOP_SESSION_ID=this-is-deprecated</value>
+    <value type="QString">GNOME_KEYRING_CONTROL=/tmp/keyring-wlJ5SZ</value>
+    <value type="QString">GNOME_KEYRING_PID=1374</value>
+    <value type="QString">GTK_MODULES=canberra-gtk-module</value>
+    <value type="QString">HOME=/home/zlogic</value>
+    <value type="QString">LANG=en_US.utf8</value>
+    <value type="QString">LD_LIBRARY_PATH=/usr/lib/qtcreator:</value>
+    <value type="QString">LOGNAME=zlogic</value>
+    <value type="QString">MANDATORY_PATH=/usr/share/gconf/gnome.mandatory.path</value>
+    <value type="QString">ORBIT_SOCKETDIR=/tmp/orbit-zlogic</value>
+    <value type="QString">PATH=/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games</value>
+    <value type="QString">PWD=/home/zlogic</value>
+    <value type="QString">QTDIR=/usr/share/qt4</value>
+    <value type="QString">SESSION_MANAGER=local/octane-linux:@/tmp/.ICE-unix/1392,unix/octane-linux:/tmp/.ICE-unix/1392</value>
+    <value type="QString">SHELL=/bin/bash</value>
+    <value type="QString">SPEECHD_PORT=7560</value>
+    <value type="QString">SSH_AGENT_PID=1426</value>
+    <value type="QString">SSH_AUTH_SOCK=/tmp/keyring-wlJ5SZ/ssh</value>
+    <value type="QString">USER=zlogic</value>
+    <value type="QString">USERNAME=zlogic</value>
+    <value type="QString">XAUTHORITY=/var/run/gdm/auth-for-zlogic-rpGXGq/database</value>
+    <value type="QString">XDG_CONFIG_DIRS=/etc/xdg/xdg-gnome:/etc/xdg</value>
+    <value type="QString">XDG_DATA_DIRS=/usr/share/gnome:/usr/local/share/:/usr/share/</value>
+    <value type="QString">XDG_SESSION_COOKIE=92aadb10fe523208750472684c17e96a-1276703928.838960-1848958870</value>
    </valuelist>
    <value key="abstractProcess.IgnoreReturnValue" type="bool">false</value>
    <valuelist key="abstractProcess.arguments" type="QVariantList">
     <value type="QString">-w</value>
    </valuelist>
-   <value key="abstractProcess.command" type="QString">C:/qt/2010.01/mingw/bin/mingw32-make.exe</value>
+   <value key="abstractProcess.command" type="QString">/usr/bin/make</value>
    <value key="abstractProcess.enabled" type="bool">true</value>
-   <value key="abstractProcess.workingDirectory" type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/Code/3dvision</value>
+   <value key="abstractProcess.workingDirectory" type="QString">/home/zlogic/Documents/Klub/3dvision/Code/3dvision</value>
   </valuemap>
  </data>
  <data>
@@ -404,59 +364,46 @@
   <valuemap type="QVariantMap">
    <value key="ProjectExplorer.BuildConfiguration.DisplayName" type="QString">Release</value>
    <valuelist key="abstractProcess.Environment" type="QVariantList">
-    <value type="QString">ALLUSERSPROFILE=C:\ProgramData</value>
-    <value type="QString">APPDATA=C:\Users\Zlogic\AppData\Roaming</value>
-    <value type="QString">COMMONPROGRAMFILES=C:\Program Files (x86)\Common Files</value>
-    <value type="QString">COMMONPROGRAMFILES(X86)=C:\Program Files (x86)\Common Files</value>
-    <value type="QString">COMMONPROGRAMW6432=C:\Program Files\Common Files</value>
-    <value type="QString">COMPUTERNAME=OCTANE</value>
-    <value type="QString">COMSPEC=C:\Windows\system32\cmd.exe</value>
-    <value type="QString">FP_NO_HOST_CHECK=NO</value>
-    <value type="QString">HOMEDRIVE=C:</value>
-    <value type="QString">HOMEPATH=\Users\Zlogic</value>
-    <value type="QString">LANG=en</value>
-    <value type="QString">LOCALAPPDATA=C:\Users\Zlogic\AppData\Local</value>
-    <value type="QString">LOGONSERVER=\\OCTANE</value>
-    <value type="QString">MPCONFIG_PRODUCTAPPDATAPATH=C:\ProgramData\Microsoft\Microsoft Antimalware</value>
-    <value type="QString">MPCONFIG_PRODUCTCODENAME=Salt Lake City</value>
-    <value type="QString">MPCONFIG_PRODUCTPATH=c:\PROGRA~1\MICROS~2</value>
-    <value type="QString">MPCONFIG_PRODUCTUSERAPPDATAPATH=C:\Users\Zlogic\AppData\Local\Microsoft\Microsoft Antimalware</value>
-    <value type="QString">MPCONFIG_REPORTINGGUID=826B690B-B607-41C6-8853-A89EAA76AABA</value>
-    <value type="QString">NUMBER_OF_PROCESSORS=2</value>
-    <value type="QString">OS=Windows_NT</value>
-    <value type="QString">PATH=c:\qt\2010.01\mingw\bin;C:\Qt\2010.01\qt\bin;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\Common Files\Microsoft Shared\Windows Live;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Program Files\MATLAB\R2009b\bin;C:\Program Files (x86)\QT Lite\QTSystem;C:\Program Files\Common Files\Microsoft Shared\Windows Live</value>
-    <value type="QString">PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC</value>
-    <value type="QString">PROCESSOR_ARCHITECTURE=x86</value>
-    <value type="QString">PROCESSOR_ARCHITEW6432=AMD64</value>
-    <value type="QString">PROCESSOR_IDENTIFIER=Intel64 Family 6 Model 15 Stepping 2, GenuineIntel</value>
-    <value type="QString">PROCESSOR_LEVEL=6</value>
-    <value type="QString">PROCESSOR_REVISION=0f02</value>
-    <value type="QString">PROGRAMDATA=C:\ProgramData</value>
-    <value type="QString">PROGRAMFILES=C:\Program Files (x86)</value>
-    <value type="QString">PROGRAMFILES(X86)=C:\Program Files (x86)</value>
-    <value type="QString">PROGRAMW6432=C:\Program Files</value>
-    <value type="QString">PSMODULEPATH=C:\Windows\system32\WindowsPowerShell\v1.0\Modules\</value>
-    <value type="QString">PUBLIC=C:\Users\Public</value>
-    <value type="QString">QTDIR=C:/Qt/2010.01/qt</value>
-    <value type="QString">SESSIONNAME=Console</value>
-    <value type="QString">SYSTEMDRIVE=C:</value>
-    <value type="QString">SYSTEMROOT=C:\Windows</value>
-    <value type="QString">TEMP=C:\Users\Zlogic\AppData\Local\Temp</value>
-    <value type="QString">TMP=C:\Users\Zlogic\AppData\Local\Temp</value>
-    <value type="QString">USERDOMAIN=Octane</value>
-    <value type="QString">USERNAME=Zlogic</value>
-    <value type="QString">USERPROFILE=C:\Users\Zlogic</value>
-    <value type="QString">VBOX_INSTALL_PATH=C:\Program Files\Sun\VirtualBox\</value>
-    <value type="QString">WINDIR=C:\Windows</value>
+    <value type="QString">DBUS_SESSION_BUS_ADDRESS=unix:abstract=/tmp/dbus-KqFROH5eea,guid=b390fe21b045324c4ef77d654c18f4b9</value>
+    <value type="QString">DEFAULTS_PATH=/usr/share/gconf/gnome.default.path</value>
+    <value type="QString">DESKTOP_SESSION=gnome</value>
+    <value type="QString">DISPLAY=:0.0</value>
+    <value type="QString">GDMSESSION=gnome</value>
+    <value type="QString">GDM_KEYBOARD_LAYOUT=us</value>
+    <value type="QString">GDM_LANG=en_US.utf8</value>
+    <value type="QString">GNOME_DESKTOP_SESSION_ID=this-is-deprecated</value>
+    <value type="QString">GNOME_KEYRING_CONTROL=/tmp/keyring-wlJ5SZ</value>
+    <value type="QString">GNOME_KEYRING_PID=1374</value>
+    <value type="QString">GTK_MODULES=canberra-gtk-module</value>
+    <value type="QString">HOME=/home/zlogic</value>
+    <value type="QString">LANG=en_US.utf8</value>
+    <value type="QString">LD_LIBRARY_PATH=/usr/lib/qtcreator:</value>
+    <value type="QString">LOGNAME=zlogic</value>
+    <value type="QString">MANDATORY_PATH=/usr/share/gconf/gnome.mandatory.path</value>
+    <value type="QString">ORBIT_SOCKETDIR=/tmp/orbit-zlogic</value>
+    <value type="QString">PATH=/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games</value>
+    <value type="QString">PWD=/home/zlogic</value>
+    <value type="QString">QTDIR=/usr/share/qt4</value>
+    <value type="QString">SESSION_MANAGER=local/octane-linux:@/tmp/.ICE-unix/1392,unix/octane-linux:/tmp/.ICE-unix/1392</value>
+    <value type="QString">SHELL=/bin/bash</value>
+    <value type="QString">SPEECHD_PORT=7560</value>
+    <value type="QString">SSH_AGENT_PID=1426</value>
+    <value type="QString">SSH_AUTH_SOCK=/tmp/keyring-wlJ5SZ/ssh</value>
+    <value type="QString">USER=zlogic</value>
+    <value type="QString">USERNAME=zlogic</value>
+    <value type="QString">XAUTHORITY=/var/run/gdm/auth-for-zlogic-rpGXGq/database</value>
+    <value type="QString">XDG_CONFIG_DIRS=/etc/xdg/xdg-gnome:/etc/xdg</value>
+    <value type="QString">XDG_DATA_DIRS=/usr/share/gnome:/usr/local/share/:/usr/share/</value>
+    <value type="QString">XDG_SESSION_COOKIE=92aadb10fe523208750472684c17e96a-1276703928.838960-1848958870</value>
    </valuelist>
    <value key="abstractProcess.IgnoreReturnValue" type="bool">true</value>
    <valuelist key="abstractProcess.arguments" type="QVariantList">
     <value type="QString">clean</value>
     <value type="QString">-w</value>
    </valuelist>
-   <value key="abstractProcess.command" type="QString">C:/qt/2010.01/mingw/bin/mingw32-make.exe</value>
+   <value key="abstractProcess.command" type="QString">/usr/bin/make</value>
    <value key="abstractProcess.enabled" type="bool">true</value>
-   <value key="abstractProcess.workingDirectory" type="QString">C:/Users/Zlogic/Documents/Klub/3dvision/Code/3dvision</value>
+   <value key="abstractProcess.workingDirectory" type="QString">/home/zlogic/Documents/Klub/3dvision/Code/3dvision</value>
    <value key="cleanConfig" type="bool">true</value>
    <valuelist key="makeargs" type="QVariantList">
     <value type="QString">clean</value>
