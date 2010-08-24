@@ -55,8 +55,8 @@ namespace cybervision{
 			max.setZ(qMax(max.z(),it->z()));
 
 			centroid.setX(centroid.x()+it->x());
-			centroid.setY(centroid.x()+it->y());
-			centroid.setZ(centroid.x()+it->z());
+			centroid.setY(centroid.y()+it->y());
+			centroid.setZ(centroid.z()+it->z());
 		}
 
 		float aspectRatio= (max.x()-min.x())/(max.y()-min.y());
@@ -69,16 +69,19 @@ namespace cybervision{
 			QPointF point(it->x(),it->y());
 			pointsMap.insertMulti(point,it->z());
 		}
-		QPointF last_point= pointsMap.begin().key();
 		float sum=0;
 		int count=0;
 
 		QList<QVector3D> filteredPoints;
 		for(QMap<QPointF,float>::const_iterator it=pointsMap.begin();it!=pointsMap.end();it++){
-			if(it.key()==last_point){
+			if((it+1)!=pointsMap.end() && it.key()==(it+1).key()){
 				sum+= it.value();
 				count++;
 			}else{
+				if(count>0){
+					sum+= it.value();
+					count++;
+				}
 				float z= count>0?(sum/(float)count):it.value();
 				QVector3D scaled_point((it.key().x()-min.x())*scale_x-Options::surfaceSize/2,
 							(it.key().y()-min.y())*scale_y+Options::surfaceSize/2,
@@ -87,7 +90,6 @@ namespace cybervision{
 				filteredPoints.push_back(scaled_point);
 				sum= 0;
 				count= 0;
-				last_point= it.key();
 			}
 		}
 		return filteredPoints;

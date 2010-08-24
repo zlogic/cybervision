@@ -1169,7 +1169,7 @@ int NotOnEdge(Image imdiff, int row, int col)
     float f5 = (f3 - f4)*0.25f;
     float f6 = f1*f2 - f5*f5;
     float f8 = f1+f2;
-    return f6*11*11 > f8*f8*10;
+	return f6*11*11 > f8*f8*10;
 }
 
 Keypoint InterpKeyPoint(Image* imdiff, int index, int rowstart, int colstart,

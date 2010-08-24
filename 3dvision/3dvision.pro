@@ -27,12 +27,16 @@ HEADERS += UI/mainwindow.h \
 FORMS += UI/mainwindow.ui
 OTHER_FILES += SIFT/optimization_flags.txt \
     SIFT/3dvision_pro.txt
-QMAKE_CXXFLAGS += -msse3
+
+QMAKE_CXXFLAGS_RELEASE += -msse3
+QMAKE_CXXFLAGS_DEBUG +=
+
 win32 { 
     QMAKE_LIBS += -static \
-        -lgomp \
-        -lpthread
-    QMAKE_CXXFLAGS += -U_WIN32
+		-lgomp \
+		-lpthread
+	QMAKE_CXXFLAGS += -U_WIN32 -fopenmp
+	QMAKE_CFLAGS += -U_WIN32
 }
 unix { 
     QMAKE_LIBS += -lgomp \

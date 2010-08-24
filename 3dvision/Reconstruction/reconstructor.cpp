@@ -237,6 +237,7 @@ namespace cybervision{
 				if(consensus_set.size()>best_consensus_set.size() || (consensus_set.size()==best_consensus_set.size() && error<best_error)){
 					best_consensus_set= consensus_set;
 					best_error= error;
+					//best_E= E_normalized;
 					best_E= E;
 				}
 			}
@@ -327,8 +328,16 @@ namespace cybervision{
 
 		QGenericMatrix<1,1,double> x2tEx1= x2.transposed()*E*x1;
 		QGenericMatrix<1,3,double> Ex1=E*x1,Etx2=E.transposed()*x2;
+		//Calculate distance from epipolar line to points
+		return fabs(x2tEx1(0,0)*x2tEx1(0,0)*(1/(Ex1(0,0)*Ex1(0,0)+Ex1(1,0)*Ex1(1,0))+1/(Etx2(0,0)*Etx2(0,0)+Etx2(1,0)*Etx2(1,0))));
+		/*
+		//Badly working method 1
 		return fabs(x2tEx1(0,0)*x2tEx1(0,0)/(Ex1(0,0)*Ex1(0,0)+Ex1(1,0)*Ex1(1,0)+Etx2(0,0)*Etx2(0,0)+Etx2(1,0)*Etx2(1,0)));
-		//return fabs(x2tEx1(0,0));
+		*/
+		/*
+		//Badly working method 2
+		return fabs(x2tEx1(0,0));
+		*/
 	}
 
 
@@ -467,7 +476,7 @@ namespace cybervision{
 			QGenericMatrix<4,4,double> V= svd.getV();
 			QGenericMatrix<1,4,double> V_col3;
 			for(int i=0;i<4;i++)
-				V_col3(i,0)= V(i,2);
+				V_col3(i,0)= V(i,3);
 			QGenericMatrix<1,4,double> X= V_col3;
 
 			QVector3D resultPoint(x1.x(),x1.y(),X(2,0));
