@@ -74,15 +74,10 @@ namespace cybervision{
 
 		QList<QVector3D> filteredPoints;
 		for(QMap<QPointF,float>::const_iterator it=pointsMap.begin();it!=pointsMap.end();it++){
-			if((it+1)!=pointsMap.end() && it.key()==(it+1).key()){
-				sum+= it.value();
-				count++;
-			}else{
-				if(count>0){
-					sum+= it.value();
-					count++;
-				}
-				float z= count>0?(sum/(float)count):it.value();
+			sum+= it.value();
+			count++;
+			if((it+1)==pointsMap.end() || it.key()!=(it+1).key()){
+				float z= sum/(float)count;
 				QVector3D scaled_point((it.key().x()-min.x())*scale_x-Options::surfaceSize/2,
 							(it.key().y()-min.y())*scale_y+Options::surfaceSize/2,
 							(z-min.z())*scale_z

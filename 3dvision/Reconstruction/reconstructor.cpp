@@ -214,8 +214,8 @@ namespace cybervision{
 				QPointF x2; x2.setX((it1.value().b.x()-centroidB.x())*scalingB),x2.setY((it1.value().b.y()-centroidB.y())*scalingB);
 				KeypointMatch match_normalized; match_normalized.a=x1, match_normalized.b=x2;
 				//Check error
-				double current_error= computeEssentialMatrixError(E,it1.value());
-				//double current_error= computeEssentialMatrixError(E_normalized,match_normalized);
+				//double current_error= computeEssentialMatrixError(E,it1.value());
+				double current_error= computeEssentialMatrixError(E_normalized,match_normalized);
 
 				//Check if match exists in master consensus set
 				if(master_consensus_set.contains(it1.key(),it1.value())){
@@ -237,8 +237,8 @@ namespace cybervision{
 				if(consensus_set.size()>best_consensus_set.size() || (consensus_set.size()==best_consensus_set.size() && error<best_error)){
 					best_consensus_set= consensus_set;
 					best_error= error;
-					//best_E= E_normalized;
-					best_E= E;
+					best_E= E_normalized;
+					//best_E= E;
 				}
 			}
 		}
@@ -308,13 +308,14 @@ namespace cybervision{
 		//(Project into essential space (do we need this?))
 		{
 			SVD<3,3,double> svd(E);
+			QGenericMatrix<3,3,double> Sigma= svd.getSigma();
+			Sigma(2,2)= 0.0;
 /*
 			QGenericMatrix<3,3,double> Sigma_new;
 			Sigma_new.fill(0.0);
 			Sigma_new(0,0)= 1.0, Sigma_new(1,1)= 1.0;
+			Sigma= Sigma_new;
 */
-			QGenericMatrix<3,3,double> Sigma= svd.getSigma();
-			Sigma(2,2)= 0.0;
 
 			E= svd.getU()*Sigma*(svd.getV().transposed());
 		}
@@ -432,8 +433,9 @@ namespace cybervision{
 		for(int i=0;i<3;i++)
 			P1(i,i)= 1;
 
+		P1(2,2)= 1e-6;//=1/f
 		for(int i=0;i<3;i++)
-			P1(i,3)= T(i,0);//This is a hack because our SVD procedure cannot process non-square matrices
+			P1(i,3)= 0;
 
 		P2.fill(0.0);
 		for(int i=0;i<3;i++)
@@ -457,8 +459,8 @@ namespace cybervision{
 				max_y= fabs(it.value().b.y());
 		}
 
-		max_x*=10, max_y*=10;
-		//max_x*=0, max_y*=0;
+		max_x*=50, max_y*=50;
+		//max_x=0, max_y=0;
 		QList<QVector3D> resultPoints;
 
 		QGenericMatrix<4,4,double> A;
@@ -482,6 +484,38 @@ namespace cybervision{
 			QVector3D resultPoint(x1.x(),x1.y(),X(2,0));
 
 			resultPoints.push_back(resultPoint);
+		}
+
+		//TODO: remove this ugly filtering hack!
+		if(true)
+		{
+			double average_depth= 0;
+			double min_depth=std::numeric_limits<double>::infinity(),max_depth=-std::numeric_limits<double>::infinity();
+			QVector3D p00=*resultPoints.begin(),p01=*resultPoints.begin(),p10=*resultPoints.begin(),p11=*resultPoints.begin();
+			for(QList<QVector3D>::const_iterator i= resultPoints.begin();i!=resultPoints.end();i++){
+				average_depth+= i->z();
+				if(min_depth>i->z())
+					min_depth= i->z();
+				if(max_depth<i->z())
+					max_depth= i->z();
+
+				if(i->x()<p00.x() && i->y()<p00.y())
+					p00=*i;
+
+				if(i->x()<p01.x() && i->y()>p01.y())
+					p01=*i;
+
+				if(i->x()>p10.x() && i->y()<p10.y())
+					p10=*i;
+
+				if(i->x()>p11.x() && i->y()>p11.y())
+					p11=*i;
+			}
+			average_depth/=(double)resultPoints.size();
+
+			//QVector3D min_point= qMin(qMin(p00->z(),p11->z()),qMin(p10->z(),p01->z()));
+
+			//QVector3D max_point= qMax(qMax(p00->z(),p11->z()),qMax(p10->z(),p01->z()));
 		}
 
 		return resultPoints;
