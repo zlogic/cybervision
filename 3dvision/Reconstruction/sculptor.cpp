@@ -62,7 +62,7 @@ namespace cybervision{
 		float aspectRatio= (max.x()-min.x())/(max.y()-min.y());
 		float scale_x= aspectRatio*Options::surfaceSize/(max.x()-min.x());
 		float scale_y= -Options::surfaceSize/(max.y()-min.y());
-		float scale_z= -Options::surfaceDepth/(max.z()-min.z());
+		float scale_z= Options::surfaceDepth/(max.z()-min.z());
 
 		QMap<QPointF,float> pointsMap;
 		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
@@ -196,7 +196,7 @@ namespace cybervision{
 			float dmax= (dx > dy) ? dx : dy;
 			float xmid= (max.x()+min.x())/2.0;
 			float ymid= (max.y()+min.x())/2.0;
-			
+
 			superTriangle.a= QVector3D(xmid-2.0*dmax,ymid-dmax,0);
 			superTriangle.b= QVector3D(xmid,ymid+2.0*dmax,0);
 			superTriangle.c= QVector3D(xmid+2.0*dmax,ymid-dmax,0);

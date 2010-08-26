@@ -12,5 +12,5 @@ namespace cybervision{
 	const int Options::RANSAC_d= 32;
 
 	const float Options::surfaceSize= 15.0F;
-	const float Options::surfaceDepth= 2.5F;
+	const float Options::surfaceDepth= 5.0F;
 }

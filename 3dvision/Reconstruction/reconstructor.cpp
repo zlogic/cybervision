@@ -257,18 +257,18 @@ namespace cybervision{
 
 		QList<StereopairPosition> RTList= computeRT(best_E);
 		//Output R,T matrices to log
-		/*
+
 		QString RT_str;
 		for(QList<StereopairPosition>::const_iterator i= RTList.begin();i!=RTList.end();i++){
-			RT_str.append("R%1T\n").arg(QString(""),40);
+			RT_str.append(QString("R%1T\n").arg(QString(""),40));
 			for(int j=0;j<3;j++){
-				qreal T_value_i= j==0? i->T.x(): (j==1?i->T.y():i->T.z());//Extract i-th value from QVector3D
+				qreal T_value_i= j==0? i->T(0,0): (j==1?i->T(1,0):i->T(2,0));//Extract i-th value from QVector3D
 				QString matrix_row= QString("%1 %2 %3 %4\n").arg(i->R(j,0),6,'g',6).arg(i->R(j,1),6,'g',6).arg(i->R(j,2),6,'g',6).arg(T_value_i,6,'g',6);
 				RT_str.append(matrix_row);
 			}
 		}
 		emit sgnLogMessage(QString("Resulting camera poses\n").append(RT_str));
-		*/
+
 		return RTList;
 	}
 
@@ -306,16 +306,16 @@ namespace cybervision{
 		}
 		//"Normalize" E
 		//(Project into essential space (do we need this?))
-		{
+		if(false){
 			SVD<3,3,double> svd(E);
 			QGenericMatrix<3,3,double> Sigma= svd.getSigma();
 			Sigma(2,2)= 0.0;
-/*
+			/*
 			QGenericMatrix<3,3,double> Sigma_new;
 			Sigma_new.fill(0.0);
 			Sigma_new(0,0)= 1.0, Sigma_new(1,1)= 1.0;
 			Sigma= Sigma_new;
-*/
+			*/
 
 			E= svd.getU()*Sigma*(svd.getV().transposed());
 		}
@@ -347,7 +347,7 @@ namespace cybervision{
 		result.fill(0.0);
 		result(0,1)= angle>=0?1:(-1);
 		result(1,0)= -(angle>=0?1:(-1));
-		//result(2,2)= 1.0;
+		result(2,2)= 1.0;
 		return result;
 	}
 
@@ -360,6 +360,10 @@ namespace cybervision{
 
 		QGenericMatrix<3,3,double> U= svd.getU(),Sigma=svd.getSigma(), V=svd.getV();
 
+		//Project into essential space
+		Sigma.fill(0.0);
+		Sigma(0,0)= 1.0, Sigma(1,1)= 1.0;
+
 		for(QList<double>::const_iterator i= pi_values.begin();i!=pi_values.end();i++){
 			double PI_R= *i;
 			QGenericMatrix<3,3,double> R= U*(computeRT_rzfunc(PI_R).transposed())*(V.transposed());
@@ -371,7 +375,11 @@ namespace cybervision{
 				T_unhatted(0,0)= (T(2,1)-T(1,2))/2;
 				T_unhatted(1,0)= (T(0,2)-T(2,0))/2;
 				T_unhatted(2,0)= (T(1,0)-T(0,1))/2;
-				//T_unhatted=QVector3D(U(0,2),U(1,2),U(2,2))*(PI_T>=0?1:-1);
+
+				T_unhatted(0,0)=U(0,2)*(PI_T>=0?1:-1);
+				T_unhatted(1,0)=U(1,2)*(PI_T>=0?1:-1);
+				T_unhatted(2,0)=U(2,2)*(PI_T>=0?1:-1);
+
 
 				StereopairPosition RT;
 				RT.R= R, RT.T= T_unhatted;
@@ -433,9 +441,8 @@ namespace cybervision{
 		for(int i=0;i<3;i++)
 			P1(i,i)= 1;
 
-		P1(2,2)= 1e-6;//=1/f
-		for(int i=0;i<3;i++)
-			P1(i,3)= 0;
+		//for(int i=0;i<3;i++)
+		//	P1(i,3)= 0;
 
 		P2.fill(0.0);
 		for(int i=0;i<3;i++)
@@ -459,12 +466,11 @@ namespace cybervision{
 				max_y= fabs(it.value().b.y());
 		}
 
-		max_x*=50, max_y*=50;
-		//max_x=0, max_y=0;
 		QList<QVector3D> resultPoints;
 
 		QGenericMatrix<4,4,double> A;
 
+		for(int i=0;i<2;i++)
 		for(SortedKeypointMatches::const_iterator it=matches.begin();it!=matches.end();it++){
 			QPointF x1= it.value().a, x2= it.value().b;
 			for(int i=0;i<4;i++){
@@ -476,46 +482,18 @@ namespace cybervision{
 			SVD<4,4,double> svd(A);
 			QGenericMatrix<4,4,double> Sigma= svd.getSigma();
 			QGenericMatrix<4,4,double> V= svd.getV();
-			QGenericMatrix<1,4,double> V_col3;
-			for(int i=0;i<4;i++)
-				V_col3(i,0)= V(i,3);
-			QGenericMatrix<1,4,double> X= V_col3;
+			//Search for min column
+			size_t Sigma_min_index=0;
+			for(size_t i=1;i<4;i++)
+				Sigma_min_index= Sigma(i,i)<Sigma(Sigma_min_index,Sigma_min_index);
 
-			QVector3D resultPoint(x1.x(),x1.y(),X(2,0));
+			QGenericMatrix<1,4,double> V_col_min;
+			for(int i=0;i<4;i++)
+				V_col_min(i,0)= V(i,Sigma_min_index);
+
+			QVector3D resultPoint(x1.x(),x1.y(),V_col_min(2,0));
 
 			resultPoints.push_back(resultPoint);
-		}
-
-		//TODO: remove this ugly filtering hack!
-		if(true)
-		{
-			double average_depth= 0;
-			double min_depth=std::numeric_limits<double>::infinity(),max_depth=-std::numeric_limits<double>::infinity();
-			QVector3D p00=*resultPoints.begin(),p01=*resultPoints.begin(),p10=*resultPoints.begin(),p11=*resultPoints.begin();
-			for(QList<QVector3D>::const_iterator i= resultPoints.begin();i!=resultPoints.end();i++){
-				average_depth+= i->z();
-				if(min_depth>i->z())
-					min_depth= i->z();
-				if(max_depth<i->z())
-					max_depth= i->z();
-
-				if(i->x()<p00.x() && i->y()<p00.y())
-					p00=*i;
-
-				if(i->x()<p01.x() && i->y()>p01.y())
-					p01=*i;
-
-				if(i->x()>p10.x() && i->y()<p10.y())
-					p10=*i;
-
-				if(i->x()>p11.x() && i->y()>p11.y())
-					p11=*i;
-			}
-			average_depth/=(double)resultPoints.size();
-
-			//QVector3D min_point= qMin(qMin(p00->z(),p11->z()),qMin(p10->z(),p01->z()));
-
-			//QVector3D max_point= qMax(qMax(p00->z(),p11->z()),qMax(p10->z(),p01->z()));
 		}
 
 		return resultPoints;
