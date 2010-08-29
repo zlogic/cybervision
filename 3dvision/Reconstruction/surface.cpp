@@ -16,16 +16,10 @@ namespace cybervision{
 	}
 
 	void Surface::glDraw() const{
-		/*
-		glBegin(GL_TRIANGLES);
-		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
-			glVertex3f(it->x(),it->y(),it->z()*5e6F);
-		}
-		glEnd();
-		*/
 		for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
 			glBegin(GL_TRIANGLES);
 			glColor3f(1.0f, 1.0f, 1.0f);
+			//Front side
 			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
 			glVertex3f(it->a.x(),it->a.y(),it->a.z());
 			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
@@ -33,6 +27,13 @@ namespace cybervision{
 			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
 			glVertex3f(it->c.x(),it->c.y(),it->c.z());
 
+			//Back side
+			glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
+			glVertex3f(it->c.x(),it->c.y(),it->c.z());
+			glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
+			glVertex3f(it->b.x(),it->b.y(),it->b.z());
+			glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
+			glVertex3f(it->a.x(),it->a.y(),it->a.z());
 			glEnd();
 
 			glBegin(GL_POINTS);

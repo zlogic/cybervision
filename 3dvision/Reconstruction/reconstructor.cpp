@@ -441,14 +441,10 @@ namespace cybervision{
 		for(int i=0;i<3;i++)
 			P1(i,i)= 1;
 
-		//for(int i=0;i<3;i++)
-		//	P1(i,3)= 0;
-
 		P2.fill(0.0);
 		for(int i=0;i<3;i++)
 			for(int j=0;j<3;j++)
 				P2(i,j)= R(i,j);
-
 
 		for(int i=0;i<3;i++)
 			P2(i,3)= T(i,0);
@@ -474,10 +470,10 @@ namespace cybervision{
 		for(SortedKeypointMatches::const_iterator it=matches.begin();it!=matches.end();it++){
 			QPointF x1= it.value().a, x2= it.value().b;
 			for(int i=0;i<4;i++){
-				A(0,i)= (x1.x()+max_x)*P1(2,i)-P1(0,i);
-				A(1,i)= (x1.y()+max_y)*P1(2,i)-P1(1,i);
-				A(2,i)= (x2.x()+max_x)*P2(2,i)-P2(0,i);
-				A(3,i)= (x2.y()+max_y)*P2(2,i)-P2(1,i);
+				A(0,i)= (x1.x()+max_x*10)*P1(2,i)-P1(0,i);
+				A(1,i)= (x1.y()+max_y*10)*P1(2,i)-P1(1,i);
+				A(2,i)= (x2.x()+max_x*10)*P2(2,i)-P2(0,i);
+				A(3,i)= (x2.y()+max_y*10)*P2(2,i)-P2(1,i);
 			}
 			SVD<4,4,double> svd(A);
 			QGenericMatrix<4,4,double> Sigma= svd.getSigma();

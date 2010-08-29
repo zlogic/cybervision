@@ -49,10 +49,10 @@ void CybervisionViewer::paintGL(){
 	// draw the scene:
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glLoadIdentity();
+	glTranslatef(vpTranslation.x(), vpTranslation.y(), vpTranslation.z());
 	glRotatef(vpRotation.x(), 1.0, 0.0, 0.0);
 	glRotatef(vpRotation.y(), 0.0, 1.0, 0.0);
 	glRotatef(vpRotation.z(), 0.0, 0.0, 1.0);
-	glTranslatef(vpTranslation.x(), vpTranslation.y(), vpTranslation.z());
 
 	{
 		QMutexLocker lock(&surfaceMutex);

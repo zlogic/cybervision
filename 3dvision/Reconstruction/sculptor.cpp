@@ -46,6 +46,14 @@ namespace cybervision{
 		QVector3D centroid(0,0,0);
 		QVector3D min( std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
 		QVector3D max(-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity());
+
+		//These values are unwanted
+		qreal max_z=points.begin()->z(), min_z=points.begin()->z();
+		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
+			max_z= qMax(max_z,it->z());
+			min_z= qMin(min_z,it->z());
+		}
+
 		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
 			min.setX(qMin(min.x(),it->x()));
 			min.setY(qMin(min.y(),it->y()));
@@ -58,6 +66,7 @@ namespace cybervision{
 			centroid.setY(centroid.y()+it->y());
 			centroid.setZ(centroid.z()+it->z());
 		}
+
 
 		float aspectRatio= (max.x()-min.x())/(max.y()-min.y());
 		float scale_x= aspectRatio*Options::surfaceSize/(max.x()-min.x());
@@ -80,7 +89,7 @@ namespace cybervision{
 				float z= sum/(float)count;
 				QVector3D scaled_point((it.key().x()-min.x())*scale_x-Options::surfaceSize/2,
 							(it.key().y()-min.y())*scale_y+Options::surfaceSize/2,
-							(z-min.z())*scale_z
+							(z-min.z())*scale_z-Options::surfaceDepth
 				);
 				filteredPoints.push_back(scaled_point);
 				sum= 0;
