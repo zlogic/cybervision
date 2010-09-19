@@ -78,6 +78,7 @@ namespace cybervision{
 		QMap<QPointF,float> pointsMap;
 		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
 			//TODO:create a better filter here!
+			if(false)
 			{
 				if(fabs(it->z()-centroid.z())>0.2*(max.z()-min.z()))
 					continue;
@@ -89,6 +90,7 @@ namespace cybervision{
 		int count=0;
 
 		//TODO:create a better filter here!
+		if(false)
 		{
 			float delta=max.z()-min.z();
 			min= QVector3D( std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
