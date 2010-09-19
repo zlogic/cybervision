@@ -67,7 +67,9 @@ namespace cybervision{
 			centroid.setZ(centroid.z()+it->z());
 		}
 
-
+		centroid.setX(centroid.x()/points.count());
+		centroid.setY(centroid.y()/points.count());
+		centroid.setZ(centroid.z()/points.count());
 		float aspectRatio= (max.x()-min.x())/(max.y()-min.y());
 		float scale_x= aspectRatio*Options::surfaceSize/(max.x()-min.x());
 		float scale_y= -Options::surfaceSize/(max.y()-min.y());
@@ -75,11 +77,35 @@ namespace cybervision{
 
 		QMap<QPointF,float> pointsMap;
 		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
+			//TODO:create a better filter here!
+			{
+				if(fabs(it->z()-centroid.z())>0.2*(max.z()-min.z()))
+					continue;
+			}
 			QPointF point(it->x(),it->y());
 			pointsMap.insertMulti(point,it->z());
 		}
 		float sum=0;
 		int count=0;
+
+		//TODO:create a better filter here!
+		{
+			float delta=max.z()-min.z();
+			min= QVector3D( std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
+			max= QVector3D( -std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity());
+			for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
+				if(fabs(it->z()-centroid.z())>0.2*delta)
+					continue;
+				min.setX(qMin(min.x(),it->x()));
+				min.setY(qMin(min.y(),it->y()));
+				min.setZ(qMin(min.z(),it->z()));
+				max.setX(qMax(max.x(),it->x()));
+				max.setY(qMax(max.y(),it->y()));
+				max.setZ(qMax(max.z(),it->z()));
+			}
+			scale_z= Options::surfaceDepth/(max.z()-min.z());
+		}
+
 
 		QList<QVector3D> filteredPoints;
 		for(QMap<QPointF,float>::const_iterator it=pointsMap.begin();it!=pointsMap.end();it++){
