@@ -13,7 +13,8 @@ SOURCES += main.cpp \
     SIFT/libsiftfast.cpp \
     UI/cybervisionviewer.cpp \
     Reconstruction/sculptor.cpp \
-    Reconstruction/surface.cpp
+    Reconstruction/surface.cpp \
+	KDTree/kdtreegateway.cpp
 HEADERS += UI/mainwindow.h \
     Reconstruction/svd.h \
     Reconstruction/reconstructor.h \
@@ -23,20 +24,26 @@ HEADERS += UI/mainwindow.h \
     SIFT/siftfast.h \
     UI/cybervisionviewer.h \
     Reconstruction/sculptor.h \
-    Reconstruction/surface.h
+    Reconstruction/surface.h \
+    KDTree/region.hpp \
+    KDTree/node.hpp \
+    KDTree/kdtree.hpp \
+    KDTree/iterator.hpp \
+    KDTree/function.hpp \
+    KDTree/allocator.hpp \
+	KDTree/kdtreegateway.h
 FORMS += UI/mainwindow.ui
 OTHER_FILES += SIFT/optimization_flags.txt \
     SIFT/3dvision_pro.txt
-
 QMAKE_CXXFLAGS_RELEASE += -msse3
-QMAKE_CXXFLAGS_DEBUG +=
-
+QMAKE_CXXFLAGS_DEBUG += 
 win32 { 
-	QMAKE_LIBS += -static \
-		-lgomp \
-		-lpthread
-	QMAKE_CXXFLAGS += -U_WIN32 -fopenmp
-	QMAKE_CFLAGS += -U_WIN32
+    QMAKE_LIBS += -static \
+        -lgomp \
+        -lpthread
+    QMAKE_CXXFLAGS += -U_WIN32 \
+        -fopenmp
+    QMAKE_CFLAGS += -U_WIN32
 }
 unix { 
     QMAKE_LIBS += -lgomp \

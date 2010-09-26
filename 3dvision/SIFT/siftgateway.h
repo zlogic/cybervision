@@ -21,6 +21,7 @@ namespace SIFT{
 		float distance(const Keypoint&)const;
 		float getX()const;
 		float getY()const;
+		inline float operator[](size_t i)const{return descriptor[i];}
 	};
 
 	class Extractor{
