@@ -6,9 +6,9 @@
 namespace KDTree{
 
 	//Used for comparing two SIFT keypoints by libkdtree++
-	inline double sift_coordinate(const SIFT::Keypoint t, size_t k) { return t[k]; }
+	inline double sift_coordinate(const SIFT::Keypoint& t, size_t k) { return t[k]; }
 
-	typedef KDTree<128,SIFT::Keypoint,std::pointer_to_binary_function<SIFT::Keypoint,size_t,double> > KDTreeType;
+	typedef KDTree<128,SIFT::Keypoint,std::pointer_to_binary_function<const SIFT::Keypoint&,size_t,double> > KDTreeType;
 	KDTreeGateway::KDTreeGateway(double maxKeypointDistance,size_t bbf_steps){
 		this->maxKeypointDistance= maxKeypointDistance;
 		this->bbf_steps= bbf_steps;

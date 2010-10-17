@@ -24,12 +24,12 @@ namespace cybervision{
 	}
 
 	Reconstructor::SortedKeypointMatches Reconstructor::extractMatches(const QString& filename1,const QString& filename2){
-		QString precomputed_filename;
-		QFile precomputed_file;
+		QFileInfo precomputed_file_info;
 		if(Options::UsePrecomputedKeypointData){
 			QFileInfo file1(filename1), file2(filename2);
-			precomputed_filename= QString(file1.fileName()+" "+file2.fileName()+".txt");
-			QFile precomputed_file(QFileInfo(file1.absoluteDir(),precomputed_filename).absoluteFilePath());
+			QString precomputed_filename= QString(file1.fileName()+" "+file2.fileName()+".txt");
+			precomputed_file_info= QFileInfo(file1.absoluteDir(),precomputed_filename);
+			QFile precomputed_file(precomputed_file_info.absoluteFilePath());
 			if(precomputed_file.exists()){
 				emit sgnLogMessage("Loading precomputed SIFT matches from "+QDir::convertSeparators(precomputed_file.fileName()));
 				precomputed_file.open(QFile::ReadOnly);
@@ -111,23 +111,22 @@ namespace cybervision{
 				m.a= it.value().a, m.b= it.value().b;
 				matches.insert(it.key(),m);
 			}
-/*
+
 			emit sgnLogMessage(QString("Matching keypoints from %1 to %2 with kd-tree").arg(filename2).arg(filename1));
 			current_matches= kdTree.matchKeypoints(keypoints2,keypoints1);
 			for(cybervision::SortedKeypointMatches::const_iterator it=current_matches.begin();it!=current_matches.end();it++){
-				if(!matches.contains(it.key())){
-					KeypointMatch m;
-					m.a= it.value().a, m.b= it.value().b;
+				KeypointMatch m;
+				m.a= it.value().b, m.b= it.value().a;
+				if(!matches.contains(it.key(),m))
 					matches.insert(it.key(),m);
-				}
 			}
-			*/
 		}
 
 		emit sgnLogMessage(QString("Found %1 keypoint matches").arg(matches.size()));
 
 		if(Options::UsePrecomputedKeypointData){
-			emit sgnLogMessage("Saving computed SIFT matches to "+QDir::convertSeparators(precomputed_file.fileName()));
+			emit sgnLogMessage("Saving computed SIFT matches to "+QDir::convertSeparators(precomputed_file_info.fileName()));
+			QFile precomputed_file(precomputed_file_info.absoluteFilePath());
 			precomputed_file.open(QFile::WriteOnly);
 			QTextStream out_stream(&precomputed_file);
 
