@@ -1,8 +1,6 @@
 #ifndef OPTIONS_H
 #define OPTIONS_H
-
-//Uses precumputed data when possible (to skip time-consuming steps)
-#define USE_PRECOMPUTED_DATA
+#include <cstddef>
 
 namespace cybervision{
 
@@ -12,6 +10,11 @@ public:
 	static const double MaxKeypointDistance;//Maximum SIFT match vector distance, larger values get discarded
 	static const double ReliableDistance;//Maximum keypoint distance on which camera pose (E, R&T) can be computed
 	static const int MinMatches;//Minimum amount of matches needed for pose estimation
+	static const bool UsePrecomputedKeypointData;//Use precomputed data when possible (to skip time-consuming steps)
+	enum KeypointMatchingMode {KEYPOINT_MATCHING_SIMPLE,KEYPOINT_MATCHING_KDTREE};//Mode for matching keypoints (BBF KT-tree or simple comparison)
+	static const size_t bbf_steps;//Number of best-bin-first search iterations
+	static const KeypointMatchingMode keypointMatchingMode;//Keypoint matching mode
+
 	static const int RANSAC_k;//RANSAC k parameter
 	static const int RANSAC_n;//RANSAC n parameter
 	static const double RANSAC_t;//RANSAC t parameter

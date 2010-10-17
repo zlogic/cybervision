@@ -25,7 +25,7 @@ namespace cybervision{
 		};
 		//Stores all acceptable keypoint matches
 		typedef QList<QPair<float,KeypointMatch> > KeypointMatches;
-		typedef QMultiMap<float,KeypointMatch > SortedKeypointMatches;
+		typedef QMultiMap<float,KeypointMatch> SortedKeypointMatches;
 		//Class for storing stereo pair's R and T matrix pairs
 		struct StereopairPosition{
 			QGenericMatrix<3,3,double> R;
