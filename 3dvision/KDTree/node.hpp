@@ -200,14 +200,14 @@ namespace KDTree
 		   const _Node<_Val>* __node, const _Node_base* __end,
 		   const _Node<_Val>* __best, typename _Dist::distance_type __max,
 		   const _Cmp& __cmp, const _Acc& __acc, const _Dist& __dist,
-		   _Predicate __p)
+		   _Predicate __p,size_t __bbf_steps_remaining)
   {
     const _Node_base* pcur = __node;
     const _Node_base* cur = _S_node_descend(__dim % __k, __cmp, __acc, __val, __node);
-    size_t cur_dim = __dim+1;
+	size_t cur_dim = __dim+1;
     // find the smallest __max distance in direct descent
-    while (cur)
-      {
+	while (cur)
+	  {
 	if (__p(static_cast<const _Node<_Val>* >(cur)->_M_value))
 	  {
 	    typename _Dist::distance_type d = 0;
@@ -238,7 +238,7 @@ namespace KDTree
     const _Node_base* pprobe = probe;
     const _Node_base* near_node;
     const _Node_base* far_node;
-    size_t probe_dim = cur_dim;
+	size_t probe_dim = cur_dim;
     if (_S_node_compare(probe_dim % __k, __cmp, __acc, __val, static_cast<const _Node<_Val>* >(probe)->_M_value))
       near_node = probe->_M_right;
     else
@@ -249,11 +249,13 @@ namespace KDTree
       {
 	probe = near_node;
 	++probe_dim;
-      }
-    while (cur != __end)
-      {
-	while (probe != cur)
+	  }
+	while (cur != __end && __bbf_steps_remaining>0)
 	  {
+	while (probe != cur && __bbf_steps_remaining>0)
+	  {
+		if(__bbf_steps_remaining!=std::numeric_limits<size_t>::max() && __bbf_steps_remaining>0)
+		  __bbf_steps_remaining--;
 	    if (_S_node_compare(probe_dim % __k, __cmp, __acc, __val, static_cast<const _Node<_Val>* >(probe)->_M_value))
 	      {
 		near_node = probe->_M_left;
@@ -277,7 +279,7 @@ namespace KDTree
 			__best = static_cast<const _Node<_Val>* >(probe);
 			__max = d;
 			__dim = probe_dim;
-		      }
+			  }
 		  }
 		pprobe = probe;
 		if (near_node)

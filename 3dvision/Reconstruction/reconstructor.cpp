@@ -104,10 +104,24 @@ namespace cybervision{
 		}else if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_KDTREE){
 			//KD tree matching
 			emit sgnLogMessage(QString("Matching keypoints from %1 to %2 with kd-tree").arg(filename1).arg(filename2));
-			KDTree::KDTreeGateway kdTree(Options::MaxKeypointDistance);
+			KDTree::KDTreeGateway kdTree(Options::MaxKeypointDistance,Options::bbf_steps);
 			cybervision::SortedKeypointMatches current_matches= kdTree.matchKeypoints(keypoints1,keypoints2);
-
+			for(cybervision::SortedKeypointMatches::const_iterator it=current_matches.begin();it!=current_matches.end();it++){
+				KeypointMatch m;
+				m.a= it.value().a, m.b= it.value().b;
+				matches.insert(it.key(),m);
+			}
+/*
 			emit sgnLogMessage(QString("Matching keypoints from %1 to %2 with kd-tree").arg(filename2).arg(filename1));
+			current_matches= kdTree.matchKeypoints(keypoints2,keypoints1);
+			for(cybervision::SortedKeypointMatches::const_iterator it=current_matches.begin();it!=current_matches.end();it++){
+				if(!matches.contains(it.key())){
+					KeypointMatch m;
+					m.a= it.value().a, m.b= it.value().b;
+					matches.insert(it.key(),m);
+				}
+			}
+			*/
 		}
 
 		emit sgnLogMessage(QString("Found %1 keypoint matches").arg(matches.size()));

@@ -76,6 +76,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cassert>
+#include <limits>
 
 #include "function.hpp"
 #include "allocator.hpp"
@@ -524,7 +525,7 @@ namespace KDTree
 
       template <class SearchVal>
       std::pair<const_iterator, distance_type>
-      find_nearest (SearchVal const& __val, distance_type __max) const
+	  find_nearest (SearchVal const& __val, distance_type __max, size_t bbf_steps=std::numeric_limits<size_t>::max()) const
       {
 	if (_M_get_root())
 	  {
@@ -543,7 +544,7 @@ namespace KDTree
 	      std::pair<size_type, typename _Acc::result_type> >
 	      best = _S_node_nearest (__K, 0, __val, _M_get_root(), &_M_header,
 				      node, __max, _M_cmp, _M_acc, _M_dist,
-				      always_true<value_type>());
+					  always_true<value_type>(),bbf_steps);
        // make sure we didn't just get stuck with the root node...
        if (root_is_candidate || best.first != _M_get_root())
           return std::pair<const_iterator, distance_type>
