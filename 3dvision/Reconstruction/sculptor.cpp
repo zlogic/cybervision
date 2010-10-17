@@ -35,6 +35,7 @@ namespace cybervision{
 	Sculptor::Sculptor(const QList<QVector3D>& points){
 		if(!points.empty()){
 			delaunayTriangulate(points);
+			surface.points= points;
 		}
 	}
 

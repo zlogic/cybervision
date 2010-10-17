@@ -20,6 +20,10 @@ void CybervisionViewer::setSurface3D(const cybervision::Surface& surface){
 	updateGL();
 }
 
+const cybervision::Surface& CybervisionViewer::getSurface3D()const{
+	return surface;
+}
+
 //OpenGL-specific stuff
 
 void CybervisionViewer::initializeGL(){

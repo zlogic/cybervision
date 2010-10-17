@@ -26,10 +26,20 @@ private:
 
 	QGraphicsScene scene;
 	ProcessThread thread;
+
+	//Updates widgets enabled/disabled/visible status
+	void updateWidgetStatus();
+
+	//Loads debugging data from file
+	void loadDebugPreferences();
+
 private slots:
-	void on_actionShowlog_toggled(bool );
- void on_logDockWidget_visibilityChanged(bool visible);
- void on_saveButton_clicked();
+ void on_addImageButton_clicked();
+ void on_deleteImageButton_clicked();
+ void on_imageList_itemSelectionChanged();
+	void on_actionShowlog_toggled(bool);
+	void on_logDockWidget_visibilityChanged(bool visible);
+	void on_saveButton_clicked();
 	void on_startProcessButton_clicked();
 
 	//Slots for receiving messages from process thread

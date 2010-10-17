@@ -55,3 +55,6 @@ unix {
         -lpthread
     QMAKE_CXXFLAGS += -fopenmp
 }
+
+FORMS += \
+    UI/mainwindow.ui

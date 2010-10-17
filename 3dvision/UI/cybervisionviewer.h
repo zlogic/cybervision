@@ -21,7 +21,7 @@ public:
 	CybervisionViewer(QWidget *parent);
 
 	void setSurface3D(const cybervision::Surface&);
-
+	const cybervision::Surface& getSurface3D()const;
 protected:
 	//Inherited opengl stuff
 	void initializeGL();

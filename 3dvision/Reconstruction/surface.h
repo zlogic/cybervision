@@ -2,6 +2,7 @@
 #define SURFACE_H
 
 #include <QVector3D>
+#include <QFileInfo>
 
 namespace cybervision{
 	class Surface{
@@ -14,13 +15,23 @@ namespace cybervision{
 			QVector3D normal;
 		};
 
-		QList<Triangle> triangles;//Surface data
+		//Surface data in two formats
+		QList<Triangle> triangles;
+		QList<QVector3D> points;
 	public:
 		Surface();
 		Surface(const Surface&);
 		void operator =(const Surface&);
 		//Draws the surface with OpenGL, should be called from paintGL
 		void glDraw()const;
+
+		//Returns true if surface contains valid data instead of an empty set
+		bool isOk() const;
+
+		//Functions for saving image
+		void savePoints(QString fileName)const;
+		void savePolygons(QString fileName)const;
+		void saveCollada(QString fileName)const;
 	signals:
 
 	public slots:
