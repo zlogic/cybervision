@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/collada">
+        <file alias="Template.xml">Reconstruction/ColladaTemplate.xml</file>
+    </qresource>
+</RCC>

@@ -40,7 +40,8 @@ HEADERS += UI/mainwindow.h \
 	KDTree/allocator.hpp \
 FORMS += UI/mainwindow.ui
 OTHER_FILES += SIFT/optimization_flags.txt \
-    SIFT/3dvision_pro.txt
+    SIFT/3dvision_pro.txt \
+    Reconstruction/ColladaTemplate.xml
 QMAKE_CXXFLAGS_RELEASE += -msse3
 QMAKE_CXXFLAGS_DEBUG +=
 win32 { 
@@ -58,3 +59,6 @@ unix {
 
 FORMS += \
     UI/mainwindow.ui
+
+RESOURCES += \
+    ReconstructionResources.qrc

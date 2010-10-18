@@ -49,6 +49,10 @@ namespace cybervision{
 
 	bool Surface::isOk()const{ return !triangles.empty() && !points.empty(); }
 
+
+	/*
+	 Functions for saving image data
+	 */
 	void Surface::savePoints(QString fileName)const{
 		QFile file(fileName);
 		file.open(QIODevice::WriteOnly);
@@ -74,15 +78,50 @@ namespace cybervision{
 		file.close();
 	}
 	void Surface::saveCollada(QString fileName)const{
+		//Read XML template
+		QString xmlTemplate;
+		{
+			QFile templateFile(":/collada/Template.xml");
+			templateFile.open(QIODevice::ReadOnly);
+			QTextStream stream(&templateFile);
+			xmlTemplate= stream.readAll();
+		}
+
 		QFile file(fileName);
 		file.open(QIODevice::WriteOnly);
 
 		QTextStream stream(&file);
 
+		QString vertexesString,normalsString,trianglesString;
+		int i=0;//Triangle indexes
 		for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
-			//TODO: write file here
+			QString currentVertexString;
+			currentVertexString.append(QString("%1 %2 %3 ").arg(it->a.x()).arg(it->a.y()).arg(it->a.z()));
+			currentVertexString.append(QString("%1 %2 %3 ").arg(it->b.x()).arg(it->b.y()).arg(it->b.z()));
+			currentVertexString.append(QString("%1 %2 %3 ").arg(it->c.x()).arg(it->c.y()).arg(it->c.z()));
+			QString currentNormalString;
+			currentNormalString.append(QString("%1 %2 %3 ").arg(it->normal.x()).arg(it->normal.y()).arg(it->normal.z()));
+			QString currentTriangleString;
+			currentTriangleString.append(QString("%1 %2 %3 ").arg(i).arg(i+1).arg(i+2));
+
+			vertexesString.append(currentVertexString);
+			normalsString.append(currentNormalString+currentNormalString+currentNormalString);
+			trianglesString.append(currentTriangleString);
+			i+=3;
 		}
 
+		QString result=xmlTemplate;
+		result.replace("##[points-array-size]##",QString("%1").arg(triangles.length()*9));
+		result.replace("##[points-count]##",QString("%1").arg(triangles.length()));
+		result.replace("##[normals-array-size]##",QString("%1").arg(triangles.length()*9));
+		result.replace("##[normals-count]##",QString("%1").arg(triangles.length()));
+		result.replace("##[triangles-count]##",QString("%1").arg(triangles.length()));
+
+		result.replace("##[points]##",vertexesString);
+		result.replace("##[normals]##",normalsString);
+		result.replace("##[triangles-indexes]##",trianglesString);
+
+		stream<<result;
 		file.close();
 	}
 }
