@@ -9,9 +9,10 @@ namespace cybervision{
 		friend class Sculptor;
 	protected:
 		//Internal classes
+		typedef int PolygonPoint;//Index of point in array. NOT checked!
 		class Triangle{
 		public:
-			QVector3D a,b,c;
+			PolygonPoint a,b,c;
 			QVector3D normal;
 		};
 

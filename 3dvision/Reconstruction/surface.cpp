@@ -2,6 +2,7 @@
 #include <QTextStream>
 
 #include "surface.h"
+#include "options.h"
 
 namespace cybervision{
 	Surface::Surface(){
@@ -19,23 +20,27 @@ namespace cybervision{
 
 	void Surface::glDraw() const{
 		for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
+			const QVector3D& pa=points[it->a];
+			const QVector3D& pb=points[it->b];
+			const QVector3D& pc=points[it->c];
+
 			glBegin(GL_TRIANGLES);
 			glColor3f(1.0f, 1.0f, 1.0f);
 			//Front side
 			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-			glVertex3f(it->a.x(),it->a.y(),it->a.z());
+			glVertex3f(pa.x(),pa.y(),pa.z());
 			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-			glVertex3f(it->b.x(),it->b.y(),it->b.z());
+			glVertex3f(pb.x(),pb.y(),pb.z());
 			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-			glVertex3f(it->c.x(),it->c.y(),it->c.z());
+			glVertex3f(pc.x(),pc.y(),pc.z());
 
 			//Back side
 			glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-			glVertex3f(it->c.x(),it->c.y(),it->c.z());
+			glVertex3f(pc.x(),pc.y(),pc.z());
 			glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-			glVertex3f(it->b.x(),it->b.y(),it->b.z());
+			glVertex3f(pb.x(),pb.y(),pb.z());
 			glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-			glVertex3f(it->a.x(),it->a.y(),it->a.z());
+			glVertex3f(pa.x(),pa.y(),pa.z());
 			glEnd();
 
 			glBegin(GL_POINTS);
@@ -69,10 +74,13 @@ namespace cybervision{
 
 		QTextStream stream(&file);
 		for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
+			const QVector3D& pa=points[it->a];
+			const QVector3D& pb=points[it->b];
+			const QVector3D& pc=points[it->c];
 			stream<<it->normal.x()<<"\t"<<it->normal.y()<<"\t"<<it->normal.z()<<"\t";
-			stream<<it->a.x()<<"\t"<<it->a.y()<<"\t"<<it->a.z()<<"\t";
-			stream<<it->b.x()<<"\t"<<it->b.y()<<"\t"<<it->b.z()<<"\t";
-			stream<<it->c.x()<<"\t"<<it->c.y()<<"\t"<<it->c.z()<<"\r\n";
+			stream<<pa.x()<<"\t"<<pa.y()<<"\t"<<pa.z()<<"\t";
+			stream<<pb.x()<<"\t"<<pb.y()<<"\t"<<pb.z()<<"\t";
+			stream<<pc.x()<<"\t"<<pc.y()<<"\t"<<pc.z()<<"\r\n";
 		}
 
 		file.close();
@@ -93,29 +101,59 @@ namespace cybervision{
 		QTextStream stream(&file);
 
 		QString vertexesString,normalsString,trianglesString;
-		int i=0;//Triangle indexes
-		for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
-			QString currentVertexString;
-			currentVertexString.append(QString("%1 %2 %3 ").arg(it->a.x()).arg(it->a.y()).arg(it->a.z()));
-			currentVertexString.append(QString("%1 %2 %3 ").arg(it->b.x()).arg(it->b.y()).arg(it->b.z()));
-			currentVertexString.append(QString("%1 %2 %3 ").arg(it->c.x()).arg(it->c.y()).arg(it->c.z()));
-			QString currentNormalString;
-			currentNormalString.append(QString("%1 %2 %3 ").arg(it->normal.x()).arg(it->normal.y()).arg(it->normal.z()));
-			QString currentTriangleString;
-			currentTriangleString.append(QString("%1 %2 %3 ").arg(i).arg(i+1).arg(i+2));
-
-			vertexesString.append(currentVertexString);
-			normalsString.append(currentNormalString+currentNormalString+currentNormalString);
-			trianglesString.append(currentTriangleString);
-			i+=3;
-		}
 
 		QString result=xmlTemplate;
-		result.replace("##[points-array-size]##",QString("%1").arg(triangles.length()*9));
-		result.replace("##[points-count]##",QString("%1").arg(triangles.length()));
-		result.replace("##[normals-array-size]##",QString("%1").arg(triangles.length()*9));
-		result.replace("##[normals-count]##",QString("%1").arg(triangles.length()));
-		result.replace("##[triangles-count]##",QString("%1").arg(triangles.length()));
+		if(Options::colladaFormat==Options::COLLADA_SHARED_POINTS){
+			//Output points
+			for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
+				QString currentVertexString;
+				currentVertexString.append(QString("%1 %2 %3 ").arg(it->x()).arg(it->y()).arg(it->z()));
+				vertexesString.append(currentVertexString);
+			}
+
+			//Output normals and polygons
+			for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
+				QString currentNormalString;
+				currentNormalString.append(QString("%1 %2 %3 ").arg(it->normal.x()).arg(it->normal.y()).arg(it->normal.z()));
+				QString currentTriangleString;
+				currentTriangleString.append(QString("%1 %2 %3 ").arg(it->a).arg(it->b).arg(it->c));
+
+				normalsString.append(currentNormalString+currentNormalString+currentNormalString);
+				trianglesString.append(currentTriangleString);
+			}
+
+			result.replace("##[points-array-size]##",QString("%1").arg(points.length()*3));
+			result.replace("##[points-count]##",QString("%1").arg(points.length()));
+			result.replace("##[normals-array-size]##",QString("%1").arg(triangles.length()*9));
+			result.replace("##[normals-count]##",QString("%1").arg(triangles.length()));
+			result.replace("##[triangles-count]##",QString("%1").arg(triangles.length()));
+		}else if(Options::colladaFormat==Options::COLLADA_INDEPENDENT_POLYGONS){
+			PolygonPoint i=0;//Triangle indexes
+			for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
+				const QVector3D& pa=points[it->a];
+				const QVector3D& pb=points[it->b];
+				const QVector3D& pc=points[it->c];
+				QString currentVertexString;
+				currentVertexString.append(QString("%1 %2 %3 ").arg(pa.x()).arg(pa.y()).arg(pa.z()));
+				currentVertexString.append(QString("%1 %2 %3 ").arg(pb.x()).arg(pb.y()).arg(pb.z()));
+				currentVertexString.append(QString("%1 %2 %3 ").arg(pc.x()).arg(pc.y()).arg(pc.z()));
+				QString currentNormalString;
+				currentNormalString.append(QString("%1 %2 %3 ").arg(it->normal.x()).arg(it->normal.y()).arg(it->normal.z()));
+				QString currentTriangleString;
+				currentTriangleString.append(QString("%1 %2 %3 ").arg(i).arg(i+1).arg(i+2));
+
+				vertexesString.append(currentVertexString);
+				normalsString.append(currentNormalString+currentNormalString+currentNormalString);
+				trianglesString.append(currentTriangleString);
+				i+=3;
+			}
+
+			result.replace("##[points-array-size]##",QString("%1").arg(triangles.length()*9));
+			result.replace("##[points-count]##",QString("%1").arg(triangles.length()*3));
+			result.replace("##[normals-array-size]##",QString("%1").arg(triangles.length()*9));
+			result.replace("##[normals-count]##",QString("%1").arg(triangles.length()*3));
+			result.replace("##[triangles-count]##",QString("%1").arg(triangles.length()));
+		}
 
 		result.replace("##[points]##",vertexesString);
 		result.replace("##[normals]##",normalsString);

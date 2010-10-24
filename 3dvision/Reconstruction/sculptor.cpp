@@ -35,7 +35,6 @@ namespace cybervision{
 	Sculptor::Sculptor(const QList<QVector3D>& points){
 		if(!points.empty()){
 			delaunayTriangulate(points);
-			surface.points= points;
 		}
 	}
 
@@ -128,15 +127,15 @@ namespace cybervision{
 		return filteredPoints;
 	}
 
-	Surface::Triangle Sculptor::createTriangle(const QVector3D& a, const QVector3D& b, const QVector3D& c)const{
+	Surface::Triangle Sculptor::createTriangle(const QList<QVector3D>& points,const Surface::PolygonPoint& a, const Surface::PolygonPoint& b, const Surface::PolygonPoint& c)const{
 		Surface::Triangle triangle;
 		triangle.a= a;
 		triangle.b= b;
 		triangle.c= c;
-		if(QLineF(triangle.a.x(),triangle.a.y(),triangle.b.x(),triangle.b.y())
-			.angleTo(QLineF(triangle.b.x(),triangle.b.y(),triangle.c.x(),triangle.c.y()))<180.0)
+		if(QLineF(points[triangle.a].x(),points[triangle.a].y(),points[triangle.b].x(),points[triangle.b].y())
+			.angleTo(QLineF(points[triangle.b].x(),points[triangle.b].y(),points[triangle.c].x(),points[triangle.c].y()))<180.0)
 			qSwap(triangle.b,triangle.c);
-		triangle.normal= calcNormal(triangle.b-triangle.a,triangle.c-triangle.a);
+		triangle.normal= calcNormal(points[triangle.b]-points[triangle.a],points[triangle.c]-points[triangle.a]);
 		//if(triangle.normal.z()<0)
 		//	triangle.normal.setZ(-triangle.normal.z());
 
@@ -210,7 +209,7 @@ namespace cybervision{
 			vertex list. The supertriangle is the first triangle in
 			the triangle list.
 		*/
-		typedef QPair<QVector3D,QVector3D> Edge;
+		typedef QPair<Surface::PolygonPoint,Surface::PolygonPoint> Edge;
 
 		QList<QPair<Surface::Triangle,bool> > triangles;
 		Surface::Triangle superTriangle;
@@ -235,17 +234,21 @@ namespace cybervision{
 			float xmid= (max.x()+min.x())/2.0;
 			float ymid= (max.y()+min.x())/2.0;
 
-			superTriangle.a= QVector3D(xmid-2.0*dmax,ymid-dmax,0);
-			superTriangle.b= QVector3D(xmid,ymid+2.0*dmax,0);
-			superTriangle.c= QVector3D(xmid+2.0*dmax,ymid-dmax,0);
+			points<<QVector3D(xmid-2.0*dmax,ymid-dmax,0);
+			superTriangle.a= points.length()-1;
+			points<<QVector3D(xmid,ymid+2.0*dmax,0);
+			superTriangle.b= points.length()-1;
+			points<<QVector3D(xmid+2.0*dmax,ymid-dmax,0);
+			superTriangle.c= points.length()-1;
+
 			triangles<<QPair<Surface::Triangle,bool>(superTriangle,false);
-			points<<superTriangle.a<<superTriangle.b<<superTriangle.c;
 		}
 		/*
 			Include each point one at a time into the existing mesh
 		*/
-		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
-			QPointF p(it->x(),it->y());
+		for(Surface::PolygonPoint it= 0;it<points.length();it++){
+			//TODO: fail if we exceed maximum value of int
+			QPointF p(points[it].x(),points[it].y());
 
 			QList<Edge> edges;
 			/*
@@ -259,9 +262,9 @@ namespace cybervision{
 					jt++;
 					continue;
 				}
-				QPointF a(jt->first.a.x(),jt->first.a.y());
-				QPointF b(jt->first.b.x(),jt->first.b.y());
-				QPointF c(jt->first.c.x(),jt->first.c.y());
+				QPointF a(points[jt->first.a].x(),points[jt->first.a].y());
+				QPointF b(points[jt->first.b].x(),points[jt->first.b].y());
+				QPointF c(points[jt->first.c].x(),points[jt->first.c].y());
 				QVector3D circle;
 				bool inside= delaunayCircumCircle(p,a,b,c,&circle);
 				if (circle.x() + circle.z() < p.x())
@@ -280,7 +283,7 @@ namespace cybervision{
 				Note: if all triangles are specified anticlockwise then all
 				interior edges are opposite pointing in direction.
 			*/
-			QVector3D vector_inf(std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity());
+			Surface::PolygonPoint vector_inf= -1;
 			if(edges.size()>=2)
 			for(QList<Edge>::iterator edge1= edges.begin();edge1!=(edges.end()-1);edge1++){
 				for (QList<Edge>::iterator edge2= edge1+1;edge2!=edges.end();edge2++){
@@ -309,7 +312,7 @@ namespace cybervision{
 				Surface::Triangle triangle;
 				triangle.a= edge->first;
 				triangle.b = edge->second;
-				triangle.c = *it;
+				triangle.c = it;
 				triangles<<QPair<Surface::Triangle,bool>(triangle,false);
 			}
 		}
@@ -318,8 +321,9 @@ namespace cybervision{
 			if((it->first.a!=superTriangle.a) && (it->first.a!=superTriangle.b) &&(it->first.a!=superTriangle.c))
 				if((it->first.b!=superTriangle.a) && (it->first.b!=superTriangle.b) &&(it->first.b!=superTriangle.c))
 					if((it->first.c!=superTriangle.a) && (it->first.c!=superTriangle.b) &&(it->first.c!=superTriangle.c))
-						surface.triangles.push_back(createTriangle(it->first.a,it->first.b,it->first.c));
+						surface.triangles.push_back(createTriangle(points,it->first.a,it->first.b,it->first.c));
 		}
+		surface.points= points;
 	}
 
 

@@ -16,7 +16,7 @@ namespace cybervision{
 		QList<QVector3D> filterPoints(const QList<QVector3D>& points);//average points with the same (x,y) values, change scale to better fit result
 
 		//Returns a triangle with computed normal and clockwise vertex placement
-		Surface::Triangle createTriangle(const QVector3D& a, const QVector3D& b, const QVector3D& c)const;
+		Surface::Triangle createTriangle(const QList<QVector3D>& points,const Surface::PolygonPoint& a, const Surface::PolygonPoint& b, const Surface::PolygonPoint& c)const;
 		//Returns a normal for a 3D triangle
 		QVector3D calcNormal(const QVector3D& a, const QVector3D& b)const;
 

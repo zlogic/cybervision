@@ -23,6 +23,8 @@ public:
 	//Surface options
 	static const float surfaceSize;//Target size (width~height) of surface, to fit into opengl viewport
 	static const float surfaceDepth;//Target depth of surface, to fit into opengl viewport
+	enum ColladaFormat {COLLADA_INDEPENDENT_POLYGONS,COLLADA_SHARED_POINTS}; //Shared points produces a more compact file but mangles normals
+	static const ColladaFormat colladaFormat;//Selected Collada file format
 };
 
 }
