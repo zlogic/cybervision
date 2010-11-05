@@ -2,7 +2,7 @@
 # Project created by QtCreator 2009-10-25T19:45:46
 # -------------------------------------------------
 QT += opengl
-TARGET = 3dvision
+TARGET = cybervision
 TEMPLATE = app
 SOURCES += main.cpp \
     UI/mainwindow.cpp \
@@ -40,7 +40,7 @@ HEADERS += UI/mainwindow.h \
 	KDTree/allocator.hpp \
 FORMS += UI/mainwindow.ui
 OTHER_FILES += SIFT/optimization_flags.txt \
-    SIFT/3dvision_pro.txt \
+    SIFT/cybervision_pro.txt \
     Reconstruction/ColladaTemplate.xml
 QMAKE_CXXFLAGS_RELEASE += -msse3
 QMAKE_CXXFLAGS_DEBUG +=
