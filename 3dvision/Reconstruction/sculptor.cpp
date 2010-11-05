@@ -70,51 +70,25 @@ namespace cybervision{
 		centroid.setX(centroid.x()/points.count());
 		centroid.setY(centroid.y()/points.count());
 		centroid.setZ(centroid.z()/points.count());
-		float aspectRatio= (max.x()-min.x())/(max.y()-min.y());
-		float scale_x= aspectRatio*Options::surfaceSize/(max.x()-min.x());
-		float scale_y= -Options::surfaceSize/(max.y()-min.y());
-		float scale_z= Options::surfaceDepth/(max.z()-min.z());
+		qreal aspectRatio= (max.x()-min.x())/(max.y()-min.y());
+		qreal scale_x= aspectRatio*Options::surfaceSize/(max.x()-min.x());
+		qreal scale_y= -Options::surfaceSize/(max.y()-min.y());
+		qreal scale_z= Options::surfaceDepth/(max.z()-min.z());
 
-		QMap<QPointF,float> pointsMap;
+		QMap<QPointF,qreal> pointsMap;
 		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
-			//TODO:create a better filter here!
-			if(false)
-			{
-				if(fabs(it->z()-centroid.z())>0.2*(max.z()-min.z()))
-					continue;
-			}
 			QPointF point(it->x(),it->y());
 			pointsMap.insertMulti(point,it->z());
 		}
-		float sum=0;
+		qreal sum=0;
 		int count=0;
 
-		//TODO:create a better filter here!
-		if(false)
-		{
-			float delta=max.z()-min.z();
-			min= QVector3D( std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
-			max= QVector3D( -std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity());
-			for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
-				if(fabs(it->z()-centroid.z())>0.2*delta)
-					continue;
-				min.setX(qMin(min.x(),it->x()));
-				min.setY(qMin(min.y(),it->y()));
-				min.setZ(qMin(min.z(),it->z()));
-				max.setX(qMax(max.x(),it->x()));
-				max.setY(qMax(max.y(),it->y()));
-				max.setZ(qMax(max.z(),it->z()));
-			}
-			scale_z= Options::surfaceDepth/(max.z()-min.z());
-		}
-
-
 		QList<QVector3D> filteredPoints;
-		for(QMap<QPointF,float>::const_iterator it=pointsMap.begin();it!=pointsMap.end();it++){
+		for(QMap<QPointF,qreal>::const_iterator it=pointsMap.begin();it!=pointsMap.end();it++){
 			sum+= it.value();
 			count++;
 			if((it+1)==pointsMap.end() || it.key()!=(it+1).key()){
-				float z= sum/(float)count;
+				qreal z= sum/(qreal)count;
 				QVector3D scaled_point((it.key().x()-min.x())*scale_x-Options::surfaceSize/2,
 							(it.key().y()-min.y())*scale_y+Options::surfaceSize/2,
 							(z-min.z())*scale_z-Options::surfaceDepth
@@ -127,11 +101,69 @@ namespace cybervision{
 		return filteredPoints;
 	}
 
+
+	QList<QVector3D> Sculptor::filterTriangles(const QList<QVector3D>& points,const QList<Surface::Triangle>& triangles){
+		QList<QVector3D> modifiedPoints= points;
+
+		QVector3D vectorNaN(std::numeric_limits<qreal>::signaling_NaN(),std::numeric_limits<qreal>::signaling_NaN(),std::numeric_limits<qreal>::signaling_NaN());
+		for(Surface::PolygonPoint p=0;p<modifiedPoints.size();p++){
+			//TODO: fail if we exceed maximum value of int
+			qreal zMin= std::numeric_limits<qreal>::infinity(), zMax= -std::numeric_limits<qreal>::infinity();
+			qreal zSum= 0;
+			size_t zSumCount=0;
+			qreal maxHeight=0;
+			//Find all triangles containing current point
+			for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
+				//Search for min and max values of points' neighbors as well as the max height
+				bool found=false;
+				QVector3D point1, point2;
+				if(it->a==p && it->b!=p && it->c!=p){
+					point1= modifiedPoints[it->b], point2= modifiedPoints[it->c];
+					found=true;
+				}else if(it->a!=p && it->b==p && it->c!=p){
+					point1= modifiedPoints[it->a], point2= modifiedPoints[it->c];
+					found=true;
+				}else if(it->a!=p && it->b!=p && it->c==p){
+					point1= modifiedPoints[it->a], point2= modifiedPoints[it->b];
+					found=true;
+				}
+
+				if(found){
+					zMin= qMin(zMin,qMin(point1.z(),point2.z()));
+					zMax= qMax(zMax,qMax(point1.z(),point2.z()));
+					maxHeight= qMax(maxHeight,fabs(point1.z()-point2.z()));
+					zSum+= point1.z()+point2.z();
+					zSumCount+= 2;
+				}
+			}
+
+			if(fabs(points[p].z()-(zMax+zMin)/2)>Options::peakSize*maxHeight && zSumCount>0){
+				//this is a peak
+				modifiedPoints[p].setZ(zSum/(qreal)zSumCount);
+			}
+		}
+
+		//Renormalize z-coordinate
+		qreal zMin= std::numeric_limits<qreal>::infinity(), zMax= -std::numeric_limits<qreal>::infinity();
+		for(QList<QVector3D>::const_iterator it= modifiedPoints.begin();it!=modifiedPoints.end();it++){
+			zMin= qMin(zMin,it->z());
+			zMax= qMax(zMax,it->z());
+		}
+		qreal scale_z= Options::surfaceDepth/(zMax-zMin);
+		for(QList<QVector3D>::iterator it= modifiedPoints.begin();it!=modifiedPoints.end();it++){
+			it->setZ((it->z()-zMin)*scale_z);
+		}
+
+		return modifiedPoints;
+	}
+
 	Surface::Triangle Sculptor::createTriangle(const QList<QVector3D>& points,const Surface::PolygonPoint& a, const Surface::PolygonPoint& b, const Surface::PolygonPoint& c)const{
 		Surface::Triangle triangle;
 		triangle.a= a;
 		triangle.b= b;
 		triangle.c= c;
+
+		//Make sure the triangle has correct winding
 		if(QLineF(points[triangle.a].x(),points[triangle.a].y(),points[triangle.b].x(),points[triangle.b].y())
 			.angleTo(QLineF(points[triangle.b].x(),points[triangle.b].y(),points[triangle.c].x(),points[triangle.c].y()))<180.0)
 			qSwap(triangle.b,triangle.c);
@@ -317,13 +349,21 @@ namespace cybervision{
 			}
 		}
 
+		QList<Surface::Triangle> unfilteredTriangles;
 		for(QList<QPair<Surface::Triangle,bool> >::const_iterator it= triangles.begin();it!=triangles.end();it++){
 			if((it->first.a!=superTriangle.a) && (it->first.a!=superTriangle.b) &&(it->first.a!=superTriangle.c))
 				if((it->first.b!=superTriangle.a) && (it->first.b!=superTriangle.b) &&(it->first.b!=superTriangle.c))
 					if((it->first.c!=superTriangle.a) && (it->first.c!=superTriangle.b) &&(it->first.c!=superTriangle.c))
-						surface.triangles.push_back(createTriangle(points,it->first.a,it->first.b,it->first.c));
+						unfilteredTriangles.push_back(it->first);
 		}
+		triangles.clear();
+
+
+		//Filter peaks
+		points= filterTriangles(points,unfilteredTriangles);
 		surface.points= points;
+		for(QList<Surface::Triangle>::const_iterator it= unfilteredTriangles.begin();it!=unfilteredTriangles.end();it++)
+			surface.triangles.push_back(createTriangle(points,it->a,it->b,it->c));
 	}
 
 

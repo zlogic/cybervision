@@ -21,6 +21,7 @@ public:
 	static const int RANSAC_d;//RANSAC d parameter
 
 	//Surface options
+	static const float peakSize;//Minimum relative height of point (inside a triangle) for it to be considered to be a peak
 	static const float surfaceSize;//Target size (width~height) of surface, to fit into opengl viewport
 	static const float surfaceDepth;//Target depth of surface, to fit into opengl viewport
 	enum ColladaFormat {COLLADA_INDEPENDENT_POLYGONS,COLLADA_SHARED_POINTS}; //Shared points produces a more compact file but mangles normals

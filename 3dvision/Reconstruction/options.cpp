@@ -16,5 +16,6 @@ namespace cybervision{
 
 	const float Options::surfaceSize= 15.0F;
 	const float Options::surfaceDepth= 10.0F;
+	const float Options::peakSize= 5.0F;
 	const Options::ColladaFormat Options::colladaFormat= Options::COLLADA_INDEPENDENT_POLYGONS;
 }
