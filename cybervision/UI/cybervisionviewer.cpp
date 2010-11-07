@@ -8,7 +8,7 @@
 #include <cmath>
 
 CybervisionViewer::CybervisionViewer(QWidget *parent): QGLWidget(parent){
-	vpTranslation= QVector3D(0,0,-10);
+	vpTranslation= QVector3D(0,0,-15);
 }
 
 

@@ -129,6 +129,7 @@ void MainWindow::on_saveButton_clicked(){
 	QStringList formats;
 	formats<<"Surface points (*.txt)";
 	formats<<"Surface polygons (*.txt)";
+	formats<<"PNG image (*.png)";
 	formats<<"Collada model (*.dae)";
 	QString filter;
 	for(QStringList::const_iterator it=formats.begin();it!=formats.end();it++)
@@ -146,6 +147,11 @@ void MainWindow::on_saveButton_clicked(){
 				fileName.append(".txt");
 			ui->openGLViewport->getSurface3D().savePolygons(fileName);
 		}else if(selectedFilter==formats[2]){
+			if(fileInfo.suffix()!="png")
+				fileName.append(".png");
+			QImage screenshot= ui->openGLViewport->grabFrameBuffer();
+			screenshot.save(fileName,"png");
+		}else if(selectedFilter==formats[3]){
 			if(fileInfo.suffix()!="dae")
 				fileName.append(".dae");
 			ui->openGLViewport->getSurface3D().saveCollada(fileName);
