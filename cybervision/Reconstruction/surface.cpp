@@ -3,6 +3,7 @@
 
 #include "surface.h"
 #include "options.h"
+#include <cmath>
 
 namespace cybervision{
 	Surface::Surface(){
@@ -50,6 +51,19 @@ namespace cybervision{
 
 			glEnd();
 		}
+		/*
+		//Draw point cloud
+		double radius=.08;
+		int num_segments=36;
+		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
+			glBegin(GL_POLYGON);
+			for(int i =0;i<num_segments;i++){
+				double angle = i*M_PI*2/(double)num_segments;
+				glVertex3f(it->x()+cos(angle)*radius,it->y()+sin(angle)*radius,it->z());
+			}
+			glEnd();
+		}
+		*/
 	}
 
 	bool Surface::isOk()const{ return !triangles.empty() && !points.empty(); }

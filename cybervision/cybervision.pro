@@ -39,8 +39,7 @@ HEADERS += UI/mainwindow.h \
     KDTree/function.hpp \
 	KDTree/allocator.hpp \
 FORMS += UI/mainwindow.ui
-OTHER_FILES += SIFT/optimization_flags.txt \
-    SIFT/cybervision_pro.txt \
+OTHER_FILES += \
     Reconstruction/ColladaTemplate.xml
 QMAKE_CXXFLAGS_RELEASE += -msse3
 QMAKE_CXXFLAGS_DEBUG +=

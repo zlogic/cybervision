@@ -1,1 +1,0 @@
-"QMAKE_LIBS+=-static -lgomp -lpthread" QMAKE_CXXFLAGS+="-fopenmp -msse3" QMAKE_CXXFLAGS+=-U_WIN32
