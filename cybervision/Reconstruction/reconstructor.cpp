@@ -377,29 +377,53 @@ namespace cybervision{
 	}
 
 	QList<Reconstructor::StereopairPosition> Reconstructor::computeRT(const QGenericMatrix<3,3,double>&Essential_matrix) const{
-		SVD<3,3,double> svd(Essential_matrix);
+
 
 		QList<Reconstructor::StereopairPosition> RTList;
 		QList<double> pi_values;
 		pi_values<<M_PI_2<<-M_PI_2;
 
-		QGenericMatrix<3,3,double> U= svd.getU(),Sigma=svd.getSigma(), V=svd.getV();
+
+
+
+		QGenericMatrix<3,3,double> Essential_matrix_projected;
 
 		//Project into essential space
-		Sigma.fill(0.0);
-		Sigma(0,0)= 1.0, Sigma(1,1)= 1.0;
+		{
+			SVD<3,3,double> svd(Essential_matrix);
+
+			QGenericMatrix<3,3,double> U= svd.getU(),Sigma=svd.getSigma(), V=svd.getV();
+
+			double Sigma_value= (Sigma(0,0)+Sigma(1,1))/2.0;
+
+			Sigma.fill(0.0);
+			Sigma(0,0)= Sigma_value,Sigma(1,1) = Sigma_value;
+
+			Essential_matrix_projected= U*Sigma*(V.transposed());
+		}
+
+
+
+
+		SVD<3,3,double> svd(Essential_matrix_projected);
+		QGenericMatrix<3,3,double> U= svd.getU(),Sigma=svd.getSigma(), V=svd.getV();
 
 		for(QList<double>::const_iterator i= pi_values.begin();i!=pi_values.end();i++){
 			double PI_R= *i;
 			QGenericMatrix<3,3,double> R= U*(computeRT_rzfunc(PI_R).transposed())*(V.transposed());
+			if(R(0,0)*(R(1,1)*R(2,2)-R(1,2)*R(2,1))-R(0,1)*(R(1,0)*R(2,2)-R(1,2)*R(2,0))+R(0,2)*(R(1,0)*R(2,1)-R(1,1)*R(2,0)))
+				R=R*(-1.0);//Probably unnecessary
 			for(QList<double>::const_iterator j= pi_values.begin();j!=pi_values.end();j++){
 				double PI_T=*j;
-				QGenericMatrix<3,3,double> T= U*computeRT_rzfunc(PI_T)*Sigma*(U.transposed());
 
 				QGenericMatrix<1,3,double> T_unhatted;
+
+				/*
+				QGenericMatrix<3,3,double> T= U*computeRT_rzfunc(PI_T)*Sigma*(U.transposed());
 				T_unhatted(0,0)= (T(2,1)-T(1,2))/2;
 				T_unhatted(1,0)= (T(0,2)-T(2,0))/2;
 				T_unhatted(2,0)= (T(1,0)-T(0,1))/2;
+				*/
 
 				T_unhatted(0,0)=U(0,2)*(PI_T>=0?1:-1);
 				T_unhatted(1,0)=U(1,2)*(PI_T>=0?1:-1);
@@ -433,7 +457,16 @@ namespace cybervision{
 					min_depth= it2->z();
 			}
 
+
+			/*
 			if(max_depth-min_depth>best_max_depth-best_min_depth){
+				best_max_depth= max_depth;
+				best_min_depth= min_depth;
+				best_Points3d= Points3d;
+			}
+			*/
+
+			if(min_depth>0 && max_depth-min_depth>best_max_depth-best_min_depth){
 				best_max_depth= max_depth;
 				best_min_depth= min_depth;
 				best_Points3d= Points3d;
@@ -441,14 +474,6 @@ namespace cybervision{
 
 			emit sgnLogMessage(QString("Minimum depth is %1, maximum depth is %2").arg(min_depth).arg(max_depth));
 
-			/*
-			if(min_depth>0){
-				best_max_depth= max_depth;
-				best_min_depth= min_depth;
-				best_Points3d= Points3d;
-				break;
-			}
-			*/
 		}
 
 		if(best_max_depth<0){
@@ -487,6 +512,18 @@ namespace cybervision{
 				max_y= fabs(it.value().b.y());
 		}
 
+		//Camera matrix
+		QGenericMatrix<3,3,double> camera_K;
+		camera_K.fill(0.0);
+		camera_K(0,0)= 1;//Focal X
+		camera_K(1,1)= 1;//Focal Y
+		//camera_K(0,2)= 0;//Optical center X
+		//camera_K(1,2)= 0;//Optical center Y
+		camera_K(2,2)= 1e-8;//1/f
+
+		P1=camera_K*P1;
+		P2=camera_K*P2;
+
 		QList<QVector3D> resultPoints;
 
 		QGenericMatrix<4,4,double> A;
@@ -506,13 +543,14 @@ namespace cybervision{
 			//Search for min column
 			size_t Sigma_min_index=0;
 			for(size_t i=1;i<4;i++)
-				Sigma_min_index= Sigma(i,i)<Sigma(Sigma_min_index,Sigma_min_index);
+				Sigma_min_index= Sigma(i,i)<Sigma(Sigma_min_index,Sigma_min_index)?i:Sigma_min_index;
 
+			//Sigma_min_index=3;//DZ 02.12.2010 seems Sigma=0 gives the best results. Sigma=1 gives a rougher surface.
 			QGenericMatrix<1,4,double> V_col_min;
 			for(int i=0;i<4;i++)
 				V_col_min(i,0)= V(i,Sigma_min_index);
 
-			QVector3D resultPoint(x1.x(),x1.y(),V_col_min(2,0));
+			QVector3D resultPoint(x1.x(),x1.y(),V_col_min(2,0)/V_col_min(3,0));
 
 			resultPoints.push_back(resultPoint);
 		}

@@ -91,7 +91,7 @@ namespace cybervision{
 				qreal z= sum/(qreal)count;
 				QVector3D scaled_point((it.key().x()-min.x())*scale_x-Options::surfaceSize/2,
 							(it.key().y()-min.y())*scale_y+Options::surfaceSize/2,
-							(z-min.z())*scale_z-Options::surfaceDepth
+							(z-min.z())*scale_y
 				);
 				filteredPoints.push_back(scaled_point);
 				sum= 0;
@@ -104,6 +104,8 @@ namespace cybervision{
 
 	QList<QVector3D> Sculptor::filterTriangles(const QList<QVector3D>& points,const QList<Surface::Triangle>& triangles){
 		QList<QVector3D> modifiedPoints= points;
+
+		return modifiedPoints;
 
 		QVector3D vectorNaN(std::numeric_limits<qreal>::signaling_NaN(),std::numeric_limits<qreal>::signaling_NaN(),std::numeric_limits<qreal>::signaling_NaN());
 		for(Surface::PolygonPoint p=0;p<modifiedPoints.size();p++){
