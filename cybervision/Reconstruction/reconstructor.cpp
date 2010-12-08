@@ -515,10 +515,10 @@ namespace cybervision{
 		//Camera matrix
 		QGenericMatrix<3,3,double> camera_K;
 		camera_K.fill(0.0);
-		camera_K(0,0)= 1e9;//Focal distance X
-		camera_K(1,1)= 1e9;//Focal distance Y
-		//camera_K(0,2)= -max_x*0.5;//Optical center X
-		//camera_K(1,2)= -max_y*0.5;//Optical center Y
+		camera_K(0,0)= 1e-7;//Focal distance X
+		camera_K(1,1)= 1e-7;//Focal distance Y
+		camera_K(0,2)= -max_x;//Optical center X
+		camera_K(1,2)= -max_y;//Optical center Y
 		camera_K(2,2)= 1;//1/f
 
 		P1=camera_K*P1;
@@ -532,10 +532,10 @@ namespace cybervision{
 		for(SortedKeypointMatches::const_iterator it=matches.begin();it!=matches.end();it++){
 			QPointF x1= it.value().a, x2= it.value().b;
 			for(int i=0;i<4;i++){
-				A(0,i)= (x1.x()+max_x*10)*P1(2,i)-P1(0,i);
-				A(1,i)= (x1.y()+max_y*10)*P1(2,i)-P1(1,i);
-				A(2,i)= (x2.x()+max_x*10)*P2(2,i)-P2(0,i);
-				A(3,i)= (x2.y()+max_y*10)*P2(2,i)-P2(1,i);
+				A(0,i)= (x1.x())*P1(2,i)-P1(0,i);
+				A(1,i)= (x1.y())*P1(2,i)-P1(1,i);
+				A(2,i)= (x2.x())*P2(2,i)-P2(0,i);
+				A(3,i)= (x2.y())*P2(2,i)-P2(1,i);
 			}
 			SVD<4,4,double> svd(A);
 			QGenericMatrix<4,4,double> Sigma= svd.getSigma();
@@ -552,7 +552,7 @@ namespace cybervision{
 
 			//QVector3D resultPoint(x1.x(),x1.y(),1e5*(V_col_min(2,0)-(V_col_min(0,0)+V_col_min(1,0)))/V_col_min(3,0));//Without camera matrix, remove camera_K from P
 			//QVector3D resultPoint(V_col_min(0,0)/V_col_min(3,0),V_col_min(1,0)/V_col_min(3,0),V_col_min(2,0)/V_col_min(3,0));
-			QVector3D resultPoint(x1.x(),x1.y(),(V_col_min(2,0))/V_col_min(3,0)+x1.y()*6);
+			QVector3D resultPoint(x1.x(),x1.y(),2e4*(V_col_min(2,0)-(V_col_min(0,0)+V_col_min(1,0)))/V_col_min(3,0));
 
 			resultPoints.push_back(resultPoint);
 		}
