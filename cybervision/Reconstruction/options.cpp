@@ -14,9 +14,11 @@ namespace cybervision{
 	const double Options::RANSAC_t= 1e-18;
 	const int Options::RANSAC_d= 32;
 
+	const double Options::scaleFocalDistance= 2e-4;
+
 	const float Options::surfaceSize= 15.0F;
 	const float Options::surfaceDepth= 10.0F;
-	const float Options::peakSize= 3.0F;
-	const int Options::maxPeakFilterPasses= 100;
+	const float Options::peakSize= 10.0F;
+	const int Options::maxPeakFilterPasses= 10;
 	const Options::ColladaFormat Options::colladaFormat= Options::COLLADA_INDEPENDENT_POLYGONS;
 }

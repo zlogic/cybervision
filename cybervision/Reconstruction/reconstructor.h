@@ -8,6 +8,7 @@
 #include <QPair>
 #include <QGenericMatrix>
 #include <QVector3D>
+#include <QSize>
 
 #include <Reconstruction/options.h>
 
@@ -35,6 +36,7 @@ namespace cybervision{
 		//State
 		QString errorString;
 		QList<QVector3D> Points3D;
+		QSize imageSize;
 
 		//Internal procedures
 
@@ -43,6 +45,9 @@ namespace cybervision{
 		//Estimates the best pose (R and T matrices) and essential matrix with RANSAC; filters the point list by removing outliers
 		QList<Reconstructor::StereopairPosition> computePose(SortedKeypointMatches&);
 
+
+		//Returns the camera calibration matrix
+		QGenericMatrix<3,3,double> computeCameraMatrix()const;
 		//Computes the essential matrix from N points
 		QGenericMatrix<3,3,double> computeEssentialMatrix(const KeypointMatches&);
 		//Computes a keypoint match's error when used with the essential matrix E
@@ -54,7 +59,7 @@ namespace cybervision{
 
 		//Triangulates a point in 3D space
 		QList<QVector3D> compute3DPoints(const SortedKeypointMatches&matches,const QList<StereopairPosition>& RTList);
-		QList<QVector3D> computeTriangulatedPoints(const SortedKeypointMatches&matches,const QGenericMatrix<3,3,double>&R,const QGenericMatrix<1,3,double>& T);
+		QList<QVector3D> computeTriangulatedPoints(const SortedKeypointMatches&matches,const QGenericMatrix<3,3,double>&R,const QGenericMatrix<1,3,double>& T,bool normalizeCameras);
 
 	public:
 		Reconstructor();

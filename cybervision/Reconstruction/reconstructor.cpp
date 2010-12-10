@@ -43,6 +43,13 @@ namespace cybervision{
 					matches.insert(distance,match);
 				}
 				precomputed_file.close();
+
+				emit sgnLogMessage(QString("Loading images %1 and %2 to obtain image sizes").arg(filename1).arg(filename2));
+				QImage img1(filename1),img2(filename2);
+				if(img1.size()!=img2.size())//TODO:Error here!
+					emit sgnLogMessage(QString("Images %1 and %2 have different sizes!").arg(filename1).arg(filename2));
+				else
+					imageSize= img1.size();
 				return matches;
 			}
 		}
@@ -51,6 +58,10 @@ namespace cybervision{
 		emit sgnLogMessage("Starting SIFT keypoint detection");
 		emit sgnLogMessage(QString("Loading images %1 and %2").arg(filename1).arg(filename2));
 		QImage img1(filename1),img2(filename2);
+		if(img1.size()!=img2.size())//TODO:Error here!
+			emit sgnLogMessage(QString("Images %1 and %2 have different sizes!").arg(filename1).arg(filename2));
+		else
+			imageSize= img1.size();
 		QList <SIFT::Keypoint> keypoints1,keypoints2;
 		{
 			SIFT::Extractor extractor;
@@ -280,6 +291,8 @@ namespace cybervision{
 		for(KeypointMatches::const_iterator it=best_consensus_set.begin();it!=best_consensus_set.end();it++)
 			matches.insert(it->first,it->second);
 
+		//De-normalize E
+		//best_E= T2.transposed()*best_E*T1;
 		QList<StereopairPosition> RTList= computeRT(best_E);
 		//Output R,T matrices to log
 
@@ -301,11 +314,7 @@ namespace cybervision{
 	QGenericMatrix<3,3,double> Reconstructor::computeEssentialMatrix(const KeypointMatches& matches){
 		if(matches.size()!=8){
 			emit sgnLogMessage(QString("Wrong consensus set size (%1), should be %2").arg(matches.size()).arg(8));
-			/*
-			QGenericMatrix<3,3,float> badResult;
-			badResult.fill(0.0);
-			return badResult;
-			*/
+			//TODO:fail here
 		}
 		//Create the Chi matrix
 		QGenericMatrix<9,8,double> chi;
@@ -376,34 +385,37 @@ namespace cybervision{
 		return result;
 	}
 
+
+	QGenericMatrix<3,3,double> Reconstructor::computeCameraMatrix()const{
+		QGenericMatrix<3,3,double> K;
+		K.fill(0.0);
+		K(0,0)= Options::scaleFocalDistance;//Focal distance X
+		K(1,1)= Options::scaleFocalDistance;//Focal distance Y
+		K(0,2)= -imageSize.width();//Optical center X
+		K(1,2)= -imageSize.height();//Optical center Y
+		K(2,2)= 1;
+		return K;
+	}
+
 	QList<Reconstructor::StereopairPosition> Reconstructor::computeRT(const QGenericMatrix<3,3,double>&Essential_matrix) const{
-
-
 		QList<Reconstructor::StereopairPosition> RTList;
 		QList<double> pi_values;
 		pi_values<<M_PI_2<<-M_PI_2;
 
-
-
-
-		QGenericMatrix<3,3,double> Essential_matrix_projected;
+		QGenericMatrix<3,3,double> camera_K= computeCameraMatrix();
+		QGenericMatrix<3,3,double> Essential_matrix_projected=camera_K.transposed()*Essential_matrix*camera_K;
 
 		//Project into essential space
 		{
-			SVD<3,3,double> svd(Essential_matrix);
-
+			SVD<3,3,double> svd(Essential_matrix_projected);
 			QGenericMatrix<3,3,double> U= svd.getU(),Sigma=svd.getSigma(), V=svd.getV();
 
 			double Sigma_value= (Sigma(0,0)+Sigma(1,1))/2.0;
-
 			Sigma.fill(0.0);
 			Sigma(0,0)= Sigma_value,Sigma(1,1) = Sigma_value;
 
 			Essential_matrix_projected= U*Sigma*(V.transposed());
 		}
-
-
-
 
 		SVD<3,3,double> svd(Essential_matrix_projected);
 		QGenericMatrix<3,3,double> U= svd.getU(),Sigma=svd.getSigma(), V=svd.getV();
@@ -443,10 +455,13 @@ namespace cybervision{
 	QList<QVector3D> Reconstructor::compute3DPoints(const SortedKeypointMatches&matches,const QList<StereopairPosition>& RTList){
 		emit sgnStatusMessage("Performing 3D triangulation...");
 
-		double best_max_depth= -std::numeric_limits<double>::infinity(), best_min_depth=std::numeric_limits<double>::infinity();
-		QList<QVector3D> best_Points3d;
+		double best_min_depth=std::numeric_limits<double>::infinity();
+
+		StereopairPosition bestPosition=RTList.first();
+		bool found=false;
+		//Find best R/T pair
 		for(QList<StereopairPosition>::const_iterator it1=RTList.begin();it1!=RTList.end();it1++){
-			QList<QVector3D> Points3d= computeTriangulatedPoints(matches,it1->R,it1->T);
+			QList<QVector3D> Points3d= computeTriangulatedPoints(matches,it1->R,it1->T,false);
 
 			//Search for maximum depth in order to evaluate and select best configuration
 			double max_depth= -std::numeric_limits<double>::infinity(), min_depth=std::numeric_limits<double>::infinity();
@@ -457,35 +472,21 @@ namespace cybervision{
 					min_depth= it2->z();
 			}
 
-
-			/*
-			if(max_depth-min_depth>best_max_depth-best_min_depth){
-				best_max_depth= max_depth;
-				best_min_depth= min_depth;
-				best_Points3d= Points3d;
-			}
-			*/
-
-			if(min_depth>0 && max_depth-min_depth>best_max_depth-best_min_depth){
-				best_max_depth= max_depth;
-				best_min_depth= min_depth;
-				best_Points3d= Points3d;
+			if(min_depth>0){
+				bestPosition= *it1;
+				found=true;
 			}
 
 			emit sgnLogMessage(QString("Minimum depth is %1, maximum depth is %2").arg(min_depth).arg(max_depth));
-
 		}
 
-		if(best_max_depth<0){
+		if(best_min_depth<0)
 			emit sgnLogMessage(QString("Warning: minimum depth is %1, less than zero!").arg(best_min_depth));
-			//Invert points
-			for(QList<QVector3D>::iterator it1=best_Points3d.begin();it1!=best_Points3d.end();it1++)
-				it1->setZ(-it1->z());
-		}
-		return best_Points3d;
+
+		return computeTriangulatedPoints(matches,bestPosition.R,bestPosition.T,true);
 	}
 
-	QList<QVector3D> Reconstructor::computeTriangulatedPoints(const SortedKeypointMatches&matches,const QGenericMatrix<3,3,double>&R,const QGenericMatrix<1,3,double>& T){
+	QList<QVector3D> Reconstructor::computeTriangulatedPoints(const SortedKeypointMatches&matches,const QGenericMatrix<3,3,double>&R,const QGenericMatrix<1,3,double>& T,bool normalizeCameras){
 		QGenericMatrix<4,3,double> P1,P2;
 		P1.fill(0.0);
 		for(int i=0;i<3;i++)
@@ -513,16 +514,11 @@ namespace cybervision{
 		}
 
 		//Camera matrix
-		QGenericMatrix<3,3,double> camera_K;
-		camera_K.fill(0.0);
-		camera_K(0,0)= 1e-7;//Focal distance X
-		camera_K(1,1)= 1e-7;//Focal distance Y
-		camera_K(0,2)= -max_x;//Optical center X
-		camera_K(1,2)= -max_y;//Optical center Y
-		camera_K(2,2)= 1;//1/f
-
-		P1=camera_K*P1;
-		P2=camera_K*P2;
+		if(normalizeCameras){
+			QGenericMatrix<3,3,double> camera_K= computeCameraMatrix();
+			P1=camera_K*P1;
+			P2=camera_K*P2;
+		}
 
 		QList<QVector3D> resultPoints;
 
@@ -532,11 +528,23 @@ namespace cybervision{
 		for(SortedKeypointMatches::const_iterator it=matches.begin();it!=matches.end();it++){
 			QPointF x1= it.value().a, x2= it.value().b;
 			for(int i=0;i<4;i++){
-				A(0,i)= (x1.x())*P1(2,i)-P1(0,i);
-				A(1,i)= (x1.y())*P1(2,i)-P1(1,i);
-				A(2,i)= (x2.x())*P2(2,i)-P2(0,i);
-				A(3,i)= (x2.y())*P2(2,i)-P2(1,i);
+				A(0,i)= x1.x()*P1(2,i)-P1(0,i);
+				A(1,i)= x1.y()*P1(2,i)-P1(1,i);
+				A(2,i)= x2.x()*P2(2,i)-P2(0,i);
+				A(3,i)= x2.y()*P2(2,i)-P2(1,i);
 			}
+
+			//Normalise rows of A
+			for(int i=0;i<4;i++){
+				double row_norm=0;
+				for(int j=0;j<4;j++)
+					row_norm+= A(i,j)*A(i,j);
+
+				row_norm=sqrt(row_norm);
+				for(int j=0;j<4;j++)
+					A(i,j)/= row_norm;
+			}
+
 			SVD<4,4,double> svd(A);
 			QGenericMatrix<4,4,double> Sigma= svd.getSigma();
 			QGenericMatrix<4,4,double> V= svd.getV();
@@ -552,7 +560,10 @@ namespace cybervision{
 
 			//QVector3D resultPoint(x1.x(),x1.y(),1e5*(V_col_min(2,0)-(V_col_min(0,0)+V_col_min(1,0)))/V_col_min(3,0));//Without camera matrix, remove camera_K from P
 			//QVector3D resultPoint(V_col_min(0,0)/V_col_min(3,0),V_col_min(1,0)/V_col_min(3,0),V_col_min(2,0)/V_col_min(3,0));
-			QVector3D resultPoint(x1.x(),x1.y(),2e4*(V_col_min(2,0)-(V_col_min(0,0)+V_col_min(1,0)))/V_col_min(3,0));
+			QVector3D resultPoint(
+					x1.x()*Options::scaleFocalDistance,
+					x1.y()*Options::scaleFocalDistance,
+					(V_col_min(2,0)-(V_col_min(0,0)+V_col_min(1,0)))/V_col_min(3,0));
 
 			resultPoints.push_back(resultPoint);
 		}

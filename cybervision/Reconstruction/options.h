@@ -20,6 +20,9 @@ public:
 	static const double RANSAC_t;//RANSAC t parameter
 	static const int RANSAC_d;//RANSAC d parameter
 
+	//Reconstructor data
+	static const double scaleFocalDistance;//Focal distance for determining scale
+
 	//Surface options
 	static const float peakSize;//Minimum relative height of point (inside a triangle) for it to be considered to be a peak
 	static const int maxPeakFilterPasses;//Maximum number of iterative applications of the peak filter

@@ -108,9 +108,7 @@ namespace cybervision{
 
 		for(Surface::PolygonPoint p=0;p<points.size();p++){
 			//TODO: fail if we exceed maximum value of int
-			qreal zMin= std::numeric_limits<qreal>::infinity(), zMax= -std::numeric_limits<qreal>::infinity();
-			qreal zSum= 0;
-			size_t zSumCount=0;
+			bool isPeakCandidate=false;
 			qreal maxHeight=0;
 			QList<double> sorted_heights;
 			//Find all triangles containing current point
@@ -130,16 +128,17 @@ namespace cybervision{
 					found=true;
 				}
 
-
 				if(found){
 					sorted_heights.append(point1.z());
 					sorted_heights.append(point2.z());
 
-					zMin= qMin(zMin,qMin(point1.z(),point2.z()));
-					zMax= qMax(zMax,qMax(point1.z(),point2.z()));
-					maxHeight= qMax(maxHeight,fabs(point1.z()-point2.z()));
-					zSum+= point1.z()+point2.z();
-					zSumCount+= 2;
+					qreal distanceXY= (point1.x()-point2.x())*(point1.x()-point2.x()) + (point1.y()-point2.y())*(point1.y()-point2.y());
+
+					if(fabs(points[p].z()-point1.z())>distanceXY*Options::peakSize && fabs(points[p].z()-point2.z())>distanceXY*Options::peakSize){
+						isPeakCandidate=true;
+					}else{
+						isPeakCandidate=false;
+					}
 				}
 			}
 
@@ -150,9 +149,9 @@ namespace cybervision{
 							  sorted_heights[(sorted_heights.length()-1)/2] :
 							  ((sorted_heights[sorted_heights.length()/2-1]+sorted_heights[sorted_heights.length()/2])/2);
 
-				if(fabs(points[p].z()-median)>Options::peakSize*maxHeight && zSumCount>0){
+				if(isPeakCandidate){
 					//this is a peak
-					points[p].setZ(zSum/(qreal)zSumCount);
+					points[p].setZ(median);
 					pointsModified=true;
 				}
 			}
