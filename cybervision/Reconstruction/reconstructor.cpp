@@ -78,38 +78,52 @@ namespace cybervision{
 			//Simple matching
 			emit sgnLogMessage(QString("Matching keypoints from %1 to %2").arg(filename1).arg(filename2));
 			//Match first image with second
+			#pragma omp parallel
 			for(QList<SIFT::Keypoint>::const_iterator it1= keypoints1.begin();it1!=keypoints1.end();it1++){
-				KeypointMatch match;
-				float minDistance= std::numeric_limits<float>::infinity();
-				for(QList<SIFT::Keypoint>::const_iterator it2= keypoints2.begin();it2!=keypoints2.end();it2++){
-					float distance= it1->distance(*it2);
-					if(distance<minDistance){
-						minDistance= distance;
-						match.a= QPointF(it1->getX(),it1->getY());
-						match.b= QPointF(it2->getX(),it2->getY());
+				#pragma omp single nowait
+				{
+					KeypointMatch match;
+					float minDistance= std::numeric_limits<float>::infinity();
+					for(QList<SIFT::Keypoint>::const_iterator it2= keypoints2.begin();it2!=keypoints2.end();it2++){
+						float distance= it1->distance(*it2);
+						if(distance<minDistance){
+							minDistance= distance;
+							match.a= QPointF(it1->getX(),it1->getY());
+							match.b= QPointF(it2->getX(),it2->getY());
+						}
 					}
-				}
-				if(minDistance!=std::numeric_limits<float>::infinity() && minDistance<Options::MaxKeypointDistance){
-					if(!matches.contains(minDistance,match))
-						matches.insert(minDistance,match);
+					if(minDistance!=std::numeric_limits<float>::infinity() && minDistance<Options::MaxKeypointDistance){
+						#pragma omp critical
+						{
+							if(!matches.contains(minDistance,match))
+								matches.insert(minDistance,match);
+						}
+					}
 				}
 			}
 			emit sgnLogMessage(QString("Matching keypoints from %1 to %2").arg(filename2).arg(filename1));
 			//Match second image with first
+			#pragma omp parallel
 			for(QList<SIFT::Keypoint>::const_iterator it2= keypoints2.begin();it2!=keypoints2.end();it2++){
-				KeypointMatch match;
-				float minDistance= std::numeric_limits<float>::infinity();
-				for(QList<SIFT::Keypoint>::const_iterator it1= keypoints1.begin();it1!=keypoints1.end();it1++){
-					float distance= it2->distance(*it1);
-					if(distance<minDistance){
-						minDistance= distance;
-						match.a= QPointF(it1->getX(),it1->getY());
-						match.b= QPointF(it2->getX(),it2->getY());
+				#pragma omp single nowait
+				{
+					KeypointMatch match;
+					float minDistance= std::numeric_limits<float>::infinity();
+					for(QList<SIFT::Keypoint>::const_iterator it1= keypoints1.begin();it1!=keypoints1.end();it1++){
+						float distance= it2->distance(*it1);
+						if(distance<minDistance){
+							minDistance= distance;
+							match.a= QPointF(it1->getX(),it1->getY());
+							match.b= QPointF(it2->getX(),it2->getY());
+						}
 					}
-				}
-				if(minDistance!=std::numeric_limits<float>::infinity() && minDistance<Options::MaxKeypointDistance){
-					if(!matches.contains(minDistance,match))
-						matches.insert(minDistance,match);
+					if(minDistance!=std::numeric_limits<float>::infinity() && minDistance<Options::MaxKeypointDistance){
+						#pragma omp critical
+						{
+							if(!matches.contains(minDistance,match))
+								matches.insert(minDistance,match);
+						}
+					}
 				}
 			}
 		}else if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_KDTREE){
@@ -203,7 +217,11 @@ namespace cybervision{
 		QGenericMatrix<3,3,double> best_E;
 
 		//TODO: convert this to OpenMP
+
+		#pragma omp parallel
 		for(int i=0;i<Options::RANSAC_k;i++){
+		#pragma omp single nowait
+		{
 			if(i%(Options::RANSAC_k/10)==0)
 				emit sgnLogMessage(QString("RANSAC %1% complete").arg((i*100)/Options::RANSAC_k));
 
@@ -240,7 +258,7 @@ namespace cybervision{
 			double error=0;
 			//Compute E from the random values
 			QGenericMatrix<3,3,double> E_normalized=computeEssentialMatrix(consensus_set_normalized);
-			QGenericMatrix<3,3,double> E= computeEssentialMatrix(consensus_set);
+			//QGenericMatrix<3,3,double> E= computeEssentialMatrix(consensus_set);
 
 			//Expand consensus set
 			for(SortedKeypointMatches::const_iterator it1= matches.begin();it1!=matches.end();it1++){
@@ -266,17 +284,21 @@ namespace cybervision{
 				}
 			}
 
-			if(consensus_set.size()>Options::RANSAC_d){
-				//Error was already computed, normalize it
-				error/= consensus_set.size();
-				//if(error<best_error){
-				if(consensus_set.size()>best_consensus_set.size() || (consensus_set.size()==best_consensus_set.size() && error<best_error)){
-					best_consensus_set= consensus_set;
-					best_error= error;
-					best_E= E_normalized;
-					//best_E= E;
+			#pragma omp critical
+			{
+				if(consensus_set.size()>Options::RANSAC_d){
+					//Error was already computed, normalize it
+					error/= consensus_set.size();
+					//if(error<best_error){
+					if(consensus_set.size()>best_consensus_set.size() || (consensus_set.size()==best_consensus_set.size() && error<best_error)){
+						best_consensus_set= consensus_set;
+						best_error= error;
+						best_E= E_normalized;
+						//best_E= E;
+					}
 				}
 			}
+		}
 		}
 
 		if(best_consensus_set.empty()){
