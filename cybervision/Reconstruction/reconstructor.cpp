@@ -352,7 +352,7 @@ namespace cybervision{
 			matches.insert(it->first,it->second);
 
 		//De-normalize F
-		//best_F= T2.transposed()*best_F*T1;
+		best_F= T2.transposed()*best_F*T1;
 
 		return best_F;
 	}
@@ -610,7 +610,7 @@ namespace cybervision{
 			QVector3D resultPoint(
 					x1.x()*Options::scaleFocalDistance,
 					x1.y()*Options::scaleFocalDistance,
-					(V_col_min(2,0)-(V_col_min(0,0)+V_col_min(1,0)))/V_col_min(3,0));
+					1000*(V_col_min(2,0))/V_col_min(3,0));
 
 			resultPoints.push_back(resultPoint);
 		}
