@@ -42,16 +42,22 @@ namespace cybervision{
 
 		//Finds and extracts all valid keypoint matches on two images
 		SortedKeypointMatches extractMatches(const QString& filename1,const QString& filename2);
+		//Converts QPointF to QGenericMatrix
+		inline QGenericMatrix<1,3,double> point2vector(const QPointF&)const;
+		//Converts QGenericMatrix (vector) to QPointF
+		inline QPointF vector2point(const QGenericMatrix<1,3,double>&)const;
+		//Computes just the fundamental matrix
+		QGenericMatrix<3,3,double> computeFundamentalMatrix(SortedKeypointMatches& matches,QGenericMatrix<3,3,double> T1,QGenericMatrix<3,3,double> T2);
 		//Estimates the best pose (R and T matrices) and essential matrix with RANSAC; filters the point list by removing outliers
 		QList<Reconstructor::StereopairPosition> computePose(SortedKeypointMatches&);
 
 
 		//Returns the camera calibration matrix
 		QGenericMatrix<3,3,double> computeCameraMatrix()const;
-		//Computes the essential matrix from N points
-		QGenericMatrix<3,3,double> computeEssentialMatrix(const KeypointMatches&);
-		//Computes a keypoint match's error when used with the essential matrix E
-		double computeEssentialMatrixError(const QGenericMatrix<3,3,double>&E, const KeypointMatch&) const;
+		//Computes the fundamental matrix from N points
+		QGenericMatrix<3,3,double> computeFundamentalMatrix(const KeypointMatches&);
+		//Computes a keypoint match's error when used with the fundamental matrix F
+		double computeFundamentalMatrixError(const QGenericMatrix<3,3,double>&F, const KeypointMatch&) const;
 		//Computes possible R and T matrices from essential matrix
 		QList<StereopairPosition> computeRT(const QGenericMatrix<3,3,double>&Essential_matrix) const;
 		//Helper function to construct Rz matrix for computeRT

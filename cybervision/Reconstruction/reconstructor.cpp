@@ -163,24 +163,16 @@ namespace cybervision{
 		return matches;
 	}
 
+
+
 	QList<Reconstructor::StereopairPosition> Reconstructor::computePose(SortedKeypointMatches& matches){
 		emit sgnStatusMessage("Estimating pose...");
-
-		//Increase speed with precomputed lists
-		QList<float> matches_keys= matches.uniqueKeys();
-		int matches_keys_max_i=0;
-		for(int i=0;i<matches_keys.size();i++)
-			if(matches_keys.at(i)<=Options::ReliableDistance)
-				matches_keys_max_i= i;
-			else
-				break;
-		matches_keys_max_i=std::max(matches_keys_max_i,8);
-
 		//Compute centroid and scaling factor (normalise2dpts)
-		QPointF centroidA,centroidB;
-		double scalingA, scalingB;
+
 		QGenericMatrix<3,3,double> T1,T2;
 		{
+			QPointF centroidA,centroidB;
+			double scalingA, scalingB;
 			double sumAX=0,sumAY=0,sumBX=0,sumBY=0;
 			for(SortedKeypointMatches::const_iterator it1= matches.begin();it1!=matches.end();it1++){
 				sumAX+= it1.value().a.x(), sumBX+= it1.value().b.x();
@@ -200,7 +192,6 @@ namespace cybervision{
 			scalingA= sqrt(2)/distA;
 			scalingB= sqrt(2)/distB;
 
-
 			//De-normalize2dpts
 			T1.fill(0.0);
 			T1(0,0)= scalingA, T1(1,1)= scalingA, T1(2,2)= 1.0;
@@ -210,13 +201,62 @@ namespace cybervision{
 			T2(0,2)= -scalingB*centroidB.x(), T2(1,2)= -scalingB*centroidB.y();
 		}
 
-		//Use the RANSAC algorithm to estimate camera poses
+		//Do not normalize
+		//T1.fill(0.0); T1(0,0)=1, T1(1,1)=1, T1(2,2)=1;
+		//T2=T1;
 
+		//Compute fundamental matrix
+		QGenericMatrix<3,3,double> best_F= computeFundamentalMatrix(matches,T1,T2);
+		{
+			QGenericMatrix<3,3,double> zero; zero.fill(0);
+			if(best_F==zero)
+				return QList<Reconstructor::StereopairPosition>();
+		}
+
+		QList<StereopairPosition> RTList= computeRT(best_F);
+		//Output R,T matrices to log
+
+		QString RT_str;
+		for(QList<StereopairPosition>::const_iterator i= RTList.begin();i!=RTList.end();i++){
+			RT_str.append(QString("R%1T\n").arg(QString(""),40));
+			for(int j=0;j<3;j++){
+				qreal T_value_i= j==0? i->T(0,0): (j==1?i->T(1,0):i->T(2,0));//Extract i-th value from QVector3D
+				QString matrix_row= QString("%1 %2 %3 %4\n").arg(i->R(j,0),6,'g',6).arg(i->R(j,1),6,'g',6).arg(i->R(j,2),6,'g',6).arg(T_value_i,6,'g',6);
+				RT_str.append(matrix_row);
+			}
+		}
+		emit sgnLogMessage(QString("Resulting camera poses\n").append(RT_str));
+		return RTList;
+	}
+
+	QGenericMatrix<1,3,double> Reconstructor::point2vector(const QPointF&p)const{
+		QGenericMatrix<1,3,double> vector;
+		vector(0,0)=p.x(),vector(1,0)=p.y(),vector(2,0)=1;
+		return vector;
+	}
+
+	QPointF Reconstructor::vector2point(const QGenericMatrix<1,3,double>&vector)const{
+		return QPointF(vector(0,0)/vector(2,0),vector(1,0)/vector(2,0));
+	}
+
+	QGenericMatrix<3,3,double> Reconstructor::computeFundamentalMatrix(SortedKeypointMatches& matches,QGenericMatrix<3,3,double> T1,QGenericMatrix<3,3,double> T2){
+		emit sgnStatusMessage("Estimating fundamental matrix...");
+
+		//Increase speed with precomputed lists
+		QList<float> matches_keys= matches.uniqueKeys();
+		int matches_keys_max_i=0;
+		for(int i=0;i<matches_keys.size();i++)
+			if(matches_keys.at(i)<=Options::ReliableDistance)
+				matches_keys_max_i= i;
+			else
+				break;
+		matches_keys_max_i=std::max(matches_keys_max_i,8);
+
+
+		//Use the RANSAC algorithm to estimate camera poses
 		KeypointMatches best_consensus_set;
 		double best_error= std::numeric_limits<float>::infinity();
-		QGenericMatrix<3,3,double> best_E;
-
-		//TODO: convert this to OpenMP
+		QGenericMatrix<3,3,double> best_F;
 
 		#pragma omp parallel
 		for(int i=0;i<Options::RANSAC_k;i++){
@@ -246,8 +286,8 @@ namespace cybervision{
 					consensus_set.push_back(new_match);
 
 					//Create normalized point
-					QPointF x1; x1.setX((new_match.second.a.x()-centroidA.x())*scalingA),x1.setY((new_match.second.a.y()-centroidA.y())*scalingA);
-					QPointF x2; x2.setX((new_match.second.b.x()-centroidB.x())*scalingB),x2.setY((new_match.second.b.y()-centroidB.y())*scalingB);
+					QPointF x1=	vector2point(T1*point2vector(new_match.second.a));
+					QPointF x2=	vector2point(T2*point2vector(new_match.second.b));
 					KeypointMatch new_match_normalized_points;
 					new_match_normalized_points.a=x1, new_match_normalized_points.b=x2;
 					QPair<float,KeypointMatch> new_match_normalized(random_distance,new_match_normalized_points);
@@ -257,19 +297,17 @@ namespace cybervision{
 
 			double error=0;
 			//Compute E from the random values
-			QGenericMatrix<3,3,double> E_normalized=computeEssentialMatrix(consensus_set_normalized);
-			//QGenericMatrix<3,3,double> E= computeEssentialMatrix(consensus_set);
+			QGenericMatrix<3,3,double> F_normalized=computeFundamentalMatrix(consensus_set_normalized);
 
 			//Expand consensus set
 			for(SortedKeypointMatches::const_iterator it1= matches.begin();it1!=matches.end();it1++){
 				//Normalize point for error computation
 
-				QPointF x1; x1.setX((it1.value().a.x()-centroidA.x())*scalingA),x1.setY((it1.value().a.y()-centroidA.y())*scalingA);
-				QPointF x2; x2.setX((it1.value().b.x()-centroidB.x())*scalingB),x2.setY((it1.value().b.y()-centroidB.y())*scalingB);
+				QPointF x1=	vector2point(T1*point2vector(it1.value().a));
+				QPointF x2=	vector2point(T2*point2vector(it1.value().b));
 				KeypointMatch match_normalized; match_normalized.a=x1, match_normalized.b=x2;
 				//Check error
-				//double current_error= computeEssentialMatrixError(E,it1.value());
-				double current_error= computeEssentialMatrixError(E_normalized,match_normalized);
+				double current_error= computeFundamentalMatrixError(F_normalized,match_normalized);
 
 				//Check if match exists in master consensus set
 				if(master_consensus_set.contains(it1.key(),it1.value())){
@@ -293,8 +331,7 @@ namespace cybervision{
 					if(consensus_set.size()>best_consensus_set.size() || (consensus_set.size()==best_consensus_set.size() && error<best_error)){
 						best_consensus_set= consensus_set;
 						best_error= error;
-						best_E= E_normalized;
-						//best_E= E;
+						best_F= F_normalized;
 					}
 				}
 			}
@@ -303,7 +340,8 @@ namespace cybervision{
 
 		if(best_consensus_set.empty()){
 			emit sgnLogMessage("No RANSAC consensus found");
-			return QList<Reconstructor::StereopairPosition>();
+			QGenericMatrix<3,3,double> zero; zero.fill(0);
+			return zero;
 		}else{
 			emit sgnLogMessage(QString("RANSAC consensus found, error=%1, size=%2").arg(best_error,0,'g',4).arg(best_consensus_set.size()));
 		}
@@ -313,27 +351,14 @@ namespace cybervision{
 		for(KeypointMatches::const_iterator it=best_consensus_set.begin();it!=best_consensus_set.end();it++)
 			matches.insert(it->first,it->second);
 
-		//De-normalize E
-		//best_E= T2.transposed()*best_E*T1;
-		QList<StereopairPosition> RTList= computeRT(best_E);
-		//Output R,T matrices to log
+		//De-normalize F
+		//best_F= T2.transposed()*best_F*T1;
 
-		QString RT_str;
-		for(QList<StereopairPosition>::const_iterator i= RTList.begin();i!=RTList.end();i++){
-			RT_str.append(QString("R%1T\n").arg(QString(""),40));
-			for(int j=0;j<3;j++){
-				qreal T_value_i= j==0? i->T(0,0): (j==1?i->T(1,0):i->T(2,0));//Extract i-th value from QVector3D
-				QString matrix_row= QString("%1 %2 %3 %4\n").arg(i->R(j,0),6,'g',6).arg(i->R(j,1),6,'g',6).arg(i->R(j,2),6,'g',6).arg(T_value_i,6,'g',6);
-				RT_str.append(matrix_row);
-			}
-		}
-		emit sgnLogMessage(QString("Resulting camera poses\n").append(RT_str));
-
-		return RTList;
+		return best_F;
 	}
 
 
-	QGenericMatrix<3,3,double> Reconstructor::computeEssentialMatrix(const KeypointMatches& matches){
+	QGenericMatrix<3,3,double> Reconstructor::computeFundamentalMatrix(const KeypointMatches& matches){
 		if(matches.size()!=8){
 			emit sgnLogMessage(QString("Wrong consensus set size (%1), should be %2").arg(matches.size()).arg(8));
 			//TODO:fail here
@@ -351,19 +376,19 @@ namespace cybervision{
 			}
 		}
 		//Compute V_chi from the SVD decomposition
-		QGenericMatrix<3,3,double> E;
+		QGenericMatrix<3,3,double> F;
 		{
 			SVD<9,8,double> svd(chi);
 			QGenericMatrix<9,9,double> V_chi= svd.getV();
 			//Get and unstack E
-			E(0,0)=V_chi(0,8), E(1,0)=V_chi(1,8), E(2,0)=V_chi(2,8);
-			E(0,1)=V_chi(3,8), E(1,1)=V_chi(4,8), E(2,1)=V_chi(5,8);
-			E(0,2)=V_chi(6,8), E(1,2)=V_chi(7,8), E(2,2)=V_chi(8,8);
+			F(0,0)=V_chi(0,8), F(1,0)=V_chi(1,8), F(2,0)=V_chi(2,8);
+			F(0,1)=V_chi(3,8), F(1,1)=V_chi(4,8), F(2,1)=V_chi(5,8);
+			F(0,2)=V_chi(6,8), F(1,2)=V_chi(7,8), F(2,2)=V_chi(8,8);
 		}
 		//"Normalize" E
 		//(Project into essential space (do we need this?))
-		if(false){
-			SVD<3,3,double> svd(E);
+		if(true){
+			SVD<3,3,double> svd(F);
 			QGenericMatrix<3,3,double> Sigma= svd.getSigma();
 			Sigma(2,2)= 0.0;
 			/*
@@ -373,20 +398,20 @@ namespace cybervision{
 			Sigma= Sigma_new;
 			*/
 
-			E= svd.getU()*Sigma*(svd.getV().transposed());
+			F= svd.getU()*Sigma*(svd.getV().transposed());
 		}
 
-		return E;
+		return F;
 	}
 
-	double Reconstructor::computeEssentialMatrixError(const QGenericMatrix<3,3,double>&E, const KeypointMatch& match) const{
+	double Reconstructor::computeFundamentalMatrixError(const QGenericMatrix<3,3,double>&F, const KeypointMatch& match) const{
 		QGenericMatrix<1,3,double> x1; x1(0,0)=match.a.x(), x1(1,0)=match.a.y(), x1(2,0)=1;
 		QGenericMatrix<1,3,double> x2; x2(0,0)=match.b.x(), x2(1,0)=match.b.y(), x2(2,0)=1;
 
-		QGenericMatrix<1,1,double> x2tEx1= x2.transposed()*E*x1;
-		QGenericMatrix<1,3,double> Ex1=E*x1,Etx2=E.transposed()*x2;
+		QGenericMatrix<1,1,double> x2tFx1= x2.transposed()*F*x1;
+		QGenericMatrix<1,3,double> Fx1=F*x1,Ftx2=F.transposed()*x2;
 		//Calculate distance from epipolar line to points
-		return fabs(x2tEx1(0,0)*x2tEx1(0,0)*(1/(Ex1(0,0)*Ex1(0,0)+Ex1(1,0)*Ex1(1,0))+1/(Etx2(0,0)*Etx2(0,0)+Etx2(1,0)*Etx2(1,0))));
+		return fabs(x2tFx1(0,0)*x2tFx1(0,0)*(1/(Fx1(0,0)*Fx1(0,0)+Fx1(1,0)*Fx1(1,0))+1/(Ftx2(0,0)*Ftx2(0,0)+Ftx2(1,0)*Ftx2(1,0))));
 		/*
 		//Badly working method 1
 		return fabs(x2tEx1(0,0)*x2tEx1(0,0)/(Ex1(0,0)*Ex1(0,0)+Ex1(1,0)*Ex1(1,0)+Etx2(0,0)*Etx2(0,0)+Etx2(1,0)*Etx2(1,0)));
