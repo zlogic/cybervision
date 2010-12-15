@@ -14,7 +14,9 @@ namespace cybervision{
 	const double Options::RANSAC_t= 1e-18;
 	const int Options::RANSAC_d= 32;
 
-	const double Options::scaleFocalDistance= 2e-4;
+	const double Options::scaleFocalDistance= 1e-2;
+	const double Options::scaleXY= 1;
+	const double Options::scaleZ= 5000.0;
 
 	const float Options::surfaceSize= 15.0F;
 	const float Options::surfaceDepth= 10.0F;

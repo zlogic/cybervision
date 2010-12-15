@@ -207,6 +207,10 @@ namespace cybervision{
 
 		//Compute fundamental matrix
 		QGenericMatrix<3,3,double> best_F= computeFundamentalMatrix(matches,T1,T2);
+
+		//De-normalize F
+		//best_F= T2.transposed()*best_F*T1;
+
 		{
 			QGenericMatrix<3,3,double> zero; zero.fill(0);
 			if(best_F==zero)
@@ -327,7 +331,6 @@ namespace cybervision{
 				if(consensus_set.size()>Options::RANSAC_d){
 					//Error was already computed, normalize it
 					error/= consensus_set.size();
-					//if(error<best_error){
 					if(consensus_set.size()>best_consensus_set.size() || (consensus_set.size()==best_consensus_set.size() && error<best_error)){
 						best_consensus_set= consensus_set;
 						best_error= error;
@@ -350,9 +353,6 @@ namespace cybervision{
 		matches.clear();
 		for(KeypointMatches::const_iterator it=best_consensus_set.begin();it!=best_consensus_set.end();it++)
 			matches.insert(it->first,it->second);
-
-		//De-normalize F
-		best_F= T2.transposed()*best_F*T1;
 
 		return best_F;
 	}
@@ -387,15 +387,13 @@ namespace cybervision{
 		}
 		//"Normalize" E
 		//(Project into essential space (do we need this?))
-		if(true){
+		if(false){
 			SVD<3,3,double> svd(F);
 			QGenericMatrix<3,3,double> Sigma= svd.getSigma();
 			Sigma(2,2)= 0.0;
 			/*
-			QGenericMatrix<3,3,double> Sigma_new;
-			Sigma_new.fill(0.0);
-			Sigma_new(0,0)= 1.0, Sigma_new(1,1)= 1.0;
-			Sigma= Sigma_new;
+			Sigma.fill(0.0);
+			Sigma(0,0)= 1.0, Sigma(1,1)= 1.0;
 			*/
 
 			F= svd.getU()*Sigma*(svd.getV().transposed());
@@ -426,8 +424,8 @@ namespace cybervision{
 	QGenericMatrix<3,3,double> Reconstructor::computeRT_rzfunc(double angle) const{
 		QGenericMatrix<3,3,double> result;
 		result.fill(0.0);
-		result(0,1)= angle>=0?1:(-1);
-		result(1,0)= -(angle>=0?1:(-1));
+		result(0,1)= angle>=0?1.0:(-1.0);
+		result(1,0)= -(angle>=0?1.0:(-1.0));
 		result(2,2)= 1.0;
 		return result;
 	}
@@ -457,7 +455,7 @@ namespace cybervision{
 			SVD<3,3,double> svd(Essential_matrix_projected);
 			QGenericMatrix<3,3,double> U= svd.getU(),Sigma=svd.getSigma(), V=svd.getV();
 
-			double Sigma_value= (Sigma(0,0)+Sigma(1,1))/2.0;
+			double Sigma_value= 1;//(Sigma(0,0)+Sigma(1,1))/2.0;
 			Sigma.fill(0.0);
 			Sigma(0,0)= Sigma_value,Sigma(1,1) = Sigma_value;
 
@@ -470,8 +468,8 @@ namespace cybervision{
 		for(QList<double>::const_iterator i= pi_values.begin();i!=pi_values.end();i++){
 			double PI_R= *i;
 			QGenericMatrix<3,3,double> R= U*(computeRT_rzfunc(PI_R).transposed())*(V.transposed());
-			if(R(0,0)*(R(1,1)*R(2,2)-R(1,2)*R(2,1))-R(0,1)*(R(1,0)*R(2,2)-R(1,2)*R(2,0))+R(0,2)*(R(1,0)*R(2,1)-R(1,1)*R(2,0)))
-				R=R*(-1.0);//Probably unnecessary
+			//if(R(0,0)*(R(1,1)*R(2,2)-R(1,2)*R(2,1))-R(0,1)*(R(1,0)*R(2,2)-R(1,2)*R(2,0))+R(0,2)*(R(1,0)*R(2,1)-R(1,1)*R(2,0))<0)
+			//	R=R*(-1.0);//Probably unnecessary
 			for(QList<double>::const_iterator j= pi_values.begin();j!=pi_values.end();j++){
 				double PI_T=*j;
 
@@ -488,7 +486,6 @@ namespace cybervision{
 				T_unhatted(1,0)=U(1,2)*(PI_T>=0?1:-1);
 				T_unhatted(2,0)=U(2,2)*(PI_T>=0?1:-1);
 
-
 				StereopairPosition RT;
 				RT.R= R, RT.T= T_unhatted;
 				RTList.push_back(RT);
@@ -502,7 +499,7 @@ namespace cybervision{
 	QList<QVector3D> Reconstructor::compute3DPoints(const SortedKeypointMatches&matches,const QList<StereopairPosition>& RTList){
 		emit sgnStatusMessage("Performing 3D triangulation...");
 
-		double best_min_depth=std::numeric_limits<double>::infinity();
+		double best_min_depth=std::numeric_limits<double>::infinity(),best_max_depth=-std::numeric_limits<double>::infinity();
 
 		StereopairPosition bestPosition=RTList.first();
 		bool found=false;
@@ -519,7 +516,9 @@ namespace cybervision{
 					min_depth= it2->z();
 			}
 
-			if(min_depth>0){
+			if(min_depth>0 && max_depth-min_depth>best_max_depth-best_min_depth){
+				best_min_depth= min_depth;
+				best_max_depth= max_depth;
 				bestPosition= *it1;
 				found=true;
 			}
@@ -529,6 +528,9 @@ namespace cybervision{
 
 		if(best_min_depth<0)
 			emit sgnLogMessage(QString("Warning: minimum depth is %1, less than zero!").arg(best_min_depth));
+
+		if(best_min_depth==std::numeric_limits<double>::infinity())
+			emit sgnLogMessage(QString("Warning: minimum depth is less than zero!"));
 
 		return computeTriangulatedPoints(matches,bestPosition.R,bestPosition.T,true);
 	}
@@ -605,12 +607,10 @@ namespace cybervision{
 			for(int i=0;i<4;i++)
 				V_col_min(i,0)= V(i,Sigma_min_index);
 
-			//QVector3D resultPoint(x1.x(),x1.y(),1e5*(V_col_min(2,0)-(V_col_min(0,0)+V_col_min(1,0)))/V_col_min(3,0));//Without camera matrix, remove camera_K from P
-			//QVector3D resultPoint(V_col_min(0,0)/V_col_min(3,0),V_col_min(1,0)/V_col_min(3,0),V_col_min(2,0)/V_col_min(3,0));
 			QVector3D resultPoint(
-					x1.x()*Options::scaleFocalDistance,
-					x1.y()*Options::scaleFocalDistance,
-					1000*(V_col_min(2,0))/V_col_min(3,0));
+					x1.x()*Options::scaleXY,
+					x1.y()*Options::scaleXY,
+					(Options::scaleXY*Options::scaleZ)*(V_col_min(2,0)-(V_col_min(0,0)+V_col_min(1,0)))/V_col_min(3,0));
 
 			resultPoints.push_back(resultPoint);
 		}

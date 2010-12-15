@@ -22,6 +22,8 @@ public:
 
 	//Reconstructor data
 	static const double scaleFocalDistance;//Focal distance for determining scale
+	static const double scaleXY;//XY plane scale
+	static const double scaleZ;//Depth scale, relative to XY
 
 	//Surface options
 	static const float peakSize;//Minimum relative height of point (inside a triangle) for it to be considered to be a peak

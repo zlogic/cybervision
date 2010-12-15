@@ -46,11 +46,10 @@ namespace cybervision{
 		inline QGenericMatrix<1,3,double> point2vector(const QPointF&)const;
 		//Converts QGenericMatrix (vector) to QPointF
 		inline QPointF vector2point(const QGenericMatrix<1,3,double>&)const;
-		//Computes just the fundamental matrix
+		//Computes the fundamental matrix with RANSAC
 		QGenericMatrix<3,3,double> computeFundamentalMatrix(SortedKeypointMatches& matches,QGenericMatrix<3,3,double> T1,QGenericMatrix<3,3,double> T2);
 		//Estimates the best pose (R and T matrices) and essential matrix with RANSAC; filters the point list by removing outliers
 		QList<Reconstructor::StereopairPosition> computePose(SortedKeypointMatches&);
-
 
 		//Returns the camera calibration matrix
 		QGenericMatrix<3,3,double> computeCameraMatrix()const;

@@ -165,7 +165,8 @@ namespace cybervision{
 		}
 
 		for(QList<QVector3D>::iterator it= points.begin();it!=points.end();it++){
-			it->setZ((it->z()-zMin));
+			it->setZ(it->z()-zMin);
+			//it->setZ((it->z()-zMin)*Options::surfaceDepth/(zMax-zMin));
 		}
 
 		return pointsModified;
