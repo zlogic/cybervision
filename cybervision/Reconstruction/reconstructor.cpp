@@ -209,7 +209,7 @@ namespace cybervision{
 		QGenericMatrix<3,3,double> best_F= computeFundamentalMatrix(matches,T1,T2);
 
 		//De-normalize F
-		//best_F= T2.transposed()*best_F*T1;
+		best_F= T1.transposed()*best_F*T2;
 
 		{
 			QGenericMatrix<3,3,double> zero; zero.fill(0);
@@ -584,6 +584,7 @@ namespace cybervision{
 			}
 
 			//Normalise rows of A
+			/*
 			for(int i=0;i<4;i++){
 				double row_norm=0;
 				for(int j=0;j<4;j++)
@@ -593,6 +594,7 @@ namespace cybervision{
 				for(int j=0;j<4;j++)
 					A(i,j)/= row_norm;
 			}
+			*/
 
 			SVD<4,4,double> svd(A);
 			QGenericMatrix<4,4,double> Sigma= svd.getSigma();
