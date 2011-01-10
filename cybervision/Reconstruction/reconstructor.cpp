@@ -167,8 +167,44 @@ namespace cybervision{
 
 	QList<Reconstructor::StereopairPosition> Reconstructor::computePose(SortedKeypointMatches& matches){
 		emit sgnStatusMessage("Estimating pose...");
-		//Compute centroid and scaling factor (normalise2dpts)
 
+		//Compute fundamental matrix
+		QGenericMatrix<3,3,double> best_F= computeFundamentalMatrix(matches);
+
+		{
+			QGenericMatrix<3,3,double> zero; zero.fill(0);
+			if(best_F==zero)
+				return QList<Reconstructor::StereopairPosition>();
+		}
+
+		QList<StereopairPosition> RTList= computeRT(best_F);
+		//Output R,T matrices to log
+
+		QString RT_str;
+		for(QList<StereopairPosition>::const_iterator i= RTList.begin();i!=RTList.end();i++){
+			RT_str.append(QString("R%1T\n").arg(QString(""),40));
+			for(int j=0;j<3;j++){
+				qreal T_value_i= j==0? i->T(0,0): (j==1?i->T(1,0):i->T(2,0));//Extract i-th value from QVector3D
+				QString matrix_row= QString("%1 %2 %3 %4\n").arg(i->R(j,0),6,'g',6).arg(i->R(j,1),6,'g',6).arg(i->R(j,2),6,'g',6).arg(T_value_i,6,'g',6);
+				RT_str.append(matrix_row);
+			}
+		}
+		emit sgnLogMessage(QString("Resulting camera poses\n").append(RT_str));
+		return RTList;
+	}
+
+	QGenericMatrix<1,3,double> Reconstructor::point2vector(const QPointF&p)const{
+		QGenericMatrix<1,3,double> vector;
+		vector(0,0)=p.x(),vector(1,0)=p.y(),vector(2,0)=1;
+		return vector;
+	}
+
+	QPointF Reconstructor::vector2point(const QGenericMatrix<1,3,double>&vector)const{
+		return QPointF(vector(0,0)/vector(2,0),vector(1,0)/vector(2,0));
+	}
+
+	QGenericMatrix<3,3,double> Reconstructor::computeFundamentalMatrix(SortedKeypointMatches& matches){
+		//Compute centroid and scaling factor (normalise2dpts)
 		QGenericMatrix<3,3,double> T1,T2;
 		{
 			QPointF centroidA,centroidB;
@@ -206,44 +242,15 @@ namespace cybervision{
 		//T2=T1;
 
 		//Compute fundamental matrix
-		QGenericMatrix<3,3,double> best_F= computeFundamentalMatrix(matches,T1,T2);
+		QGenericMatrix<3,3,double> F= ransacComputeFundamentalMatrix(matches,T1,T2);
 
 		//De-normalize F
-		best_F= T1.transposed()*best_F*T2;
+		F= T1.transposed()*F*T2;
 
-		{
-			QGenericMatrix<3,3,double> zero; zero.fill(0);
-			if(best_F==zero)
-				return QList<Reconstructor::StereopairPosition>();
-		}
-
-		QList<StereopairPosition> RTList= computeRT(best_F);
-		//Output R,T matrices to log
-
-		QString RT_str;
-		for(QList<StereopairPosition>::const_iterator i= RTList.begin();i!=RTList.end();i++){
-			RT_str.append(QString("R%1T\n").arg(QString(""),40));
-			for(int j=0;j<3;j++){
-				qreal T_value_i= j==0? i->T(0,0): (j==1?i->T(1,0):i->T(2,0));//Extract i-th value from QVector3D
-				QString matrix_row= QString("%1 %2 %3 %4\n").arg(i->R(j,0),6,'g',6).arg(i->R(j,1),6,'g',6).arg(i->R(j,2),6,'g',6).arg(T_value_i,6,'g',6);
-				RT_str.append(matrix_row);
-			}
-		}
-		emit sgnLogMessage(QString("Resulting camera poses\n").append(RT_str));
-		return RTList;
+		return F;
 	}
 
-	QGenericMatrix<1,3,double> Reconstructor::point2vector(const QPointF&p)const{
-		QGenericMatrix<1,3,double> vector;
-		vector(0,0)=p.x(),vector(1,0)=p.y(),vector(2,0)=1;
-		return vector;
-	}
-
-	QPointF Reconstructor::vector2point(const QGenericMatrix<1,3,double>&vector)const{
-		return QPointF(vector(0,0)/vector(2,0),vector(1,0)/vector(2,0));
-	}
-
-	QGenericMatrix<3,3,double> Reconstructor::computeFundamentalMatrix(SortedKeypointMatches& matches,QGenericMatrix<3,3,double> T1,QGenericMatrix<3,3,double> T2){
+	QGenericMatrix<3,3,double> Reconstructor::ransacComputeFundamentalMatrix(SortedKeypointMatches& matches,QGenericMatrix<3,3,double> T1,QGenericMatrix<3,3,double> T2){
 		emit sgnStatusMessage("Estimating fundamental matrix...");
 
 		//Increase speed with precomputed lists
@@ -301,7 +308,7 @@ namespace cybervision{
 
 			double error=0;
 			//Compute E from the random values
-			QGenericMatrix<3,3,double> F_normalized=computeFundamentalMatrix(consensus_set_normalized);
+			QGenericMatrix<3,3,double> F_normalized=computeFundamentalMatrix8Point(consensus_set_normalized);
 
 			//Expand consensus set
 			for(SortedKeypointMatches::const_iterator it1= matches.begin();it1!=matches.end();it1++){
@@ -358,7 +365,7 @@ namespace cybervision{
 	}
 
 
-	QGenericMatrix<3,3,double> Reconstructor::computeFundamentalMatrix(const KeypointMatches& matches){
+	QGenericMatrix<3,3,double> Reconstructor::computeFundamentalMatrix8Point(const KeypointMatches& matches){
 		if(matches.size()!=8){
 			emit sgnLogMessage(QString("Wrong consensus set size (%1), should be %2").arg(matches.size()).arg(8));
 			//TODO:fail here
@@ -420,6 +427,7 @@ namespace cybervision{
 		*/
 	}
 
+	//Essential matrix method functions
 
 	QGenericMatrix<3,3,double> Reconstructor::computeRT_rzfunc(double angle) const{
 		QGenericMatrix<3,3,double> result;
@@ -620,6 +628,35 @@ namespace cybervision{
 		return resultPoints;
 	}
 
+	//Fundamental matrix method functions
+	QList<QVector3D> Reconstructor::compute3DPoints(const SortedKeypointMatches&matches,QGenericMatrix<3,3,double> F){
+		//Project into fundamental space (satisfy rank-2 criteria)
+		{
+			SVD<3,3,double> svd(F);
+			QGenericMatrix<3,3,double> Sigma= svd.getSigma();
+			Sigma(2,2)= 0.0;
+			F= svd.getU()*Sigma*(svd.getV().transposed());
+		}
+
+
+		QList<QVector3D> resultPoints;
+
+		//For every keypoint match
+		for(SortedKeypointMatches::const_iterator match_i=matches.begin();match_i!=matches.end();match_i++){
+			QPointF x1= match_i.value().a, x2= match_i.value().b;
+
+			QGenericMatrix<3,3,double> T1,T2;
+			T1.fill(0), T2.fill(0);
+			T1(0,0)=1, T1(1,1)=1, T1(2,2)=1, T1(0,2)= -x1.x(), T1(1,2)= -x1.y();
+			T2(0,0)=1, T2(1,1)=1, T2(2,2)=1, T2(0,2)= -x2.x(), T2(1,2)= -x2.y();
+
+		}
+
+		return resultPoints;
+	}
+
+
+	//Main reconstruction function
 	bool Reconstructor::run(const QString& filename1,const QString& filename2){
 		Points3D.clear();
 		//Extract and sort matches by distance
@@ -632,29 +669,47 @@ namespace cybervision{
 			errorString= QString("Not enough matches (%1), need at least %2").arg(matches.size()).arg(Options::MinMatches);
 			return false;
 		}
-		//Estimate camera poses
-		QList<Reconstructor::StereopairPosition> RTList= Reconstructor::computePose(matches);
-		if(RTList.empty()){
-			errorString= "Error when estimating pose";
+
+		if(Options::reconstructionMode==Options::RECONSTRUCTION_ESSENTIAL_FULL){
+			emit sgnLogMessage("Performing reconstruction with essential matrix and complete pose data");
+			//Estimate camera poses
+			QList<Reconstructor::StereopairPosition> RTList= computePose(matches);
+			if(RTList.empty()){
+				errorString= "Error when estimating pose";
+				return false;
+			}
+
+			//Triangulate points
+			Points3D= compute3DPoints(matches,RTList);
+			if(Points3D.empty()){
+				errorString= "Error during 3D triangulation";
+				return false;
+			}
+			//log points to console
+			/*
+			QString pointsStr="A=[";
+			for(QList<QVector3D>::const_iterator it2=Points3D.begin();it2!=Points3D.end();it2++)
+				pointsStr.append(QString("%1 %2 %3%4").arg(it2->x()).arg(it2->y()).arg(-it2->z(),0,'g',12).arg(it2!=(Points3D.end()-1)?";":""));
+			pointsStr.append("];");
+
+			emit sgnLogMessage(QString(pointsStr));
+			*/
+		}else if(Options::reconstructionMode==Options::RECONSTRUCTION_FUNDAMENTAL){
+			emit sgnLogMessage("Performing reconstruction with fundamental matrix");
+
+			//Compute fundamental matrix
+			QGenericMatrix<3,3,double> F= computeFundamentalMatrix(matches);
+
+			//Optimal triangulation of points
+			Points3D= compute3DPoints(matches,F);
+			if(Points3D.empty()){
+				errorString= "Error during 3D triangulation";
+				return false;
+			}
+		}else{
+			errorString= QString("Unknown reconstruction mode: %1").arg(Options::reconstructionMode);
 			return false;
 		}
-
-		//Triangulate points
-		Points3D= compute3DPoints(matches,RTList);
-		if(Points3D.empty()){
-			errorString= "Error during 3D triangulation";
-			return false;
-		}
-		//log points to console
-		/*
-		QString pointsStr="A=[";
-		for(QList<QVector3D>::const_iterator it2=Points3D.begin();it2!=Points3D.end();it2++)
-			pointsStr.append(QString("%1 %2 %3%4").arg(it2->x()).arg(it2->y()).arg(-it2->z(),0,'g',12).arg(it2!=(Points3D.end()-1)?";":""));
-		pointsStr.append("];");
-
-		emit sgnLogMessage(QString(pointsStr));
-		*/
-
 		return true;
 	}
 

@@ -46,17 +46,23 @@ namespace cybervision{
 		inline QGenericMatrix<1,3,double> point2vector(const QPointF&)const;
 		//Converts QGenericMatrix (vector) to QPointF
 		inline QPointF vector2point(const QGenericMatrix<1,3,double>&)const;
-		//Computes the fundamental matrix with RANSAC
-		QGenericMatrix<3,3,double> computeFundamentalMatrix(SortedKeypointMatches& matches,QGenericMatrix<3,3,double> T1,QGenericMatrix<3,3,double> T2);
+		//Normalizes values and computes fundamental matrix
+		QGenericMatrix<3,3,double> computeFundamentalMatrix(SortedKeypointMatches& matches);
+		//Computes the fundamental matrix with RANSAC; point coordinates should be normalized
+		QGenericMatrix<3,3,double> ransacComputeFundamentalMatrix(SortedKeypointMatches& matches,QGenericMatrix<3,3,double> T1,QGenericMatrix<3,3,double> T2);
 		//Estimates the best pose (R and T matrices) and essential matrix with RANSAC; filters the point list by removing outliers
 		QList<Reconstructor::StereopairPosition> computePose(SortedKeypointMatches&);
 
-		//Returns the camera calibration matrix
-		QGenericMatrix<3,3,double> computeCameraMatrix()const;
-		//Computes the fundamental matrix from N points
-		QGenericMatrix<3,3,double> computeFundamentalMatrix(const KeypointMatches&);
+		//Computes the fundamental matrix from N points (currently 8-point method is used)
+		QGenericMatrix<3,3,double> computeFundamentalMatrix8Point(const KeypointMatches&);
 		//Computes a keypoint match's error when used with the fundamental matrix F
 		double computeFundamentalMatrixError(const QGenericMatrix<3,3,double>&F, const KeypointMatch&) const;
+
+		//TODO: create derived classes
+
+		//Essential matrix method functions
+		//Returns the camera calibration matrix
+		QGenericMatrix<3,3,double> computeCameraMatrix()const;
 		//Computes possible R and T matrices from essential matrix
 		QList<StereopairPosition> computeRT(const QGenericMatrix<3,3,double>&Essential_matrix) const;
 		//Helper function to construct Rz matrix for computeRT
@@ -66,6 +72,10 @@ namespace cybervision{
 		QList<QVector3D> compute3DPoints(const SortedKeypointMatches&matches,const QList<StereopairPosition>& RTList);
 		QList<QVector3D> computeTriangulatedPoints(const SortedKeypointMatches&matches,const QGenericMatrix<3,3,double>&R,const QGenericMatrix<1,3,double>& T,bool normalizeCameras);
 
+
+		//Fundamental matrix method functions
+		//Optimal triangulation method
+		QList<QVector3D> compute3DPoints(const SortedKeypointMatches&matches,QGenericMatrix<3,3,double>F);
 	public:
 		Reconstructor();
 

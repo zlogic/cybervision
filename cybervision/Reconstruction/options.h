@@ -14,6 +14,8 @@ public:
 	enum KeypointMatchingMode {KEYPOINT_MATCHING_SIMPLE,KEYPOINT_MATCHING_KDTREE};//Mode for matching keypoints (BBF KT-tree or simple comparison)
 	static const size_t bbf_steps;//Number of best-bin-first search iterations
 	static const KeypointMatchingMode keypointMatchingMode;//Keypoint matching mode
+	enum ReconstructionMode {RECONSTRUCTION_ESSENTIAL_FULL,RECONSTRUCTION_FUNDAMENTAL};//Mode for reconstruction (Full with Essential and R/T matrices or Fundamental matrix)
+	static const ReconstructionMode reconstructionMode;//Reconstruction mode
 
 	static const int RANSAC_k;//RANSAC k parameter
 	static const int RANSAC_n;//RANSAC n parameter

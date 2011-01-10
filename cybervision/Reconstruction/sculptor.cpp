@@ -104,12 +104,11 @@ namespace cybervision{
 	bool Sculptor::filterTriangles(QList<QVector3D>& points,const QList<Surface::Triangle>& triangles){
 
 		bool pointsModified= false;
-		QVector3D vectorNaN(std::numeric_limits<qreal>::signaling_NaN(),std::numeric_limits<qreal>::signaling_NaN(),std::numeric_limits<qreal>::signaling_NaN());
 
 		for(Surface::PolygonPoint p=0;p<points.size();p++){
 			//TODO: fail if we exceed maximum value of int
 			bool isPeakCandidate=false;
-			qreal maxHeight=0;
+
 			QList<double> sorted_heights;
 			//Find all triangles containing current point
 			for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
