@@ -446,12 +446,12 @@ namespace cybervision{
 		QGenericMatrix<3,3,double> camera_K= computeCameraMatrix();
 		QGenericMatrix<3,3,double> Essential_matrix_projected=camera_K.transposed()*Essential_matrix*camera_K;
 
-		//Project into essential space
-		if(false){
+		//Frobenius minimization
+		if(true){
 			SVD<3,3,double> svd(Essential_matrix_projected);
 			QGenericMatrix<3,3,double> U= svd.getU(),Sigma=svd.getSigma(), V=svd.getV();
 
-			double Sigma_value= 1;//(Sigma(0,0)+Sigma(1,1))/2.0;
+			double Sigma_value= (Sigma(0,0)+Sigma(1,1))/2.0;
 			Sigma.fill(0.0);
 			Sigma(0,0)= Sigma_value,Sigma(1,1) = Sigma_value;
 
@@ -501,7 +501,7 @@ namespace cybervision{
 		bool found=false;
 		//Find best R/T pair
 		for(QList<StereopairPosition>::const_iterator it1=RTList.begin();it1!=RTList.end();it1++){
-			QList<QVector3D> Points3d= computeTriangulatedPoints(matches,it1->R,it1->T,false);
+			QList<QVector3D> Points3d= computeTriangulatedPoints(matches,it1->R,it1->T,true);
 
 			//Search for maximum depth in order to evaluate and select best configuration
 			double max_depth= -std::numeric_limits<double>::infinity(), min_depth=std::numeric_limits<double>::infinity();
@@ -589,16 +589,16 @@ namespace cybervision{
 			//Sigma_min_index=3;//DZ 02.12.2010 seems Sigma=0 gives the best results. Sigma=1 gives a rougher surface.
 			QGenericMatrix<1,4,double> V_col_min;
 			for(int i=0;i<4;i++)
-				V_col_min(i,0)= V(i,Sigma_min_index);
-
-			/*QVector3D resultPoint(
-					x1.x(),x1.y(),
-					//V_col_min(0,0),V_col_min(1,0),
-					V_col_min(2,0));*/
+				V_col_min(i,0)= V(Sigma_min_index,i);
 
 			QVector3D resultPoint(
+					x1.x(),x1.y(),
+					//V_col_min(0,0),V_col_min(1,0),
+					V_col_min(2,0));
+
+			/*QVector3D resultPoint(
 					x2.x(),x2.y(),
-					sqrt((x1.x()-x2.x())*(x1.x()-x2.x())+(x1.y()-x2.y())*(x1.y()-x2.y())));
+					sqrt((x1.x()-x2.x())*(x1.x()-x2.x())+(x1.y()-x2.y())*(x1.y()-x2.y())));*/
 
 			resultPoints.push_back(resultPoint);
 		}
