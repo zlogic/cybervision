@@ -208,6 +208,15 @@ namespace cybervision{
 		//Compute fundamental matrix
 		QGenericMatrix<3,3,double> best_F= computeFundamentalMatrix(matches,T1,T2);
 
+		//"Normalize" E
+		//(Project into essential space (do we need this?))
+		if(true){
+			SVD<3,3,double> svd(best_F);
+			QGenericMatrix<3,3,double> Sigma= svd.getSigma();
+			Sigma(2,2)= 0.0;
+			best_F= svd.getU()*Sigma*(svd.getV().transposed());
+		}
+
 		//De-normalize F
 		best_F= T1.transposed()*best_F*T2;
 
@@ -385,19 +394,6 @@ namespace cybervision{
 			F(0,1)=V_chi(3,8), F(1,1)=V_chi(4,8), F(2,1)=V_chi(5,8);
 			F(0,2)=V_chi(6,8), F(1,2)=V_chi(7,8), F(2,2)=V_chi(8,8);
 		}
-		//"Normalize" E
-		//(Project into essential space (do we need this?))
-		if(false){
-			SVD<3,3,double> svd(F);
-			QGenericMatrix<3,3,double> Sigma= svd.getSigma();
-			Sigma(2,2)= 0.0;
-			/*
-			Sigma.fill(0.0);
-			Sigma(0,0)= 1.0, Sigma(1,1)= 1.0;
-			*/
-
-			F= svd.getU()*Sigma*(svd.getV().transposed());
-		}
 
 		return F;
 	}
@@ -451,7 +447,7 @@ namespace cybervision{
 		QGenericMatrix<3,3,double> Essential_matrix_projected=camera_K.transposed()*Essential_matrix*camera_K;
 
 		//Project into essential space
-		{
+		if(false){
 			SVD<3,3,double> svd(Essential_matrix_projected);
 			QGenericMatrix<3,3,double> U= svd.getU(),Sigma=svd.getSigma(), V=svd.getV();
 
@@ -549,19 +545,6 @@ namespace cybervision{
 		for(int i=0;i<3;i++)
 			P2(i,3)= T(i,0);
 
-		//Search for maximums
-		double max_x=0, max_y=0;
-		for(SortedKeypointMatches::const_iterator it=matches.begin();it!=matches.end();it++){
-			if(fabs(it.value().a.x())>max_x)
-				max_x= fabs(it.value().a.x());
-			if(fabs(it.value().b.x())>max_x)
-				max_x= fabs(it.value().b.x());
-			if(fabs(it.value().a.y())>max_y)
-				max_y= fabs(it.value().a.y());
-			if(fabs(it.value().b.y())>max_y)
-				max_y= fabs(it.value().b.y());
-		}
-
 		//Camera matrix
 		if(normalizeCameras){
 			QGenericMatrix<3,3,double> camera_K= computeCameraMatrix();
@@ -573,7 +556,6 @@ namespace cybervision{
 
 		QGenericMatrix<4,4,double> A;
 
-		for(int i=0;i<2;i++)
 		for(SortedKeypointMatches::const_iterator it=matches.begin();it!=matches.end();it++){
 			QPointF x1= it.value().a, x2= it.value().b;
 			for(int i=0;i<4;i++){
@@ -609,10 +591,14 @@ namespace cybervision{
 			for(int i=0;i<4;i++)
 				V_col_min(i,0)= V(i,Sigma_min_index);
 
+			/*QVector3D resultPoint(
+					x1.x(),x1.y(),
+					//V_col_min(0,0),V_col_min(1,0),
+					V_col_min(2,0));*/
+
 			QVector3D resultPoint(
-					x1.x(),
-					x1.y(),
-					(V_col_min(2,0)-(V_col_min(0,0)+V_col_min(1,0)))/V_col_min(3,0));
+					x2.x(),x2.y(),
+					sqrt((x1.x()-x2.x())*(x1.x()-x2.x())+(x1.y()-x2.y())*(x1.y()-x2.y())));
 
 			resultPoints.push_back(resultPoint);
 		}
