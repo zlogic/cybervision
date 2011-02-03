@@ -255,6 +255,7 @@ namespace cybervision{
 
 	void Sculptor::delaunayTriangulate(const QList<QVector3D>& unfilteredPoints){
 		QList<QVector3D> points=filterPoints(unfilteredPoints);
+		QList<QVector3D> pointsNoSuperTriangle=points;
 
 
 		/*
@@ -381,6 +382,8 @@ namespace cybervision{
 		}
 		triangles.clear();
 
+		points=pointsNoSuperTriangle;
+		pointsNoSuperTriangle.clear();
 
 		//Filter peaks
 		for(int i=0;i<Options::maxPeakFilterPasses;i++)
