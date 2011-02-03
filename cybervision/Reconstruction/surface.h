@@ -19,6 +19,9 @@ namespace cybervision{
 		//Surface data in two formats
 		QList<Triangle> triangles;
 		QList<QVector3D> points;
+
+		//Scale for viewport
+		qreal scale;
 	public:
 		Surface();
 		Surface(const Surface&);

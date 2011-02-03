@@ -60,7 +60,7 @@
           </property>
          </widget>
         </item>
-        <item row="4" column="0" colspan="2">
+        <item row="6" column="0" colspan="2">
          <widget class="QPushButton" name="startProcessButton">
           <property name="locale">
            <locale language="English" country="UnitedStates"/>
@@ -70,7 +70,7 @@
           </property>
          </widget>
         </item>
-        <item row="5" column="0" colspan="2">
+        <item row="7" column="0" colspan="2">
          <widget class="QPushButton" name="saveButton">
           <property name="locale">
            <locale language="English" country="UnitedStates"/>
@@ -97,6 +97,40 @@
           </property>
           <property name="text">
            <string>Select exactly two images from the list</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QLineEdit" name="scaleXYEdit">
+          <property name="text">
+           <string>1.0</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="0">
+         <widget class="QLabel" name="sceleXYLabel">
+          <property name="text">
+           <string>Scale XY</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="0">
+         <widget class="QLabel" name="scaleZlabel">
+          <property name="text">
+           <string>Scale Z</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="1">
+         <widget class="QLineEdit" name="scaleZEdit">
+          <property name="text">
+           <string>1.0</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
           </property>
          </widget>
         </item>

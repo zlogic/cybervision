@@ -610,9 +610,9 @@ namespace cybervision{
 				V_col_min(i,0)= V(i,Sigma_min_index);
 
 			QVector3D resultPoint(
-					x1.x()*Options::scaleXY,
-					x1.y()*Options::scaleXY,
-					(Options::scaleXY*Options::scaleZ)*(V_col_min(2,0)-(V_col_min(0,0)+V_col_min(1,0)))/V_col_min(3,0));
+					x1.x(),
+					x1.y(),
+					(V_col_min(2,0)-(V_col_min(0,0)+V_col_min(1,0)))/V_col_min(3,0));
 
 			resultPoints.push_back(resultPoint);
 		}

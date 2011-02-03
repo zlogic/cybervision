@@ -32,7 +32,8 @@ inline bool qFuzzyCompare(const QPointF& a,const QPointF& b){
 }
 
 namespace cybervision{
-	Sculptor::Sculptor(const QList<QVector3D>& points){
+	Sculptor::Sculptor(const QList<QVector3D>& points,qreal scaleXY,qreal scaleZ){
+		this->scaleXY= scaleXY, this->scaleZ= scaleZ;
 		if(!points.empty()){
 			delaunayTriangulate(points);
 		}
@@ -70,9 +71,18 @@ namespace cybervision{
 		centroid.setX(centroid.x()/points.count());
 		centroid.setY(centroid.y()/points.count());
 		centroid.setZ(centroid.z()/points.count());
-		qreal aspectRatio= (max.x()-min.x())/(max.y()-min.y());
-		qreal scale_x= aspectRatio*Options::surfaceSize/(max.x()-min.x());
-		qreal scale_y= -Options::surfaceSize/(max.y()-min.y());
+
+		qreal scale_x= scaleXY;
+		qreal scale_y= scaleXY;
+		qreal scale_z= scaleZ;
+
+		QPointF center;
+		{
+			center.setX((max.x()-min.x())*scaleXY/2.0);
+			center.setY((max.y()-min.y())*scaleXY/2.0);
+		}
+
+		surface.scale= Options::surfaceSize/(scaleXY*qMax(max.x()-min.x(),max.y()-min.y()));
 
 		QMap<QPointF,qreal> pointsMap;
 		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
@@ -88,9 +98,9 @@ namespace cybervision{
 			count++;
 			if((it+1)==pointsMap.end() || it.key()!=(it+1).key()){
 				qreal z= sum/(qreal)count;
-				QVector3D scaled_point((it.key().x()-min.x())*scale_x-Options::surfaceSize/2,
-							(it.key().y()-min.y())*scale_y+Options::surfaceSize/2,
-							(z-min.z())*scale_y
+				QVector3D scaled_point((it.key().x()-min.x())*scale_x-center.x(),
+							-(it.key().y()-min.y())*scale_y+center.y(),
+							-(z-min.z())*scale_z
 				);
 				filteredPoints.push_back(scaled_point);
 				sum= 0;
@@ -132,7 +142,7 @@ namespace cybervision{
 
 					qreal distanceXY= (point1.x()-point2.x())*(point1.x()-point2.x()) + (point1.y()-point2.y())*(point1.y()-point2.y());
 
-					if(fabs(points[p].z()-point1.z())>distanceXY*Options::peakSize && fabs(points[p].z()-point2.z())>distanceXY*Options::peakSize){
+					if(fabs(points[p].z()-point1.z())>distanceXY*Options::peakSize*surface.scale && fabs(points[p].z()-point2.z())>distanceXY*Options::peakSize*surface.scale){
 						isPeakCandidate=true;
 					}else{
 						isPeakCandidate=false;
@@ -164,7 +174,7 @@ namespace cybervision{
 
 		for(QList<QVector3D>::iterator it= points.begin();it!=points.end();it++){
 			it->setZ(it->z()-zMin);
-			//it->setZ((it->z()-zMin)*Options::surfaceDepth/(zMax-zMin));
+			//it->setZ((it->z()-zMin)*10.0/(zMax-zMin));
 		}
 
 		return pointsModified;

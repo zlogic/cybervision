@@ -7,7 +7,7 @@
 
 namespace cybervision{
 	Surface::Surface(){
-
+		scale= 1.0;
 	}
 
 	Surface::Surface(const Surface&sc){
@@ -17,6 +17,7 @@ namespace cybervision{
 	void Surface::operator =(const Surface&sc){
 		this->triangles= sc.triangles;
 		this->points= sc.points;
+		this->scale= sc.scale;
 	}
 
 	void Surface::glDraw() const{
@@ -29,19 +30,19 @@ namespace cybervision{
 			glColor3f(1.0f, 1.0f, 1.0f);
 			//Front side
 			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-			glVertex3f(pa.x(),pa.y(),pa.z());
+			glVertex3f(pa.x()*scale,pa.y()*scale,pa.z()*scale);
 			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-			glVertex3f(pb.x(),pb.y(),pb.z());
+			glVertex3f(pb.x()*scale,pb.y()*scale,pb.z()*scale);
 			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-			glVertex3f(pc.x(),pc.y(),pc.z());
+			glVertex3f(pc.x()*scale,pc.y()*scale,pc.z()*scale);
 
 			//Back side
 			glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-			glVertex3f(pc.x(),pc.y(),pc.z());
+			glVertex3f(pc.x()*scale,pc.y()*scale,pc.z()*scale);
 			glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-			glVertex3f(pb.x(),pb.y(),pb.z());
+			glVertex3f(pb.x()*scale,pb.y()*scale,pb.z()*scale);
 			glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-			glVertex3f(pa.x(),pa.y(),pa.z());
+			glVertex3f(pa.x()*scale,pa.y()*scale,pa.z()*scale);
 			glEnd();
 
 			glBegin(GL_POINTS);
@@ -59,14 +60,14 @@ namespace cybervision{
 			glBegin(GL_POLYGON);
 			for(int i =0;i<num_segments;i++){
 				double angle = i*M_PI*2/(double)num_segments;
-				glVertex3f(it->x()+cos(angle)*radius,it->y()+sin(angle)*radius,it->z());
+				glVertex3f(it->x()*scale+cos(angle)*radius,it->y()*scale+sin(angle)*radius,it->z()*scale);
 			}
 			glEnd();
 		}
 		*/
 	}
 
-	bool Surface::isOk()const{ return !triangles.empty() && !points.empty(); }
+	bool Surface::isOk()const{ return !triangles.empty() && !points.empty() && scale>0.0; }
 
 
 	/*

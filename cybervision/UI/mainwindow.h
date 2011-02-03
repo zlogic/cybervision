@@ -4,6 +4,7 @@
 #include <QtGui/QMainWindow>
 #include <QGraphicsScene>
 #include <QTextStream>
+#include <QDoubleValidator>
 
 #include <UI/processthread.h>
 
@@ -26,6 +27,8 @@ private:
 
 	QGraphicsScene scene;
 	ProcessThread thread;
+
+	QDoubleValidator scaleXYValidator,scaleZValidator;
 
 	//Updates widgets enabled/disabled/visible status
 	void updateWidgetStatus();

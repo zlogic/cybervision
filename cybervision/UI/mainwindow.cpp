@@ -31,6 +31,11 @@ void MainWindow::updateWidgetStatus(){
 
 	ui->deleteImageButton->setEnabled(!ui->imageList->selectedItems().empty());
 	ui->saveButton->setEnabled(ui->openGLViewport->getSurface3D().isOk());
+
+	scaleXYValidator.setBottom(0.0);
+	scaleZValidator.setBottom(0.0);
+	ui->scaleXYEdit->setValidator(&scaleXYValidator);
+	ui->scaleZEdit->setValidator(&scaleZValidator);
 }
 
 
@@ -54,12 +59,22 @@ void MainWindow::loadDebugPreferences(){
 		QTextStream stream(&debugFile);
 
 		while(!stream.atEnd()){
-			QString fileName= stream.readLine();
-			if(!fileName.isNull() && !fileName.isEmpty()){
-				QString name= QFileInfo(fileName).fileName();
-				QListWidgetItem* newItem= new QListWidgetItem(name);
-				newItem->setData(32,QDir::convertSeparators(fileName));
-				ui->imageList->addItem(newItem);
+			QString line= stream.readLine();
+			if(!line.isNull() && !line.isEmpty()){
+				QRegExp fileRegexp("^file\\s+(.*)$",Qt::CaseInsensitive);
+				QRegExp scaleXYRegexp("^ScaleXY\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",Qt::CaseInsensitive);
+				QRegExp scaleZRegexp("^ScaleZ\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",Qt::CaseInsensitive);
+				if(fileRegexp.exactMatch(line) && fileRegexp.capturedTexts().size()>=2){
+					QString fileName= fileRegexp.capturedTexts().at(1);
+					QString name= QFileInfo(fileName).fileName();
+					QListWidgetItem* newItem= new QListWidgetItem(name);
+					newItem->setData(32,QDir::convertSeparators(fileName));
+					ui->imageList->addItem(newItem);
+				}else if(scaleXYRegexp.exactMatch(line) && scaleXYRegexp.capturedTexts().size()>=2){
+					ui->scaleXYEdit->setText(scaleXYRegexp.capturedTexts().at(1));
+				}else if(scaleZRegexp.exactMatch(line) && scaleZRegexp.capturedTexts().size()>=2){
+					ui->scaleZEdit->setText(scaleZRegexp.capturedTexts().at(1));
+				}
 			}
 		}
 		debugFile.close();
@@ -115,14 +130,17 @@ void MainWindow::processStopped(QString resultText,cybervision::Surface surface)
 void MainWindow::on_startProcessButton_clicked(){
 	QStringList filenames;
 
+
+	double scaleXY= ui->scaleXYEdit->text().toDouble();
+	double scaleZ= ui->scaleZEdit->text().toDouble();
+
 	QList<QListWidgetItem*> selectedItems= ui->imageList->selectedItems();
 	for(QList<QListWidgetItem*>::const_iterator i=selectedItems.begin();i!=selectedItems.end();i++){
 		if(*i)
 			filenames<<(*i)->data(32).toString();
 	}
 
-	ui->imageList->selectedItems();
-	thread.extract(filenames);
+	thread.extract(filenames,scaleXY,scaleZ);
 }
 
 void MainWindow::on_saveButton_clicked(){

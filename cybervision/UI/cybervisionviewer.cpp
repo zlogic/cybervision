@@ -28,7 +28,7 @@ const cybervision::Surface& CybervisionViewer::getSurface3D()const{
 
 void CybervisionViewer::initializeGL(){
 	// Set up the rendering context, define display lists etc.:
-	glClearColor(0.0, 0.0, 0.0, 0.0);
+	glClearColor(1.0, 1.0, 1.0, 0.0);
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 	glShadeModel(GL_SMOOTH);

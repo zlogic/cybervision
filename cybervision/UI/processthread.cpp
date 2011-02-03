@@ -9,11 +9,11 @@
 
 ProcessThread::ProcessThread(){mw=NULL;}
 
-void ProcessThread::extract(QStringList image_filenames,QString output_filename){
+void ProcessThread::extract(QStringList image_filenames,double scaleXY,double scaleZ){
 	wait();
 	task=TASK_RECONSTRUCTION;
 	this->image_filenames= image_filenames;
-	this->output_filename= output_filename;
+	this->scaleXY= scaleXY, this->scaleZ= scaleZ;
 
 	start();
 }
@@ -60,7 +60,7 @@ void ProcessThread::runExtract(){
 
 void ProcessThread::runSurface(){
 	emit processUpdated("Creating 3D surface","Creating 3D surface...");
-	cybervision::Sculptor sculptor(points);
+	cybervision::Sculptor sculptor(points,scaleXY,scaleZ);
 
 	points.clear();
 

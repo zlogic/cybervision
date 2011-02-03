@@ -20,7 +20,7 @@ protected:
 
 	//For reconstruction task
 	QStringList image_filenames;
-	QString output_filename;
+	double scaleXY, scaleZ;
 	//For extraction task
 	QList<QVector3D> points;
 
@@ -30,7 +30,7 @@ public:
 	ProcessThread();
 	void setUi(MainWindow *nw=NULL);
 
-	void extract(QStringList image_filenames,QString output_filename="");
+	void extract(QStringList image_filenames,double scaleXY,double scaleZ);
 	void surface(QList<QVector3D> points);
 	void run();//the main thread loop
 signals:

@@ -12,6 +12,7 @@ namespace cybervision{
 	protected:
 
 		cybervision::Surface surface;
+		qreal scaleXY,scaleZ;
 
 		//Average points with the same (x,y) values, change scale to better fit result
 		QList<QVector3D> filterPoints(const QList<QVector3D>& points);
@@ -28,7 +29,7 @@ namespace cybervision{
 		//Interpolates points to create surface (using Delaunay triangulation)
 		void delaunayTriangulate(const QList<QVector3D>& points);
 	public:
-		Sculptor(const QList<QVector3D>& points=QList<QVector3D>());
+		Sculptor(const QList<QVector3D>& points=QList<QVector3D>(),double scaleXY=0.0,double scaleZ=0.0);
 
 		cybervision::Surface getSurface()const;
 	};
