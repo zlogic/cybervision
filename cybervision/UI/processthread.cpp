@@ -39,7 +39,7 @@ void ProcessThread::run(){
 
 void ProcessThread::runExtract(){
 	emit processStarted();
-	cybervision::Reconstructor reconstructor;
+	cybervision::Reconstructor reconstructor(NULL);
 
 	QObject::connect(&reconstructor, SIGNAL(sgnLogMessage(QString)),
 					 this, SLOT(sgnLogMessage(QString)),Qt::AutoConnection);

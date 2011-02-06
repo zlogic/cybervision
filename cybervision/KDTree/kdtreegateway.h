@@ -5,20 +5,10 @@
 #include <QMultiMap>
 #include <QPointF>
 #include <limits>
+#include <Reconstruction/pointmatch.h>
 
 namespace SIFT{
 	class Keypoint;
-}
-
-namespace cybervision{
-	//Imported from Reconstruction/reconstructor.h
-	//Class for storing a single patch between two points on different images
-	struct KeypointMatch{
-		QPointF a;//Coordinates on the first image
-		QPointF b;//Coordinates on the second image
-		bool operator==(const KeypointMatch&)const;
-	};
-	typedef QMultiMap<float,KeypointMatch> SortedKeypointMatches;
 }
 
 namespace KDTree{

@@ -8,6 +8,7 @@ namespace cybervision{
 	const bool Options::UsePrecomputedKeypointData= true;
 	const Options::KeypointMatchingMode Options::keypointMatchingMode= Options::KEYPOINT_MATCHING_SIMPLE;
 	const size_t Options::bbf_steps= 1000;
+	const Options::TriangulationMode Options::triangulationMode= Options::TRIANGULATION_PARALLEL;
 
 	const int Options::RANSAC_k= 10000;
 	const int Options::RANSAC_n= 8;
