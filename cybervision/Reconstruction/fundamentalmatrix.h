@@ -4,6 +4,7 @@
 #include <QObject>
 #include <Reconstruction/pointmatch.h>
 #include <QGenericMatrix>
+#include <QFileInfo>
 
 namespace cybervision{
 	/*
@@ -40,6 +41,9 @@ namespace cybervision{
 		QGenericMatrix<3,3,double> getFundamentalMatrix()const;
 		QGenericMatrix<3,3,double> getT1()const;
 		QGenericMatrix<3,3,double> getT2()const;
+
+		//Output functions
+		void saveAcceptedMatches(const QFileInfo &target);
 	signals:
 		void sgnLogMessage(QString);
 		void sgnStatusMessage(QString);

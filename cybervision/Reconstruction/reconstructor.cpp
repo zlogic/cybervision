@@ -5,6 +5,7 @@
 #include <Reconstruction/pointtriangulator.h>
 
 #include <ctime>
+#include <QDir>
 
 namespace cybervision{
 
@@ -49,6 +50,12 @@ namespace cybervision{
 			if(!ok || matches.isEmpty()){
 				errorString= "Error when computing fundamental matrix";
 				return false;
+			}
+			//Save matches if needed
+			if(Options::SaveFilteredMatches){
+				QObject::connect(&fundamentalMatrix, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);
+				fundamentalMatrix.saveAcceptedMatches(QFileInfo(QFileInfo(filename1).absoluteDir(),QFileInfo(filename1).fileName()+" "+QFileInfo(filename1).fileName()+" filtered.txt").absoluteFilePath());	
+				QObject::disconnect(&fundamentalMatrix, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)));
 			}
 		}
 

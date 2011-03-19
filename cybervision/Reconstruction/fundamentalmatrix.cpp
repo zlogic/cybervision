@@ -3,6 +3,7 @@
 #include <Reconstruction/options.h>
 #include <Reconstruction/svd.h>
 #include <limits>
+#include <QFile>
 
 namespace cybervision{
 
@@ -245,5 +246,21 @@ namespace cybervision{
 				return false;
 		}
 		return true;
+	}
+
+
+	void FundamentalMatrix::saveAcceptedMatches(const QFileInfo &target){
+		QFile file(target.absoluteFilePath());
+		if (file.open(QFile::WriteOnly|QFile::Text)) {
+			QTextStream out(&file);
+
+			for(SortedKeypointMatches::const_iterator i=matches.begin();i!=matches.end();i++){
+				out<<QString("%1\t%2\t%3\t%4\n").arg(i.value().a.x()).arg(i.value().a.y()).arg(i.value().b.x()).arg(i.value().b.y());
+			}
+			file.close();
+			emit sgnLogMessage(QString("Saved RANSAC-filtered matches to %1").arg(target.absoluteFilePath()));
+		}else{
+			emit sgnLogMessage(QString("Error when saving RANSAC-filtered matches to file %1").arg(target.absoluteFilePath()));
+		}
 	}
 }

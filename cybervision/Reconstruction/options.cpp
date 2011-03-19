@@ -6,6 +6,7 @@ namespace cybervision{
 	const double Options::ReliableDistance= 0.5;
 	const int Options::MinMatches= 16;
 	const bool Options::UsePrecomputedKeypointData= true;
+	const bool Options::SaveFilteredMatches= false;
 	const Options::KeypointMatchingMode Options::keypointMatchingMode= Options::KEYPOINT_MATCHING_SIMPLE;
 	const size_t Options::bbf_steps= 1000;
 	const Options::TriangulationMode Options::triangulationMode= Options::TRIANGULATION_PARALLEL;
