@@ -2,6 +2,9 @@
 
 #include <Reconstruction/options.h>
 #include <Reconstruction/svd.h>
+
+#include <Eigen/Dense>
+#include <Eigen/SVD>
 #include <limits>
 #include <QSize>
 
@@ -244,12 +247,50 @@ namespace cybervision{
 		result= RESULT_OK;
 		camera_K= QGenericMatrix<3,3,double>();
 
-		for(SortedKeypointMatches::const_iterator it=matches.begin();it!=matches.end();it++){
-			QPointF x1= it.value().a, x2=it.value().b;
-			QVector3D resultPoint(
-					x1.x(),x1.y(),
-					sqrt((x1.x()-x2.x())*(x1.x()-x2.x())+(x1.y()-x2.y())*(x1.y()-x2.y())));
+		//QGenericMatrix<matches.size(),4,double> W();
+		//SVD<matches.size(),4,double> svd(W);
 
+		QPointF centerA(0,0),centerB(0,0);
+		for(SortedKeypointMatches::const_iterator i=matches.begin();i!=matches.end();i++){
+			centerA.setX(centerA.x()+i.value().a.x());
+			centerA.setY(centerA.y()+i.value().a.y());
+			centerB.setX(centerB.x()+i.value().b.x());
+			centerB.setY(centerB.y()+i.value().b.y());
+		}
+		centerA.setX(centerA.x()/matches.size());
+		centerA.setY(centerA.y()/matches.size());
+		centerB.setX(centerB.x()/matches.size());
+		centerB.setY(centerB.y()/matches.size());
+
+		Eigen::MatrixXd W(4,matches.size());
+		{
+			size_t j=0;
+			for(SortedKeypointMatches::const_iterator i=matches.begin();i!=matches.end();i++,j++){
+				W(0,j)=i.value().a.x()-centerA.x();
+				W(1,j)=i.value().a.y()-centerA.y();
+				W(2,j)=i.value().b.x()-centerB.x();
+				W(3,j)=i.value().b.y()-centerB.y();
+			}
+		}
+
+		Eigen::JacobiSVD<Eigen::MatrixXd> svd(W, Eigen::ComputeThinV);
+		Eigen::MatrixXd X(matches.size(),3);
+		Eigen::MatrixXd V= svd.matrixV();
+
+		if(Options::triangulationMode==Options::TRIANGULATION_PARALLEL_V){
+			//Method 1 (simpler)
+			X= V.block(0,0,V.rows(),3);
+		}else if(Options::triangulationMode==Options::TRIANGULATION_PARALLEL_SV) {
+			//Method 2 (S*V')'
+			Eigen::MatrixXd S= svd.singularValues().asDiagonal();
+			S= S.block(0,0,3,3);
+			V= V.block(0,0,V.rows(),3);
+			X= (S*(V.transpose())).transpose();
+		}
+
+
+		for(int i=0;i<X.rows();i++){
+			QVector3D resultPoint(X(i,0),X(i,1),X(i,2));
 			Points3D.push_back(resultPoint);
 		}
 

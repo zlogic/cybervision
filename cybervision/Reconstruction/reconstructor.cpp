@@ -67,7 +67,7 @@ namespace cybervision{
 			bool ok=false;
 			if(Options::triangulationMode==Options::TRIANGULATION_PERSPECTIVE)
 				ok= triangulator.triangulatePoints(matches,F,imageSize);
-			else if(Options::triangulationMode==Options::TRIANGULATION_PARALLEL)
+			else if(Options::triangulationMode==Options::TRIANGULATION_PARALLEL_V || Options::triangulationMode==Options::TRIANGULATION_PARALLEL_SV)
 				ok= triangulator.triangulatePoints(matches);
 			QObject::disconnect(&triangulator, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)));
 			QObject::disconnect(&triangulator, SIGNAL(sgnStatusMessage(QString)),this, SIGNAL(sgnStatusMessage(QString)));

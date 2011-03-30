@@ -1,7 +1,7 @@
 # -------------------------------------------------
 # Project created by QtCreator 2009-10-25T19:45:46
 # -------------------------------------------------
-QT += opengl
+QT += core gui opengl
 TARGET = cybervision
 TEMPLATE = app
 SOURCES += main.cpp \
@@ -19,8 +19,7 @@ SOURCES += main.cpp \
 	Reconstruction/sculptor.cpp \
 	Reconstruction/surface.cpp \
 	KDTree/kdtreegateway.cpp
-HEADERS += UI/mainwindow.h \
-	Reconstruction/svd.h \
+HEADERS += Reconstruction/svd.h \
 	Reconstruction/pointmatcher.h \
 	Reconstruction/pointmatch.h \
 	Reconstruction/fundamentalmatrix.h \
@@ -46,9 +45,29 @@ HEADERS += UI/mainwindow.h \
 	KDTree/iterator.hpp \
 	KDTree/function.hpp \
 	KDTree/allocator.hpp \
+	Eigen/SVD \
+	Eigen/StdVector \
+	Eigen/StdList \
+	Eigen/StdDeque \
+	Eigen/Sparse \
+	Eigen/QtAlignedMalloc \
+	Eigen/QR \
+	Eigen/LU \
+	Eigen/LeastSquares \
+	Eigen/Jacobi \
+	Eigen/Householder \
+	Eigen/Geometry \
+	Eigen/Eigenvalues \
+	Eigen/Eigen2Support \
+	Eigen/Core \
+	Eigen/Cholesky \
+	Eigen/Array \
+	Eigen/Eigen \
+	Eigen/Dense \
+    UI/mainwindow.h
+
 FORMS += UI/mainwindow.ui
-OTHER_FILES += \
-	Reconstruction/ColladaTemplate.xml
+
 QMAKE_CXXFLAGS_RELEASE += -msse3
 QMAKE_CXXFLAGS_DEBUG +=
 win32 { 
@@ -58,14 +77,14 @@ win32 {
 	QMAKE_CXXFLAGS += -U_WIN32 -fopenmp
 	QMAKE_CFLAGS += -U_WIN32
 }
-unix { 
+unix {
 	QMAKE_LIBS += -lgomp \
 		-lpthread
 	QMAKE_CXXFLAGS += -fopenmp
 }
 
-FORMS += \
-	UI/mainwindow.ui
-
 RESOURCES += \
 	ReconstructionResources.qrc
+
+OTHER_FILES += \
+	Reconstruction/ColladaTemplate.xml

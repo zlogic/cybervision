@@ -15,7 +15,7 @@ public:
 	enum KeypointMatchingMode {KEYPOINT_MATCHING_SIMPLE,KEYPOINT_MATCHING_KDTREE};//Mode for matching keypoints (BBF KT-tree or simple comparison)
 	static const size_t bbf_steps;//Number of best-bin-first search iterations
 	static const KeypointMatchingMode keypointMatchingMode;//Keypoint matching mode
-	enum TriangulationMode {TRIANGULATION_PERSPECTIVE,TRIANGULATION_PARALLEL};//Mode for triangulation (perspective or parallel projection mode)
+	enum TriangulationMode {TRIANGULATION_PERSPECTIVE,TRIANGULATION_PARALLEL_V,TRIANGULATION_PARALLEL_SV};//Mode for triangulation (perspective or parallel (V or SV) projection mode)
 	static const TriangulationMode triangulationMode;
 
 	static const int RANSAC_k;//RANSAC k parameter
