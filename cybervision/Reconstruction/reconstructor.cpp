@@ -37,7 +37,7 @@ namespace cybervision{
 			return false;
 		}
 		//Compute fundamental matrix
-		QGenericMatrix<3,3,double> F;
+		Eigen::Matrix3d F;
 		{
 			FundamentalMatrix fundamentalMatrix(this);
 			QObject::connect(&fundamentalMatrix, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);

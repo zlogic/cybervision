@@ -19,7 +19,7 @@ SOURCES += main.cpp \
 	Reconstruction/sculptor.cpp \
 	Reconstruction/surface.cpp \
 	KDTree/kdtreegateway.cpp
-HEADERS += Reconstruction/svd.h \
+HEADERS += \
 	Reconstruction/pointmatcher.h \
 	Reconstruction/pointmatch.h \
 	Reconstruction/fundamentalmatrix.h \

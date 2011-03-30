@@ -1,36 +1,38 @@
 #include "fundamentalmatrix.h"
 
 #include <Reconstruction/options.h>
-#include <Reconstruction/svd.h>
+#include <Eigen/Dense>
+#include <Eigen/SVD>
 #include <limits>
 #include <QFile>
+#include <QTextStream>
 
 namespace cybervision{
 
 	FundamentalMatrix::FundamentalMatrix(QObject *parent) : QObject(parent){ }
 
-	QGenericMatrix<1,3,double> FundamentalMatrix::point2vector(const QPointF&p)const{
-		QGenericMatrix<1,3,double> vector;
+	Eigen::Vector3d FundamentalMatrix::point2vector(const QPointF&p)const{
+		Eigen::Vector3d vector;
 		vector(0,0)=p.x(),vector(1,0)=p.y(),vector(2,0)=1;
 		return vector;
 	}
 
-	QPointF FundamentalMatrix::vector2point(const QGenericMatrix<1,3,double>&vector)const{
+	QPointF FundamentalMatrix::vector2point(const Eigen::Vector3d&vector)const{
 		return QPointF(vector(0,0)/vector(2,0),vector(1,0)/vector(2,0));
 	}
 
 	SortedKeypointMatches FundamentalMatrix::getAcceptedMatches()const{ return matches; }
-	QGenericMatrix<3,3,double> FundamentalMatrix::getFundamentalMatrix()const{ return F; }
-	QGenericMatrix<3,3,double> FundamentalMatrix::getT1()const{ return T1; }
-	QGenericMatrix<3,3,double> FundamentalMatrix::getT2()const{ return T2; }
+	Eigen::Matrix3d FundamentalMatrix::getFundamentalMatrix()const{ return F; }
+	Eigen::Matrix3d FundamentalMatrix::getT1()const{ return T1; }
+	Eigen::Matrix3d FundamentalMatrix::getT2()const{ return T2; }
 
-	QGenericMatrix<3,3,double> FundamentalMatrix::computeFundamentalMatrix(const KeypointMatches& matches){
+	Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(const KeypointMatches& matches){
 		if(matches.size()!=8){
 			emit sgnLogMessage(QString("Wrong consensus set size (%1), should be %2").arg(matches.size()).arg(8));
 			//TODO:fail here
 		}
 		//Create the Chi matrix
-		QGenericMatrix<9,8,double> chi;
+		Eigen::Matrix<double,8,9> chi;
 		{
 			int i=0;
 			for(KeypointMatches::const_iterator it= matches.begin();it!=matches.end();it++,i++){
@@ -42,10 +44,10 @@ namespace cybervision{
 			}
 		}
 		//Compute V_chi from the SVD decomposition
-		QGenericMatrix<3,3,double> F;
+		Eigen::Matrix3d F;
 		{
-			SVD<9,8,double> svd(chi);
-			QGenericMatrix<9,9,double> V_chi= svd.getV();
+			Eigen::JacobiSVD<Eigen::Matrix<double,8,9> > svd(chi, Eigen::ComputeFullV);
+			Eigen::Matrix<double,9,9> V_chi= svd.matrixV();
 			//Get and unstack E
 			F(0,0)=V_chi(0,8), F(1,0)=V_chi(1,8), F(2,0)=V_chi(2,8);
 			F(0,1)=V_chi(3,8), F(1,1)=V_chi(4,8), F(2,1)=V_chi(5,8);
@@ -55,12 +57,12 @@ namespace cybervision{
 		return F;
 	}
 
-	double FundamentalMatrix::computeFundamentalMatrixError(const QGenericMatrix<3,3,double>&F, const KeypointMatch& match) const{
-		QGenericMatrix<1,3,double> x1; x1(0,0)=match.a.x(), x1(1,0)=match.a.y(), x1(2,0)=1;
-		QGenericMatrix<1,3,double> x2; x2(0,0)=match.b.x(), x2(1,0)=match.b.y(), x2(2,0)=1;
+	double FundamentalMatrix::computeFundamentalMatrixError(const Eigen::Matrix3d&F, const KeypointMatch& match) const{
+		Eigen::Vector3d x1; x1(0,0)=match.a.x(), x1(1,0)=match.a.y(), x1(2,0)=1;
+		Eigen::Vector3d x2; x2(0,0)=match.b.x(), x2(1,0)=match.b.y(), x2(2,0)=1;
 
-		QGenericMatrix<1,1,double> x2tFx1= x2.transposed()*F*x1;
-		QGenericMatrix<1,3,double> Fx1=F*x1,Ftx2=F.transposed()*x2;
+		Eigen::Matrix<double,1,1> x2tFx1= x2.transpose()*F*x1;
+		Eigen::Vector3d Fx1=F*x1,Ftx2=F.transpose()*x2;
 		//Calculate distance from epipolar line to points
 		return fabs(x2tFx1(0,0)*x2tFx1(0,0)*(1/(Fx1(0,0)*Fx1(0,0)+Fx1(1,0)*Fx1(1,0))+1/(Ftx2(0,0)*Ftx2(0,0)+Ftx2(1,0)*Ftx2(1,0))));
 		/*
@@ -73,7 +75,7 @@ namespace cybervision{
 		*/
 	}
 
-	QGenericMatrix<3,3,double> FundamentalMatrix::computeFundamentalMatrix(){
+	Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(){
 		emit sgnStatusMessage("Estimating fundamental matrix...");
 
 		//Increase speed with precomputed lists
@@ -90,7 +92,7 @@ namespace cybervision{
 		//Use the RANSAC algorithm to estimate camera poses
 		KeypointMatches best_consensus_set;
 		double best_error= std::numeric_limits<float>::infinity();
-		QGenericMatrix<3,3,double> best_F;
+		Eigen::Matrix3d best_F;
 
 		#pragma omp parallel
 		for(int i=0;i<Options::RANSAC_k;i++){
@@ -131,7 +133,7 @@ namespace cybervision{
 
 				double error=0;
 				//Compute E from the random values
-				QGenericMatrix<3,3,double> F_normalized=computeFundamentalMatrix(consensus_set_normalized);
+				Eigen::Matrix3d F_normalized=computeFundamentalMatrix(consensus_set_normalized);
 
 				//Expand consensus set
 				for(SortedKeypointMatches::const_iterator it1= matches.begin();it1!=matches.end();it1++){
@@ -173,7 +175,7 @@ namespace cybervision{
 
 		if(best_consensus_set.empty()){
 			emit sgnLogMessage("No RANSAC consensus found");
-			QGenericMatrix<3,3,double> zero; zero.fill(0);
+			Eigen::Matrix3d zero; zero.fill(0);
 			return zero;
 		}else{
 			emit sgnLogMessage(QString("RANSAC consensus found, error=%1, size=%2").arg(best_error,0,'g',4).arg(best_consensus_set.size()));
@@ -231,17 +233,17 @@ namespace cybervision{
 		//"Normalize" E
 		//(Project into essential space (do we need this?))
 		if(true){
-			SVD<3,3,double> svd(F);
-			QGenericMatrix<3,3,double> Sigma= svd.getSigma();
-			Sigma(2,2)= 0.0;
-			F= svd.getU()*Sigma*(svd.getV().transposed());
+			Eigen::JacobiSVD<Eigen::Matrix3d> svd(F, Eigen::ComputeFullV|Eigen::ComputeFullU);
+			Eigen::Vector3d Sigma= svd.singularValues();
+			Sigma(2,0)= 0.0;
+			F= svd.matrixU()*(Sigma.asDiagonal())*(svd.matrixV().transpose());
 		}
 
 		//De-normalize F
-		F= T1.transposed()*F*T2;
+		F= T1.transpose()*F*T2;
 
 		{
-			QGenericMatrix<3,3,double> zero; zero.fill(0);
+			Eigen::Matrix3d zero; zero.fill(0);
 			if(F==zero)
 				return false;
 		}

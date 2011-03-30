@@ -6,12 +6,13 @@
 #include <QMap>
 #include <QList>
 #include <QPair>
-#include <QGenericMatrix>
 #include <QVector3D>
 
-#include <Reconstruction/options.h>
+#include <Eigen/Dense>
 
+#include <Reconstruction/options.h>
 #include <Reconstruction/pointmatch.h>
+
 
 namespace cybervision{
 	/*

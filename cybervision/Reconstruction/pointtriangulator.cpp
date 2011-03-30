@@ -1,7 +1,6 @@
 #include "pointtriangulator.h"
 
 #include <Reconstruction/options.h>
-#include <Reconstruction/svd.h>
 
 #include <Eigen/Dense>
 #include <Eigen/SVD>
@@ -17,7 +16,7 @@ namespace cybervision{
 	QList<QVector3D> PointTriangulator::getPoints3D()const{ return Points3D; }
 	PointTriangulator::TriangulationResult PointTriangulator::getResult()const{ return result; }
 
-	QList<PointTriangulator::StereopairPosition> PointTriangulator::computePose(const QGenericMatrix<3,3,double>& F){
+	QList<PointTriangulator::StereopairPosition> PointTriangulator::computePose(const Eigen::Matrix3d& F){
 		emit sgnStatusMessage("Estimating pose...");
 
 		QList<StereopairPosition> RTList= computeRT(F);
@@ -37,8 +36,8 @@ namespace cybervision{
 	}
 
 
-	QGenericMatrix<3,3,double> PointTriangulator::computeRT_rzfunc(double angle) const{
-		QGenericMatrix<3,3,double> result;
+	Eigen::Matrix3d PointTriangulator::computeRT_rzfunc(double angle) const{
+		Eigen::Matrix3d result;
 		result.fill(0.0);
 		result(0,1)= angle>=0?1.0:(-1.0);
 		result(1,0)= -(angle>=0?1.0:(-1.0));
@@ -47,8 +46,8 @@ namespace cybervision{
 	}
 
 
-	QGenericMatrix<3,3,double> PointTriangulator::computeCameraMatrix(const QSize& imageSize)const{
-		QGenericMatrix<3,3,double> K;
+	Eigen::Matrix3d PointTriangulator::computeCameraMatrix(const QSize& imageSize)const{
+		Eigen::Matrix3d K;
 		K.fill(0.0);
 		K(0,0)= Options::scaleFocalDistance;//Focal distance X
 		K(1,1)= Options::scaleFocalDistance;//Focal distance Y
@@ -58,38 +57,40 @@ namespace cybervision{
 		return K;
 	}
 
-	QList<PointTriangulator::StereopairPosition> PointTriangulator::computeRT(QGenericMatrix<3,3,double> Essential_matrix) const{
+	QList<PointTriangulator::StereopairPosition> PointTriangulator::computeRT(Eigen::Matrix3d Essential_matrix) const{
 		QList<PointTriangulator::StereopairPosition> RTList;
 		QList<double> pi_values;
 		pi_values<<M_PI_2<<-M_PI_2;
 
 		//Project into essential space
 		if(false){
-			SVD<3,3,double> svd(Essential_matrix);
-			QGenericMatrix<3,3,double> U= svd.getU(),Sigma=svd.getSigma(), V=svd.getV();
+			Eigen::JacobiSVD<Eigen::Matrix3d> svd(Essential_matrix, Eigen::ComputeFullV|Eigen::ComputeFullU);
+			Eigen::Matrix3d U= svd.matrixU(), V=svd.matrixV();
+			Eigen::Vector3d Sigma=svd.singularValues();
 
-			double Sigma_value= 1;//(Sigma(0,0)+Sigma(1,1))/2.0;
+			double Sigma_value= 1;//(Sigma(0,0)+Sigma(1,0))/2.0;
 			Sigma.fill(0.0);
-			Sigma(0,0)= Sigma_value,Sigma(1,1) = Sigma_value;
+			Sigma(0,0)= Sigma_value,Sigma(1,0) = Sigma_value;
 
-			Essential_matrix= U*Sigma*(V.transposed());
+			Essential_matrix= U*(Sigma.asDiagonal())*(V.transpose());
 		}
 
-		SVD<3,3,double> svd(Essential_matrix);
-		QGenericMatrix<3,3,double> U= svd.getU(),Sigma=svd.getSigma(), V=svd.getV();
+		Eigen::JacobiSVD<Eigen::Matrix3d> svd(Essential_matrix, Eigen::ComputeFullV|Eigen::ComputeFullU);
+		Eigen::Matrix3d U= svd.matrixU(), V=svd.matrixV();
+		Eigen::Vector3d Sigma= svd.singularValues();
 
 		for(QList<double>::const_iterator i= pi_values.begin();i!=pi_values.end();i++){
 			double PI_R= *i;
-			QGenericMatrix<3,3,double> R= U*(computeRT_rzfunc(PI_R).transposed())*(V.transposed());
+			Eigen::Matrix3d R= U*(computeRT_rzfunc(PI_R).transpose())*(V.transpose());
 			//if(R(0,0)*(R(1,1)*R(2,2)-R(1,2)*R(2,1))-R(0,1)*(R(1,0)*R(2,2)-R(1,2)*R(2,0))+R(0,2)*(R(1,0)*R(2,1)-R(1,1)*R(2,0))<0)
 			//	R=R*(-1.0);//Probably unnecessary
 			for(QList<double>::const_iterator j= pi_values.begin();j!=pi_values.end();j++){
 				double PI_T=*j;
 
-				QGenericMatrix<1,3,double> T_unhatted;
+				Eigen::Vector3d T_unhatted;
 
 				/*
-				QGenericMatrix<3,3,double> T= U*computeRT_rzfunc(PI_T)*Sigma*(U.transposed());
+				Eigen::Matrix3d T= U*computeRT_rzfunc(PI_T)*Sigma*(U.transposed());
 				T_unhatted(0,0)= (T(2,1)-T(1,2))/2;
 				T_unhatted(1,0)= (T(0,2)-T(2,0))/2;
 				T_unhatted(2,0)= (T(1,0)-T(0,1))/2;
@@ -148,8 +149,8 @@ namespace cybervision{
 		return computeTriangulatedPoints(matches,bestPosition.R,bestPosition.T,true);
 	}
 
-	QList<QVector3D> PointTriangulator::computeTriangulatedPoints(const SortedKeypointMatches&matches,const QGenericMatrix<3,3,double>&R,const QGenericMatrix<1,3,double>& T,bool normalizeCameras){
-		QGenericMatrix<4,3,double> P1,P2;
+	QList<QVector3D> PointTriangulator::computeTriangulatedPoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d&R,const Eigen::Vector3d& T,bool normalizeCameras){
+		Eigen::Matrix<double,3,4> P1,P2;
 		P1.fill(0.0);
 		for(int i=0;i<3;i++)
 			P1(i,i)= 1;
@@ -170,7 +171,7 @@ namespace cybervision{
 
 		QList<QVector3D> resultPoints;
 
-		QGenericMatrix<4,4,double> A;
+		Eigen::Matrix4d A;
 
 		for(SortedKeypointMatches::const_iterator it=matches.begin();it!=matches.end();it++){
 			QPointF x1= it.value().a, x2= it.value().b;
@@ -194,18 +195,17 @@ namespace cybervision{
 			}
 			*/
 
-			SVD<4,4,double> svd(A);
-			QGenericMatrix<4,4,double> Sigma= svd.getSigma();
-			QGenericMatrix<4,4,double> V= svd.getV();
+
+			Eigen::JacobiSVD<Eigen::Matrix4d> svd(A, Eigen::ComputeFullV);
+			Eigen::Matrix4d  V=svd.matrixV();
+			Eigen::Vector4d Sigma= svd.singularValues();
 			//Search for min column
 			size_t Sigma_min_index=0;
 			for(size_t i=1;i<4;i++)
-				Sigma_min_index= Sigma(i,i)<Sigma(Sigma_min_index,Sigma_min_index)?i:Sigma_min_index;
+				Sigma_min_index= Sigma(i,0)<Sigma(Sigma_min_index,0)?i:Sigma_min_index;
 
 			//Sigma_min_index=3;//DZ 02.12.2010 seems Sigma=0 gives the best results. Sigma=1 gives a rougher surface.
-			QGenericMatrix<1,4,double> V_col_min;
-			for(int i=0;i<4;i++)
-				V_col_min(i,0)= V(i,Sigma_min_index);
+			Eigen::Vector4d V_col_min= V.block(0,Sigma_min_index,4,1);
 
 			QVector3D resultPoint(
 					x1.x(),x1.y(),
@@ -219,12 +219,12 @@ namespace cybervision{
 	}
 
 
-	bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,const QGenericMatrix<3,3,double>& F,const QSize& imageSize){
+	bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d& F,const QSize& imageSize){
 		Points3D.clear();
 		result= RESULT_OK;
 
 		camera_K= computeCameraMatrix(imageSize);
-		QGenericMatrix<3,3,double> Essential_matrix_projected=camera_K.transposed()*F*camera_K;
+		Eigen::Matrix3d Essential_matrix_projected=camera_K.transpose()*F*camera_K;
 
 		//Estimate pose
 		QList<PointTriangulator::StereopairPosition> RTList= computePose(Essential_matrix_projected);
@@ -245,10 +245,7 @@ namespace cybervision{
 	bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches){
 		Points3D.clear();
 		result= RESULT_OK;
-		camera_K= QGenericMatrix<3,3,double>();
-
-		//QGenericMatrix<matches.size(),4,double> W();
-		//SVD<matches.size(),4,double> svd(W);
+		camera_K= Eigen::Matrix3d();
 
 		QPointF centerA(0,0),centerB(0,0);
 		for(SortedKeypointMatches::const_iterator i=matches.begin();i!=matches.end();i++){

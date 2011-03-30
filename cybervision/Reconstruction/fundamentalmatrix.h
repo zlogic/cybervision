@@ -2,9 +2,9 @@
 #define FUNDAMENTALMATRIX_H
 
 #include <QObject>
-#include <Reconstruction/pointmatch.h>
-#include <QGenericMatrix>
 #include <QFileInfo>
+#include <Reconstruction/pointmatch.h>
+#include <Eigen/Dense>
 
 namespace cybervision{
 	/*
@@ -14,22 +14,22 @@ namespace cybervision{
 		Q_OBJECT
 	protected:
 		//Results
-		QGenericMatrix<3,3,double> F,T1,T2;
+		Eigen::Matrix3d F,T1,T2;
 		SortedKeypointMatches matches;
 
 		//Internal procedures
-		//Converts QPointF to QGenericMatrix
-		inline QGenericMatrix<1,3,double> point2vector(const QPointF&)const;
-		//Converts QGenericMatrix (vector) to QPointF
-		inline QPointF vector2point(const QGenericMatrix<1,3,double>&)const;
+		//Converts QPointF to Eigen::Vector3d
+		inline Eigen::Vector3d point2vector(const QPointF&)const;
+		//Converts Eigen::Vector3d to QPointF
+		inline QPointF vector2point(const Eigen::Vector3d&)const;
 
 		//Computes the fundamental matrix from N points
-		QGenericMatrix<3,3,double> computeFundamentalMatrix(const KeypointMatches&);
+		Eigen::Matrix3d computeFundamentalMatrix(const KeypointMatches&);
 		//Computes a keypoint match's error when used with the fundamental matrix F
-		double computeFundamentalMatrixError(const QGenericMatrix<3,3,double>&F, const KeypointMatch&) const;
+		double computeFundamentalMatrixError(const Eigen::Matrix3d&F, const KeypointMatch&) const;
 
 		//Computes the fundamental matrix with RANSAC, removing any outliers
-		QGenericMatrix<3,3,double> computeFundamentalMatrix();
+		Eigen::Matrix3d computeFundamentalMatrix();
 	public:
 		explicit FundamentalMatrix(QObject *parent = 0);
 
@@ -38,9 +38,9 @@ namespace cybervision{
 
 		//Getters
 		SortedKeypointMatches getAcceptedMatches()const;
-		QGenericMatrix<3,3,double> getFundamentalMatrix()const;
-		QGenericMatrix<3,3,double> getT1()const;
-		QGenericMatrix<3,3,double> getT2()const;
+		Eigen::Matrix3d getFundamentalMatrix()const;
+		Eigen::Matrix3d getT1()const;
+		Eigen::Matrix3d getT2()const;
 
 		//Output functions
 		void saveAcceptedMatches(const QFileInfo &target);
