@@ -125,9 +125,10 @@ QList<SIFT::Keypoint> SIFT::Extractor::extract(const QImage& sourceImg)const{
 	//Return SIFT features
 
 	QList<SIFT::Keypoint> points;
-	while(keypoints){
-		points.append(SIFT::Keypoint(keypoints->row*scalingFactor,keypoints->col*scalingFactor,keypoints->scale,keypoints->ori,keypoints->descrip));
-		keypoints= keypoints->next;
+	::Keypoint keypoint= keypoints;
+	while(keypoint){
+		points.append(SIFT::Keypoint(keypoint->row*scalingFactor,keypoint->col*scalingFactor,keypoint->scale,keypoint->ori,keypoint->descrip));
+		keypoint= keypoint->next;
 	}
 	FreeKeypoints(keypoints);
 
