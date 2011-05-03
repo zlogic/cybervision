@@ -32,6 +32,13 @@ public:
 	static const float surfaceSize;//Target size (width~height) of surface, to fit into opengl viewport
 	enum ColladaFormat {COLLADA_INDEPENDENT_POLYGONS,COLLADA_SHARED_POINTS}; //Shared points produces a more compact file but mangles normals
 	static const ColladaFormat colladaFormat;//Selected Collada file format
+	enum AveragingNormalsMode {AVERAGE_NORMALS_TRIANGLE,AVERAGE_NORMALS_LINE}; //Average normals for point: from neighboring lines or triangles
+	static const AveragingNormalsMode averageNormalsMode;
+
+	//Rendering options
+	static const bool renderShiny; //Render surface as a shiny texture
+	enum RenderNormalsMode {RENDER_NORMALS_TRIANGLE,RENDER_NORMALS_POINT}; //Use normals from polygon or from point when rendering
+	static const RenderNormalsMode renderNormalsMode; //Selected normals source for rendering
 };
 
 }

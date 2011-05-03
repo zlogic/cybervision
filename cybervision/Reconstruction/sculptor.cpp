@@ -1,5 +1,6 @@
 #include <QGLWidget>
 #include <QMap>
+#include <QMatrix4x4>
 #include <limits>
 
 #define _USE_MATH_DEFINES
@@ -197,9 +198,48 @@ namespace cybervision{
 		return triangle;
 	}
 
+	QVector3D Sculptor::calcNormal(const QList<Surface::Triangle>& triangles,const QList<QVector3D>& points,const Surface::PolygonPoint& point)const{
+		Surface::PolygonPoint a= point;
+		QVector3D normal;
+		int N=0;
+		for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
+			Surface::PolygonPoint b,c;
+			if(it->a==a && (it->b!=a && it->c!=a)){
+				b=it->b;
+				c=it->c;
+			}else if (it->b==a && (it->c!=a && it->b!=a)){
+				b=it->c;
+				c=it->a;
+			}else if (it->c==a && (it->a!=a && it->b!=a)){
+				b=it->a;
+				c=it->b;
+			} else continue;
+
+			//Rotate line a-b 90 degrees
+			if(Options::averageNormalsMode== Options::AVERAGE_NORMALS_LINE){
+				QVector3D Va= points[a], Vb= points[b], Vc= points[c];
+				QVector3D Vab= Vb-Va, Vac= Vc-Va;
+				normal+= calcNormal(Vab)+calcNormal(Vac);
+				N+= 2;
+			}else if(Options::averageNormalsMode== Options::AVERAGE_NORMALS_TRIANGLE){
+				normal += it->normal;
+				N++;
+			}
+		}
+		return normal/N;
+	}
+
 	QVector3D Sculptor::calcNormal(const QVector3D& a, const QVector3D& b)const{
 		QVector3D dotProduct=QVector3D::crossProduct(a,b);
 		return dotProduct/dotProduct.length();
+	}
+
+	QVector3D Sculptor::calcNormal(const QVector3D& vector)const{
+		//Rotate vector's projection onto XY plane 90 degrees
+		QVector3D projection(vector.x(),vector.y(),0);
+		QMatrix4x4 rotationMatrix; rotationMatrix.rotate(90.0,0,0,1);
+		QVector3D projection_rotated= rotationMatrix*projection;
+		return calcNormal(vector,projection_rotated);
 	}
 
 
@@ -389,9 +429,18 @@ namespace cybervision{
 		for(int i=0;i<Options::maxPeakFilterPasses;i++)
 			if(!filterTriangles(points,unfilteredTriangles)) break;
 
-		surface.points= points;
+		//Calculate triangle normals
 		for(QList<Surface::Triangle>::const_iterator it= unfilteredTriangles.begin();it!=unfilteredTriangles.end();it++)
 			surface.triangles.push_back(createTriangle(points,it->a,it->b,it->c));
+
+
+		//Calculate point normals
+		for(Surface::PolygonPoint i=0;i!=points.size();i++){
+			Surface::Point point;
+			point.coord= points[i];
+			point.normal= calcNormal(surface.triangles,points,i);
+			surface.points.append(point);
+		}
 	}
 
 

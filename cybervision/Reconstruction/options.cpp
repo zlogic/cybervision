@@ -22,4 +22,8 @@ namespace cybervision{
 	const float Options::peakSize= 10.0F;
 	const int Options::maxPeakFilterPasses= 10;
 	const Options::ColladaFormat Options::colladaFormat= Options::COLLADA_INDEPENDENT_POLYGONS;
+	const Options::AveragingNormalsMode Options::averageNormalsMode= Options::AVERAGE_NORMALS_TRIANGLE;
+
+	const bool Options::renderShiny= true;
+	const Options::RenderNormalsMode Options::renderNormalsMode= Options::RENDER_NORMALS_POINT;
 }

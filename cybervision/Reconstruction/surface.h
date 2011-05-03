@@ -9,16 +9,21 @@ namespace cybervision{
 		friend class Sculptor;
 	protected:
 		//Internal classes
-		typedef int PolygonPoint;//Index of point in array. NOT checked!
+		typedef int PolygonPoint;//Index of point in array. NOT checked! TODO: remove int limits
 		class Triangle{
 		public:
 			PolygonPoint a,b,c;
 			QVector3D normal;
 		};
 
+		class Point{
+		public :
+			QVector3D coord, normal;
+		};
+
 		//Surface data in two formats
 		QList<Triangle> triangles;
-		QList<QVector3D> points;
+		QList<Point> points;
 
 		//Scale for viewport
 		qreal scale;

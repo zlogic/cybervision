@@ -23,6 +23,10 @@ namespace cybervision{
 		Surface::Triangle createTriangle(const QList<QVector3D>& points,const Surface::PolygonPoint& a, const Surface::PolygonPoint& b, const Surface::PolygonPoint& c)const;
 		//Returns a normal for a 3D triangle
 		QVector3D calcNormal(const QVector3D& a, const QVector3D& b)const;
+		//Returns a normal for a 3D point based on all edges that contain it
+		QVector3D calcNormal(const QList<Surface::Triangle>& triangles,const QList<QVector3D>& points,const Surface::PolygonPoint& point)const;
+		//Returns a normal for a vector (normal and source vector projections onto XY plane will be collinear)
+		QVector3D calcNormal(const QVector3D& vector)const;
 
 		//Code ported from http://local.wasp.uwa.edu.au/~pbourke/papers/triangulate/index.html
 		bool delaunayCircumCircle(const QPointF& p,const QPointF& a,const QPointF& b,const QPointF& c,QVector3D* circle=NULL)const;

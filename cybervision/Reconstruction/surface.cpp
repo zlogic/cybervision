@@ -22,34 +22,53 @@ namespace cybervision{
 
 	void Surface::glDraw() const{
 		for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
-			const QVector3D& pa=points[it->a];
-			const QVector3D& pb=points[it->b];
-			const QVector3D& pc=points[it->c];
+			const Point& pa=points[it->a];
+			const Point& pb=points[it->b];
+			const Point& pc=points[it->c];
 
 			glBegin(GL_TRIANGLES);
 			glColor3f(1.0f, 1.0f, 1.0f);
-			//Front side
-			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-			glVertex3f(pa.x()*scale,pa.y()*scale,pa.z()*scale);
-			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-			glVertex3f(pb.x()*scale,pb.y()*scale,pb.z()*scale);
-			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-			glVertex3f(pc.x()*scale,pc.y()*scale,pc.z()*scale);
 
-			//Back side
-			glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-			glVertex3f(pc.x()*scale,pc.y()*scale,pc.z()*scale);
-			glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-			glVertex3f(pb.x()*scale,pb.y()*scale,pb.z()*scale);
-			glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-			glVertex3f(pa.x()*scale,pa.y()*scale,pa.z()*scale);
-			glEnd();
+			if(Options::renderNormalsMode== Options::RENDER_NORMALS_TRIANGLE){
+				//Use triangle normals
+				//Front side
+				glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
+				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
+				glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
+				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
+				glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
+				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
 
+				//Back side
+				glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
+				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
+				glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
+				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
+				glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
+				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
+			}else if(Options::renderNormalsMode== Options::RENDER_NORMALS_POINT){
+				//Use point normals
+				//Front side
+				glNormal3f(pa.normal.x(),pa.normal.y(),pa.normal.z());
+				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
+				glNormal3f(pa.normal.x(),pa.normal.y(),pa.normal.z());
+				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
+				glNormal3f(pa.normal.x(),pa.normal.y(),pa.normal.z());
+				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
+
+				//Back side
+				glNormal3f(-pa.normal.x(),-pa.normal.y(),-pa.normal.z());
+				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
+				glNormal3f(-pa.normal.x(),-pa.normal.y(),-pa.normal.z());
+				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
+				glNormal3f(-pa.normal.x(),-pa.normal.y(),-pa.normal.z());
+				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
+				glEnd();
+			}
 			glBegin(GL_POINTS);
 			glColor3f(1.0f, 1.0f, 1.0f);
 			//glVertex3f(it->a.x(),it->a.y(),it->a.z());
 			//glVertex3f(it->a.x(),it->a.y(),it->a.z()+1);
-
 			glEnd();
 		}
 		/*
@@ -78,8 +97,8 @@ namespace cybervision{
 		file.open(QIODevice::WriteOnly);
 
 		QTextStream stream(&file);
-		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++)
-			stream<<it->x()<<"\t"<<it->y()<<"\t"<<it->z()<<"\r\n";
+		for(QList<Point>::const_iterator it= points.begin();it!=points.end();it++)
+			stream<<it->coord.x()<<"\t"<<it->coord.y()<<"\t"<<it->coord.z()<<"\r\n";
 
 		file.close();
 	}
@@ -89,9 +108,9 @@ namespace cybervision{
 
 		QTextStream stream(&file);
 		for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
-			const QVector3D& pa=points[it->a];
-			const QVector3D& pb=points[it->b];
-			const QVector3D& pc=points[it->c];
+			const QVector3D& pa=points[it->a].coord;
+			const QVector3D& pb=points[it->b].coord;
+			const QVector3D& pc=points[it->c].coord;
 			stream<<it->normal.x()<<"\t"<<it->normal.y()<<"\t"<<it->normal.z()<<"\t";
 			stream<<pa.x()<<"\t"<<pa.y()<<"\t"<<pa.z()<<"\t";
 			stream<<pb.x()<<"\t"<<pb.y()<<"\t"<<pb.z()<<"\t";
@@ -120,9 +139,9 @@ namespace cybervision{
 		QString result=xmlTemplate;
 		if(Options::colladaFormat==Options::COLLADA_SHARED_POINTS){
 			//Output points
-			for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
+			for(QList<Point>::const_iterator it= points.begin();it!=points.end();it++){
 				QString currentVertexString;
-				currentVertexString.append(QString("%1 %2 %3 ").arg(it->x()).arg(it->y()).arg(it->z()));
+				currentVertexString.append(QString("%1 %2 %3 ").arg(it->coord.x()).arg(it->coord.y()).arg(it->coord.z()));
 				vertexesString.append(currentVertexString);
 			}
 
@@ -145,9 +164,9 @@ namespace cybervision{
 		}else if(Options::colladaFormat==Options::COLLADA_INDEPENDENT_POLYGONS){
 			PolygonPoint i=0;//Triangle indexes
 			for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
-				const QVector3D& pa=points[it->a];
-				const QVector3D& pb=points[it->b];
-				const QVector3D& pc=points[it->c];
+				const QVector3D& pa=points[it->a].coord;
+				const QVector3D& pb=points[it->b].coord;
+				const QVector3D& pc=points[it->c].coord;
 				QString currentVertexString;
 				currentVertexString.append(QString("%1 %2 %3 ").arg(pa.x()).arg(pa.y()).arg(pa.z()));
 				currentVertexString.append(QString("%1 %2 %3 ").arg(pb.x()).arg(pb.y()).arg(pb.z()));

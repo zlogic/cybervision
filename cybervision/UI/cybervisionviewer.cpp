@@ -7,6 +7,8 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 
+#include <Reconstruction/options.h>
+
 CybervisionViewer::CybervisionViewer(QWidget *parent): QGLWidget(parent){
 	vpTranslation= QVector3D(0,0,-15);
 }
@@ -36,7 +38,16 @@ void CybervisionViewer::initializeGL(){
 	glEnable(GL_LIGHT0);
 	//static GLfloat lightPosition[4] = { 0.5, 5.0, 7.0, 1.0 };
 	static GLfloat light0Position[4] = { 5.0f, 5.0f, 10.0f, 1.0f };
+	static GLfloat light0Ambiance[4] = { 0.2f, 0.2f, 0.2f, 0.2f };
 	glLightfv(GL_LIGHT0, GL_POSITION, light0Position);
+	glLightfv(GL_LIGHT0,GL_AMBIENT,light0Ambiance);
+
+	if(cybervision::Options::renderShiny){
+		static GLfloat mat_specular[] = { 1.0, 1.0, 1.0, 1.0 };
+		static GLfloat mat_shininess[] = { 50.0 };
+		glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
+		glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);
+	}
 }
 
 void CybervisionViewer::resizeGL(int w, int h){
