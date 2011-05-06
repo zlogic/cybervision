@@ -51,15 +51,15 @@ namespace cybervision{
 				//Front side
 				glNormal3f(pa.normal.x(),pa.normal.y(),pa.normal.z());
 				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
-				glNormal3f(pa.normal.x(),pa.normal.y(),pa.normal.z());
+				glNormal3f(pb.normal.x(),pb.normal.y(),pb.normal.z());
 				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
-				glNormal3f(pa.normal.x(),pa.normal.y(),pa.normal.z());
+				glNormal3f(pc.normal.x(),pc.normal.y(),pc.normal.z());
 				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
 
 				//Back side
-				glNormal3f(-pa.normal.x(),-pa.normal.y(),-pa.normal.z());
+				glNormal3f(-pc.normal.x(),-pc.normal.y(),-pc.normal.z());
 				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
-				glNormal3f(-pa.normal.x(),-pa.normal.y(),-pa.normal.z());
+				glNormal3f(-pb.normal.x(),-pb.normal.y(),-pb.normal.z());
 				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
 				glNormal3f(-pa.normal.x(),-pa.normal.y(),-pa.normal.z());
 				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
