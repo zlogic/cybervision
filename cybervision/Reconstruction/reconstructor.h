@@ -7,6 +7,7 @@
 #include <QList>
 #include <QPair>
 #include <QVector3D>
+#include <QSize>
 
 #include <Eigen/Dense>
 
@@ -25,6 +26,7 @@ namespace cybervision{
 		//State
 		QString errorString;
 		QList<QVector3D> Points3D;
+		QSize imageSize;
 
 	public:
 		explicit Reconstructor(QObject *parent);
@@ -35,6 +37,7 @@ namespace cybervision{
 		bool isOk()const;
 		QString getErrorString()const;
 		QList<QVector3D> get3DPoints()const;
+		QSize getImageSize()const;
 	signals:
 		void sgnLogMessage(QString);
 		void sgnStatusMessage(QString);

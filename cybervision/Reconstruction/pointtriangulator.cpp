@@ -64,7 +64,7 @@ namespace cybervision{
 
 		//Project into essential space
 		if(false){
-			Eigen::JacobiSVD<Eigen::Matrix3d> svd(Essential_matrix, Eigen::ComputeFullV|Eigen::ComputeFullU);
+			Eigen::JacobiSVD<Eigen::Matrix3d,Eigen::FullPivHouseholderQRPreconditioner> svd(Essential_matrix, Eigen::ComputeFullV|Eigen::ComputeFullU);
 			Eigen::Matrix3d U= svd.matrixU(), V=svd.matrixV();
 			Eigen::Vector3d Sigma=svd.singularValues();
 
@@ -75,7 +75,7 @@ namespace cybervision{
 			Essential_matrix= U*(Sigma.asDiagonal())*(V.transpose());
 		}
 
-		Eigen::JacobiSVD<Eigen::Matrix3d> svd(Essential_matrix, Eigen::ComputeFullV|Eigen::ComputeFullU);
+		Eigen::JacobiSVD<Eigen::Matrix3d,Eigen::FullPivHouseholderQRPreconditioner> svd(Essential_matrix, Eigen::ComputeFullV|Eigen::ComputeFullU);
 		Eigen::Matrix3d U= svd.matrixU(), V=svd.matrixV();
 		Eigen::Vector3d Sigma= svd.singularValues();
 
@@ -196,7 +196,7 @@ namespace cybervision{
 			*/
 
 
-			Eigen::JacobiSVD<Eigen::Matrix4d> svd(A, Eigen::ComputeFullV);
+			Eigen::JacobiSVD<Eigen::Matrix4d,Eigen::FullPivHouseholderQRPreconditioner> svd(A, Eigen::ComputeFullV);
 			Eigen::Matrix4d  V=svd.matrixV();
 			Eigen::Vector4d Sigma= svd.singularValues();
 			//Search for min column
@@ -270,24 +270,42 @@ namespace cybervision{
 			}
 		}
 
-		Eigen::JacobiSVD<Eigen::MatrixXd> svd(W, Eigen::ComputeThinV);
+		Eigen::JacobiSVD<Eigen::MatrixXd,Eigen::FullPivHouseholderQRPreconditioner> svd(W, Eigen::ComputeFullV|Eigen::ComputeFullU);
 		Eigen::MatrixXd X(matches.size(),3);
 		Eigen::MatrixXd V= svd.matrixV();
+		Eigen::MatrixXd U= svd.matrixU();
+		Eigen::MatrixXd M(4,3);
+
 
 		if(Options::triangulationMode==Options::TRIANGULATION_PARALLEL_V){
 			//Method 1 (simpler)
 			X= V.block(0,0,V.rows(),3);
+
+			for(int i=0;i<M.cols();i++){
+				Eigen::VectorXd S= svd.singularValues();
+				M.col(i)= S(i)*U.col(i);
+			}
 		}else if(Options::triangulationMode==Options::TRIANGULATION_PARALLEL_SV) {
 			//Method 2 (S*V')'
 			Eigen::MatrixXd S= svd.singularValues().asDiagonal();
 			S= S.block(0,0,3,3);
 			V= V.block(0,0,V.rows(),3);
 			X= (S*(V.transpose())).transpose();
+
+			for(int i=0;i<M.cols();i++){
+				M.col(i)= U.col(i);
+			}
 		}
 
+		//Projection matrix
+		Eigen::MatrixXd M1= M.block(0,0,2,2);
 
 		for(int i=0;i<X.rows();i++){
-			QVector3D resultPoint(X(i,0),X(i,1),X(i,2));
+			//Project points with matrix M to remove rotation
+			Eigen::MatrixXd projectedXY= M1*(X.block(i,0,1,2).transpose());
+			double scale= sqrt(projectedXY(0,0)*projectedXY(0,0)+projectedXY(1,0)*projectedXY(1,0))/sqrt(X(i,0)*X(i,0)+X(i,1)*X(i,1));
+			QVector3D resultPoint(projectedXY(0,0),projectedXY(1,0),scale*X(i,2));
+			//QVector3D resultPoint(X(i,0),X(i,1),X(i,2));
 			Points3D.push_back(resultPoint);
 		}
 

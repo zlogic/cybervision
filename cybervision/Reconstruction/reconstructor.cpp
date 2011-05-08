@@ -17,7 +17,6 @@ namespace cybervision{
 		Points3D.clear();
 		//Extract and sort matches by distance
 		SortedKeypointMatches matches;//Point matches
-		QSize imageSize;
 		{
 			PointMatcher matcher(this);
 			QObject::connect(&matcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);
@@ -108,4 +107,5 @@ namespace cybervision{
 	bool Reconstructor::isOk()const{ return !errorString.isNull()&&!errorString.isEmpty(); }
 	QString Reconstructor::getErrorString()const{ return errorString; }
 	QList<QVector3D> Reconstructor::get3DPoints()const{ return Points3D; }
+	QSize Reconstructor::getImageSize()const{ return imageSize; }
 }

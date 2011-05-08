@@ -46,7 +46,7 @@ namespace cybervision{
 		//Compute V_chi from the SVD decomposition
 		Eigen::Matrix3d F;
 		{
-			Eigen::JacobiSVD<Eigen::Matrix<double,8,9> > svd(chi, Eigen::ComputeFullV);
+			Eigen::JacobiSVD<Eigen::Matrix<double,8,9>,Eigen::FullPivHouseholderQRPreconditioner> svd(chi, Eigen::ComputeFullV);
 			Eigen::Matrix<double,9,9> V_chi= svd.matrixV();
 			//Get and unstack E
 			F(0,0)=V_chi(0,8), F(1,0)=V_chi(1,8), F(2,0)=V_chi(2,8);
@@ -233,7 +233,7 @@ namespace cybervision{
 		//"Normalize" E
 		//(Project into essential space (do we need this?))
 		if(true){
-			Eigen::JacobiSVD<Eigen::Matrix3d> svd(F, Eigen::ComputeFullV|Eigen::ComputeFullU);
+			Eigen::JacobiSVD<Eigen::Matrix3d,Eigen::FullPivHouseholderQRPreconditioner> svd(F, Eigen::ComputeFullV|Eigen::ComputeFullU);
 			Eigen::Vector3d Sigma= svd.singularValues();
 			Sigma(2,0)= 0.0;
 			F= svd.matrixU()*(Sigma.asDiagonal())*(svd.matrixV().transpose());

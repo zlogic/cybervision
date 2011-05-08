@@ -18,10 +18,11 @@ void ProcessThread::extract(QStringList image_filenames,double scaleXY,double sc
 	start();
 }
 
-void ProcessThread::surface(QList<QVector3D>points){
+void ProcessThread::surface(QList<QVector3D>points,QSize imageSize){
 	wait();
 	task=TASK_SURFACE;
 	this->points= points;
+	this->imageSize= imageSize;
 
 	start();
 }
@@ -50,7 +51,7 @@ void ProcessThread::runExtract(){
 		//Prepare variables for output data
 
 		if(reconstructor.run(image_filenames.first(),image_filenames.last()))
-			emit processStopped(QString(),reconstructor.get3DPoints());
+			emit processStopped(QString(),reconstructor.get3DPoints(),reconstructor.getImageSize());
 		else
 			emit processStopped(reconstructor.getErrorString());
 	}else
@@ -60,7 +61,7 @@ void ProcessThread::runExtract(){
 
 void ProcessThread::runSurface(){
 	emit processUpdated("Creating 3D surface","Creating 3D surface...");
-	cybervision::Sculptor sculptor(points,scaleXY,scaleZ);
+	cybervision::Sculptor sculptor(points,imageSize,scaleXY,scaleZ);
 
 	points.clear();
 
@@ -72,8 +73,8 @@ void ProcessThread::setUi(MainWindow* mw){
 	if(this->mw){
 		QObject::disconnect(this, SIGNAL(processStarted()),
 							this->mw, SLOT(processStarted()));
-		QObject::disconnect(this, SIGNAL(processStopped(QString,QList<QVector3D>)),
-							this->mw, SLOT(processStopped(QString,QList<QVector3D>)));
+		QObject::disconnect(this, SIGNAL(processStopped(QString,QList<QVector3D>,QSize)),
+							this->mw, SLOT(processStopped(QString,QList<QVector3D>,QSize)));
 		QObject::disconnect(this, SIGNAL(processStopped(QString,cybervision::Surface)),
 							this->mw, SLOT(processStopped(QString,cybervision::Surface)));
 		QObject::disconnect(this, SIGNAL(processUpdated(QString,QString)),
@@ -85,8 +86,8 @@ void ProcessThread::setUi(MainWindow* mw){
 
 	QObject::connect(this, SIGNAL(processStarted()),
 					 mw, SLOT(processStarted()),Qt::AutoConnection);
-	QObject::connect(this, SIGNAL(processStopped(QString,QList<QVector3D>)),
-					 mw, SLOT(processStopped(QString,QList<QVector3D>)),Qt::AutoConnection);
+	QObject::connect(this, SIGNAL(processStopped(QString,QList<QVector3D>,QSize)),
+					 mw, SLOT(processStopped(QString,QList<QVector3D>,QSize)),Qt::AutoConnection);
 	QObject::connect(this, SIGNAL(processStopped(QString,cybervision::Surface)),
 					 mw, SLOT(processStopped(QString,cybervision::Surface)),Qt::AutoConnection);
 	QObject::connect(this, SIGNAL(processUpdated(QString,QString)),

@@ -97,7 +97,7 @@ void MainWindow::processUpdated(QString logMessage,QString statusBarText){
 		ui->logTextEdit->appendPlainText(statusBarText+"\n");
 }
 
-void MainWindow::processStopped(QString resultText,QList<QVector3D> points){
+void MainWindow::processStopped(QString resultText,QList<QVector3D> points,QSize imageSize){
 	/*
 	*/
 	if(!resultText.isNull() && !resultText.isEmpty()){
@@ -106,7 +106,7 @@ void MainWindow::processStopped(QString resultText,QList<QVector3D> points){
 	}
 
 	if(!points.empty())
-		thread.surface(points);
+		thread.surface(points,imageSize);
 	else{
 		ui->statusBar->clearMessage();
 		ui->startProcessButton->setEnabled(true);

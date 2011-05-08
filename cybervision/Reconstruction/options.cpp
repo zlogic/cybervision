@@ -21,8 +21,12 @@ namespace cybervision{
 	const float Options::surfaceSize= 15.0F;
 	const float Options::peakSize= 10.0F;
 	const int Options::maxPeakFilterPasses= 10;
-	const Options::ColladaFormat Options::colladaFormat= Options::COLLADA_INDEPENDENT_POLYGONS;
+	const Options::ColladaFormat Options::colladaFormat= Options::COLLADA_SHARED_POINTS;
 	const Options::AveragingNormalsMode Options::averageNormalsMode= Options::AVERAGE_NORMALS_TRIANGLE;
+	const bool Options::mapPointsToGrid= true;
+	const int Options::gridResolution= 6;
+	const bool Options::gridAddRealPoints= false;
+	const double Options::gridCellArea= 4.0;
 
 	const bool Options::renderShiny= true;
 	const Options::RenderNormalsMode Options::renderNormalsMode= Options::RENDER_NORMALS_POINT;

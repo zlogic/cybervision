@@ -33,15 +33,21 @@ inline bool qFuzzyCompare(const QPointF& a,const QPointF& b){
 }
 
 namespace cybervision{
-	Sculptor::Sculptor(const QList<QVector3D>& points,qreal scaleXY,qreal scaleZ){
+	Sculptor::Sculptor(const QList<QVector3D>& points,QSize imageSize,qreal scaleXY,qreal scaleZ){
 		this->scaleXY= scaleXY, this->scaleZ= scaleZ;
-		if(!points.empty()){
-			delaunayTriangulate(points);
+		this->imageSize= imageSize;
+
+		if(Options::mapPointsToGrid){
+			QList<QVector3D> gridPoints= interpolatePointsToGrid(points);
+			if(!gridPoints.empty())
+				delaunayTriangulate(gridPoints);
+		}else{
+			if(!points.empty())
+				delaunayTriangulate(points);
 		}
 	}
 
 	Surface Sculptor::getSurface()const{ return surface; }
-
 
 	QList<QVector3D> Sculptor::filterPoints(const QList<QVector3D>& points){
 		//Get data from the point set
@@ -179,6 +185,101 @@ namespace cybervision{
 		}
 
 		return pointsModified;
+	}
+
+	Sculptor::CellData::CellData(){
+		averageDepth=0;
+		min= QVector2D(0,0), max= QVector2D(0,0);
+	}
+	Sculptor::CellData::CellData(const QList<QVector3D> &points,qreal parentAverageDepth, const QVector2D &min, const QVector2D &max){
+		averageDepth=parentAverageDepth;
+		this->min= min, this->max= max;
+		/*
+		for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
+			if(it->x()>=min.x() && it->x()<=max.x() && it->y()>=min.y() && it->y()<=max.y()){
+				averageDepth+= it->z();
+				this->points.append(*it);
+			}
+		}
+
+		averageDepth/= (this->points.size()+1);
+		*/
+		double sumDepth=0,sumDistance=0;
+		QVector2D middle= min+(max-min)/2;
+		for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
+			qreal distance= (QVector2D(*it)-middle).length();
+			if(distance <= Options::gridCellArea*(max-middle).length()){
+				sumDepth+= it->z()/distance;
+				sumDistance+= 1/distance;
+			}
+
+			if(it->x()>=min.x() && it->x()<=max.x() && it->y()>=min.y() && it->y()<=max.y()){
+				this->points.append(*it);
+			}
+		}
+		if(sumDistance>0){
+			averageDepth= sumDepth/sumDistance;
+		}
+	}
+	Sculptor::CellData::CellData(const CellData& cellData){ this->operator =(cellData); }
+	void Sculptor::CellData::operator =(const CellData& cellData){
+		averageDepth= cellData.averageDepth;
+		min= cellData.min, max= cellData.max;
+		points= cellData.points;
+	}
+
+	QList<QVector3D> Sculptor::interpolatePointsToGrid(const QList<QVector3D>& points)const{
+		QList<CellData> mappedPoints;
+
+		//Fill the first cell
+		{
+			qreal minX= points.begin()->x(), minY= points.begin()->y(), maxX= points.begin()->x(), maxY= points.begin()->y();
+			for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
+				minX= qMin(minX,it->x());
+				minY= qMin(minY,it->y());
+				maxX= qMax(maxX,it->x());
+				maxY= qMax(maxY,it->y());
+			}
+			//minX= 0, minY= 0;
+			//maxX= imageSize.width(), maxY= imageSize.height();
+			mappedPoints << CellData(points,0,QVector2D(minX,minY),QVector2D(maxX,maxY));
+		}
+
+		//Double the resolution on every iteration by splitting each cell into 4 equal parts
+		for(int resolution=0;resolution<Options::gridResolution;resolution++){
+			QList<CellData> newMappedPoints;
+
+			#pragma omp parallel
+			for(QList<CellData>::const_iterator it= mappedPoints.begin();it!=mappedPoints.end();it++){
+				#pragma omp single nowait
+				{
+					QList<CellData> currentCellMappedPoints;
+					QVector2D middle((it->min.x()+it->max.x())/2,(it->min.y()+it->max.y())/2);
+					currentCellMappedPoints << CellData(points,it->averageDepth,it->min,middle);
+					currentCellMappedPoints << CellData(points,it->averageDepth,QVector2D(it->min.x(),middle.y()),QVector2D(middle.x(),it->max.y()));
+					currentCellMappedPoints << CellData(points,it->averageDepth,QVector2D(middle.x(),it->min.y()),QVector2D(it->max.x(),middle.y()));
+					currentCellMappedPoints << CellData(points,it->averageDepth,middle,it->max);
+					#pragma omp critical
+					{
+						newMappedPoints.append(currentCellMappedPoints);
+					}
+				}
+			}
+			mappedPoints= newMappedPoints;
+		}
+
+		//Extract interpolated points
+		QList<QVector3D> interpolatedPoints;
+		for(QList<CellData>::const_iterator it= mappedPoints.begin();it!=mappedPoints.end();it++){
+			if(it->points.size()>0)
+				for(QList<QVector3D>::const_iterator jt= it->points.begin();jt!=it->points.end();jt++){
+					if(Options::gridAddRealPoints)
+						interpolatedPoints << *jt;
+				}
+			interpolatedPoints << QVector3D(it->min.x(),it->min.y(),it->averageDepth);
+		}
+
+		return interpolatedPoints;
 	}
 
 	Surface::Triangle Sculptor::createTriangle(const QList<QVector3D>& points,const Surface::PolygonPoint& a, const Surface::PolygonPoint& b, const Surface::PolygonPoint& c)const{
