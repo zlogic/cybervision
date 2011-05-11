@@ -287,10 +287,9 @@ namespace cybervision{
 			}
 		}else if(Options::triangulationMode==Options::TRIANGULATION_PARALLEL_SV) {
 			//Method 2 (S*V')'
-			Eigen::MatrixXd S= svd.singularValues().asDiagonal();
-			S= S.block(0,0,3,3);
-			V= V.block(0,0,V.rows(),3);
-			X= (S*(V.transpose())).transpose();
+			Eigen::MatrixXd Sigma= svd.singularValues().asDiagonal();
+			Sigma= Sigma.block(0,0,3,3).eval();
+			X= (Sigma*(V.block(0,0,V.rows(),3).transpose())).transpose();
 
 			for(int i=0;i<M.cols();i++){
 				M.col(i)= U.col(i);
@@ -299,11 +298,19 @@ namespace cybervision{
 
 		//Projection matrix
 		Eigen::MatrixXd M1= M.block(0,0,2,2);
+		//Compute image-wide scale
+		qreal scale=0;
+		for(int i=0;i<X.rows();i++){
+			Eigen::MatrixXd projectedXY= M1*(X.block(i,0,1,2).transpose());
+			scale+= sqrt(projectedXY(0,0)*projectedXY(0,0)+projectedXY(1,0)*projectedXY(1,0))/sqrt(X(i,0)*X(i,0)+X(i,1)*X(i,1));
+		}
+		scale/= X.rows();
 
+		//Final processing for points
 		for(int i=0;i<X.rows();i++){
 			//Project points with matrix M to remove rotation
 			Eigen::MatrixXd projectedXY= M1*(X.block(i,0,1,2).transpose());
-			double scale= sqrt(projectedXY(0,0)*projectedXY(0,0)+projectedXY(1,0)*projectedXY(1,0))/sqrt(X(i,0)*X(i,0)+X(i,1)*X(i,1));
+			//double scale= sqrt(projectedXY(0,0)*projectedXY(0,0)+projectedXY(1,0)*projectedXY(1,0))/sqrt(X(i,0)*X(i,0)+X(i,1)*X(i,1));
 			QVector3D resultPoint(projectedXY(0,0),projectedXY(1,0),scale*X(i,2));
 			//QVector3D resultPoint(X(i,0),X(i,1),X(i,2));
 			Points3D.push_back(resultPoint);
