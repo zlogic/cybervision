@@ -11,6 +11,7 @@
 
 CybervisionViewer::CybervisionViewer(QWidget *parent): QGLWidget(parent){
 	vpTranslation= QVector3D(0,0,-15);
+	this->mouseMode= MOUSE_ROTATION;
 }
 
 
@@ -20,6 +21,10 @@ void CybervisionViewer::setSurface3D(const cybervision::Surface& surface){
 		this->surface= surface;
 	}
 	updateGL();
+}
+
+void CybervisionViewer::setMouseMode(MouseMode mouseMode){
+	this->mouseMode= mouseMode;
 }
 
 const cybervision::Surface& CybervisionViewer::getSurface3D()const{
@@ -91,24 +96,24 @@ void CybervisionViewer::mouseMoveEvent(QMouseEvent *event){
 	//event->
 	int dx= event->pos().x()-lastMousePos.x(), dy=event->pos().y()-lastMousePos.y();
 
-	if(event->modifiers()==Qt::NoModifier){
+	if(mouseMode==MOUSE_ROTATION){
 		//Rotation
-		if (event->buttons() & Qt::LeftButton) {
+		if ((event->buttons() & Qt::LeftButton) && event->modifiers()==Qt::NoModifier) {
 			vpRotation.setX(normalizeAngle(vpRotation.x() + dy));
 			vpRotation.setY(normalizeAngle(vpRotation.y() + dx));
 			updateGL();
-		} else if (event->buttons() & Qt::RightButton) {
+		} else {
 			vpRotation.setX(normalizeAngle(vpRotation.x() + dy));
 			vpRotation.setZ(normalizeAngle(vpRotation.z() + dx));
 			updateGL();
 		}
-	}else if(event->modifiers()==Qt::ShiftModifier){
+	}else if(mouseMode==MOUSE_PANNING){
 		//Translation
-		if (event->buttons() & Qt::LeftButton) {
+		if ((event->buttons() & Qt::LeftButton) && event->modifiers()==Qt::NoModifier) {
 			vpTranslation.setX(vpTranslation.x() + dx/10.0F);
 			vpTranslation.setY(vpTranslation.y() - dy/10.0F);
 			updateGL();
-		} else if (event->buttons() & Qt::RightButton) {
+		} else {
 			vpTranslation.setX(vpTranslation.x() + dx/10.0F);
 			vpTranslation.setZ(vpTranslation.z() - dy/10.0F);
 			updateGL();

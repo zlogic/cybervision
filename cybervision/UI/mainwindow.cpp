@@ -221,3 +221,11 @@ void MainWindow::on_imageList_itemSelectionChanged(){
 	updateWidgetStatus();
 }
 
+
+void MainWindow::on_moveToolButton_toggled(bool checked){
+	ui->openGLViewport->setMouseMode(checked?CybervisionViewer::MOUSE_PANNING:CybervisionViewer::MOUSE_ROTATION);
+}
+
+void MainWindow::on_rotateToolButton_toggled(bool checked){
+	ui->openGLViewport->setMouseMode(!checked?CybervisionViewer::MOUSE_PANNING:CybervisionViewer::MOUSE_ROTATION);
+}

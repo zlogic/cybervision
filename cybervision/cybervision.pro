@@ -87,4 +87,6 @@ RESOURCES += \
 	ReconstructionResources.qrc
 
 OTHER_FILES += \
-	Reconstruction/ColladaTemplate.xml
+	Reconstruction/ColladaTemplate.xml \
+    UI/icons/arrow-move.png \
+    UI/icons/arrow-circle.png

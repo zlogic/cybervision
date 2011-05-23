@@ -50,6 +50,8 @@ private slots:
 	void processUpdated(QString logMessage,QString statusBarText=QString());
 	void processStopped(QString resultText,QList<QVector3D> points=QList<QVector3D>(),QSize imageSize=QSize());
 	void processStopped(QString resultText,cybervision::Surface);
+	void on_moveToolButton_toggled(bool checked);
+	void on_rotateToolButton_toggled(bool checked);
 };
 
 #endif // MAINWINDOW_H

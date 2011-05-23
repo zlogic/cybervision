@@ -2,4 +2,8 @@
     <qresource prefix="/collada">
         <file alias="Template.xml">Reconstruction/ColladaTemplate.xml</file>
     </qresource>
+    <qresource prefix="/icons">
+        <file>UI/icons/arrow-circle.png</file>
+        <file>UI/icons/arrow-move.png</file>
+    </qresource>
 </RCC>
