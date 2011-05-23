@@ -100,7 +100,7 @@ QList<SIFT::Keypoint> SIFT::Extractor::extract(const QImage& sourceImg)const{
 	int width=img.width(), height=img.height();
 	Image siftfastImage= CreateImage(height,width);
 
-	//Convert to ZSIFT internal format
+	//Convert to SIFT internal format
 	const uchar *imgPixels= img.bits();
 	int imgStride= img.bytesPerLine();
 

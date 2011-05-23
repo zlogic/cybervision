@@ -383,10 +383,15 @@ namespace cybervision{
 			scale= scale_matrix(0,0);
 		}
 
+		Eigen::MatrixXd M1= M.block(0,0,2,2);
+
 		//Final processing for points
 		for(int i=0;i<X.rows();i++){
 			//Project points with matrix M to remove rotation
-			QVector3D resultPoint(X(i,0),X(i,1),X(i,2)*scale);
+			Eigen::MatrixXd projectedXY= M1*(X.block(i,0,1,2).transpose());
+			//double scale= sqrt(projectedXY(0,0)*projectedXY(0,0)+projectedXY(1,0)*projectedXY(1,0))/sqrt(X(i,0)*X(i,0)+X(i,1)*X(i,1));
+			QVector3D resultPoint(projectedXY(0,0),projectedXY(1,0),scale*X(i,2));
+			//QVector3D resultPoint(X(i,0),X(i,1),X(i,2)*scale);
 			Points3D.push_back(resultPoint);
 		}
 

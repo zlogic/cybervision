@@ -73,7 +73,7 @@ QMAKE_CXXFLAGS_DEBUG +=
 win32 { 
 	QMAKE_LIBS += -static \
 		-lgomp \
-		-lpthread
+		-lpthread.dll
 	QMAKE_CXXFLAGS += -U_WIN32 -fopenmp
 	QMAKE_CFLAGS += -U_WIN32
 }
