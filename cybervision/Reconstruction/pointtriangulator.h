@@ -41,6 +41,8 @@ namespace cybervision{
 		QList<StereopairPosition> computeRT(Eigen::Matrix3d Essential_matrix) const;
 		//Helper function to construct Rz matrix for computeRT
 		Eigen::Matrix3d computeRT_rzfunc(double angle)const;
+		//Computes Kronecker product
+		Eigen::MatrixXd kronecker(const Eigen::MatrixXd A,const Eigen::MatrixXd& B)const;
 
 		//Triangulates a point in 3D space
 		QList<QVector3D> compute3DPoints(const SortedKeypointMatches&matches,const QList<StereopairPosition>& RTList);

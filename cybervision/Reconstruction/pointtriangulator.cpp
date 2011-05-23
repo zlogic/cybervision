@@ -45,6 +45,19 @@ namespace cybervision{
 		return result;
 	}
 
+	Eigen::MatrixXd PointTriangulator::kronecker(const Eigen::MatrixXd A, const Eigen::MatrixXd &B) const{
+		Eigen::MatrixXd result(A.rows()*B.rows(),A.cols()*B.cols());
+
+		// http://mathworld.wolfram.com/KroneckerProduct.html
+		for(Eigen::MatrixXd::Index i=0;i<A.rows();i++)
+			for(Eigen::MatrixXd::Index j=0;j<A.cols();j++)
+				for(Eigen::MatrixXd::Index k=0;k<B.rows();k++)
+					for(Eigen::MatrixXd::Index l=0;l<B.cols();l++)
+						result(B.rows()*i+k,B.cols()*j+l)= A(i,j)*B(k,l);
+
+		return result;
+	}
+
 
 	Eigen::Matrix3d PointTriangulator::computeCameraMatrix(const QSize& imageSize)const{
 		Eigen::Matrix3d K;
@@ -270,31 +283,82 @@ namespace cybervision{
 			}
 		}
 
-		Eigen::JacobiSVD<Eigen::MatrixXd,Eigen::FullPivHouseholderQRPreconditioner> svd(W, Eigen::ComputeFullV|Eigen::ComputeFullU);
-		Eigen::MatrixXd X(matches.size(),3);
-		Eigen::MatrixXd V= svd.matrixV();
-		Eigen::MatrixXd U= svd.matrixU();
-		Eigen::MatrixXd M(4,3);
 
+		//Decompose W into X*M
+		Eigen::MatrixXd X,M;
+		{
+			Eigen::JacobiSVD<Eigen::MatrixXd,Eigen::FullPivHouseholderQRPreconditioner> svd(W, Eigen::ComputeFullV|Eigen::ComputeFullU);
 
-		if(Options::triangulationMode==Options::TRIANGULATION_PARALLEL_V){
-			//Method 1 (simpler)
-			X= V.block(0,0,V.rows(),3);
-
-			for(int i=0;i<M.cols();i++){
-				Eigen::VectorXd S= svd.singularValues();
-				M.col(i)= S(i)*U.col(i);
-			}
-		}else if(Options::triangulationMode==Options::TRIANGULATION_PARALLEL_SV) {
-			//Method 2 (S*V')'
+			Eigen::MatrixXd V= svd.matrixV();
+			Eigen::MatrixXd U= svd.matrixU();
 			Eigen::MatrixXd Sigma= svd.singularValues().asDiagonal();
-			Sigma= Sigma.block(0,0,3,3).eval();
-			X= (Sigma*(V.block(0,0,V.rows(),3).transpose())).transpose();
 
-			for(int i=0;i<M.cols();i++){
-				M.col(i)= U.col(i);
-			}
+			Sigma= Sigma.block(0,0,3,3).eval();
+			for(int i=0;i<3;i++)
+				Sigma(i,i)= sqrt(Sigma(i,i));
+
+			X= (Sigma*(V.block(0,0,V.rows(),3).transpose())).transpose();
+			M= U.block(0,0,U.rows(),3)*Sigma;
 		}
+
+		//Compute matrix A for M*A*A^-1*X decomposition
+		Eigen::MatrixXd Q;
+		{
+			//First, create the equation system (tomasiTr92Text.pdf page 14)
+			//Use http://en.wikipedia.org/wiki/Kronecker_product#Matrix_equations for
+			//transforming this into a linear equation system
+
+			Eigen::MatrixXd A(6,9);
+			A.row(0)= kronecker(M.block(0,0,1,M.cols()),M.block(0,0,1,M.cols()));
+			A.row(1)= kronecker(M.block(1,0,1,M.cols()),M.block(1,0,1,M.cols()));
+			A.row(2)= kronecker(M.block(2,0,1,M.cols()),M.block(2,0,1,M.cols()));
+			A.row(3)= kronecker(M.block(3,0,1,M.cols()),M.block(3,0,1,M.cols()));
+			A.row(4)= kronecker(M.block(0,0,1,M.cols()),M.block(1,0,1,M.cols()));
+			A.row(5)= kronecker(M.block(2,0,1,M.cols()),M.block(3,0,1,M.cols()));
+
+			Eigen::MatrixXd B(6,1);
+			B<< 1,1,1,1,0,0;
+
+			Eigen::JacobiSVD<Eigen::MatrixXd,Eigen::FullPivHouseholderQRPreconditioner> svd(A, Eigen::ComputeFullV|Eigen::ComputeFullU);
+
+			Eigen::MatrixXd V= svd.matrixV();
+			Eigen::MatrixXd U= svd.matrixU();
+			Eigen::VectorXd S= svd.singularValues();
+			Eigen::MatrixXd Sd(A.cols(),A.rows());
+			for(Eigen::MatrixXd::Index i=0;i<Sd.rows();i++){
+				for(Eigen::MatrixXd::Index j=0;j<Sd.cols();j++){
+					if(i==j && S(i)>(Options::constraintsThreshold*S(1)))
+						Sd(i,j)= 1/S(i);
+					else
+						Sd(i,j)= 0;
+				}
+			}
+			Eigen::MatrixXd Qv= V*Sd*(U.transpose())*B;
+			Q= Eigen::MatrixXd(3,3);
+			Q.col(0)= Qv.block(0,0,3,1);
+			Q.col(1)= Qv.block(3,0,3,1);
+			Q.col(2)= Qv.block(6,0,3,1);
+
+			//N. Higham, "Computing a Nearest Symmetric Positive Semidefinite Matrix"
+			//vincentToolbox - sfm\metricUpgrade.m
+			Q= (Q+Q.transpose()).eval()/2;
+
+			Eigen::JacobiSVD<Eigen::MatrixXd,Eigen::FullPivHouseholderQRPreconditioner> Qsvd(Q,Eigen::ComputeFullU);
+			Eigen::MatrixXd QsvdU= Qsvd.matrixU();
+			Eigen::MatrixXd QsvdS= QsvdU.transpose()*Q*QsvdU;
+
+			for(Eigen::MatrixXd::Index i=0;i<QsvdS.cols() && i<QsvdS.rows();i++){
+				if(QsvdS(i,i)<0)
+					QsvdS(i,i)= 0;
+				else
+					QsvdS(i,i)= sqrt(QsvdS(i,i));
+			}
+
+			Q= QsvdU*QsvdS;
+		}
+
+		M= M*Q;
+		X= (Q.inverse()*(X.transpose())).transpose();
 
 		//Projection matrix
 		Eigen::MatrixXd M1= M.block(0,0,2,2);
@@ -311,8 +375,8 @@ namespace cybervision{
 			//Project points with matrix M to remove rotation
 			Eigen::MatrixXd projectedXY= M1*(X.block(i,0,1,2).transpose());
 			//double scale= sqrt(projectedXY(0,0)*projectedXY(0,0)+projectedXY(1,0)*projectedXY(1,0))/sqrt(X(i,0)*X(i,0)+X(i,1)*X(i,1));
-			QVector3D resultPoint(projectedXY(0,0),projectedXY(1,0),scale*X(i,2));
-			//QVector3D resultPoint(X(i,0),X(i,1),X(i,2));
+			//QVector3D resultPoint(projectedXY(0,0),projectedXY(1,0),scale*X(i,2));
+			QVector3D resultPoint(X(i,0),X(i,1),X(i,2));
 			Points3D.push_back(resultPoint);
 		}
 
