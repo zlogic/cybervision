@@ -9,11 +9,11 @@
 
 ProcessThread::ProcessThread(){mw=NULL;}
 
-void ProcessThread::extract(QStringList image_filenames,double scaleXY,double scaleZ){
+void ProcessThread::extract(QStringList image_filenames,qreal scaleXY,qreal scaleZ,qreal angle){
 	wait();
 	task=TASK_RECONSTRUCTION;
 	this->image_filenames= image_filenames;
-	this->scaleXY= scaleXY, this->scaleZ= scaleZ;
+	this->scaleXY= scaleXY, this->scaleZ= scaleZ, this->angle= angle;
 
 	start();
 }
@@ -50,7 +50,7 @@ void ProcessThread::runExtract(){
 	if(image_filenames.size()==2){
 		//Prepare variables for output data
 
-		if(reconstructor.run(image_filenames.first(),image_filenames.last()))
+		if(reconstructor.run(image_filenames.first(),image_filenames.last(),angle))
 			emit processStopped(QString(),reconstructor.get3DPoints(),reconstructor.getImageSize());
 		else
 			emit processStopped(reconstructor.getErrorString());

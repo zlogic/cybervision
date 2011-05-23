@@ -13,7 +13,7 @@ namespace cybervision{
 		srand(time(NULL));
 	}
 
-	bool Reconstructor::run(const QString& filename1,const QString& filename2){
+	bool Reconstructor::run(const QString& filename1,const QString& filename2,qreal angle){
 		Points3D.clear();
 		//Extract and sort matches by distance
 		SortedKeypointMatches matches;//Point matches
@@ -67,7 +67,7 @@ namespace cybervision{
 			if(Options::triangulationMode==Options::TRIANGULATION_PERSPECTIVE)
 				ok= triangulator.triangulatePoints(matches,F,imageSize);
 			else if(Options::triangulationMode==Options::TRIANGULATION_PARALLEL)
-				ok= triangulator.triangulatePoints(matches);
+				ok= triangulator.triangulatePoints(matches,angle);
 			QObject::disconnect(&triangulator, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)));
 			QObject::disconnect(&triangulator, SIGNAL(sgnStatusMessage(QString)),this, SIGNAL(sgnStatusMessage(QString)));
 			Points3D= triangulator.getPoints3D();

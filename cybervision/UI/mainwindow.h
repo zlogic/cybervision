@@ -28,7 +28,7 @@ private:
 	QGraphicsScene scene;
 	ProcessThread thread;
 
-	QDoubleValidator scaleXYValidator,scaleZValidator;
+	QDoubleValidator scaleXYValidator,scaleZValidator,angleValidator;
 
 	//Updates widgets enabled/disabled/visible status
 	void updateWidgetStatus();

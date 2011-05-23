@@ -33,8 +33,10 @@ void MainWindow::updateWidgetStatus(){
 
 	scaleXYValidator.setBottom(0.0);
 	scaleZValidator.setBottom(0.0);
+	angleValidator.setRange(-360.0,360.0,1000);
 	ui->scaleXYEdit->setValidator(&scaleXYValidator);
 	ui->scaleZEdit->setValidator(&scaleZValidator);
+	ui->angleEdit->setValidator(&angleValidator);
 }
 
 
@@ -63,6 +65,7 @@ void MainWindow::loadDebugPreferences(){
 				QRegExp fileRegexp("^file\\s+(.*)$",Qt::CaseInsensitive);
 				QRegExp scaleXYRegexp("^ScaleXY\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",Qt::CaseInsensitive);
 				QRegExp scaleZRegexp("^ScaleZ\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",Qt::CaseInsensitive);
+				QRegExp angleRegexp("^Angle\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",Qt::CaseInsensitive);
 				if(fileRegexp.exactMatch(line) && fileRegexp.capturedTexts().size()>=2){
 					QString fileName= fileRegexp.capturedTexts().at(1);
 					QString name= QFileInfo(fileName).fileName();
@@ -73,6 +76,8 @@ void MainWindow::loadDebugPreferences(){
 					ui->scaleXYEdit->setText(scaleXYRegexp.capturedTexts().at(1));
 				}else if(scaleZRegexp.exactMatch(line) && scaleZRegexp.capturedTexts().size()>=2){
 					ui->scaleZEdit->setText(scaleZRegexp.capturedTexts().at(1));
+				}else if(angleRegexp.exactMatch(line) && angleRegexp.capturedTexts().size()>=2){
+					ui->angleEdit->setText(angleRegexp.capturedTexts().at(1));
 				}
 			}
 		}
@@ -132,6 +137,7 @@ void MainWindow::on_startProcessButton_clicked(){
 
 	double scaleXY= ui->scaleXYEdit->text().toDouble();
 	double scaleZ= ui->scaleZEdit->text().toDouble();
+	double angle= ui->angleEdit->text().toDouble();
 
 	QList<QListWidgetItem*> selectedItems= ui->imageList->selectedItems();
 	for(QList<QListWidgetItem*>::const_iterator i=selectedItems.begin();i!=selectedItems.end();i++){
@@ -139,7 +145,7 @@ void MainWindow::on_startProcessButton_clicked(){
 			filenames<<(*i)->data(32).toString();
 	}
 
-	thread.extract(filenames,scaleXY,scaleZ);
+	thread.extract(filenames,scaleXY,scaleZ,angle);
 }
 
 void MainWindow::on_saveButton_clicked(){

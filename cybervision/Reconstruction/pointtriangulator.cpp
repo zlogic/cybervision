@@ -58,6 +58,26 @@ namespace cybervision{
 		return result;
 	}
 
+	Eigen::MatrixXd PointTriangulator::leastSquares(const Eigen::MatrixXd A, const Eigen::MatrixXd &B) const{
+		Eigen::JacobiSVD<Eigen::MatrixXd,Eigen::FullPivHouseholderQRPreconditioner> svd(A, Eigen::ComputeFullV|Eigen::ComputeFullU);
+
+		Eigen::MatrixXd V= svd.matrixV();
+		Eigen::MatrixXd U= svd.matrixU();
+		Eigen::VectorXd S= svd.singularValues();
+		Eigen::MatrixXd Sd(A.cols(),A.rows());
+		for(Eigen::MatrixXd::Index i=0;i<Sd.rows();i++){
+			for(Eigen::MatrixXd::Index j=0;j<Sd.cols();j++){
+				if(i==j && S(i)>(Options::constraintsThreshold*S(0)))
+					Sd(i,j)= 1/S(i);
+				else
+					Sd(i,j)= 0;
+			}
+		}
+		Eigen::MatrixXd result= V*Sd*(U.transpose())*B;
+
+		return result;
+	}
+
 
 	Eigen::Matrix3d PointTriangulator::computeCameraMatrix(const QSize& imageSize)const{
 		Eigen::Matrix3d K;
@@ -255,7 +275,7 @@ namespace cybervision{
 		return true;
 	}
 
-	bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches){
+	bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,qreal angle){
 		Points3D.clear();
 		result= RESULT_OK;
 		camera_K= Eigen::Matrix3d();
@@ -319,21 +339,7 @@ namespace cybervision{
 			Eigen::MatrixXd B(6,1);
 			B<< 1,1,1,1,0,0;
 
-			Eigen::JacobiSVD<Eigen::MatrixXd,Eigen::FullPivHouseholderQRPreconditioner> svd(A, Eigen::ComputeFullV|Eigen::ComputeFullU);
-
-			Eigen::MatrixXd V= svd.matrixV();
-			Eigen::MatrixXd U= svd.matrixU();
-			Eigen::VectorXd S= svd.singularValues();
-			Eigen::MatrixXd Sd(A.cols(),A.rows());
-			for(Eigen::MatrixXd::Index i=0;i<Sd.rows();i++){
-				for(Eigen::MatrixXd::Index j=0;j<Sd.cols();j++){
-					if(i==j && S(i)>(Options::constraintsThreshold*S(1)))
-						Sd(i,j)= 1/S(i);
-					else
-						Sd(i,j)= 0;
-				}
-			}
-			Eigen::MatrixXd Qv= V*Sd*(U.transpose())*B;
+			Eigen::MatrixXd Qv= leastSquares(A,B);
 			Q= Eigen::MatrixXd(3,3);
 			Q.col(0)= Qv.block(0,0,3,1);
 			Q.col(1)= Qv.block(3,0,3,1);
@@ -360,23 +366,27 @@ namespace cybervision{
 		M= M*Q;
 		X= (Q.inverse()*(X.transpose())).transpose();
 
-		//Projection matrix
-		Eigen::MatrixXd M1= M.block(0,0,2,2);
 		//Compute image-wide scale
 		qreal scale=0;
-		for(int i=0;i<X.rows();i++){
-			Eigen::MatrixXd projectedXY= M1*(X.block(i,0,1,2).transpose());
-			scale+= sqrt(projectedXY(0,0)*projectedXY(0,0)+projectedXY(1,0)*projectedXY(1,0))/sqrt(X(i,0)*X(i,0)+X(i,1)*X(i,1));
+		{
+			Eigen::VectorXd Z_multiplier(3);
+			Z_multiplier<< 0,0,tan(angle*M_PI/180);
+			Eigen::MatrixXd Z_curr= X*Z_multiplier;
+			Eigen::MatrixXd Z_disp(Z_curr.rows(),Z_curr.cols());
+
+			Eigen::MatrixXd deltaX= W.block(0,0,1,W.cols())-W.block(2,0,1,W.cols());
+			Eigen::MatrixXd deltaY= W.block(1,0,1,W.cols())-W.block(3,0,1,W.cols());
+
+			for(Eigen::MatrixXd::Index i=0;i<W.cols();i++)
+				Z_disp(i)= sqrt(deltaX(0,i)*deltaX(0,i)+deltaY(0,i)*deltaY(0,i));
+			Eigen::MatrixXd scale_matrix= leastSquares(Z_curr,Z_disp);
+			scale= scale_matrix(0,0);
 		}
-		scale/= X.rows();
 
 		//Final processing for points
 		for(int i=0;i<X.rows();i++){
 			//Project points with matrix M to remove rotation
-			Eigen::MatrixXd projectedXY= M1*(X.block(i,0,1,2).transpose());
-			//double scale= sqrt(projectedXY(0,0)*projectedXY(0,0)+projectedXY(1,0)*projectedXY(1,0))/sqrt(X(i,0)*X(i,0)+X(i,1)*X(i,1));
-			//QVector3D resultPoint(projectedXY(0,0),projectedXY(1,0),scale*X(i,2));
-			QVector3D resultPoint(X(i,0),X(i,1),X(i,2));
+			QVector3D resultPoint(X(i,0),X(i,1),X(i,2)*scale);
 			Points3D.push_back(resultPoint);
 		}
 

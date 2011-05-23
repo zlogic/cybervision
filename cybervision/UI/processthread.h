@@ -20,7 +20,7 @@ protected:
 
 	//For reconstruction task
 	QStringList image_filenames;
-	double scaleXY, scaleZ;
+	qreal scaleXY, scaleZ,angle;
 	QSize imageSize;
 	//For extraction task
 	QList<QVector3D> points;
@@ -31,7 +31,7 @@ public:
 	ProcessThread();
 	void setUi(MainWindow *nw=NULL);
 
-	void extract(QStringList image_filenames,double scaleXY,double scaleZ);
+	void extract(QStringList image_filenames,qreal scaleXY,qreal scaleZ,qreal angle);
 	void surface(QList<QVector3D> points,QSize imageSize);
 	void run();//the main thread loop
 signals:

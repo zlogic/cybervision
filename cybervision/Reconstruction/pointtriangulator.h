@@ -43,6 +43,8 @@ namespace cybervision{
 		Eigen::Matrix3d computeRT_rzfunc(double angle)const;
 		//Computes Kronecker product
 		Eigen::MatrixXd kronecker(const Eigen::MatrixXd A,const Eigen::MatrixXd& B)const;
+		//Performs a least-squares solving of A*x=B equation system
+		Eigen::MatrixXd leastSquares(const Eigen::MatrixXd A,const Eigen::MatrixXd& B)const;
 
 		//Triangulates a point in 3D space
 		QList<QVector3D> compute3DPoints(const SortedKeypointMatches&matches,const QList<StereopairPosition>& RTList);
@@ -53,8 +55,8 @@ namespace cybervision{
 
 		//Performs a complete triangulation with pose estimation (for perspective projection)
 		bool triangulatePoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d& F,const QSize& imageSize);
-		//Performs a simplified disparity-based triangulation (for parallel projection)
-		bool triangulatePoints(const SortedKeypointMatches&matches);
+		//Performs a triangulation without pose estimation (for parallel projection)
+		bool triangulatePoints(const SortedKeypointMatches&matches,qreal angle);
 
 		//Getters
 		QList<QVector3D> getPoints3D()const;
