@@ -16,30 +16,44 @@
 #define SIFT_FAST_H
 
 typedef struct ImageSt {
-    int rows, cols;          // Dimensions of image.
-    float *pixels;          // 2D array of image pixels.
-    int stride;             // how many floats until the next row
-                            // (used to add padding to make rows aligned to 16 bytes)
+	int rows, cols;          // Dimensions of image.
+	float *pixels;          // 2D array of image pixels.
+	int stride;             // how many floats until the next row
+							// (used to add padding to make rows aligned to 16 bytes)
 } *Image;
 
 typedef struct KeypointSt {
-    float row, col;             // Subpixel location of keypoint.
-    float scale, ori;           // Scale and orientation (range [-PI,PI])
-    float descrip[128];     // Vector of descriptor values
-    struct KeypointSt *next;    // Pointer to next keypoint in list.
+	float row, col;             // Subpixel location of keypoint.
+	float scale, ori;           // Scale and orientation (range [-PI,PI])
+	float descrip[128];     // Vector of descriptor values
+	struct KeypointSt *next;    // Pointer to next keypoint in list.
+	// used for extracting descriptors, not part of the the keypoint's frame
+	int imageindex; /// index of image keypoint came from
+	float fpyramidscale; // scale of the pyramid
 } *Keypoint;
+
+struct SiftParameters
+{
+	int DoubleImSize;
+	int Scales;
+	float InitSigma;
+	float PeakThresh; // default: 0.04/Scales
+};
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 Keypoint GetKeypoints(Image porgimage);
+Keypoint GetKeypointFrames(Image porgimage);
+void GetKeypointDescriptors(Image porgimage, Keypoint frames);
 Image CreateImage(int rows, int cols);
 Image CreateImageFromMatlabData(double* pdata, int rows, int cols);
 void DestroyAllImages();
 void DestroyAllResources();
 void FreeKeypoints(Keypoint keypt);
-
+void SetSiftParameters(SiftParameters params);
+SiftParameters GetSiftParameters();
 #ifdef __cplusplus
 }
 #endif
