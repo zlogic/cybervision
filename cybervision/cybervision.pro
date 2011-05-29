@@ -18,7 +18,8 @@ SOURCES += main.cpp \
 	UI/cybervisionviewer.cpp \
 	Reconstruction/sculptor.cpp \
 	Reconstruction/surface.cpp \
-	KDTree/kdtreegateway.cpp
+	KDTree/kdtreegateway.cpp \
+    Reconstruction/imageloader.cpp
 HEADERS += \
 	Reconstruction/pointmatcher.h \
 	Reconstruction/pointmatch.h \
@@ -64,7 +65,8 @@ HEADERS += \
 	Eigen/Array \
 	Eigen/Eigen \
 	Eigen/Dense \
-    UI/mainwindow.h
+    UI/mainwindow.h \
+    Reconstruction/imageloader.h
 
 FORMS += UI/mainwindow.ui
 

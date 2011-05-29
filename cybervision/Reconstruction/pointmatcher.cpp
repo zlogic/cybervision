@@ -1,9 +1,9 @@
 #include "pointmatcher.h"
 
 #include <Reconstruction/options.h>
+#include <Reconstruction/imageloader.h>
 #include <KDTree/kdtreegateway.h>
 #include <SIFT/siftgateway.h>
-
 
 #define USE_PRECOMPUTED_DATA
 #ifdef USE_PRECOMPUTED_DATA
@@ -30,23 +30,23 @@ namespace cybervision{
 			if(precomputed_file.exists()){
 				emit sgnLogMessage("Loading precomputed SIFT matches from "+QDir::convertSeparators(precomputed_file.fileName()));
 				precomputed_file.open(QFile::ReadOnly);
-				QTextStream out_stream(&precomputed_file);
+				QTextStream in_stream(&precomputed_file);
 
-				while(!out_stream.atEnd()){
+				while(!in_stream.atEnd()){
 					double distance;
 					KeypointMatch match;
-					out_stream>>distance>>match.a.rx()>>match.a.ry()>>match.b.rx()>>match.b.ry();
+					in_stream>>distance>>match.a.rx()>>match.a.ry()>>match.b.rx()>>match.b.ry();
 					matches.insert(distance,match);
 				}
 				precomputed_file.close();
 
 				emit sgnLogMessage(QString("Loading images %1 and %2 to obtain image sizes").arg(filename1).arg(filename2));
-				QImage img1(filename1),img2(filename2);
-				if(img1.size()!=img2.size()){//TODO:Error here!
+				ImageLoader img1Metadata(filename1),img2Metadata(filename2);
+				if(img1Metadata.getSize()!=img2Metadata.getSize()){
 					emit sgnLogMessage(QString("Images %1 and %2 have different sizes!").arg(filename1).arg(filename2));
 					return false;
 				}else
-					imageSize= img1.size();
+					imageSize= img1Metadata.getSize();
 				return true;
 			}
 		}
@@ -54,19 +54,19 @@ namespace cybervision{
 		emit sgnStatusMessage("Detecting SIFT keypoints...");
 		emit sgnLogMessage("Starting SIFT keypoint detection");
 		emit sgnLogMessage(QString("Loading images %1 and %2").arg(filename1).arg(filename2));
-		QImage img1(filename1),img2(filename2);
-		if(img1.size()!=img2.size()){//TODO:Error here!
+		ImageLoader img1Metadata(filename1),img2Metadata(filename2);
+		if(img1Metadata.getSize()!=img1Metadata.getSize()){
 			emit sgnLogMessage(QString("Images %1 and %2 have different sizes!").arg(filename1).arg(filename2));
 			return false;
 		}else
-			imageSize= img1.size();
+			imageSize= img1Metadata.getSize();
 		QList <SIFT::Keypoint> keypoints1,keypoints2;
 		{
 			SIFT::Extractor extractor;
 			emit sgnLogMessage(QString("Extracting keypoints from %1").arg(filename1));
-			keypoints1= extractor.extract(img1);
+			keypoints1= extractor.extract(img1Metadata.getImage());
 			emit sgnLogMessage(QString("Extracting keypoints from %2").arg(filename2));
-			keypoints2= extractor.extract(img2);
+			keypoints2= extractor.extract(img2Metadata.getImage());
 		}
 
 
