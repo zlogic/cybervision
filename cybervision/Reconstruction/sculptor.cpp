@@ -206,7 +206,36 @@ namespace cybervision{
 		*/
 		double sumDepth=0,sumDistance=0;
 		QVector2D middle= min+(max-min)/2;
+		//Create filter for small peaks
+		QVector<qreal> Zp;
 		for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
+			qreal distance= (QVector2D(*it)-middle).length();
+			if(distance <= Options::gridCellArea*(max-middle).length())
+				Zp<< it->z();
+		}
+		qSort(Zp);
+		qreal median,
+				Zmax= !Zp.isEmpty()?Zp.at(Zp.size()-1):0,
+				Zmin= !Zp.isEmpty()?Zp.at(0):0;
+		if(Zp.isEmpty())
+			median= parentAverageDepth;
+		else if(Zp.size()%2==0)
+			median= (Zp.at(Zp.size()/2-1)+Zp.at(Zp.size()/2))/2.0;
+		else
+			median= Zp.at(Zp.size()/2-1);
+
+		if(Zp.size()>=3){
+			qreal threshold=2;
+			if(abs(Zp.at(0)-median)>threshold*abs(Zp.at(1)-median))
+				Zmin= Zp.at(1);
+			if(abs(Zp.at(Zp.size()-1)-median)>threshold*abs(Zp.at(Zp.size()-2)-median))
+				Zmax= Zp.at(Zp.size()-2);
+		}
+		Zp.clear();
+
+		for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
+			if((it->z()<Zmin) || (it->z()>Zmax))
+				continue;
 			qreal distance= (QVector2D(*it)-middle).length();
 			if(distance <= Options::gridCellArea*(max-middle).length()){
 				sumDepth+= it->z()/distance;
@@ -527,8 +556,9 @@ namespace cybervision{
 		pointsNoSuperTriangle.clear();
 
 		//Filter peaks
-		for(int i=0;i<Options::maxPeakFilterPasses;i++)
-			if(!filterTriangles(points,unfilteredTriangles)) break;
+		if(!Options::mapPointsToGrid)
+			for(int i=0;i<Options::maxPeakFilterPasses;i++)
+				if(!filterTriangles(points,unfilteredTriangles)) break;
 
 		//Calculate triangle normals
 		for(QList<Surface::Triangle>::const_iterator it= unfilteredTriangles.begin();it!=unfilteredTriangles.end();it++)
