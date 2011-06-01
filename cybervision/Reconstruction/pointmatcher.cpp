@@ -47,6 +47,7 @@ namespace cybervision{
 					return false;
 				}else
 					imageSize= img1Metadata.getSize();
+				//emit sgnLogMessage(QString("Extracted fields from image metadata:\n%1\n\n").arg(img1Metadata.getMetadataString()));
 				return true;
 			}
 		}
@@ -60,6 +61,7 @@ namespace cybervision{
 			return false;
 		}else
 			imageSize= img1Metadata.getSize();
+		//emit sgnLogMessage(QString("Extracted fields from image metadata:\n%1\n\n").arg(img1Metadata.getMetadataString()));
 		QList <SIFT::Keypoint> keypoints1,keypoints2;
 		{
 			SIFT::Extractor extractor;

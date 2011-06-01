@@ -225,7 +225,7 @@ namespace cybervision{
 			median= Zp.at(Zp.size()/2-1);
 
 		if(Zp.size()>=3){
-			qreal threshold=2;
+			qreal threshold= 2;
 			if(abs(Zp.at(0)-median)>threshold*abs(Zp.at(1)-median))
 				Zmin= Zp.at(1);
 			if(abs(Zp.at(Zp.size()-1)-median)>threshold*abs(Zp.at(Zp.size()-2)-median))
@@ -556,7 +556,7 @@ namespace cybervision{
 		pointsNoSuperTriangle.clear();
 
 		//Filter peaks
-		if(!Options::mapPointsToGrid)
+		//if(!Options::mapPointsToGrid)
 			for(int i=0;i<Options::maxPeakFilterPasses;i++)
 				if(!filterTriangles(points,unfilteredTriangles)) break;
 

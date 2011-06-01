@@ -21,7 +21,7 @@ namespace cybervision{
 
 	const float Options::surfaceSize= 15.0F;
 	const float Options::peakSize= 10.0F;
-	const int Options::maxPeakFilterPasses= 10;
+	const int Options::maxPeakFilterPasses= 25;
 	const Options::ColladaFormat Options::colladaFormat= Options::COLLADA_SHARED_POINTS;
 	const Options::AveragingNormalsMode Options::averageNormalsMode= Options::AVERAGE_NORMALS_TRIANGLE;
 	const bool Options::mapPointsToGrid= true;
