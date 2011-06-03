@@ -572,6 +572,23 @@ namespace cybervision{
 			point.normal= calcNormal(surface.triangles,points,i);
 			surface.points.append(point);
 		}
+
+		//Calculate height median, min & max
+		{
+			QList<qreal> heights;
+			for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++)
+				heights<<it->z();
+			qSort(heights);
+
+			if(heights.length()>0){
+				double median=heights.length()%2==1 ?
+							  heights[(heights.length()-1)/2] :
+							  ((heights[heights.length()/2-1]+heights[heights.length()/2])/2);
+				surface.medianDepth= median;
+				surface.minDepth= heights[0];
+				surface.maxDepth= heights[heights.length()-1];
+			}
+		}
 	}
 
 

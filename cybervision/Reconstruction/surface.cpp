@@ -8,6 +8,7 @@
 namespace cybervision{
 	Surface::Surface(){
 		scale= 1.0;
+		medianDepth= 0,minDepth= 0,maxDepth= 0;
 	}
 
 	Surface::Surface(const Surface&sc){
@@ -18,9 +19,25 @@ namespace cybervision{
 		this->triangles= sc.triangles;
 		this->points= sc.points;
 		this->scale= sc.scale;
+		this->medianDepth= sc.medianDepth;
+		this->minDepth= sc.minDepth;
+		this->maxDepth= sc.maxDepth;
 	}
 
 	void Surface::glDraw() const{
+
+		GLfloat backup_mat_specular[4];
+		GLfloat backup_mat_shininess[1];
+
+		if(cybervision::Options::renderShiny){
+			glGetMaterialfv(GL_FRONT, GL_SPECULAR, backup_mat_specular);
+			glGetMaterialfv(GL_FRONT, GL_SHININESS, backup_mat_shininess);
+			static GLfloat mat_specular[] = { 1.0, 1.0, 1.0, 1.0 };
+			static GLfloat mat_shininess[] = { 50.0 };
+			glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
+			glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);
+		}
+
 		for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
 			const Point& pa=points[it->a];
 			const Point& pb=points[it->b];
@@ -66,7 +83,7 @@ namespace cybervision{
 				glEnd();
 			}
 			glBegin(GL_POINTS);
-			glColor3f(1.0f, 1.0f, 1.0f);
+			glColor3f(0.0f, 0.0f, 0.0f);
 			//glVertex3f(it->a.x(),it->a.y(),it->a.z());
 			//glVertex3f(it->a.x(),it->a.y(),it->a.z()+1);
 			glEnd();
@@ -84,9 +101,20 @@ namespace cybervision{
 			glEnd();
 		}
 		*/
+
+		if(cybervision::Options::renderShiny){
+			glMaterialfv(GL_FRONT, GL_SPECULAR, backup_mat_specular);
+			glMaterialfv(GL_FRONT, GL_SHININESS, backup_mat_shininess);
+		}
 	}
 
 	bool Surface::isOk()const{ return !triangles.empty() && !points.empty() && scale>0.0; }
+
+	qreal Surface::getMedianDepth()const{ return medianDepth; }
+	qreal Surface::getMinDepth()const{ return minDepth; }
+	qreal Surface::getMaxDepth()const{ return maxDepth; }
+
+	qreal Surface::getScale()const{ return scale; }
 
 
 	/*

@@ -33,6 +33,9 @@ protected:
 	void resizeGL(int w, int h);
 	void paintGL();
 
+	//Grid functions
+	void drawGrid(qreal z);
+
 	//Rotation/movement with mouse
 	float normalizeAngle(float angle)const;
 	void mousePressEvent(QMouseEvent *event);

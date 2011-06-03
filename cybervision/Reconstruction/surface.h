@@ -27,6 +27,9 @@ namespace cybervision{
 
 		//Scale for viewport
 		qreal scale;
+
+		//Median depth
+		qreal medianDepth,minDepth,maxDepth;
 	public:
 		Surface();
 		Surface(const Surface&);
@@ -36,6 +39,13 @@ namespace cybervision{
 
 		//Returns true if surface contains valid data instead of an empty set
 		bool isOk() const;
+
+		//Returns median point depth
+		qreal getMedianDepth()const;
+		qreal getMinDepth()const;
+		qreal getMaxDepth()const;
+		//Returns scale
+		qreal getScale()const;
 
 		//Functions for saving image
 		void savePoints(QString fileName)const;
