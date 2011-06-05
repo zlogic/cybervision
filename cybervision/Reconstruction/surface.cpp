@@ -22,6 +22,7 @@ namespace cybervision{
 		this->medianDepth= sc.medianDepth;
 		this->minDepth= sc.minDepth;
 		this->maxDepth= sc.maxDepth;
+		this->imageSize= sc.imageSize;
 	}
 
 	void Surface::glDraw() const{
@@ -113,6 +114,7 @@ namespace cybervision{
 	qreal Surface::getMedianDepth()const{ return medianDepth; }
 	qreal Surface::getMinDepth()const{ return minDepth; }
 	qreal Surface::getMaxDepth()const{ return maxDepth; }
+	QRectF cybervision::Surface::getImageSize() const{ return imageSize; }
 
 	qreal Surface::getScale()const{ return scale; }
 

@@ -229,3 +229,7 @@ void MainWindow::on_moveToolButton_toggled(bool checked){
 void MainWindow::on_rotateToolButton_toggled(bool checked){
 	ui->openGLViewport->setMouseMode(!checked?CybervisionViewer::MOUSE_PANNING:CybervisionViewer::MOUSE_ROTATION);
 }
+
+void MainWindow::on_gridToolButton_toggled(bool checked){
+	ui->openGLViewport->setShowGrid(checked);
+}

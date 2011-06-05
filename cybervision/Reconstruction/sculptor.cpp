@@ -114,6 +114,14 @@ namespace cybervision{
 				count= 0;
 			}
 		}
+
+		//Set image size
+		surface.imageSize= QRectF(
+					-center.x(),
+					-center.y(),
+					imageSize.width()*scaleXY,
+					imageSize.height()*scaleXY
+		);
 		return filteredPoints;
 	}
 
@@ -217,12 +225,13 @@ namespace cybervision{
 		qreal median,
 				Zmax= !Zp.isEmpty()?Zp.at(Zp.size()-1):0,
 				Zmin= !Zp.isEmpty()?Zp.at(0):0;
+
 		if(Zp.isEmpty())
 			median= parentAverageDepth;
-		else if(Zp.size()%2==0)
-			median= (Zp.at(Zp.size()/2-1)+Zp.at(Zp.size()/2))/2.0;
 		else
-			median= Zp.at(Zp.size()/2-1);
+			median= Zp.size()%2==1 ?
+						Zp[(Zp.size()-1)/2] :
+						((Zp[Zp.size()/2-1]+Zp[Zp.size()/2])/2.0);
 
 		if(Zp.size()>=3){
 			qreal threshold= 2;

@@ -28,8 +28,11 @@ namespace cybervision{
 		//Scale for viewport
 		qreal scale;
 
-		//Median depth
+		//Depth statistics
 		qreal medianDepth,minDepth,maxDepth;
+
+		//Image size
+		QRectF imageSize;
 	public:
 		Surface();
 		Surface(const Surface&);
@@ -40,10 +43,14 @@ namespace cybervision{
 		//Returns true if surface contains valid data instead of an empty set
 		bool isOk() const;
 
-		//Returns median point depth
+		//Returns point depth statistics (min/max/median)
 		qreal getMedianDepth()const;
 		qreal getMinDepth()const;
 		qreal getMaxDepth()const;
+
+		//Returns source image size
+		QRectF getImageSize()const;
+
 		//Returns scale
 		qreal getScale()const;
 

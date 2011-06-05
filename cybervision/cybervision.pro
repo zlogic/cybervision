@@ -91,4 +91,5 @@ RESOURCES += \
 OTHER_FILES += \
 	Reconstruction/ColladaTemplate.xml \
     UI/icons/arrow-move.png \
-    UI/icons/arrow-circle.png
+    UI/icons/arrow-circle.png \
+    UI/icons/grid.png
