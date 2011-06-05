@@ -15,6 +15,7 @@ namespace cybervision{
 		//Results
 		SortedKeypointMatches matches;
 		QSize imageSize;
+		double scaleMetadata;
 	public:
 		explicit PointMatcher(QObject *parent = 0);
 
@@ -24,6 +25,7 @@ namespace cybervision{
 		//Getters
 		SortedKeypointMatches getMatches()const;
 		QSize getSize()const;
+		double getScaleMetadata()const;
 	signals:
 		void sgnLogMessage(QString);
 		void sgnStatusMessage(QString);

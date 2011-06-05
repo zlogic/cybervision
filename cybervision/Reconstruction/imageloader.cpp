@@ -13,12 +13,12 @@ ImageLoader::ImageLoader(const QString& filename,bool loadFullImage,QObject *par
 		metadata= extractTagStringTIFF(filename);
 
 	if(!metadata.isEmpty())
-		tags= parseTagString(metadata);
+		quantaTags= parseTagString(metadata);
 
 	//Parse data
 	{
 		double dDataBarHeight;
-		QString strDataBarHeight= tags["PrivateFei.DatabarHeight"];
+		QString strDataBarHeight= quantaTags["PrivateFei.DatabarHeight"];
 		bool ok;
 		dDataBarHeight= strDataBarHeight.toDouble(&ok);
 		if(ok){
@@ -181,4 +181,17 @@ QString ImageLoader::extractTagStringTIFF(const QString& filename) const{
 	file.close();
 	return result;
 }
+}
+
+const double cybervision::ImageLoader::getScale() const{
+	if(quantaTags.contains("Scan.PixelWidth")){
+		QString pixelWidthStr(quantaTags.value("Scan.PixelWidth"));
+		bool ok;
+		double result= pixelWidthStr.toDouble(&ok);
+		if(ok)
+			return result/* *10e5 */;
+		else
+			return -1;
+	} else
+		return -1;
 }

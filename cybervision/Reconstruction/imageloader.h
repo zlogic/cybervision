@@ -21,7 +21,7 @@ protected:
 	QSize imageSize;
 	QImage img;
 	QString metadata;
-	QMap<QString,QString> tags;
+	QMap<QString,QString> quantaTags;
 
 	//Parse INI file
 	QMap<QString,QString> parseTagString(const QString& metadata)const;
@@ -33,6 +33,9 @@ public:
 	const QSize& getSize() const;
 	const QImage& getImage() const;
 	const QString& getMetadataString() const;
+
+	//Returns image scale or -1 if scale cannot be extracted
+	const double getScale()const;
 signals:
 
 public slots:

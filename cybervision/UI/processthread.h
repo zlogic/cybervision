@@ -32,12 +32,12 @@ public:
 	void setUi(MainWindow *nw=NULL);
 
 	void extract(QStringList image_filenames,qreal scaleXY,qreal scaleZ,qreal angle);
-	void surface(QList<QVector3D> points,QSize imageSize);
+	void surface(QList<QVector3D> points,QSize imageSize,double scaleMetadata=-1);
 	void run();//the main thread loop
 signals:
 	void processStarted();
 	void processUpdated(QString logMessage,QString statusBarText);
-	void processStopped(QString resultText,QList<QVector3D> points=QList<QVector3D>(),QSize imageSize=QSize());
+	void processStopped(QString resultText,QList<QVector3D> points=QList<QVector3D>(),QSize imageSize=QSize(),double scaleMetadata=-1);
 	void processStopped(QString resultText,cybervision::Surface);
 private slots:
 	void sgnLogMessage(QString);

@@ -13,10 +13,11 @@
 #endif
 
 namespace cybervision{
-	PointMatcher::PointMatcher(QObject *parent) : QObject(parent){ }
+	PointMatcher::PointMatcher(QObject *parent) : QObject(parent){ scaleMetadata= -1; }
 
 	SortedKeypointMatches PointMatcher::getMatches()const{ return matches; }
 	QSize PointMatcher::getSize()const{ return imageSize; }
+	double PointMatcher::getScaleMetadata()const{ return scaleMetadata; }
 
 	bool PointMatcher::extractMatches(const QString& filename1,const QString& filename2){
 		matches.clear();
@@ -47,7 +48,21 @@ namespace cybervision{
 					return false;
 				}else
 					imageSize= img1Metadata.getSize();
-				//emit sgnLogMessage(QString("Extracted fields from image metadata:\n%1\n\n").arg(img1Metadata.getMetadataString()));
+
+				double scale1= img1Metadata.getScale(), scale2= img2Metadata.getScale();
+				if(scale1!=scale2){
+					emit sgnLogMessage(QString("Images %1 and %2 have different scales in metadata!").arg(filename1).arg(filename2));
+					return false;
+				}
+				else{
+					scaleMetadata= scale1;
+					if(scaleMetadata>0)
+						emit sgnLogMessage(QString("Extracted scale %1 from metadata").arg(scaleMetadata));
+					else
+						emit sgnLogMessage(QString("No scale in metadata").arg(scaleMetadata));
+				}
+				//emit sgnLogMessage(QString("Extracted fields from image 1 metadata:\n%1\n\n").arg(img1Metadata.getMetadataString()));
+				//emit sgnLogMessage(QString("Extracted fields from image 2 metadata:\n%1\n\n").arg(img2Metadata.getMetadataString()));
 				return true;
 			}
 		}
@@ -61,7 +76,20 @@ namespace cybervision{
 			return false;
 		}else
 			imageSize= img1Metadata.getSize();
-		//emit sgnLogMessage(QString("Extracted fields from image metadata:\n%1\n\n").arg(img1Metadata.getMetadataString()));
+
+		double scale1= img1Metadata.getScale(), scale2= img2Metadata.getScale();
+		if(scale1!=scale2){
+			emit sgnLogMessage(QString("Images %1 and %2 have different scales in metadata!").arg(filename1).arg(filename2));
+			return false;
+		}else{
+			scaleMetadata= scale1;
+			if(scaleMetadata>0)
+				emit sgnLogMessage(QString("Extracted scale %1 from metadata").arg(scaleMetadata));
+			else
+				emit sgnLogMessage(QString("No scale in metadata").arg(scaleMetadata));
+		}
+		//emit sgnLogMessage(QString("Extracted fields from image 1 metadata:\n%1\n\n").arg(img1Metadata.getMetadataString()));
+		//emit sgnLogMessage(QString("Extracted fields from image 2 metadata:\n%1\n\n").arg(img2Metadata.getMetadataString()));
 		QList <SIFT::Keypoint> keypoints1,keypoints2;
 		{
 			SIFT::Extractor extractor;

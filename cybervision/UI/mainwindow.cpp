@@ -102,16 +102,14 @@ void MainWindow::processUpdated(QString logMessage,QString statusBarText){
 		ui->logTextEdit->appendPlainText(statusBarText+"\n");
 }
 
-void MainWindow::processStopped(QString resultText,QList<QVector3D> points,QSize imageSize){
-	/*
-	*/
+void MainWindow::processStopped(QString resultText,QList<QVector3D> points,QSize imageSize,double scaleMetadata){
 	if(!resultText.isNull() && !resultText.isEmpty()){
 		ui->saveButton->setEnabled(true);
 		ui->logTextEdit->appendHtml("<b>"+resultText+"</b>");
 	}
 
 	if(!points.empty())
-		thread.surface(points,imageSize);
+		thread.surface(points,imageSize,ui->actionPrefer_scale_from_metadata->isChecked()?scaleMetadata:-1);
 	else{
 		ui->statusBar->clearMessage();
 		ui->startProcessButton->setEnabled(true);

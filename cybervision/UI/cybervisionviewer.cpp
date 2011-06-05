@@ -185,15 +185,19 @@ void CybervisionViewer::drawGrid(){
 	glEnable(GL_LIGHTING);
 
 	//Draw labels
-	QFont font("Arial",8);
+	QFont font("Arial",7);
 	qglColor(QColor(0,0,0,255));
 	for(int i=min_x;i<=max_x;i++) {
 		qreal x= step_x*i*surface.getScale();
-		QString str= QString("%1").arg(i*step_x);
+		QString str;
+		QTextStream stream(&str);
+		stream.setRealNumberPrecision(1);
+		stream.setRealNumberNotation(QTextStream::ScientificNotation);
+		stream<<i*step_x;
 		if((selected_planes & SHOW_FRONT))
-			renderText(x,min_y*step_y*surface.getScale()-2,max_z*step_z*surface.getScale(),str,font);
+			renderText(x,min_y*step_y*surface.getScale()-3,max_z*step_z*surface.getScale(),str,font);
 		if((selected_planes & SHOW_BACK))
-			renderText(x,min_y*step_y*surface.getScale()-2,min_z*step_z*surface.getScale(),str,font);
+			renderText(x,min_y*step_y*surface.getScale()-3,min_z*step_z*surface.getScale(),str,font);
 		if((selected_planes & SHOW_TOP))
 			renderText(x,max_y*step_y*surface.getScale(),min_z*step_z*surface.getScale()-2,str,font);
 		if((selected_planes & SHOW_BOTTOM))
@@ -201,11 +205,15 @@ void CybervisionViewer::drawGrid(){
 	}
 	for(int i=min_y;i<=max_y;i++) {
 		qreal y= step_y*i*surface.getScale();
-		QString str= QString("%1").arg(i*step_y);
+		QString str;
+		QTextStream stream(&str);
+		stream.setRealNumberPrecision(1);
+		stream.setRealNumberNotation(QTextStream::ScientificNotation);
+		stream<<i*step_y;
 		if((selected_planes & SHOW_FRONT))
-			renderText(min_x*step_x*surface.getScale()-2,y,max_z*step_z*surface.getScale(),str,font);
+			renderText(min_x*step_x*surface.getScale()-3,y,max_z*step_z*surface.getScale(),str,font);
 		if((selected_planes & SHOW_BACK))
-			renderText(min_x*step_x*surface.getScale()-2,y,min_z*step_z*surface.getScale(),str,font);
+			renderText(min_x*step_x*surface.getScale()-3,y,min_z*step_z*surface.getScale(),str,font);
 		if((selected_planes & SHOW_LEFT))
 			renderText(min_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale()-2,str,font);
 		if((selected_planes & SHOW_RIGHT))
@@ -213,11 +221,15 @@ void CybervisionViewer::drawGrid(){
 	}
 	for(int i=min_z;i<=max_z;i++) {
 		qreal z= step_z*i*surface.getScale();
-		QString str= QString("%1").arg(i*step_z);
+		QString str;
+		QTextStream stream(&str);
+		stream.setRealNumberPrecision(1);
+		stream.setRealNumberNotation(QTextStream::ScientificNotation);
+		stream<<i*step_z;
 		if((selected_planes & SHOW_TOP))
-			renderText(max_x*step_x*surface.getScale()+2,max_y*step_y*surface.getScale(),z,str,font);
+			renderText(max_x*step_x*surface.getScale()+4,max_y*step_y*surface.getScale(),z,str,font);
 		if((selected_planes & SHOW_BOTTOM))
-			renderText(min_x*step_x*surface.getScale()-2,min_y*step_y*surface.getScale(),z,str,font);
+			renderText(min_x*step_x*surface.getScale()-4,min_y*step_y*surface.getScale(),z,str,font);
 		if((selected_planes & SHOW_LEFT))
 			renderText(min_x*step_x*surface.getScale(),max_y*step_y*surface.getScale()+2,z,str,font);
 		if((selected_planes & SHOW_RIGHT))

@@ -27,6 +27,7 @@ namespace cybervision{
 		QString errorString;
 		QList<QVector3D> Points3D;
 		QSize imageSize;
+		double scaleMetadata;
 
 	public:
 		explicit Reconstructor(QObject *parent);
@@ -38,6 +39,7 @@ namespace cybervision{
 		QString getErrorString()const;
 		QList<QVector3D> get3DPoints()const;
 		QSize getImageSize()const;
+		double getScaleMetadata()const;
 	signals:
 		void sgnLogMessage(QString);
 		void sgnStatusMessage(QString);

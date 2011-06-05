@@ -29,7 +29,7 @@
       <property name="orientation">
        <enum>Qt::Horizontal</enum>
       </property>
-      <widget class="QGroupBox" name="groupBox_2">
+      <widget class="QGroupBox" name="controlsGroupBox">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
          <horstretch>0</horstretch>
@@ -153,7 +153,7 @@
         </item>
        </layout>
       </widget>
-      <widget class="QGroupBox" name="groupBox">
+      <widget class="QGroupBox" name="viewportGroupBox">
        <property name="sizePolicy">
         <sizepolicy hsizetype="MinimumExpanding" vsizetype="Expanding">
          <horstretch>5</horstretch>
@@ -180,7 +180,7 @@
          <number>0</number>
         </property>
         <item>
-         <widget class="QFrame" name="frame_2">
+         <widget class="QFrame" name="toolbarFrame">
           <property name="frameShape">
            <enum>QFrame::StyledPanel</enum>
           </property>
@@ -198,7 +198,7 @@
             <number>0</number>
            </property>
            <item row="0" column="0">
-            <widget class="QFrame" name="frame">
+            <widget class="QFrame" name="mouseModeFrame">
              <property name="frameShape">
               <enum>QFrame::StyledPanel</enum>
              </property>
@@ -377,6 +377,7 @@
      <string>Options</string>
     </property>
     <addaction name="actionShowlog"/>
+    <addaction name="actionPrefer_scale_from_metadata"/>
    </widget>
    <addaction name="menuOptions"/>
   </widget>
@@ -389,6 +390,17 @@
    </property>
    <property name="toolTip">
     <string>Show the log</string>
+   </property>
+  </action>
+  <action name="actionPrefer_scale_from_metadata">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Prefer scale from metadata</string>
    </property>
   </action>
  </widget>
