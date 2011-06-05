@@ -224,68 +224,6 @@ void CybervisionViewer::drawGrid(){
 			renderText(max_x*step_x*surface.getScale(),min_y*step_y*surface.getScale()-2,z,str,font);
 	}
 
-	/*
-	//Change materials
-	qreal z0= surface.getMaxDepth()*surface.getScale();
-	GLfloat backup_mat_specular[4];
-	GLfloat backup_mat_shininess[1];
-	GLfloat backup_mat_emission[4];
-	glGetMaterialfv(GL_FRONT, GL_SPECULAR, backup_mat_specular);
-	glGetMaterialfv(GL_FRONT, GL_SHININESS, backup_mat_shininess);
-	glGetMaterialfv(GL_FRONT, GL_EMISSION, backup_mat_emission);
-
-	static GLfloat mat_specular[] = { 1.0, 1.0, 1.0, 1.0 };
-	static GLfloat mat_shininess[] = { 0.0 };
-	static GLfloat mat_emission[] = { 0.0,0.0,0.0,1.0 };
-	glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
-	glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);
-	glMaterialfv(GL_FRONT, GL_EMISSION, mat_emission);
-
-	//Draw checks
-	for(int i=-5;i<=5;i+=1) {
-		QString str= QString("%1").arg(i*2);
-		//Draw text
-		QFont font("Arial",64);
-		font.setStyleStrategy(QFont::NoAntialias);
-		int border= 2;
-		QImage fontBmp(QFontMetrics(font).width(str)+border*2,QFontMetrics(font).height()+border*2,QImage::Format_ARGB32_Premultiplied);
-		fontBmp.fill(Qt::transparent);
-		QPainter painter(&fontBmp);
-		painter.fillRect(0,0,fontBmp.width(),fontBmp.height(),QBrush(Qt::white));
-		painter.setPen(Qt::black);
-		painter.setFont(font);
-		painter.drawText(QRect(border,border,fontBmp.width()-border*2,fontBmp.height()-border*2),str);
-
-		//Create texture
-		glEnable(GL_TEXTURE_2D);
-		GLuint texture= bindTexture(fontBmp);
-
-		//Trilinear filter
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 30);
-
-
-		glBegin(GL_QUADS);
-
-		//Create text surface & texture
-		qreal divider=70;
-		glNormal3d(0, 0, 1);
-		glTexCoord2f(0, 0);
-		glVertex3f(-fontBmp.width()/(2*divider)+i*2, 12, z);
-		glTexCoord2f(1, 0);
-		glVertex3f(fontBmp.width()/(2*divider)+i*2, 12, z);
-		glTexCoord2f(1, 1);
-		glVertex3f(fontBmp.width()/(2*divider)+i*2, fontBmp.height()/divider+12, z);
-		glTexCoord2f(0, 1);
-		glVertex3f(-fontBmp.width()/(2*divider)+i*2, fontBmp.height()/divider+12, z);
-		glEnd();
-
-		deleteTexture(texture);
-		glDisable(GL_TEXTURE_2D);
-	}
-	glMaterialfv(GL_FRONT, GL_SPECULAR, backup_mat_specular);
-	glMaterialfv(GL_FRONT, GL_SHININESS, backup_mat_shininess);
-	glMaterialfv(GL_FRONT, GL_EMISSION, backup_mat_emission);
-	*/
 	//glEnable(GL_DEPTH_TEST);
 }
 
