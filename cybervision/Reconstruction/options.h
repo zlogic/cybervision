@@ -39,6 +39,8 @@ public:
 	static const int gridResolution;//Grid resolution (number of iterations for splitting point set). Works only when mapPointsToGrid is true.
 	static const bool gridAddRealPoints;//Add all points after grid interpolation (increases resolution for point-rich areas). Works only when mapPointsToGrid is true.
 	static const double gridCellArea;//Maximum distance from point to cell center to use the point for averaging (may be more than sqrt(2) to overlap neighboring cells). Works only when mapPointsToGrid is true.
+	static const float gridPeakFilterRadius;//Radius factor for checking the peak filter
+	static const float gridPeakSize;//Minimum height ratio of two close point for the higher point to be considered to be a peak
 
 	//Rendering options
 	static const bool renderShiny; //Render surface as a shiny texture

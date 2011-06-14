@@ -214,11 +214,12 @@ namespace cybervision{
 		*/
 		double sumDepth=0,sumDistance=0;
 		QVector2D middle= min+(max-min)/2;
+
 		//Create filter for small peaks
 		QVector<qreal> Zp;
 		for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
 			qreal distance= (QVector2D(*it)-middle).length();
-			if(distance <= Options::gridCellArea*(max-middle).length())
+			if(distance <= Options::gridPeakFilterRadius*(max-middle).length())
 				Zp<< it->z();
 		}
 		qSort(Zp);
@@ -234,11 +235,15 @@ namespace cybervision{
 						((Zp[Zp.size()/2-1]+Zp[Zp.size()/2])/2.0);
 
 		if(Zp.size()>=3){
-			qreal threshold= 2;
-			if(abs(Zp.at(0)-median)>threshold*abs(Zp.at(1)-median))
-				Zmin= Zp.at(1);
-			if(abs(Zp.at(Zp.size()-1)-median)>threshold*abs(Zp.at(Zp.size()-2)-median))
-				Zmax= Zp.at(Zp.size()-2);
+			for(int i=0;i<Zp.size()/2;i++)
+				if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i+1)-median))
+					Zmin= Zp.at(i+1);
+				else break;
+
+			for(int i=Zp.size()-1;i>Zp.size()/2;i--)
+				if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i-1)-median))
+					Zmax= Zp.at(i-1);
+				else break;
 		}
 		Zp.clear();
 
@@ -565,7 +570,7 @@ namespace cybervision{
 		pointsNoSuperTriangle.clear();
 
 		//Filter peaks
-		//if(!Options::mapPointsToGrid)
+		if(!Options::mapPointsToGrid)
 			for(int i=0;i<Options::maxPeakFilterPasses;i++)
 				if(!filterTriangles(points,unfilteredTriangles)) break;
 
