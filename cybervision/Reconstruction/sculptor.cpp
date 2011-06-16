@@ -215,41 +215,7 @@ namespace cybervision{
 		double sumDepth=0,sumDistance=0;
 		QVector2D middle= min+(max-min)/2;
 
-		//Create filter for small peaks
-		QVector<qreal> Zp;
 		for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
-			qreal distance= (QVector2D(*it)-middle).length();
-			if(distance <= Options::gridPeakFilterRadius*(max-middle).length())
-				Zp<< it->z();
-		}
-		qSort(Zp);
-		qreal median,
-				Zmax= !Zp.isEmpty()?Zp.at(Zp.size()-1):0,
-				Zmin= !Zp.isEmpty()?Zp.at(0):0;
-
-		if(Zp.isEmpty())
-			median= parentAverageDepth;
-		else
-			median= Zp.size()%2==1 ?
-						Zp[(Zp.size()-1)/2] :
-						((Zp[Zp.size()/2-1]+Zp[Zp.size()/2])/2.0);
-
-		if(Zp.size()>=3){
-			for(int i=0;i<Zp.size()/2;i++)
-				if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i+1)-median))
-					Zmin= Zp.at(i+1);
-				else break;
-
-			for(int i=Zp.size()-1;i>Zp.size()/2;i--)
-				if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i-1)-median))
-					Zmax= Zp.at(i-1);
-				else break;
-		}
-		Zp.clear();
-
-		for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
-			if((it->z()<Zmin) || (it->z()>Zmax))
-				continue;
 			qreal distance= (QVector2D(*it)-middle).length();
 			if(distance <= Options::gridCellArea*(max-middle).length()){
 				sumDepth+= it->z()/distance;

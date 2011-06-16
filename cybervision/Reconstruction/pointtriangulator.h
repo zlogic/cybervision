@@ -50,13 +50,17 @@ namespace cybervision{
 		QList<QVector3D> compute3DPoints(const SortedKeypointMatches&matches,const QList<StereopairPosition>& RTList);
 		QList<QVector3D> computeTriangulatedPoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d&R,const Eigen::Vector3d& T,bool normalizeCameras);
 
+		//Filters out peaks from a 3D point cloud; returns indexes of discarded points. Designed for "grid" interpolation with parallel projection.
+		QSet<int> findPeaks(const QList<QVector3D>& points)const;
 	public:
 		explicit PointTriangulator(QObject *parent = 0);
 
 		//Performs a complete triangulation with pose estimation (for perspective projection)
 		bool triangulatePoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d& F,const QSize& imageSize);
-		//Performs a triangulation without pose estimation (for parallel projection)
-		bool triangulatePoints(const SortedKeypointMatches&matches,qreal angle);
+		//Performs a triangulation without pose estimation (for parallel projection), no peak filtering
+		bool triangulatePoints(const QList<cybervision::KeypointMatch>&matches,qreal angle);
+		//Performs a triangulation without pose estimation (for parallel projection), with configurable peak filtering
+		bool triangulatePoints(const SortedKeypointMatches&matches,qreal angle,bool findPeaks);
 
 		//Getters
 		QList<QVector3D> getPoints3D()const;
