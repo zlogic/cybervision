@@ -25,14 +25,15 @@ protected:
 	//Opengl constants
 	float glFarPlane,glNearPlane,glAspectRatio,glFOV;
 
-	enum Show_Planes{ SHOW_NONE=0,SHOW_FRONT=1,SHOW_BACK=1<<2,SHOW_LEFT=1<<3,SHOW_RIGHT=1<<4,SHOW_TOP=1<<5,SHOW_BOTTOM=1<<6 };
+	//Corners. Uppercase letter means max, lowercase means min => x= min_x, X=max_x etc.
+	enum Corner{ CORNER_NONE,CORNER_xyz,CORNER_xyZ,CORNER_xYz,CORNER_xYZ,CORNER_Xyz,CORNER_XyZ,CORNER_XYz,CORNER_XYZ };
 
 	//Grid functions
 	void drawGrid();
 	//Returns the optimal scale step for the min/max value pair
 	qreal getOptimalGridStep(qreal min,qreal max) const;
-	//Returns the optimal set of grid planes
-	Show_Planes getOptimalGridPlanes()const;
+	//Returns the best visible corner
+	Corner getOptimalCorner(const QVector3D& min,const QVector3D& max)const;
 public:
 	CybervisionViewer(QWidget *parent);
 

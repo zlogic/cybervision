@@ -8,6 +8,7 @@
 
 #define _USE_MATH_DEFINES
 #include <cmath>
+#include <limits>
 
 #include <QMatrix4x4>
 #include <GL/glext.h>
@@ -118,7 +119,10 @@ void CybervisionViewer::drawGrid(){
 	//glDisable(GL_DEPTH_TEST);
 
 	//Get best coordinate pair
-	Show_Planes selected_planes= getOptimalGridPlanes();
+	Corner selected_corner= getOptimalCorner(
+				QVector3D(min_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),min_z*step_z*surface.getScale()),
+				QVector3D(max_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),max_z*step_z*surface.getScale())
+				);
 
 	//Draw grid
 	glDisable(GL_LIGHTING);
@@ -126,60 +130,121 @@ void CybervisionViewer::drawGrid(){
 	glBegin(GL_LINES);
 	for(int i=min_x;i<=max_x;i++) {
 		qreal x= step_x*i*surface.getScale();
-		if((selected_planes & SHOW_FRONT)){
-			glVertex3f(x,min_y*step_y*surface.getScale()-1,max_z*step_z*surface.getScale());
-			glVertex3f(x,max_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
-		}
-		if((selected_planes & SHOW_BACK)){
-			glVertex3f(x,min_y*step_y*surface.getScale()-1,min_z*step_z*surface.getScale());
-			glVertex3f(x,max_y*step_y*surface.getScale(),min_z*step_z*surface.getScale());
-		}
-		if((selected_planes & SHOW_TOP)){
-			glVertex3f(x,max_y*step_y*surface.getScale(),min_z*step_z*surface.getScale()-1);
-			glVertex3f(x,max_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
-		}
-		if((selected_planes & SHOW_BOTTOM)){
-			glVertex3f(x,min_y*step_y*surface.getScale(),min_z*step_z*surface.getScale()-1);
+		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_XyZ)){
 			glVertex3f(x,min_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
+			glVertex3f(x,max_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
+			glVertex3f(x,min_y*step_y*surface.getScale(),min_z*step_z*surface.getScale());
+			glVertex3f(x,min_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
+
+			glVertex3f(x,min_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
+			glVertex3f(x,min_y*step_y*surface.getScale()-1,max_z*step_z*surface.getScale()+1);
+		}
+		if((selected_corner == CORNER_xYZ) || (selected_corner == CORNER_XYZ)){
+			glVertex3f(x,min_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
+			glVertex3f(x,max_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
+			glVertex3f(x,max_y*step_y*surface.getScale(),min_z*step_z*surface.getScale());
+			glVertex3f(x,max_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
+
+			glVertex3f(x,max_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
+			glVertex3f(x,max_y*step_y*surface.getScale()+1,max_z*step_z*surface.getScale()+1);
+		}
+		if((selected_corner == CORNER_xyz) || (selected_corner == CORNER_Xyz)){
+			glVertex3f(x,min_y*step_y*surface.getScale(),min_z*step_z*surface.getScale());
+			glVertex3f(x,max_y*step_y*surface.getScale(),min_z*step_z*surface.getScale());
+			glVertex3f(x,min_y*step_y*surface.getScale(),min_z*step_z*surface.getScale());
+			glVertex3f(x,min_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
+
+			glVertex3f(x,min_y*step_y*surface.getScale(),min_z*step_z*surface.getScale());
+			glVertex3f(x,min_y*step_y*surface.getScale()-1,min_z*step_z*surface.getScale()-1);
+		}
+		if((selected_corner == CORNER_xYz) || (selected_corner == CORNER_XYz)){
+			glVertex3f(x,min_y*step_y*surface.getScale(),min_z*step_z*surface.getScale());
+			glVertex3f(x,max_y*step_y*surface.getScale(),min_z*step_z*surface.getScale());
+			glVertex3f(x,max_y*step_y*surface.getScale(),min_z*step_z*surface.getScale());
+			glVertex3f(x,max_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
+
+			glVertex3f(x,max_y*step_y*surface.getScale(),min_z*step_z*surface.getScale());
+			glVertex3f(x,max_y*step_y*surface.getScale()+1,min_z*step_z*surface.getScale()-1);
 		}
 	}
 	for(int i=min_y;i<=max_y;i++) {
 		qreal y= step_y*i*surface.getScale();
-		if((selected_planes & SHOW_FRONT)){
-			glVertex3f(min_x*step_x*surface.getScale()-1,y,max_z*step_z*surface.getScale());
-			glVertex3f(max_x*step_x*surface.getScale(),y,max_z*step_z*surface.getScale());
-		}
-		if((selected_planes & SHOW_BACK)){
-			glVertex3f(min_x*step_x*surface.getScale()-1,y,min_z*step_z*surface.getScale());
-			glVertex3f(max_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale());
-		}
-		if((selected_planes & SHOW_LEFT)){
-			glVertex3f(min_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale()-1);
+		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_xYZ)){
 			glVertex3f(min_x*step_x*surface.getScale(),y,max_z*step_z*surface.getScale());
-		}
-		if((selected_planes & SHOW_RIGHT)){
-			glVertex3f(max_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale()-1);
 			glVertex3f(max_x*step_x*surface.getScale(),y,max_z*step_z*surface.getScale());
+			glVertex3f(min_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale());
+			glVertex3f(min_x*step_x*surface.getScale(),y,max_z*step_z*surface.getScale());
+
+			glVertex3f(max_x*step_x*surface.getScale(),y,max_z*step_z*surface.getScale());
+			glVertex3f(max_x*step_x*surface.getScale()+1,y,max_z*step_z*surface.getScale()+1);
+		}
+		if((selected_corner == CORNER_XyZ) || (selected_corner == CORNER_XYZ)){
+			glVertex3f(min_x*step_x*surface.getScale(),y,max_z*step_z*surface.getScale());
+			glVertex3f(max_x*step_x*surface.getScale(),y,max_z*step_z*surface.getScale());
+			glVertex3f(max_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale());
+			glVertex3f(max_x*step_x*surface.getScale(),y,max_z*step_z*surface.getScale());
+
+			glVertex3f(min_x*step_x*surface.getScale(),y,max_z*step_z*surface.getScale());
+			glVertex3f(min_x*step_x*surface.getScale()-1,y,max_z*step_z*surface.getScale()+1);
+		}
+		if((selected_corner == CORNER_xyz) || (selected_corner == CORNER_xYz)){
+			glVertex3f(min_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale());
+			glVertex3f(max_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale());
+			glVertex3f(min_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale());
+			glVertex3f(min_x*step_x*surface.getScale(),y,max_z*step_z*surface.getScale());
+
+			glVertex3f(max_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale());
+			glVertex3f(max_x*step_x*surface.getScale()+1,y,min_z*step_z*surface.getScale()-1);
+		}
+		if((selected_corner == CORNER_Xyz) || (selected_corner == CORNER_XYz)){
+			glVertex3f(min_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale());
+			glVertex3f(max_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale());
+			glVertex3f(max_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale());
+			glVertex3f(max_x*step_x*surface.getScale(),y,max_z*step_z*surface.getScale());
+
+			glVertex3f(min_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale());
+			glVertex3f(min_x*step_x*surface.getScale()-1,y,min_z*step_z*surface.getScale()-1);
 		}
 	}
 	for(int i=min_z;i<=max_z;i++) {
 		qreal z= step_z*i*surface.getScale();
-		if((selected_planes & SHOW_TOP)){
-			glVertex3f(min_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),z);
-			glVertex3f(max_x*step_x*surface.getScale()+1,max_y*step_y*surface.getScale(),z);
-		}
-		if((selected_planes & SHOW_BOTTOM)){
-			glVertex3f(min_x*step_x*surface.getScale()-1,min_y*step_y*surface.getScale(),z);
-			glVertex3f(max_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),z);
-		}
-		if((selected_planes & SHOW_LEFT)){
+		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_xyz)){
 			glVertex3f(min_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),z);
-			glVertex3f(min_x*step_x*surface.getScale(),max_y*step_y*surface.getScale()+1,z);
+			glVertex3f(max_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),z);
+			glVertex3f(min_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),z);
+			glVertex3f(min_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),z);
+
+			glVertex3f(min_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),z);
+			glVertex3f(min_x*step_x*surface.getScale()-1,min_y*step_y*surface.getScale()-1,z);
 		}
-		if((selected_planes & SHOW_RIGHT)){
-			glVertex3f(max_x*step_x*surface.getScale(),min_y*step_y*surface.getScale()-1,z);
+		if((selected_corner == CORNER_xYZ) || (selected_corner == CORNER_xYz)){
+			glVertex3f(min_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),z);
 			glVertex3f(max_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),z);
+			glVertex3f(min_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),z);
+			glVertex3f(min_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),z);
+
+			glVertex3f(min_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),z);
+			glVertex3f(min_x*step_x*surface.getScale()-1,max_y*step_y*surface.getScale()+1,z);
 		}
+		if((selected_corner == CORNER_XyZ) || (selected_corner == CORNER_Xyz)){
+			glVertex3f(min_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),z);
+			glVertex3f(max_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),z);
+			glVertex3f(max_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),z);
+			glVertex3f(max_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),z);
+
+			glVertex3f(max_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),z);
+			glVertex3f(max_x*step_x*surface.getScale()+1,min_y*step_y*surface.getScale()-1,z);
+		}
+		if((selected_corner == CORNER_XYZ) || (selected_corner == CORNER_XYz)){
+			glVertex3f(min_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),z);
+			glVertex3f(max_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),z);
+			glVertex3f(max_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),z);
+			glVertex3f(max_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),z);
+
+			glVertex3f(max_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),z);
+			glVertex3f(max_x*step_x*surface.getScale()+1,max_y*step_y*surface.getScale()+1,z);
+		}
+
 	}
 	glEnd();
 	glEnable(GL_LIGHTING);
@@ -194,14 +259,14 @@ void CybervisionViewer::drawGrid(){
 		stream.setRealNumberPrecision(1);
 		stream.setRealNumberNotation(QTextStream::ScientificNotation);
 		stream<<i*step_x;
-		if((selected_planes & SHOW_FRONT))
-			renderText(x,min_y*step_y*surface.getScale()-3,max_z*step_z*surface.getScale(),str,font);
-		if((selected_planes & SHOW_BACK))
-			renderText(x,min_y*step_y*surface.getScale()-3,min_z*step_z*surface.getScale(),str,font);
-		if((selected_planes & SHOW_TOP))
-			renderText(x,max_y*step_y*surface.getScale(),min_z*step_z*surface.getScale()-2,str,font);
-		if((selected_planes & SHOW_BOTTOM))
-			renderText(x,min_y*step_y*surface.getScale(),min_z*step_z*surface.getScale()-2,str,font);
+		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_XyZ))
+			renderText(x,min_y*step_y*surface.getScale()-1,max_z*step_z*surface.getScale()+1,str,font);
+		if((selected_corner == CORNER_xYZ) || (selected_corner == CORNER_XYZ))
+			renderText(x,max_y*step_y*surface.getScale()+1,max_z*step_z*surface.getScale()+1,str,font);
+		if((selected_corner == CORNER_xyz) || (selected_corner == CORNER_Xyz))
+			renderText(x,min_y*step_y*surface.getScale()-1,min_z*step_z*surface.getScale()-1,str,font);
+		if((selected_corner == CORNER_xYz) || (selected_corner == CORNER_XYz))
+			renderText(x,max_y*step_y*surface.getScale()+1,min_z*step_z*surface.getScale()-1,str,font);
 	}
 	for(int i=min_y;i<=max_y;i++) {
 		qreal y= step_y*i*surface.getScale();
@@ -210,14 +275,14 @@ void CybervisionViewer::drawGrid(){
 		stream.setRealNumberPrecision(1);
 		stream.setRealNumberNotation(QTextStream::ScientificNotation);
 		stream<<i*step_y;
-		if((selected_planes & SHOW_FRONT))
-			renderText(min_x*step_x*surface.getScale()-3,y,max_z*step_z*surface.getScale(),str,font);
-		if((selected_planes & SHOW_BACK))
-			renderText(min_x*step_x*surface.getScale()-3,y,min_z*step_z*surface.getScale(),str,font);
-		if((selected_planes & SHOW_LEFT))
-			renderText(min_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale()-2,str,font);
-		if((selected_planes & SHOW_RIGHT))
-			renderText(max_x*step_x*surface.getScale(),y,min_z*step_z*surface.getScale()-2,str,font);
+		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_xYZ))
+			renderText(max_x*step_x*surface.getScale()+1,y,max_z*step_z*surface.getScale()+1,str,font);
+		if((selected_corner == CORNER_XyZ) || (selected_corner == CORNER_XYZ))
+			renderText(min_x*step_x*surface.getScale()-1,y,max_z*step_z*surface.getScale()+1,str,font);
+		if((selected_corner == CORNER_xyz) || (selected_corner == CORNER_xYz))
+			renderText(max_x*step_x*surface.getScale()+1,y,min_z*step_z*surface.getScale()-1,str,font);
+		if((selected_corner == CORNER_Xyz) || (selected_corner == CORNER_XYz))
+			renderText(min_x*step_x*surface.getScale()-1,y,min_z*step_z*surface.getScale()-1,str,font);
 	}
 	for(int i=min_z;i<=max_z;i++) {
 		qreal z= step_z*i*surface.getScale();
@@ -226,14 +291,14 @@ void CybervisionViewer::drawGrid(){
 		stream.setRealNumberPrecision(1);
 		stream.setRealNumberNotation(QTextStream::ScientificNotation);
 		stream<<i*step_z;
-		if((selected_planes & SHOW_TOP))
-			renderText(max_x*step_x*surface.getScale()+4,max_y*step_y*surface.getScale(),z,str,font);
-		if((selected_planes & SHOW_BOTTOM))
-			renderText(min_x*step_x*surface.getScale()-4,min_y*step_y*surface.getScale(),z,str,font);
-		if((selected_planes & SHOW_LEFT))
-			renderText(min_x*step_x*surface.getScale(),max_y*step_y*surface.getScale()+2,z,str,font);
-		if((selected_planes & SHOW_RIGHT))
-			renderText(max_x*step_x*surface.getScale(),min_y*step_y*surface.getScale()-2,z,str,font);
+		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_xyz))
+			renderText(min_x*step_x*surface.getScale()-1,min_y*step_y*surface.getScale()-1,z,str,font);
+		if((selected_corner == CORNER_xYZ) || (selected_corner == CORNER_xYz))
+			renderText(min_x*step_x*surface.getScale()-1,max_y*step_y*surface.getScale()+1,z,str,font);
+		if((selected_corner == CORNER_XyZ) || (selected_corner == CORNER_Xyz))
+			renderText(max_x*step_x*surface.getScale()+1,min_y*step_y*surface.getScale()-1,z,str,font);
+		if((selected_corner == CORNER_XYZ) || (selected_corner == CORNER_XYz))
+			renderText(max_x*step_x*surface.getScale()+1,max_y*step_y*surface.getScale()+1,z,str,font);
 	}
 
 	//glEnable(GL_DEPTH_TEST);
@@ -302,37 +367,36 @@ void CybervisionViewer::mouseMoveEvent(QMouseEvent *event){
 	lastMousePos = event->pos();
 }
 
-CybervisionViewer::Show_Planes CybervisionViewer::getOptimalGridPlanes() const{
-	Show_Planes selected_planes= SHOW_NONE;
-	{
-		QMatrix4x4 transformationMatrix,projectionMatrix;
-		transformationMatrix.setToIdentity();
-		projectionMatrix.setToIdentity();
-		transformationMatrix.translate(vpTranslation);
-		transformationMatrix.rotate(vpRotation.x(),1,0,0);
-		transformationMatrix.rotate(vpRotation.y(),0,1,0);
-		transformationMatrix.rotate(vpRotation.z(),0,0,1);
+CybervisionViewer::Corner CybervisionViewer::getOptimalCorner(const QVector3D& min,const QVector3D& max) const{
+	QMatrix4x4 transformationMatrix,projectionMatrix;
+	transformationMatrix.setToIdentity();
+	projectionMatrix.setToIdentity();
+	transformationMatrix.translate(vpTranslation);
+	transformationMatrix.rotate(vpRotation.x(),1,0,0);
+	transformationMatrix.rotate(vpRotation.y(),0,1,0);
+	transformationMatrix.rotate(vpRotation.z(),0,0,1);
 
-		projectionMatrix.perspective(glFOV,glAspectRatio,glNearPlane,glFarPlane);
+	//projectionMatrix.perspective(glFOV,glAspectRatio,glNearPlane,glFarPlane);
 
 
-		QList<QPair<QVector3D,Show_Planes> > projections;
-		projections<<QPair<QVector3D,Show_Planes>(QVector3D( 0, 0, 1),SHOW_FRONT);
-		projections<<QPair<QVector3D,Show_Planes>(QVector3D( 0, 0,-1),SHOW_BACK);
-		projections<<QPair<QVector3D,Show_Planes>(QVector3D( 1, 0, 0),SHOW_LEFT);
-		projections<<QPair<QVector3D,Show_Planes>(QVector3D(-1, 0, 0),SHOW_RIGHT);
-		projections<<QPair<QVector3D,Show_Planes>(QVector3D( 0,-1, 0),SHOW_TOP);
-		projections<<QPair<QVector3D,Show_Planes>(QVector3D( 0, 1, 0),SHOW_BOTTOM);
-		for(QList<QPair<QVector3D,Show_Planes> >::const_iterator it=projections.begin();it!=projections.end();it++){
-			QVector3D start( 0, 0, 0);
-			QVector3D end(it->first);
-			start= projectionMatrix*((transformationMatrix*QVector4D(start,1)).toVector3DAffine());
-			end= projectionMatrix*((transformationMatrix*QVector4D(end,1)).toVector3DAffine());
-			QVector3D result= start-end;
-			if(QVector3D::dotProduct(result,QVector3D(0,0,1))/result.length()>0.1)
-				selected_planes= (CybervisionViewer::Show_Planes)(selected_planes|it->second);
+	QList<QPair<QVector3D,Corner> > corners;
+	corners<<QPair<QVector3D,Corner>(QVector3D( min.x(), min.y(), min.z()),CORNER_xyz);
+	corners<<QPair<QVector3D,Corner>(QVector3D( min.x(), min.y(), max.z()),CORNER_xyZ);
+	corners<<QPair<QVector3D,Corner>(QVector3D( min.x(), max.y(), min.z()),CORNER_xYz);
+	corners<<QPair<QVector3D,Corner>(QVector3D( min.x(), max.y(), max.z()),CORNER_xYZ);
+	corners<<QPair<QVector3D,Corner>(QVector3D( max.x(), min.y(), min.z()),CORNER_Xyz);
+	corners<<QPair<QVector3D,Corner>(QVector3D( max.x(), min.y(), max.z()),CORNER_XyZ);
+	corners<<QPair<QVector3D,Corner>(QVector3D( max.x(), max.y(), min.z()),CORNER_XYz);
+	corners<<QPair<QVector3D,Corner>(QVector3D( max.x(), max.y(), max.z()),CORNER_XYZ);
+
+	qreal closestDistance= -std::numeric_limits<qreal>::infinity();
+	Corner closestCorner= CORNER_NONE;
+	for(QList<QPair<QVector3D,Corner> >::const_iterator it=corners.begin();it!=corners.end();it++){
+		QVector3D projection= projectionMatrix*((transformationMatrix*QVector4D(it->first,1)).toVector3DAffine());
+		if(projection.z()>closestDistance){
+			closestDistance= projection.z();
+			closestCorner= it->second;
 		}
 	}
-
-	return selected_planes;
+	return closestCorner;
 }
