@@ -455,51 +455,60 @@ QSet<int> cybervision::PointTriangulator::findPeaks(const QList<QVector3D> &poin
 			jt= values_y.insert(jt+1,middle_y)+1;
 		}
 		//Iterate through grid
+
+		#pragma omp parallel
 		for(QList<qreal>::const_iterator it=values_x.begin();it!=values_x.end()-1;it++){
 			qreal min_x= *it,max_x= *(it+1);
-			for(QList<qreal>::const_iterator jt=values_y.begin();jt!=values_y.end()-1;jt++){
-				qreal min_y= *jt,max_y= *(jt+1);
-				//Create filter for peaks
-				QVector2D min(min_x,min_y);
-				QVector2D max(max_x,max_y);
-				QVector2D middle= min+(max-min)/2;
-				QList<qreal> Zp;
-				for(QList<QVector3D>::const_iterator kt=points.begin();kt!=points.end();kt++){
-					qreal distance= (QVector2D(*kt)-middle).length();
-					if(distance <= Options::gridPeakFilterRadius*(max-middle).length())
-						Zp<< kt->z();
-				}
-				qSort(Zp);
-				qreal median,
-						Zmax= !Zp.isEmpty()?Zp.at(Zp.size()-1):0,
-						Zmin= !Zp.isEmpty()?Zp.at(0):0;
+			#pragma omp single nowait
+			{
+				for(QList<qreal>::const_iterator jt=values_y.begin();jt!=values_y.end()-1;jt++){
+					qreal min_y= *jt,max_y= *(jt+1);
+					//Create filter for peaks
+					QVector2D min(min_x,min_y);
+					QVector2D max(max_x,max_y);
+					QVector2D middle= min+(max-min)/2;
+					QList<qreal> Zp;
+					for(QList<QVector3D>::const_iterator kt=points.begin();kt!=points.end();kt++){
+						qreal distance= (QVector2D(*kt)-middle).length();
+						if(distance <= Options::gridPeakFilterRadius*(max-middle).length())
+							Zp<< kt->z();
+					}
+					qSort(Zp);
+					qreal median,
+							Zmax= !Zp.isEmpty()?Zp.at(Zp.size()-1):0,
+							Zmin= !Zp.isEmpty()?Zp.at(0):0;
 
-				if(Zp.isEmpty())
-					continue;
-				else
-					median= Zp.size()%2==1 ?
-								Zp[(Zp.size()-1)/2] :
-								((Zp[Zp.size()/2-1]+Zp[Zp.size()/2])/2.0);
-
-				if(Zp.size()>=3){
-					for(int i=0;i<Zp.size()/2;i++)
-						if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i+1)-median))
-							Zmin= Zp.at(i+1);
-						else break;
-
-					for(int i=Zp.size()-1;i>Zp.size()/2;i--)
-						if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i-1)-median))
-							Zmax= Zp.at(i-1);
-						else break;
-				}
-				Zp.clear();
-
-				for(int k=0;k<points.length();k++){
-					if((points[k].z()>=Zmin) && (points[k].z()<=Zmax))
+					if(Zp.isEmpty())
 						continue;
+					else
+						median= Zp.size()%2==1 ?
+									Zp[(Zp.size()-1)/2] :
+									((Zp[Zp.size()/2-1]+Zp[Zp.size()/2])/2.0);
 
-					if(points[k].x()>=min.x() && points[k].x()<=max.x() && points[k].y()>=min.y() && points[k].y()<=max.y())
-						discardedPoints.insert(k);
+					if(Zp.size()>=3){
+						for(int i=0;i<Zp.size()/2;i++)
+							if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i+1)-median))
+								Zmin= Zp.at(i+1);
+							else break;
+
+						for(int i=Zp.size()-1;i>Zp.size()/2;i--)
+							if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i-1)-median))
+								Zmax= Zp.at(i-1);
+							else break;
+					}
+					Zp.clear();
+
+					for(int k=0;k<points.length();k++){
+						if((points[k].z()>=Zmin) && (points[k].z()<=Zmax))
+							continue;
+
+						if(points[k].x()>=min.x() && points[k].x()<=max.x() && points[k].y()>=min.y() && points[k].y()<=max.y()){
+							#pragma omp critical
+							{
+								discardedPoints.insert(k);
+							}
+						}
+					}
 				}
 			}
 		}
