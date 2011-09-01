@@ -74,8 +74,8 @@ QMAKE_CXXFLAGS_RELEASE += -msse3
 QMAKE_CXXFLAGS_DEBUG +=
 win32 { 
 	QMAKE_LIBS += -static \
-		-lgomp \
-		-lpthread.dll
+                -lgomp \
+                -lpthread.dll
 	QMAKE_CXXFLAGS += -U_WIN32 -fopenmp
 	QMAKE_CFLAGS += -U_WIN32
 }
