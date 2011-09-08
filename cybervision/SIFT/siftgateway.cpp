@@ -1,5 +1,6 @@
 #include "siftgateway.h"
 #include <SIFT/siftfast.h>
+#include <Reconstruction/options.h>
 #include <cmath>
 
 #include <QDebug>
@@ -49,7 +50,6 @@ float SIFT::Keypoint::distance(const Keypoint& keypoint)const{
 	if(keypoint.scale!=scale){
 		qDebug()<<"keypoint.scale="<<keypoint.scale<<" scale="<<scale;
 		return std::numeric_limits<float>::infinity();
-
 	}
 	*/
 	float distance_squared=0;
@@ -65,7 +65,9 @@ float SIFT::Keypoint::getY()const{return y;}
 //Class for accessing the libsiftfast library
 QMutex SIFT::Extractor::mutex;//static declaration
 
-SIFT::Extractor::Extractor(){}
+SIFT::Extractor::Extractor(double SIFTContrastCorrection){
+	this->SIFTContrastCorrection= SIFTContrastCorrection;
+}
 
 SIFT::Extractor::~Extractor(){
 	QMutexLocker locker(&mutex);
@@ -116,14 +118,22 @@ QList<SIFT::Keypoint> SIFT::Extractor::extract(const QImage& sourceImg)const{
 		}
 	}
 
+	//Set SIFT parameters
+	SiftParameters default_params= GetSiftParameters();
+	SiftParameters params= default_params;
+	params.PeakThresh*= SIFTContrastCorrection;
+	SetSiftParameters(params);
+
 	img= QImage();
 
 	//Detect SIFT features
 	::Keypoint keypoints= GetKeypoints(siftfastImage);
 	DestroyAllImages();
 
-	//Return SIFT features
+	//Restore SIFT options
+	SetSiftParameters(default_params);
 
+	//Return SIFT features
 	QList<SIFT::Keypoint> points;
 	::Keypoint keypoint= keypoints;
 	while(keypoint){
@@ -131,6 +141,7 @@ QList<SIFT::Keypoint> SIFT::Extractor::extract(const QImage& sourceImg)const{
 		keypoint= keypoint->next;
 	}
 	FreeKeypoints(keypoints);
+
 
 	return points;
 }

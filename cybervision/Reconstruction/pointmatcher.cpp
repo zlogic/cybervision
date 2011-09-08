@@ -92,7 +92,7 @@ namespace cybervision{
 		//emit sgnLogMessage(QString("Extracted fields from image 2 metadata:\n%1\n\n").arg(img2Metadata.getMetadataString()));
 		QList <SIFT::Keypoint> keypoints1,keypoints2;
 		{
-			SIFT::Extractor extractor;
+			SIFT::Extractor extractor(Options::SIFTContrastCorrection);
 			emit sgnLogMessage(QString("Extracting keypoints from %1").arg(filename1));
 			keypoints1= extractor.extract(img1Metadata.getImage());
 			emit sgnLogMessage(QString("Extracting keypoints from %2").arg(filename2));

@@ -6,6 +6,8 @@ namespace cybervision{
 
 class Options{
 public:
+	//SIFT options
+	static const double SIFTContrastCorrection;//SIFT constrast correction coefficient (amount to multiply default contrast threshold; can be used to lower or raise the threshold).
 	//Reconstructor options
 	static const double MaxKeypointDistance;//Maximum SIFT match vector distance, larger values get discarded
 	static const double ReliableDistance;//Maximum keypoint distance on which camera pose (E, R&T) can be computed

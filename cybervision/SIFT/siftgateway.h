@@ -27,9 +27,10 @@ namespace SIFT{
 	class Extractor{
 	protected:
 		static QMutex mutex;
+		double SIFTContrastCorrection;
 		QImage resizeImage(const QImage& src,int scalingFactor)const;
 	public:
-		Extractor();
+		Extractor(double SIFTContrastCorrection);
 		virtual ~Extractor();
 		QList<SIFT::Keypoint> extract(const QImage&)const;
 	};
