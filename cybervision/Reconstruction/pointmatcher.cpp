@@ -4,6 +4,7 @@
 #include <Reconstruction/imageloader.h>
 #include <KDTree/kdtreegateway.h>
 #include <SIFT/siftgateway.h>
+#include <Reconstruction/pointmatcheropencl.h>
 
 #define USE_PRECOMPUTED_DATA
 #ifdef USE_PRECOMPUTED_DATA
@@ -95,13 +96,31 @@ namespace cybervision{
 			SIFT::Extractor extractor(Options::SIFTContrastCorrection);
 			emit sgnLogMessage(QString("Extracting keypoints from %1").arg(filename1));
 			keypoints1= extractor.extract(img1Metadata.getImage());
+			emit sgnLogMessage(QString("Extracted %1 keypoints from %2").arg(keypoints1.size()).arg(filename1));
+
 			emit sgnLogMessage(QString("Extracting keypoints from %2").arg(filename2));
 			keypoints2= extractor.extract(img2Metadata.getImage());
+			emit sgnLogMessage(QString("Extracted %1 keypoints from %2").arg(keypoints2.size()).arg(filename2));
 		}
 
 
 		emit sgnStatusMessage("Matching SIFT keypoints...");
-		if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_SIMPLE){
+
+		bool OpenCLSucceeded= true;
+		if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL){
+			PointMatcherOpenCL clMatcher(this);
+
+			QObject::connect(&clMatcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);
+
+			OpenCLSucceeded= clMatcher.InitCL();
+
+			if(OpenCLSucceeded)
+				OpenCLSucceeded= clMatcher.ShutdownCL();
+
+
+			QObject::disconnect(&clMatcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)));
+		}
+		if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_SIMPLE || !OpenCLSucceeded){
 			//Simple matching
 			emit sgnLogMessage(QString("Matching keypoints from %1 to %2").arg(filename1).arg(filename2));
 			//Match first image with second

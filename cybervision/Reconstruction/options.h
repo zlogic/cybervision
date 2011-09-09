@@ -14,7 +14,7 @@ public:
 	static const int MinMatches;//Minimum amount of matches needed for pose estimation
 	static const bool UsePrecomputedKeypointData;//Use precomputed data when possible (to skip time-consuming steps)
 	static const bool SaveFilteredMatches;//Save RANSAC-filtered matches to file
-	enum KeypointMatchingMode {KEYPOINT_MATCHING_SIMPLE,KEYPOINT_MATCHING_KDTREE};//Mode for matching keypoints (BBF KT-tree or simple comparison)
+	enum KeypointMatchingMode {KEYPOINT_MATCHING_SIMPLE,KEYPOINT_MATCHING_KDTREE,KEYPOINT_MATCHING_OPENCL};//Mode for matching keypoints (simple comparison or BBF KT-tree or OpenCL)
 	static const size_t bbf_steps;//Number of best-bin-first search iterations
 	static const KeypointMatchingMode keypointMatchingMode;//Keypoint matching mode
 	enum TriangulationMode {TRIANGULATION_PERSPECTIVE,TRIANGULATION_PARALLEL};//Mode for triangulation (perspective or parallel (V or SV) projection mode)

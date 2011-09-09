@@ -19,7 +19,8 @@ SOURCES += main.cpp \
 	Reconstruction/sculptor.cpp \
 	Reconstruction/surface.cpp \
 	KDTree/kdtreegateway.cpp \
-    Reconstruction/imageloader.cpp
+    Reconstruction/imageloader.cpp \
+    Reconstruction/pointmatcheropencl.cpp
 HEADERS += \
 	Reconstruction/pointmatcher.h \
 	Reconstruction/pointmatch.h \
@@ -66,7 +67,8 @@ HEADERS += \
 	Eigen/Eigen \
 	Eigen/Dense \
     UI/mainwindow.h \
-    Reconstruction/imageloader.h
+    Reconstruction/imageloader.h \
+    Reconstruction/pointmatcheropencl.h
 
 FORMS += UI/mainwindow.ui
 
@@ -74,8 +76,9 @@ QMAKE_CXXFLAGS_RELEASE += -msse3
 QMAKE_CXXFLAGS_DEBUG +=
 win32 { 
 	QMAKE_LIBS += -static \
-                -lgomp \
-                -lpthread.dll
+				-lOpenCL \
+				-lgomp \
+				-lpthread.dll
 	QMAKE_CXXFLAGS += -U_WIN32 -fopenmp
 	QMAKE_CFLAGS += -U_WIN32
 }
@@ -92,4 +95,8 @@ OTHER_FILES += \
 	Reconstruction/ColladaTemplate.xml \
     UI/icons/arrow-move.png \
     UI/icons/arrow-circle.png \
-    UI/icons/grid.png
+    UI/icons/grid.png \
+    Reconstruction/PointMatcherKernel.cl
+
+
+

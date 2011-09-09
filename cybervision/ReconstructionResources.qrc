@@ -7,4 +7,7 @@
         <file>UI/icons/arrow-move.png</file>
         <file>UI/icons/grid.png</file>
     </qresource>
+    <qresource prefix="/opencl">
+        <file alias="PointMatcherKernel.cl">Reconstruction/PointMatcherKernel.cl</file>
+    </qresource>
 </RCC>
