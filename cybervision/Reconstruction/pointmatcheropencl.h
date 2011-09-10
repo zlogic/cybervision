@@ -3,6 +3,8 @@
 
 #include <QObject>
 #include <QString>
+#include <Reconstruction/pointmatch.h>
+#include <SIFT/siftgateway.h>
 
 //AMD APP hack for linking errors
 //#define __CYGWIN__ 1
@@ -20,12 +22,18 @@ class PointMatcherOpenCL : public QObject
 protected:
 	QString kernelStr;
 
-	cl_uint width;
-	cl_uint *input;
-	cl_uint *output;
+	bool kernelInitialized;
 
+	//OpenCL kernel paramaters
+	cl_uint vectorSize,inputVectorsCount;
+	cl_float *vector;
+	cl_float *input;
+	cl_float *output;
+
+	//OpenCL stuff
 	cl_mem   inputBuffer;
 	cl_mem	 outputBuffer;
+	cl_mem	 vectorBuffer;
 
 	cl_context          context;
 	cl_device_id        *devices;
@@ -33,14 +41,20 @@ protected:
 
 	cl_program program;
 	cl_kernel  kernel;
+	size_t    kernelWorkGroupSize;
 
+	//Runs OpenCL for the prepared buffers
+	bool CalcDistances();
 public:
-    explicit PointMatcherOpenCL(QObject *parent = 0);
+	explicit PointMatcherOpenCL(int vectorSize, int maxVectorsCount, QObject *parent = 0);
 	~PointMatcherOpenCL();
 
-	//OpenCL init/release code
+	//OpenCL init/release code. Returns true on success, emits messages and returns false on errors.
 	bool InitCL();
 	bool ShutdownCL();
+
+	//Returns the best match for a keypoints from image 1 to a list of keypoints in image 2
+	SortedKeypointMatches CalcDistances(const QList<SIFT::Keypoint>& keypoints1,const QList<SIFT::Keypoint>& keypoints2);
 signals:
 	void sgnLogMessage(QString);
 public slots:

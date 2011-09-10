@@ -108,15 +108,35 @@ namespace cybervision{
 
 		bool OpenCLSucceeded= true;
 		if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL){
-			PointMatcherOpenCL clMatcher(this);
+			PointMatcherOpenCL clMatcher(128,qMax(keypoints1.size(),keypoints2.size()),this);
 
 			QObject::connect(&clMatcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);
 
 			OpenCLSucceeded= clMatcher.InitCL();
 
-			if(OpenCLSucceeded)
-				OpenCLSucceeded= clMatcher.ShutdownCL();
+			if(OpenCLSucceeded){
+				emit sgnLogMessage(QString("Matching keypoints from %1 to %2").arg(filename1).arg(filename2));
+				//Match first image with second
+				matches= clMatcher.CalcDistances(keypoints1,keypoints2);
+				if(matches.empty())
+					OpenCLSucceeded= false;
 
+				emit sgnLogMessage(QString("Matching keypoints from %1 to %2").arg(filename2).arg(filename1));
+				//Match second image with first
+				cybervision::SortedKeypointMatches current_matches= clMatcher.CalcDistances(keypoints2,keypoints1);
+				if(current_matches.empty())
+					OpenCLSucceeded= false;
+
+				//Merge matches
+				for(cybervision::SortedKeypointMatches::const_iterator it=current_matches.begin();it!=current_matches.end();it++){
+					KeypointMatch m;
+					m.a= it.value().b, m.b= it.value().a;
+					if(!matches.contains(it.key(),m))
+						matches.insert(it.key(),m);
+				}
+
+				OpenCLSucceeded&= clMatcher.ShutdownCL();
+			}
 
 			QObject::disconnect(&clMatcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)));
 		}

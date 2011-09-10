@@ -1,13 +1,17 @@
 #include "pointmatcheropencl.h"
 
+#include <Reconstruction/options.h>
+
 #include <QFile>
+#include <QVector>
 #include <QTextStream>
+#include <QList>
 
 #include <cstdlib>
 
 
 namespace cybervision{
-	PointMatcherOpenCL::PointMatcherOpenCL(QObject *parent) : QObject(parent){
+	PointMatcherOpenCL::PointMatcherOpenCL(int vectorSize, int maxVectorsCount, QObject *parent) : QObject(parent){
 		//Read kernel from file
 		{
 			QFile kernelFile(":/opencl/PointMatcherKernel.cl");
@@ -16,22 +20,56 @@ namespace cybervision{
 			kernelStr= stream.readAll();
 		}
 
-		width				= 256;
-		input				= NULL;
-		output				= NULL;
+		kernelInitialized= false;
+
+		//Prepare buffers
+		input= NULL;
+		output= NULL;
+		kernelWorkGroupSize= 512;
+
+		//Get optimal vector size
+		{
+			int pow=0;
+			while(maxVectorsCount>0){
+				maxVectorsCount= maxVectorsCount>>1;
+				pow++;
+			}
+			maxVectorsCount= 1<<pow;
+			maxVectorsCount= qMax(maxVectorsCount,(int)kernelWorkGroupSize);
+		}
+
+		this->vectorSize= vectorSize;
+		inputVectorsCount= maxVectorsCount;
+
 
 		/////////////////////////////////////////////////////////////////
 		// Allocate and initialize memory used by host
 		/////////////////////////////////////////////////////////////////
-		cl_uint sizeInBytes = width * sizeof(cl_uint);
-		input = (cl_uint *) malloc(sizeInBytes);
-		output = (cl_uint *) malloc(sizeInBytes);
+		cl_uint vectorSizeInBytes = vectorSize * sizeof(cl_float);
+		cl_uint inputSizeInBytes = vectorSizeInBytes * inputVectorsCount;
+		cl_uint outputSizeInBytes = inputVectorsCount * sizeof(cl_float);
+		input = (cl_float *) malloc(inputSizeInBytes);
+		vector = (cl_float *) malloc(vectorSizeInBytes);
+		output = (cl_float *) malloc(outputSizeInBytes);
 	}
 	PointMatcherOpenCL::~PointMatcherOpenCL(){
-
+		if(input){
+			free(input);
+			input= NULL;
+		}
+		if(output){
+			free(output);
+			output= NULL;
+		}
+		if(devices){
+			free(devices);
+			devices= NULL;
+		}
 	}
 
 	bool PointMatcherOpenCL::InitCL(){
+		kernelInitialized= false;
+
 		if(input == NULL){
 			emit sgnLogMessage(QString("OpenCL Error: Failed to allocate input memory on host"));
 			return false;
@@ -160,8 +198,8 @@ namespace cybervision{
 		/////////////////////////////////////////////////////////////////
 		inputBuffer = clCreateBuffer(
 						  context,
-						  CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-						  sizeof(cl_uint) * width,
+						  CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+						  sizeof(cl_float) * vectorSize * inputVectorsCount,
 						  input,
 						  &status);
 		if(status != CL_SUCCESS){
@@ -171,12 +209,23 @@ namespace cybervision{
 
 		outputBuffer = clCreateBuffer(
 						   context,
-						   CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-						   sizeof(cl_uint) * width,
+						   CL_MEM_WRITE_ONLY | CL_MEM_USE_HOST_PTR,
+						   sizeof(cl_float) * inputVectorsCount,
 						   output,
 						   &status);
 		if(status != CL_SUCCESS){
 			emit sgnLogMessage(QString("OpenCL Error: clCreateBuffer (outputBuffer) code=%1").arg(status));
+			return false;
+		}
+
+		vectorBuffer = clCreateBuffer(
+						   context,
+						   CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+						   sizeof(cl_float) * vectorSize,
+						   vector,
+						   &status);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clCreateBuffer (vectorBuffer) code=%1").arg(status));
 			return false;
 		}
 
@@ -202,17 +251,28 @@ namespace cybervision{
 		/* create a cl program executable for all the devices specified */
 		status = clBuildProgram(program, 1, devices, NULL, NULL, NULL);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: Building Program (clBuildProgram) code=%1").arg(status));
+			QVector<char> build_log;
+
+			size_t log_size;
+			// First call to know the proper size
+			clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
+			build_log.reserve(log_size+1);
+			// Second call to get the log
+			clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, log_size, build_log.data(), NULL);
+			build_log[log_size] = '\0';
+
+			emit sgnLogMessage(QString("OpenCL Error: Building Program (clBuildProgram) code=%1, build log: \'%2\'").arg(status).arg(build_log.data()));
 			return false;
 		}
 
 		/* get a kernel object handle for a kernel with the given name */
-		kernel = clCreateKernel(program, "hello", &status);
+		kernel = clCreateKernel(program, "computeDistances", &status);
 		if(status != CL_SUCCESS){
 			emit sgnLogMessage(QString("OpenCL Error: Creating Kernel from program. (clCreateKernel) code=%1").arg(status));
 			return false;
 		}
 
+		kernelInitialized= true;
 		return true;
 	}
 	bool PointMatcherOpenCL::ShutdownCL(){
@@ -250,5 +310,191 @@ namespace cybervision{
 		}
 
 		return true;
+	}
+
+	bool PointMatcherOpenCL::CalcDistances(){
+		cl_int   status;
+		cl_event events[2];
+
+		size_t globalThreads[1];
+		size_t localThreads[1];
+
+		globalThreads[0] = inputVectorsCount;
+		localThreads[0] = kernelWorkGroupSize;
+
+		/* Check group size against kernelWorkGroupSize */
+		status = clGetKernelWorkGroupInfo(kernel,
+										  devices[0],
+										  CL_KERNEL_WORK_GROUP_SIZE,
+										  sizeof(size_t),
+										  &kernelWorkGroupSize,
+										  0);
+	   if(status != CL_SUCCESS){
+		   emit sgnLogMessage(QString("OpenCL Error: clGetKernelWorkGroupInfo failed, code=%1").arg(status));
+		   return false;
+	   }
+
+		if((cl_uint)(localThreads[0]) > kernelWorkGroupSize){
+			emit sgnLogMessage(QString("OpenCL Warning: Out of Resources! Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3.").arg(localThreads[0]).arg(kernelWorkGroupSize).arg(kernelWorkGroupSize));
+
+			localThreads[0] = kernelWorkGroupSize;
+		}
+
+		/*** Set appropriate arguments to the kernel ***/
+		status = clSetKernelArg(
+						kernel,
+						0,
+						sizeof(cl_mem),
+						(void *)&outputBuffer);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (outputBuffer), code=%1").arg(status));
+			return false;
+		}
+
+		status = clSetKernelArg(
+						kernel,
+						1,
+						sizeof(cl_mem),
+						(void *)&inputBuffer);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (inputBuffer), code=%1").arg(status));
+			return false;
+		}
+
+		status = clSetKernelArg(
+						kernel,
+						2,
+						sizeof(cl_mem),
+						(void *)&vectorBuffer);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (vectorBuffer), code=%1").arg(status));
+			return false;
+		}
+
+		cl_uint clVectorSize= vectorSize;
+		cl_uint clInputVectorsCount= inputVectorsCount;
+
+		status = clSetKernelArg(
+						kernel,
+						3,
+						sizeof(cl_uint),
+						(void *)&clVectorSize);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (clVectorSize), code=%1").arg(status));
+			return false;
+		}
+
+		status = clSetKernelArg(
+						kernel,
+						4,
+						sizeof(cl_uint),
+						(void *)&clInputVectorsCount);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (clInputVectorsCount), code=%1").arg(status));
+			return false;
+		}
+
+		/*
+		 * Enqueue a kernel run call.
+		 */
+		status = clEnqueueNDRangeKernel(
+				commandQueue,
+				kernel,
+				1,
+				NULL,
+				globalThreads,
+				localThreads,
+				0,
+				NULL,
+				&events[0]);
+
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clEnqueueNDRangeKernel failed, code=%1").arg(status));
+			return false;
+		}
+
+
+		/* wait for the kernel call to finish execution */
+		status = clWaitForEvents(1, &events[0]);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clWaitForEvents failed, code=%1").arg(status));
+			return false;
+		}
+
+		/* Enqueue readBuffer*/
+		status = clEnqueueReadBuffer(
+					commandQueue,
+					outputBuffer,
+					CL_TRUE,
+					0,
+					inputVectorsCount * sizeof(cl_float),
+					output,
+					0,
+					NULL,
+					&events[1]);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clEnqueueReadBuffer failed, code=%1").arg(status));
+			return false;
+		}
+
+		/* Wait for the read buffer to finish execution */
+		status = clWaitForEvents(1, &events[1]);
+
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clWaitForEvents failed, code=%1").arg(status));
+			return false;
+		}
+
+		status = clReleaseEvent(events[0]);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clReleaseEvents (0) failed, code=%1").arg(status));
+			return false;
+		}
+
+		status = clReleaseEvent(events[1]);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clReleaseEvents (1) failed, code=%1").arg(status));
+			return false;
+		}
+
+		return true;
+	}
+
+	SortedKeypointMatches PointMatcherOpenCL::CalcDistances(const QList<SIFT::Keypoint>& keypoints1,const QList<SIFT::Keypoint>& keypoints2){
+		SortedKeypointMatches result;
+
+		//Copy data for keypoints2
+		for(int i=0;i<keypoints2.size();i++)
+			for(cl_uint j=0;j<vectorSize;j++)
+				input[i*vectorSize+j]= keypoints2[i][j];
+
+		//Compute distances for all keypoints from keypoints1, then choose the minumum distance
+		for(QList<SIFT::Keypoint>::const_iterator it=keypoints1.begin();it!=keypoints1.end();it++){
+			//Prepare current vector
+			for(int i=0;i<128;i++)
+				vector[i]= (*it)[i];
+
+			//Run OpenCL stuff
+			if(!CalcDistances())
+				return SortedKeypointMatches();
+
+			//Parse OpenCL result
+			int min_i=0;
+			for(int i=0;i<keypoints2.size();i++)
+				if(output[i]<output[min_i])
+					min_i=i;
+			KeypointMatch match;
+			float minDistance= output[min_i];
+			if(minDistance<Options::MaxKeypointDistance){
+				match.a= QPointF(it->getX(),it->getY());
+				match.b= QPointF(keypoints2[min_i].getX(),keypoints2[min_i].getY());
+
+				//Add point
+				if(!result.contains(minDistance,match))
+					result.insert(minDistance,match);
+			}
+		}
+
+		return result;
 	}
 }
