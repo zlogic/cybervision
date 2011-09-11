@@ -10,6 +10,10 @@
 //#define __CYGWIN__ 1
 //Or patch cl/cl_platform.h by adding "__MINGW32__" to the list of define checks:
 //  #if defined(_WIN32) || defined(__CYGWIN__) || defined(__MINGW32__)
+
+#ifdef __MINGW32__
+#define __CYGWIN__
+#endif
 #include <CL/cl.h>
 
 namespace cybervision{

@@ -25,7 +25,7 @@ namespace cybervision{
 		//Prepare buffers
 		input= NULL;
 		output= NULL;
-		kernelWorkGroupSize= 512;
+		kernelWorkGroupSize= 4;
 
 		//Get optimal vector size
 		{
@@ -48,21 +48,25 @@ namespace cybervision{
 		cl_uint vectorSizeInBytes = vectorSize * sizeof(cl_float);
 		cl_uint inputSizeInBytes = vectorSizeInBytes * inputVectorsCount;
 		cl_uint outputSizeInBytes = inputVectorsCount * sizeof(cl_float);
-		input = (cl_float *) malloc(inputSizeInBytes);
-		vector = (cl_float *) malloc(vectorSizeInBytes);
-		output = (cl_float *) malloc(outputSizeInBytes);
+		input = new cl_float[inputSizeInBytes];
+		vector = new cl_float[vectorSizeInBytes];
+		output = new cl_float[outputSizeInBytes];
 	}
 	PointMatcherOpenCL::~PointMatcherOpenCL(){
 		if(input){
-			free(input);
+			delete[] input;
 			input= NULL;
 		}
 		if(output){
-			free(output);
+			delete[] output;
 			output= NULL;
 		}
+		if(vector){
+			delete[] vector;
+			vector= NULL;
+		}
 		if(devices){
-			free(devices);
+			delete[] devices;
 			devices= NULL;
 		}
 	}
@@ -162,7 +166,7 @@ namespace cybervision{
 		/////////////////////////////////////////////////////////////////
 		// Detect OpenCL devices
 		/////////////////////////////////////////////////////////////////
-		devices = (cl_device_id *)malloc(deviceListSize);
+		devices = new cl_device_id[deviceListSize];
 		if(devices == 0){
 			emit sgnLogMessage(QString("OpenCL Error: No devices found."));
 			return false;
@@ -368,29 +372,6 @@ namespace cybervision{
 						(void *)&vectorBuffer);
 		if(status != CL_SUCCESS){
 			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (vectorBuffer), code=%1").arg(status));
-			return false;
-		}
-
-		cl_uint clVectorSize= vectorSize;
-		cl_uint clInputVectorsCount= inputVectorsCount;
-
-		status = clSetKernelArg(
-						kernel,
-						3,
-						sizeof(cl_uint),
-						(void *)&clVectorSize);
-		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (clVectorSize), code=%1").arg(status));
-			return false;
-		}
-
-		status = clSetKernelArg(
-						kernel,
-						4,
-						sizeof(cl_uint),
-						(void *)&clInputVectorsCount);
-		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (clInputVectorsCount), code=%1").arg(status));
 			return false;
 		}
 

@@ -2,23 +2,25 @@
 
 __kernel void computeDistances(__global  float  * outputDistances,
 							   __global  float  * inputVectors,
-							   __global  float  * vector,
-							   const     uint  vectorSize,
-							   const     uint  inputVectorsSize)
+							   __global  float  * vector)
 {
-	uint tid = get_global_id(0);
+	uint gTid = get_global_id(0);
+	uint lTid = get_local_id(0);
+	//__local float vectorLocal[128];
+	//vectorLocal[lTid]= vector[lTid];
+	//barrier(CLK_LOCAL_MEM_FENCE);
 
 	float sum = 0;
 	//Compute Eucledian distance
-	for(uint i = 0; i < vectorSize; ++i)
+	for(uint i = 0; i < 128; ++i)
 	{
 		float vector_i= vector[i];
-		float vectors_i= inputVectors[vectorSize*tid+i];
+		float vectors_i= inputVectors[128*gTid+i];
 		float sqr= vector_i-vectors_i;
 		sqr*= sqr;
 		sum+= sqr;
 	}
 
-	//outputDistances[tid]= sum;
-	outputDistances[tid]= sqrt(sum);
+	//outputDistances[gTid]= sum;
+	outputDistances[gTid]= sqrt(sum);
 }
