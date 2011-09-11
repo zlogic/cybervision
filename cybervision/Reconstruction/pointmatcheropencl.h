@@ -29,7 +29,7 @@ protected:
 	bool kernelInitialized;
 
 	//OpenCL kernel paramaters
-	cl_uint vectorSize,inputVectorsCount;
+	cl_uint vectorSize,inputVectorsBufferSize,inputVectorsCount;
 	cl_float *vector;
 	cl_float *input;
 	cl_float *output;

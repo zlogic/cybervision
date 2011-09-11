@@ -39,15 +39,15 @@ namespace cybervision{
 		}
 
 		this->vectorSize= vectorSize;
-		inputVectorsCount= maxVectorsCount;
+		inputVectorsBufferSize= maxVectorsCount;
 
 
 		/////////////////////////////////////////////////////////////////
 		// Allocate and initialize memory used by host
 		/////////////////////////////////////////////////////////////////
 		cl_uint vectorSizeInBytes = vectorSize * sizeof(cl_float);
-		cl_uint inputSizeInBytes = vectorSizeInBytes * inputVectorsCount;
-		cl_uint outputSizeInBytes = inputVectorsCount * sizeof(cl_float);
+		cl_uint inputSizeInBytes = vectorSizeInBytes * inputVectorsBufferSize;
+		cl_uint outputSizeInBytes = inputVectorsBufferSize * sizeof(cl_float);
 		input = new cl_float[inputSizeInBytes];
 		vector = new cl_float[vectorSizeInBytes];
 		output = new cl_float[outputSizeInBytes];
@@ -203,7 +203,7 @@ namespace cybervision{
 		inputBuffer = clCreateBuffer(
 						  context,
 						  CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
-						  sizeof(cl_float) * vectorSize * inputVectorsCount,
+						  sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
 						  input,
 						  &status);
 		if(status != CL_SUCCESS){
@@ -214,7 +214,7 @@ namespace cybervision{
 		outputBuffer = clCreateBuffer(
 						   context,
 						   CL_MEM_WRITE_ONLY | CL_MEM_USE_HOST_PTR,
-						   sizeof(cl_float) * inputVectorsCount,
+						   sizeof(cl_float) * inputVectorsBufferSize,
 						   output,
 						   &status);
 		if(status != CL_SUCCESS){
@@ -323,7 +323,7 @@ namespace cybervision{
 		size_t globalThreads[1];
 		size_t localThreads[1];
 
-		globalThreads[0] = inputVectorsCount;
+		globalThreads[0] = inputVectorsBufferSize;
 		localThreads[0] = kernelWorkGroupSize;
 
 		/* Check group size against kernelWorkGroupSize */
@@ -375,6 +375,17 @@ namespace cybervision{
 			return false;
 		}
 
+		cl_uint clInputVectorsCount= inputVectorsCount;
+		status = clSetKernelArg(
+						kernel,
+						3,
+						sizeof(cl_mem),
+						(void *)&clInputVectorsCount);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (inputVectorsCount), code=%1").arg(status));
+			return false;
+		}
+
 		/*
 		 * Enqueue a kernel run call.
 		 */
@@ -408,7 +419,7 @@ namespace cybervision{
 					outputBuffer,
 					CL_TRUE,
 					0,
-					inputVectorsCount * sizeof(cl_float),
+					inputVectorsBufferSize * sizeof(cl_float),
 					output,
 					0,
 					NULL,
@@ -444,6 +455,7 @@ namespace cybervision{
 	SortedKeypointMatches PointMatcherOpenCL::CalcDistances(const QList<SIFT::Keypoint>& keypoints1,const QList<SIFT::Keypoint>& keypoints2){
 		SortedKeypointMatches result;
 
+		inputVectorsCount= keypoints2.size();
 		//Copy data for keypoints2
 		for(int i=0;i<keypoints2.size();i++)
 			for(cl_uint j=0;j<vectorSize;j++)
