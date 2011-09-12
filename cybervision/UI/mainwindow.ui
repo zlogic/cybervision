@@ -181,12 +181,6 @@
         </property>
         <item>
          <widget class="QFrame" name="toolbarFrame">
-          <property name="frameShape">
-           <enum>QFrame::StyledPanel</enum>
-          </property>
-          <property name="frameShadow">
-           <enum>QFrame::Raised</enum>
-          </property>
           <layout class="QFormLayout" name="formLayout_2">
            <property name="horizontalSpacing">
             <number>0</number>
@@ -199,12 +193,6 @@
            </property>
            <item row="0" column="0">
             <widget class="QFrame" name="mouseModeFrame">
-             <property name="frameShape">
-              <enum>QFrame::StyledPanel</enum>
-             </property>
-             <property name="frameShadow">
-              <enum>QFrame::Raised</enum>
-             </property>
              <layout class="QFormLayout" name="formLayout">
               <property name="fieldGrowthPolicy">
                <enum>QFormLayout::AllNonFixedFieldsGrow</enum>

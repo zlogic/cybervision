@@ -27,6 +27,7 @@ protected:
 	QString kernelStr;
 
 	bool kernelInitialized;
+	bool inputVectorsCopied;
 
 	//OpenCL kernel paramaters
 	cl_uint vectorSize,inputVectorsBufferSize,inputVectorsCount;

@@ -76,7 +76,7 @@ QMAKE_CXXFLAGS_RELEASE += -msse3
 QMAKE_CXXFLAGS_DEBUG +=
 win32 { 
 	QMAKE_LIBS += -static \
-				-lOpenCL \
+				-lOpenCL -laticalrt -laticalcl \
 				-lgomp \
 				-lpthread.dll
 	QMAKE_CXXFLAGS += -U_WIN32 -fopenmp
@@ -84,6 +84,7 @@ win32 {
 }
 unix {
 	QMAKE_LIBS += -lgomp \
+		-L/opt/AMDAPP/lib/x86_64 -lOpenCL \
 		-lpthread
 	QMAKE_CXXFLAGS += -fopenmp
 }

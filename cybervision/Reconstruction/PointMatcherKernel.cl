@@ -3,7 +3,7 @@
 __kernel void computeDistances(__global  float  * outputDistances,
 							   __global  float  * inputVectors,
 							   __global  float  * vector,
-							   const     uint   * inputVectorsCount)
+							   const     uint   inputVectorsCount)
 {
 	uint gTid = get_global_id(0);
 	uint lTid = get_local_id(0);
