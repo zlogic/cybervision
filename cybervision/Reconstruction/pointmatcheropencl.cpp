@@ -31,12 +31,7 @@ namespace cybervision{
 
 		//Get optimal vector size
 		{
-			int pow=0;
-			while(maxVectorsCount>0){
-				maxVectorsCount= maxVectorsCount>>1;
-				pow++;
-			}
-			maxVectorsCount= 1<<pow;
+			maxVectorsCount= (maxVectorsCount/512 + 1)*512;
 			maxVectorsCount= qMax(maxVectorsCount,(int)kernelWorkGroupSize);
 		}
 
@@ -355,7 +350,7 @@ namespace cybervision{
 				status = clEnqueueWriteBuffer(
 							commandQueue,
 							inputBuffer,
-							CL_TRUE,
+							CL_FALSE,
 							0,
 							sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
 							input,
@@ -387,7 +382,7 @@ namespace cybervision{
 			status = clEnqueueWriteBuffer(
 						commandQueue,
 						vectorBuffer,
-						CL_TRUE,
+						CL_FALSE,
 						0,
 						sizeof(cl_float) * vectorSize,
 						vector,
@@ -496,7 +491,7 @@ namespace cybervision{
 		status = clEnqueueReadBuffer(
 					commandQueue,
 					outputBuffer,
-					CL_TRUE,
+					CL_FALSE,
 					0,
 					inputVectorsBufferSize * sizeof(cl_float),
 					output,
