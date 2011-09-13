@@ -3,7 +3,8 @@
 __kernel void computeDistances(__global  float  * outputDistances,
 							   __global  float  * inputVectors,
 							   __global  float  * vector,
-							   const     uint   inputVectorsCount)
+							   const     uint   inputVectorsCount,
+							   const     float  MaxKeypointDistance)
 {
 	uint gTid = get_global_id(0);
 	uint lTid = get_local_id(0);
@@ -13,7 +14,7 @@ __kernel void computeDistances(__global  float  * outputDistances,
 
 	float sum = 0;
 	//Compute Eucledian distance
-	for(uint i = 0; i < 128; ++i)
+	for(uint i = 0; i < 128 && sum<MaxKeypointDistance; ++i)
 	{
 		float vector_i= vector[i];
 		float vectors_i= inputVectors[128*gTid+i];

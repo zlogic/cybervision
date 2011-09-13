@@ -22,11 +22,12 @@ namespace cybervision{
 
 		kernelInitialized= false;
 		inputVectorsCopied= false;
+		kernelFirstRun= true;
 
 		//Prepare buffers
 		input= NULL;
 		output= NULL;
-		kernelWorkGroupSize= 4;
+		kernelWorkGroupSize= (Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU)?4:512;
 
 		//Get optimal vector size
 		{
@@ -144,7 +145,7 @@ namespace cybervision{
 		// Create an OpenCL context
 		/////////////////////////////////////////////////////////////////
 		context = clCreateContextFromType(cps,
-										  CL_DEVICE_TYPE_GPU,
+										  Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU?CL_DEVICE_TYPE_GPU:CL_DEVICE_TYPE_CPU,
 										  NULL,
 										  NULL,
 										  &status);
@@ -327,79 +328,90 @@ namespace cybervision{
 		globalThreads[0] = inputVectorsBufferSize;
 		localThreads[0] = kernelWorkGroupSize;
 
-		/* Check group size against kernelWorkGroupSize */
-		status = clGetKernelWorkGroupInfo(kernel,
-										  devices[0],
-										  CL_KERNEL_WORK_GROUP_SIZE,
-										  sizeof(size_t),
-										  &kernelWorkGroupSize,
-										  0);
-	   if(status != CL_SUCCESS){
-		   emit sgnLogMessage(QString("OpenCL Error: clGetKernelWorkGroupInfo failed, code=%1").arg(status));
-		   return false;
-	   }
+		if(kernelFirstRun){
+			/* Check group size against kernelWorkGroupSize */
+			status = clGetKernelWorkGroupInfo(kernel,
+											  devices[0],
+											  CL_KERNEL_WORK_GROUP_SIZE,
+											  sizeof(size_t),
+											  &kernelWorkGroupSize,
+											  0);
+			if(status != CL_SUCCESS){
+				emit sgnLogMessage(QString("OpenCL Error: clGetKernelWorkGroupInfo failed, code=%1").arg(status));
+				return false;
+			}
 
-		if((cl_uint)(localThreads[0]) > kernelWorkGroupSize){
-			emit sgnLogMessage(QString("OpenCL Warning: Out of Resources! Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3.").arg(localThreads[0]).arg(kernelWorkGroupSize).arg(kernelWorkGroupSize));
+			if((cl_uint)(localThreads[0]) > kernelWorkGroupSize){
+				emit sgnLogMessage(QString("OpenCL Warning: Out of Resources! Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3.").arg(localThreads[0]).arg(kernelWorkGroupSize).arg(kernelWorkGroupSize));
 
-			localThreads[0] = kernelWorkGroupSize;
+				localThreads[0] = kernelWorkGroupSize;
+			}
+			kernelFirstRun= false;
 		}
 
 		if(!inputVectorsCopied){
-			/* Enqueue clEnqueueWriteBuffer for input buffer */
+			if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU){
+				/* Enqueue clEnqueueWriteBuffer for input buffer */
+				status = clEnqueueWriteBuffer(
+							commandQueue,
+							inputBuffer,
+							CL_TRUE,
+							0,
+							sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
+							input,
+							0,
+							NULL,
+							&events[0]);
+				if(status != CL_SUCCESS){
+					emit sgnLogMessage(QString("OpenCL Error: clEnqueueWriteBuffer (inputBuffer) failed, code=%1").arg(status));
+					return false;
+				}
+
+				/* wait for the write buffer call to finish execution */
+				status = clWaitForEvents(1, &events[0]);
+				if(status != CL_SUCCESS){
+					emit sgnLogMessage(QString("OpenCL Error: clWaitForEvents (0) failed, code=%1").arg(status));
+					return false;
+				}
+				status = clReleaseEvent(events[0]);
+				if(status != CL_SUCCESS){
+					emit sgnLogMessage(QString("OpenCL Error: clReleaseEvents (0) failed, code=%1").arg(status));
+					return false;
+				}
+			}
+			inputVectorsCopied= true;
+		}
+
+		if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU){
+			/* Enqueue clEnqueueWriteBuffer for input vector buffer */
 			status = clEnqueueWriteBuffer(
 						commandQueue,
-						inputBuffer,
+						vectorBuffer,
 						CL_TRUE,
 						0,
-						sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
-						input,
+						sizeof(cl_float) * vectorSize,
+						vector,
 						0,
 						NULL,
-						&events[0]);
+						&events[1]);
 			if(status != CL_SUCCESS){
-				emit sgnLogMessage(QString("OpenCL Error: clEnqueueWriteBuffer (inputBuffer) failed, code=%1").arg(status));
+				emit sgnLogMessage(QString("OpenCL Error: clEnqueueWriteBuffer (vectorBuffer) failed, code=%1").arg(status));
 				return false;
 			}
 
 			/* wait for the write buffer call to finish execution */
-			status = clWaitForEvents(1, &events[0]);
+			status = clWaitForEvents(1, &events[1]);
 			if(status != CL_SUCCESS){
-				emit sgnLogMessage(QString("OpenCL Error: clWaitForEvents (0) failed, code=%1").arg(status));
-				return false;
-			}
-			status = clReleaseEvent(events[0]);
-			if(status != CL_SUCCESS){
-				emit sgnLogMessage(QString("OpenCL Error: clReleaseEvents (0) failed, code=%1").arg(status));
+				emit sgnLogMessage(QString("OpenCL Error: clWaitForEvents (1) failed, code=%1").arg(status));
 				return false;
 			}
 
-			inputVectorsCopied= true;
+			status = clReleaseEvent(events[1]);
+			if(status != CL_SUCCESS){
+				emit sgnLogMessage(QString("OpenCL Error: clReleaseEvents (1) failed, code=%1").arg(status));
+				return false;
+			}
 		}
-
-		/* Enqueue clEnqueueWriteBuffer for input vector buffer */
-		status = clEnqueueWriteBuffer(
-					commandQueue,
-					vectorBuffer,
-					CL_TRUE,
-					0,
-					sizeof(cl_float) * vectorSize,
-					vector,
-					0,
-					NULL,
-					&events[1]);
-		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clEnqueueWriteBuffer (vectorBuffer) failed, code=%1").arg(status));
-			return false;
-		}
-
-		/* wait for the write buffer call to finish execution */
-		status = clWaitForEvents(1, &events[1]);
-		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clWaitForEvents (1) failed, code=%1").arg(status));
-			return false;
-		}
-
 		/*** Set appropriate arguments to the kernel ***/
 		status = clSetKernelArg(
 						kernel,
@@ -439,6 +451,17 @@ namespace cybervision{
 						(void *)&clInputVectorsCount);
 		if(status != CL_SUCCESS){
 			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (inputVectorsCount), code=%1").arg(status));
+			return false;
+		}
+
+		cl_float clMaxKeypointDistance= Options::MaxKeypointDistance*Options::MaxKeypointDistance;
+		status = clSetKernelArg(
+						kernel,
+						4,
+						sizeof(cl_float),
+						(void *)&clMaxKeypointDistance);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (MaxKeypointDistance), code=%1").arg(status));
 			return false;
 		}
 
@@ -489,12 +512,6 @@ namespace cybervision{
 		status = clWaitForEvents(1, &events[3]);
 		if(status != CL_SUCCESS){
 			emit sgnLogMessage(QString("OpenCL Error: clWaitForEvents (3) failed, code=%1").arg(status));
-			return false;
-		}
-
-		status = clReleaseEvent(events[1]);
-		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clReleaseEvents (1) failed, code=%1").arg(status));
 			return false;
 		}
 

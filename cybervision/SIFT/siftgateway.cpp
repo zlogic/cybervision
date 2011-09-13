@@ -44,7 +44,7 @@ bool SIFT::Keypoint::operator ==(const Keypoint& keypoint)const{
 	return true;
 }
 
-float SIFT::Keypoint::distance(const Keypoint& keypoint)const{
+float SIFT::Keypoint::distance(const Keypoint& keypoint,double MaxKeypointDistanceSquared)const{
 	/*
 	//If scale is not equal, keypoints don't match
 	if(keypoint.scale!=scale){
@@ -53,10 +53,12 @@ float SIFT::Keypoint::distance(const Keypoint& keypoint)const{
 	}
 	*/
 	float distance_squared=0;
-	for(int i=0;i<128;i++){
+	for(int i=0;i<128&&distance_squared<MaxKeypointDistanceSquared;i++){
 		float di= descriptor[i]-keypoint.descriptor[i];
 		distance_squared+= di*di;
 	}
+	if(distance_squared>MaxKeypointDistanceSquared)
+		return std::numeric_limits<float>::infinity();
 	return sqrt(distance_squared);
 }
 float SIFT::Keypoint::getX()const{return x;}

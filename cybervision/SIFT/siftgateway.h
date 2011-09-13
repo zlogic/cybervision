@@ -5,6 +5,8 @@
 #include <QImage>
 #include <QMutex>
 
+#include <limits>
+
 namespace SIFT{
 	class Keypoint{
 		friend class Extractor;
@@ -18,7 +20,7 @@ namespace SIFT{
 		Keypoint(const Keypoint&);
 		void operator =(const Keypoint&);
 		bool operator==(const Keypoint&)const;
-		float distance(const Keypoint&)const;
+		float distance(const Keypoint&,const double MaxKeypointDistanceSquared=std::numeric_limits<float>::infinity())const;
 		float getX()const;
 		float getY()const;
 		inline float operator[](size_t i)const{return descriptor[i];}

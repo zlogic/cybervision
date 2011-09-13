@@ -107,7 +107,7 @@ namespace cybervision{
 		emit sgnStatusMessage("Matching SIFT keypoints...");
 
 		bool OpenCLSucceeded= true;
-		if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL){
+		if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU || Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU){
 			PointMatcherOpenCL clMatcher(128,qMax(keypoints1.size(),keypoints2.size()),this);
 
 			QObject::connect(&clMatcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);
@@ -141,6 +141,7 @@ namespace cybervision{
 			QObject::disconnect(&clMatcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)));
 		}
 		if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_SIMPLE || !OpenCLSucceeded){
+			double MaxKeypointDistanceSquared= Options::MaxKeypointDistance*Options::MaxKeypointDistance;
 			//Simple matching
 			emit sgnLogMessage(QString("Matching keypoints from %1 to %2").arg(filename1).arg(filename2));
 			//Match first image with second
@@ -151,7 +152,7 @@ namespace cybervision{
 					KeypointMatch match;
 					float minDistance= std::numeric_limits<float>::infinity();
 					for(QList<SIFT::Keypoint>::const_iterator it2= keypoints2.begin();it2!=keypoints2.end();it2++){
-						float distance= it1->distance(*it2);
+						float distance= it1->distance(*it2,MaxKeypointDistanceSquared);
 						if(distance<minDistance){
 							minDistance= distance;
 							match.a= QPointF(it1->getX(),it1->getY());
@@ -176,7 +177,7 @@ namespace cybervision{
 					KeypointMatch match;
 					float minDistance= std::numeric_limits<float>::infinity();
 					for(QList<SIFT::Keypoint>::const_iterator it1= keypoints1.begin();it1!=keypoints1.end();it1++){
-						float distance= it2->distance(*it1);
+						float distance= it2->distance(*it1,MaxKeypointDistanceSquared);
 						if(distance<minDistance){
 							minDistance= distance;
 							match.a= QPointF(it1->getX(),it1->getY());
