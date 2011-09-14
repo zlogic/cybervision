@@ -249,8 +249,10 @@ namespace cybervision{
 			return false;
 		}
 
+		QString qOptions= QString("-D VECTOR_SIZE=%1").arg(vectorSize);
+
 		/* create a cl program executable for all the devices specified */
-		status = clBuildProgram(program, 1, devices, NULL, NULL, NULL);
+		status = clBuildProgram(program, 1, devices, qOptions.toStdString().c_str(), NULL, NULL);
 		if(status != CL_SUCCESS){
 			QVector<char> build_log;
 
