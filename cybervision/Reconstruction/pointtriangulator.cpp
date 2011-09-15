@@ -2,12 +2,14 @@
 
 #include <Reconstruction/options.h>
 
-#include <Eigen/Dense>
-#include <Eigen/SVD>
 #include <limits>
 #include <QSize>
 #include <QVector2D>
 #include <QSet>
+
+#define EIGEN_NO_EXCEPTIONS
+#include <Eigen/Dense>
+#include <Eigen/SVD>
 
 namespace cybervision{
 

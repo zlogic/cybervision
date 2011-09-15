@@ -1,3 +1,5 @@
+#ifdef CYBERVISION_OPENCL
+
 #include "pointmatcheropencl.h"
 
 #include <Reconstruction/options.h>
@@ -27,11 +29,12 @@ namespace cybervision{
 		//Prepare buffers
 		input= NULL;
 		output= NULL;
-		kernelWorkGroupSize= (Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU)?4:512;
+		kernelWorkGroupSize= (Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU)?4:1024;
 
 		//Get optimal vector size
 		{
-			maxVectorsCount= (maxVectorsCount/512 + 1)*512;
+			int workRounding= (Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU)?1024:512;
+			maxVectorsCount= (maxVectorsCount/workRounding + 1)*workRounding;
 			maxVectorsCount= qMax(maxVectorsCount,(int)kernelWorkGroupSize);
 		}
 
@@ -42,12 +45,9 @@ namespace cybervision{
 		/////////////////////////////////////////////////////////////////
 		// Allocate and initialize memory used by host
 		/////////////////////////////////////////////////////////////////
-		cl_uint vectorSizeInBytes = vectorSize * sizeof(cl_float);
-		cl_uint inputSizeInBytes = vectorSizeInBytes * inputVectorsBufferSize;
-		cl_uint outputSizeInBytes = inputVectorsBufferSize * sizeof(cl_float);
-		input = new cl_float[inputSizeInBytes];
-		vector = new cl_float[vectorSizeInBytes];
-		output = new cl_float[outputSizeInBytes];
+		input = new cl_float[vectorSize * inputVectorsBufferSize];
+		vector = new cl_float[vectorSize];
+		output = new cl_float[inputVectorsBufferSize];
 	}
 	PointMatcherOpenCL::~PointMatcherOpenCL(){
 		if(input){
@@ -279,6 +279,11 @@ namespace cybervision{
 		return true;
 	}
 	bool PointMatcherOpenCL::ShutdownCL(){
+		if(!kernelInitialized)
+			return true;
+
+		kernelInitialized= false;
+
 		cl_int status;
 
 		status = clReleaseKernel(kernel);
@@ -528,6 +533,117 @@ namespace cybervision{
 	}
 
 	SortedKeypointMatches PointMatcherOpenCL::CalcDistances(const QList<SIFT::Keypoint>& keypoints1,const QList<SIFT::Keypoint>& keypoints2){
+		if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU)
+			return CalcDistancesHybrid(keypoints1,keypoints2);
+		else if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU)
+			return CalcDistancesOpenCL(keypoints1,keypoints2);
+		else
+			return SortedKeypointMatches();
+	}
+
+	SortedKeypointMatches PointMatcherOpenCL::CalcDistancesHybrid(const QList<SIFT::Keypoint>& keypoints1,const QList<SIFT::Keypoint>& keypoints2){
+		SortedKeypointMatches result;
+
+		bool gpuBusy= false;
+		bool openCLFailed= false;
+
+		//Compute distances for all keypoints from keypoints1, then choose the minumum distance
+		#pragma omp parallel
+		for(QList<SIFT::Keypoint>::const_iterator it=keypoints1.begin();it!=keypoints1.end();it++){
+			#pragma omp single nowait
+			if(!openCLFailed)
+			{
+				bool useGPU=false;
+				#pragma omp critical
+				{
+					if(!gpuBusy && Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU){
+						useGPU= true;
+						gpuBusy= true;
+					}
+				}
+
+				KeypointMatch match;
+				float minDistance= std::numeric_limits<float>::infinity();
+
+				if(useGPU && !kernelInitialized){
+					if(!InitCL()){
+						openCLFailed= true;
+						useGPU= false;
+					}
+				}
+
+				if(useGPU && kernelFirstRun){
+					inputVectorsCount= keypoints2.size();
+					//Copy data for keypoints2
+					for(int i=0;i<keypoints2.size();i++)
+						for(cl_uint j=0;j<vectorSize;j++)
+							input[i*vectorSize+j]= keypoints2[i][j];
+
+					inputVectorsCopied= false;
+				}
+
+				if(useGPU){
+					//Prepare current vector
+					for(cl_uint i=0;i<vectorSize;i++)
+						vector[i]= (*it)[i];
+
+					//Run OpenCL stuff
+					if(!CalcDistances())
+						openCLFailed= true;
+
+					if(!openCLFailed){
+						//Parse OpenCL result
+						int min_i=0;
+						for(int i=0;i<keypoints2.size();i++)
+							if(output[i]<output[min_i])
+								min_i=i;
+						const SIFT::Keypoint& keypoint2= keypoints2[min_i];
+						minDistance= it->distance(keypoint2);
+						if(minDistance<Options::MaxKeypointDistance){
+							match.a= QPointF(it->getX(),it->getY());
+							match.b= QPointF(keypoint2.getX(),keypoint2.getY());
+
+							//Add point
+							if(!result.contains(minDistance,match))
+								result.insert(minDistance,match);
+						}
+					}
+					gpuBusy= false;
+				}else{
+					minDistance= std::numeric_limits<float>::infinity();
+					double MaxKeypointDistanceSquared= Options::MaxKeypointDistance*Options::MaxKeypointDistance;
+					for(QList<SIFT::Keypoint>::const_iterator it2= keypoints2.begin();it2!=keypoints2.end();it2++){
+						float distance= it->distance(*it2,MaxKeypointDistanceSquared);
+						if(distance<minDistance && distance<Options::MaxKeypointDistance){
+							minDistance= distance;
+							match.a= QPointF(it->getX(),it->getY());
+							match.b= QPointF(it2->getX(),it2->getY());
+						}
+					}
+				}
+
+				if(minDistance!=std::numeric_limits<float>::infinity() && minDistance<Options::MaxKeypointDistance){
+					#pragma omp critical
+					{
+						if(!result.contains(minDistance,match))
+							result.insert(minDistance,match);
+					}
+				}
+			}
+		}
+
+		if(openCLFailed)
+			result= SortedKeypointMatches();
+
+		return result;
+	}
+
+
+	SortedKeypointMatches PointMatcherOpenCL::CalcDistancesOpenCL(const QList<SIFT::Keypoint>& keypoints1,const QList<SIFT::Keypoint>& keypoints2){
+		if(!kernelInitialized)
+			if(!InitCL())
+				return SortedKeypointMatches();
+
 		SortedKeypointMatches result;
 
 		inputVectorsCount= keypoints2.size();
@@ -541,7 +657,7 @@ namespace cybervision{
 		//Compute distances for all keypoints from keypoints1, then choose the minumum distance
 		for(QList<SIFT::Keypoint>::const_iterator it=keypoints1.begin();it!=keypoints1.end();it++){
 			//Prepare current vector
-			for(int i=0;i<128;i++)
+			for(cl_uint i=0;i<vectorSize;i++)
 				vector[i]= (*it)[i];
 
 			//Run OpenCL stuff
@@ -568,3 +684,5 @@ namespace cybervision{
 		return result;
 	}
 }
+
+#endif // CYBERVISION_OPENCL

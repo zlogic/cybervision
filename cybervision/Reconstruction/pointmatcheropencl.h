@@ -1,3 +1,4 @@
+#ifdef CYBERVISION_OPENCL
 #ifndef POINTMATCHEROPENCL_H
 #define POINTMATCHEROPENCL_H
 
@@ -50,6 +51,11 @@ protected:
 
 	//Runs OpenCL for the prepared buffers
 	bool CalcDistances();
+
+	//Compute distances with OpenCL GPU and OpenMP CPU
+	SortedKeypointMatches CalcDistancesHybrid(const QList<SIFT::Keypoint>& keypoints1,const QList<SIFT::Keypoint>& keypoints2);
+	//Compute distances with OpenCL only
+	SortedKeypointMatches CalcDistancesOpenCL(const QList<SIFT::Keypoint>& keypoints1,const QList<SIFT::Keypoint>& keypoints2);
 public:
 	explicit PointMatcherOpenCL(int vectorSize, int maxVectorsCount, QObject *parent = 0);
 	~PointMatcherOpenCL();
@@ -68,3 +74,14 @@ public slots:
 }
 
 #endif // POINTMATCHEROPENCL_H
+#else
+
+#include <QObject>
+//Dummy class to prevent compiler (Qt moc) warnings
+namespace cybervision{
+class PointMatcherOpenCL : public QObject
+{
+	Q_OBJECT
+};
+}
+#endif // CYBERVISION_OPENCL

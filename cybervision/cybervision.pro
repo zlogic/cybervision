@@ -74,6 +74,9 @@ FORMS += UI/mainwindow.ui
 
 QMAKE_CXXFLAGS_RELEASE += -msse3
 QMAKE_CXXFLAGS_DEBUG +=
+
+DEFINES += CYBERVISION_OPENCL
+
 win32 { 
 	QMAKE_LIBS += -static \
 				-lOpenCL -laticalrt -laticalcl \

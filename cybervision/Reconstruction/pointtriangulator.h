@@ -4,8 +4,10 @@
 #include <QVector3D>
 #include <QObject>
 #include <QList>
-#include <Eigen/Dense>
 #include <Reconstruction/pointmatch.h>
+
+#define EIGEN_NO_EXCEPTIONS
+#include <Eigen/Dense>
 
 namespace cybervision{
 	/*

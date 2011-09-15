@@ -1,11 +1,13 @@
 #include "fundamentalmatrix.h"
 
 #include <Reconstruction/options.h>
-#include <Eigen/Dense>
-#include <Eigen/SVD>
 #include <limits>
 #include <QFile>
 #include <QTextStream>
+
+#define EIGEN_NO_EXCEPTIONS
+#include <Eigen/Dense>
+#include <Eigen/SVD>
 
 namespace cybervision{
 

@@ -9,6 +9,7 @@
 #include <QVector3D>
 #include <QSize>
 
+#define EIGEN_NO_EXCEPTIONS
 #include <Eigen/Dense>
 
 #include <Reconstruction/options.h>

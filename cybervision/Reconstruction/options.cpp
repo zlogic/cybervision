@@ -9,7 +9,7 @@ namespace cybervision{
 	const int Options::MinMatches= 16;
 	const bool Options::UsePrecomputedKeypointData= false;
 	const bool Options::SaveFilteredMatches= false;
-	const Options::KeypointMatchingMode Options::keypointMatchingMode= Options::KEYPOINT_MATCHING_SIMPLE;
+	const Options::KeypointMatchingMode Options::keypointMatchingMode= Options::KEYPOINT_MATCHING_OPENCL_GPU;
 	const size_t Options::bbf_steps= 1000;
 	const Options::TriangulationMode Options::triangulationMode= Options::TRIANGULATION_PARALLEL;
 	const double Options::constraintsThreshold= 0.0000001;

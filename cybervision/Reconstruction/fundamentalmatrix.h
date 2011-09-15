@@ -4,6 +4,8 @@
 #include <QObject>
 #include <QFileInfo>
 #include <Reconstruction/pointmatch.h>
+
+#define EIGEN_NO_EXCEPTIONS
 #include <Eigen/Dense>
 
 namespace cybervision{
