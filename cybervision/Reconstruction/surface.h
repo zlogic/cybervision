@@ -33,6 +33,9 @@ namespace cybervision{
 
 		//Image size
 		QRectF imageSize;
+
+		//Textures
+		QImage image1,image2;
 	public:
 		Surface();
 		Surface(const Surface&);
@@ -53,6 +56,13 @@ namespace cybervision{
 
 		//Returns scale
 		qreal getScale()const;
+
+		//Returns the textures
+		const QImage& getTexture1() const;
+		const QImage& getTexture2() const;
+
+		//Sets the textures
+		void setTextures(const QImage& image1,const QImage& image2);
 
 		//Functions for saving image
 		void savePoints(QString fileName)const;

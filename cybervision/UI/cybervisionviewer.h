@@ -12,14 +12,17 @@ class CybervisionViewer : public QGLWidget{
 	Q_OBJECT
 public:
 	enum MouseMode{MOUSE_ROTATION,MOUSE_PANNING};
+	enum TextureMode{TEXTURE_NONE,TEXTURE_1,TEXTURE_2};
 protected:
 	QMutex surfaceMutex;
 	cybervision::Surface surface;
+	GLuint textures[2];
 
 	//Viewport configuration
 	QVector3D vpRotation,vpTranslation;
 	QPoint lastMousePos;
 	MouseMode mouseMode;
+	TextureMode textureMode;
 	bool showGrid;
 
 	//Opengl constants
@@ -41,6 +44,7 @@ public:
 	//Getters/setters
 	void setSurface3D(const cybervision::Surface&);
 	void setMouseMode(MouseMode mouseMode);
+	void setTextureMode(TextureMode textureMode);
 	void setShowGrid(bool show);
 	const cybervision::Surface& getSurface3D()const;
 protected:

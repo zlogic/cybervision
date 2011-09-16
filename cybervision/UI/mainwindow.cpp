@@ -217,3 +217,17 @@ void MainWindow::on_rotateToolButton_toggled(bool checked){
 void MainWindow::on_gridToolButton_toggled(bool checked){
 	ui->openGLViewport->setShowGrid(checked);
 }
+
+
+
+void MainWindow::on_texture1ToolButton_clicked(){
+	ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_1);
+}
+
+void MainWindow::on_texture2ToolButton_clicked(){
+	ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_2);
+}
+
+void MainWindow::on_textureNoneToolButton_clicked(){
+	ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_NONE);
+}

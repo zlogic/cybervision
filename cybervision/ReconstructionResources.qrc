@@ -6,6 +6,9 @@
         <file>UI/icons/arrow-circle.png</file>
         <file>UI/icons/arrow-move.png</file>
         <file>UI/icons/grid.png</file>
+        <file>UI/icons/texture-empty.png</file>
+        <file>UI/icons/texture-left.png</file>
+        <file>UI/icons/texture-right.png</file>
     </qresource>
     <qresource prefix="/opencl">
         <file alias="PointMatcherKernel.cl">Reconstruction/PointMatcherKernel.cl</file>

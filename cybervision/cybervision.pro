@@ -100,7 +100,11 @@ OTHER_FILES += \
     UI/icons/arrow-move.png \
     UI/icons/arrow-circle.png \
     UI/icons/grid.png \
-    Reconstruction/PointMatcherKernel.cl
+    Reconstruction/PointMatcherKernel.cl \
+    UI/icons/texture-right.png \
+    UI/icons/texture-left.png \
+    UI/icons/texture-empty.png
+
 
 
 

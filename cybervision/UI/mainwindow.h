@@ -52,6 +52,9 @@ private slots:
 	void processStarted();
 	void processUpdated(QString logMessage,QString statusBarText=QString());
 	void processStopped(QString resultText,cybervision::Surface);
+	void on_texture1ToolButton_clicked();
+	void on_texture2ToolButton_clicked();
+	void on_textureNoneToolButton_clicked();
 };
 
 #endif // MAINWINDOW_H

@@ -27,8 +27,6 @@ namespace cybervision{
 		kernelFirstRun= true;
 
 		//Prepare buffers
-		input= NULL;
-		output= NULL;
 		kernelWorkGroupSize= (Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU)?4:1024;
 
 		//Get optimal vector size
@@ -45,27 +43,11 @@ namespace cybervision{
 		/////////////////////////////////////////////////////////////////
 		// Allocate and initialize memory used by host
 		/////////////////////////////////////////////////////////////////
-		input = new cl_float[vectorSize * inputVectorsBufferSize];
-		vector = new cl_float[vectorSize];
-		output = new cl_float[inputVectorsBufferSize];
+		input.reset(new cl_float[vectorSize * inputVectorsBufferSize]);
+		vector.reset(new cl_float[vectorSize]);
+		output.reset(new cl_float[inputVectorsBufferSize]);
 	}
 	PointMatcherOpenCL::~PointMatcherOpenCL(){
-		if(input){
-			delete[] input;
-			input= NULL;
-		}
-		if(output){
-			delete[] output;
-			output= NULL;
-		}
-		if(vector){
-			delete[] vector;
-			vector= NULL;
-		}
-		if(devices){
-			delete[] devices;
-			devices= NULL;
-		}
 	}
 
 	bool PointMatcherOpenCL::InitCL(){
@@ -163,7 +145,7 @@ namespace cybervision{
 		/////////////////////////////////////////////////////////////////
 		// Detect OpenCL devices
 		/////////////////////////////////////////////////////////////////
-		devices = new cl_device_id[deviceListSize];
+		devices.reset(new cl_device_id[deviceListSize]);
 		if(devices == 0){
 			emit sgnLogMessage(QString("OpenCL Error: No devices found."));
 			return false;
@@ -174,7 +156,7 @@ namespace cybervision{
 					 context,
 					 CL_CONTEXT_DEVICES,
 					 deviceListSize,
-					 devices,
+					 devices.data(),
 					 NULL);
 		if(status != CL_SUCCESS){
 			emit sgnLogMessage(QString("OpenCL Error: Getting Context Info (device list, clGetContextInfo) code=%1").arg(status));
@@ -201,7 +183,7 @@ namespace cybervision{
 						  context,
 						  CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
 						  sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
-						  input,
+						  input.data(),
 						  &status);
 		if(status != CL_SUCCESS){
 			emit sgnLogMessage(QString("OpenCL Error: clCreateBuffer (inputBuffer) code=%1").arg(status));
@@ -212,7 +194,7 @@ namespace cybervision{
 						   context,
 						   CL_MEM_WRITE_ONLY | CL_MEM_USE_HOST_PTR,
 						   sizeof(cl_float) * inputVectorsBufferSize,
-						   output,
+						   output.data(),
 						   &status);
 		if(status != CL_SUCCESS){
 			emit sgnLogMessage(QString("OpenCL Error: clCreateBuffer (outputBuffer) code=%1").arg(status));
@@ -223,7 +205,7 @@ namespace cybervision{
 						   context,
 						   CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
 						   sizeof(cl_float) * vectorSize,
-						   vector,
+						   vector.data(),
 						   &status);
 		if(status != CL_SUCCESS){
 			emit sgnLogMessage(QString("OpenCL Error: clCreateBuffer (vectorBuffer) code=%1").arg(status));
@@ -252,7 +234,7 @@ namespace cybervision{
 		QString qOptions= QString("-D VECTOR_SIZE=%1").arg(vectorSize);
 
 		/* create a cl program executable for all the devices specified */
-		status = clBuildProgram(program, 1, devices, qOptions.toStdString().c_str(), NULL, NULL);
+		status = clBuildProgram(program, 1, devices.data(), qOptions.toStdString().c_str(), NULL, NULL);
 		if(status != CL_SUCCESS){
 			QVector<char> build_log;
 
@@ -360,7 +342,7 @@ namespace cybervision{
 							CL_FALSE,
 							0,
 							sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
-							input,
+							input.data(),
 							0,
 							NULL,
 							&events[0]);
@@ -392,7 +374,7 @@ namespace cybervision{
 						CL_FALSE,
 						0,
 						sizeof(cl_float) * vectorSize,
-						vector,
+						vector.data(),
 						0,
 						NULL,
 						&events[1]);
@@ -501,7 +483,7 @@ namespace cybervision{
 					CL_FALSE,
 					0,
 					inputVectorsBufferSize * sizeof(cl_float),
-					output,
+					output.data(),
 					0,
 					NULL,
 					&events[3]);

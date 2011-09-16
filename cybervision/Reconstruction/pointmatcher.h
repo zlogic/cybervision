@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QSize>
+#include <QImage>
 #include <Reconstruction/pointmatch.h>
 
 namespace cybervision{
@@ -15,6 +16,7 @@ namespace cybervision{
 		//Results
 		SortedKeypointMatches matches;
 		QSize imageSize;
+		QImage image1,image2;
 		double scaleMetadata;
 	public:
 		explicit PointMatcher(QObject *parent = 0);
@@ -25,6 +27,8 @@ namespace cybervision{
 		//Getters
 		SortedKeypointMatches getMatches()const;
 		QSize getSize()const;
+		const QImage& getImage1()const;
+		const QImage& getImage2()const;
 		double getScaleMetadata()const;
 	signals:
 		void sgnLogMessage(QString);

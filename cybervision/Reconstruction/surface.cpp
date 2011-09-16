@@ -23,6 +23,8 @@ namespace cybervision{
 		this->minDepth= sc.minDepth;
 		this->maxDepth= sc.maxDepth;
 		this->imageSize= sc.imageSize;
+		this->image1= sc.image1;
+		this->image2= sc.image2;
 	}
 
 	void Surface::glDraw() const{
@@ -51,40 +53,51 @@ namespace cybervision{
 				//Use triangle normals
 				//Front side
 				glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
+				glTexCoord2d(pa.coord.x()*scale/Options::surfaceSize+0.5,pa.coord.y()*scale/Options::surfaceSize+0.5);
 				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
 				glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
+				glTexCoord2d(pb.coord.x()*scale/Options::surfaceSize+0.5,pb.coord.y()*scale/Options::surfaceSize+0.5);
 				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
 				glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
+				glTexCoord2d(pc.coord.x()*scale/Options::surfaceSize+0.5,pc.coord.y()*scale/Options::surfaceSize+0.5);
 				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
 
 				//Back side
 				glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
+				glTexCoord2d(pa.coord.x()*scale/Options::surfaceSize+0.5,pa.coord.y()*scale/Options::surfaceSize+0.5);
 				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
 				glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
+				glTexCoord2d(pb.coord.x()*scale/Options::surfaceSize+0.5,pb.coord.y()*scale/Options::surfaceSize+0.5);
 				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
 				glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
+				glTexCoord2d(pc.coord.x()*scale/Options::surfaceSize+0.5,pc.coord.y()*scale/Options::surfaceSize+0.5);
 				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
 			}else if(Options::renderNormalsMode== Options::RENDER_NORMALS_POINT){
 				//Use point normals
 				//Front side
 				glNormal3f(pa.normal.x(),pa.normal.y(),pa.normal.z());
+				glTexCoord2d(pa.coord.x()*scale/Options::surfaceSize+0.5,pa.coord.y()*scale/Options::surfaceSize+0.5);
 				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
 				glNormal3f(pb.normal.x(),pb.normal.y(),pb.normal.z());
+				glTexCoord2d(pb.coord.x()*scale/Options::surfaceSize+0.5,pb.coord.y()*scale/Options::surfaceSize+0.5);
 				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
 				glNormal3f(pc.normal.x(),pc.normal.y(),pc.normal.z());
+				glTexCoord2d(pc.coord.x()*scale/Options::surfaceSize+0.5,pc.coord.y()*scale/Options::surfaceSize+0.5);
 				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
 
 				//Back side
 				glNormal3f(-pc.normal.x(),-pc.normal.y(),-pc.normal.z());
+				glTexCoord2d(pa.coord.x()*scale/Options::surfaceSize+0.5,pa.coord.y()*scale/Options::surfaceSize+0.5);
 				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
 				glNormal3f(-pb.normal.x(),-pb.normal.y(),-pb.normal.z());
+				glTexCoord2d(pb.coord.x()*scale/Options::surfaceSize+0.5,pb.coord.y()*scale/Options::surfaceSize+0.5);
 				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
 				glNormal3f(-pa.normal.x(),-pa.normal.y(),-pa.normal.z());
+				glTexCoord2d(pc.coord.x()*scale/Options::surfaceSize+0.5,pc.coord.y()*scale/Options::surfaceSize+0.5);
 				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
-				glEnd();
 			}
-			glBegin(GL_POINTS);
-			glColor3f(0.0f, 0.0f, 0.0f);
+			//glBegin(GL_POINTS);
+			//glColor3f(0.0f, 0.0f, 0.0f);
 			//glVertex3f(it->a.x(),it->a.y(),it->a.z());
 			//glVertex3f(it->a.x(),it->a.y(),it->a.z()+1);
 			glEnd();
@@ -117,6 +130,13 @@ namespace cybervision{
 	QRectF cybervision::Surface::getImageSize() const{ return imageSize; }
 
 	qreal Surface::getScale()const{ return scale; }
+
+
+	const QImage& Surface::getTexture1()const{ return image1; }
+	const QImage& Surface::getTexture2()const{ return image2; }
+	void Surface::setTextures(const QImage& image1,const QImage& image2){
+		this->image1= image1, this->image2= image2;
+	}
 
 
 	/*

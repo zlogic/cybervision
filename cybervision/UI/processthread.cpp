@@ -6,6 +6,7 @@
 
 #include <QSharedPointer>
 #include <QFile>
+#include <QElapsedTimer>
 
 ProcessThread::ProcessThread(){mw=NULL;}
 
@@ -20,6 +21,9 @@ void ProcessThread::reconstruct3DShape(QStringList image_filenames,qreal scaleXY
 
 void ProcessThread::run(){
 	emit processStarted();
+	QElapsedTimer stopwatch;
+	stopwatch.start();
+
 	cybervision::Reconstructor reconstructor(NULL);
 
 	QObject::connect(&reconstructor, SIGNAL(sgnLogMessage(QString)),
@@ -39,7 +43,25 @@ void ProcessThread::run(){
 			emit processUpdated("Creating 3D surface","Creating 3D surface...");
 			cybervision::Sculptor sculptor(reconstructor.get3DPoints(),reconstructor.getImageSize(),scaleXY,scaleZ);
 
-			emit processStopped(QString(),sculptor.getSurface());
+			cybervision::Surface surface= sculptor.getSurface();
+
+			surface.setTextures(reconstructor.getImage1(),reconstructor.getImage2());
+
+			//Output time
+			{
+				qint64 msecs= stopwatch.elapsed();
+				qint64 mins= msecs/(1000*60);
+				msecs-= mins*(1000*60);
+				qint64 secs= msecs/1000;
+				msecs-= secs*1000;
+				QString timeString= QString("Reconstruction completed in %1:%2.%3")
+						.arg((int)mins,2,10,QChar('0'))
+						.arg((int)secs,2,10,QChar('0'))
+						.arg((int)msecs,3,10,QChar('0'));
+				emit sgnLogMessage(timeString);
+			}
+
+			emit processStopped(QString(),surface);
 		}else
 			emit processStopped(reconstructor.getErrorString());
 	}else
@@ -50,8 +72,6 @@ void ProcessThread::setUi(MainWindow* mw){
 	if(this->mw){
 		QObject::disconnect(this, SIGNAL(processStarted()),
 							this->mw, SLOT(processStarted()));
-		QObject::disconnect(this, SIGNAL(processStopped(QString,QList<QVector3D>,QSize,double)),
-							this->mw, SLOT(processStopped(QString,QList<QVector3D>,QSize,double)));
 		QObject::disconnect(this, SIGNAL(processStopped(QString,cybervision::Surface)),
 							this->mw, SLOT(processStopped(QString,cybervision::Surface)));
 		QObject::disconnect(this, SIGNAL(processUpdated(QString,QString)),
@@ -63,8 +83,6 @@ void ProcessThread::setUi(MainWindow* mw){
 
 	QObject::connect(this, SIGNAL(processStarted()),
 					 mw, SLOT(processStarted()),Qt::AutoConnection);
-	QObject::connect(this, SIGNAL(processStopped(QString,QList<QVector3D>,QSize,double)),
-					 mw, SLOT(processStopped(QString,QList<QVector3D>,QSize,double)),Qt::AutoConnection);
 	QObject::connect(this, SIGNAL(processStopped(QString,cybervision::Surface)),
 					 mw, SLOT(processStopped(QString,cybervision::Surface)),Qt::AutoConnection);
 	QObject::connect(this, SIGNAL(processUpdated(QString,QString)),

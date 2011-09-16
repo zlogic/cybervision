@@ -8,6 +8,7 @@
 #include <QPair>
 #include <QVector3D>
 #include <QSize>
+#include <QImage>
 
 #define EIGEN_NO_EXCEPTIONS
 #include <Eigen/Dense>
@@ -28,6 +29,7 @@ namespace cybervision{
 		QString errorString;
 		QList<QVector3D> Points3D;
 		QSize imageSize;
+		QImage image1,image2;
 		double scaleMetadata;
 
 	public:
@@ -40,6 +42,8 @@ namespace cybervision{
 		QString getErrorString()const;
 		QList<QVector3D> get3DPoints()const;
 		QSize getImageSize()const;
+		const QImage& getImage1()const;
+		const QImage& getImage2()const;
 		double getScaleMetadata()const;
 	signals:
 		void sgnLogMessage(QString);

@@ -4,6 +4,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QScopedArrayPointer>
 #include <Reconstruction/pointmatch.h>
 #include <SIFT/siftgateway.h>
 
@@ -32,22 +33,22 @@ protected:
 
 	//OpenCL kernel paramaters
 	cl_uint vectorSize,inputVectorsBufferSize,inputVectorsCount;
-	cl_float *vector;
-	cl_float *input;
-	cl_float *output;
+	QScopedArrayPointer<cl_float> vector;
+	QScopedArrayPointer<cl_float> input;
+	QScopedArrayPointer<cl_float> output;
 
 	//OpenCL stuff
-	cl_mem   inputBuffer;
-	cl_mem	 outputBuffer;
-	cl_mem	 vectorBuffer;
+	cl_mem inputBuffer;
+	cl_mem outputBuffer;
+	cl_mem vectorBuffer;
 
-	cl_context          context;
-	cl_device_id        *devices;
-	cl_command_queue    commandQueue;
+	cl_context context;
+	QScopedArrayPointer<cl_device_id> devices;
+	cl_command_queue commandQueue;
 
 	cl_program program;
-	cl_kernel  kernel;
-	size_t    kernelWorkGroupSize;
+	cl_kernel kernel;
+	size_t kernelWorkGroupSize;
 
 	//Runs OpenCL for the prepared buffers
 	bool CalcDistances();

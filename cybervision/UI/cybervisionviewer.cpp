@@ -17,6 +17,7 @@
 CybervisionViewer::CybervisionViewer(QWidget *parent): QGLWidget(parent){
 	vpTranslation= QVector3D(0,0,-15);
 	this->mouseMode= MOUSE_ROTATION;
+	this->textureMode= TEXTURE_1;
 	this->showGrid= false;
 	glFarPlane= 1000000;
 	glNearPlane= 1;
@@ -29,12 +30,26 @@ void CybervisionViewer::setSurface3D(const cybervision::Surface& surface){
 	{
 		QMutexLocker lock(&surfaceMutex);
 		this->surface= surface;
+		//Convert textures and delete sources since we don't need them anymore
+		deleteTexture(textures[0]);
+		deleteTexture(textures[1]);
+		glDeleteTextures(2,textures);
+		glGenTextures(2,textures);
+		textures[0]= bindTexture(this->surface.getTexture1());
+		textures[1]= bindTexture(this->surface.getTexture2());
+		this->surface.setTextures(QImage(),QImage());
 	}
 	updateGL();
 }
 
 void CybervisionViewer::setMouseMode(MouseMode mouseMode){
 	this->mouseMode= mouseMode;
+}
+
+
+void CybervisionViewer::setTextureMode(TextureMode textureMode){
+	this->textureMode= textureMode;
+	updateGL();
 }
 
 void CybervisionViewer::setShowGrid(bool show){
@@ -60,17 +75,23 @@ void CybervisionViewer::initializeGL(){
 
 	//Line smoothing
 	/*
- glEnable(GL_LINE_SMOOTH);
- glEnable (GL_BLEND);
- glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
- glHint (GL_LINE_SMOOTH_HINT, GL_NICEST);
- */
+	glEnable(GL_LINE_SMOOTH);
+	glEnable (GL_BLEND);
+	glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glHint (GL_LINE_SMOOTH_HINT, GL_NICEST);
+	*/
 
 	//static GLfloat lightPosition[4] = { 0.5, 5.0, 7.0, 1.0 };
 	static GLfloat light0Position[4] = { 5.0f, 5.0f, 10.0f, 1.0f };
 	static GLfloat light0Ambiance[4] = { 0.2f, 0.2f, 0.2f, 0.2f };
 	glLightfv(GL_LIGHT0, GL_POSITION, light0Position);
 	glLightfv(GL_LIGHT0,GL_AMBIENT,light0Ambiance);
+
+	//Texture options
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
 }
 
 void CybervisionViewer::resizeGL(int w, int h){
@@ -95,7 +116,17 @@ void CybervisionViewer::paintGL(){
 
 	{
 		QMutexLocker lock(&surfaceMutex);
+		if(textureMode!=TEXTURE_NONE)
+			glEnable(GL_TEXTURE_2D);
+		if(textureMode==TEXTURE_1)
+			glBindTexture(GL_TEXTURE_2D, textures[0]);
+		if(textureMode==TEXTURE_2)
+			glBindTexture(GL_TEXTURE_2D, textures[1]);
+
 		surface.glDraw();
+
+		glDisable(GL_TEXTURE_2D);
+
 		drawGrid();
 	}
 }

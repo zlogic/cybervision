@@ -26,6 +26,8 @@ namespace cybervision{
 			QObject::disconnect(&matcher, SIGNAL(sgnStatusMessage(QString)),this, SIGNAL(sgnStatusMessage(QString)));
 			matches= matcher.getMatches();
 			imageSize= matcher.getSize();
+			image1= matcher.getImage1();
+			image2= matcher.getImage2();
 			scaleMetadata= matcher.getScaleMetadata();
 			if(!ok || matches.isEmpty()){
 				errorString= "No matches found";
@@ -109,5 +111,7 @@ namespace cybervision{
 	QString Reconstructor::getErrorString()const{ return errorString; }
 	QList<QVector3D> Reconstructor::get3DPoints()const{ return Points3D; }
 	QSize Reconstructor::getImageSize()const{ return imageSize; }
+	const QImage&  Reconstructor::getImage1()const{ return image1; }
+	const QImage&  Reconstructor::getImage2()const{ return image2; }
 	double Reconstructor::getScaleMetadata()const{ return scaleMetadata; }
 }
