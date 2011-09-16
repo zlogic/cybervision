@@ -9,41 +9,16 @@
 
 ProcessThread::ProcessThread(){mw=NULL;}
 
-void ProcessThread::extract(QStringList image_filenames,qreal scaleXY,qreal scaleZ,qreal angle){
+void ProcessThread::reconstruct3DShape(QStringList image_filenames,qreal scaleXY,qreal scaleZ,qreal angle,bool preferScaleFromMetadata){
 	wait();
-	task=TASK_RECONSTRUCTION;
 	this->image_filenames= image_filenames;
 	this->scaleXY= scaleXY, this->scaleZ= scaleZ, this->angle= angle;
-
-	start();
-}
-
-void ProcessThread::surface(QList<QVector3D>points,QSize imageSize,double scaleMetadata){
-	wait();
-	task=TASK_SURFACE;
-	this->points= points;
-	this->imageSize= imageSize;
-
-	if(scaleMetadata>0){
-		scaleXY= scaleMetadata;
-		scaleZ= scaleMetadata;
-	}
+	this->preferScaleFromMetadata= preferScaleFromMetadata;
 
 	start();
 }
 
 void ProcessThread::run(){
-	switch(task){
-	case TASK_RECONSTRUCTION:
-		runExtract();
-		break;
-	case TASK_SURFACE:
-		runSurface();
-		break;
-	}
-}
-
-void ProcessThread::runExtract(){
 	emit processStarted();
 	cybervision::Reconstructor reconstructor(NULL);
 
@@ -53,26 +28,23 @@ void ProcessThread::runExtract(){
 					 this, SLOT(sgnStatusMessage(QString)),Qt::AutoConnection);
 
 	if(image_filenames.size()==2){
-		//Prepare variables for output data
+		//Run reconstruction
+		if(reconstructor.run(image_filenames.first(),image_filenames.last(),angle)){
+			//Run surface generation
+			qreal scaleMetadata= reconstructor.getScaleMetadata();
+			if(scaleMetadata>0 && preferScaleFromMetadata){
+				scaleXY= scaleMetadata;
+				scaleZ= scaleMetadata;
+			}
+			emit processUpdated("Creating 3D surface","Creating 3D surface...");
+			cybervision::Sculptor sculptor(reconstructor.get3DPoints(),reconstructor.getImageSize(),scaleXY,scaleZ);
 
-		if(reconstructor.run(image_filenames.first(),image_filenames.last(),angle))
-			emit processStopped(QString(),reconstructor.get3DPoints(),reconstructor.getImageSize(),reconstructor.getScaleMetadata());
-		else
+			emit processStopped(QString(),sculptor.getSurface());
+		}else
 			emit processStopped(reconstructor.getErrorString());
 	}else
 		emit processStopped("Need exactly 2 images for reconstruction");
 }
-
-
-void ProcessThread::runSurface(){
-	emit processUpdated("Creating 3D surface","Creating 3D surface...");
-	cybervision::Sculptor sculptor(points,imageSize,scaleXY,scaleZ);
-
-	points.clear();
-
-	emit processStopped(QString(),sculptor.getSurface());
-}
-
 
 void ProcessThread::setUi(MainWindow* mw){
 	if(this->mw){

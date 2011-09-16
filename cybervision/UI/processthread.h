@@ -15,15 +15,12 @@ class ProcessThread :public QThread{
 	Q_OBJECT
 protected:
 	MainWindow *mw;
-	enum Task{TASK_RECONSTRUCTION,TASK_SURFACE};
-	Task task;
 
 	//For reconstruction task
 	QStringList image_filenames;
 	qreal scaleXY, scaleZ,angle;
 	QSize imageSize;
-	//For extraction task
-	QList<QVector3D> points;
+	bool preferScaleFromMetadata;
 
 	void runExtract();
 	void runSurface();
@@ -31,14 +28,12 @@ public:
 	ProcessThread();
 	void setUi(MainWindow *nw=NULL);
 
-	void extract(QStringList image_filenames,qreal scaleXY,qreal scaleZ,qreal angle);
-	void surface(QList<QVector3D> points,QSize imageSize,double scaleMetadata=-1);
+	void reconstruct3DShape(QStringList image_filenames,qreal scaleXY,qreal scaleZ,qreal angle,bool preferScaleFromMetadata=false);
 	void run();//the main thread loop
 signals:
 	void processStarted();
 	void processUpdated(QString logMessage,QString statusBarText);
-	void processStopped(QString resultText,QList<QVector3D> points=QList<QVector3D>(),QSize imageSize=QSize(),double scaleMetadata=-1);
-	void processStopped(QString resultText,cybervision::Surface);
+	void processStopped(QString resultText,cybervision::Surface=cybervision::Surface());
 private slots:
 	void sgnLogMessage(QString);
 	void sgnStatusMessage(QString);

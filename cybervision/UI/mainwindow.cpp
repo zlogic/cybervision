@@ -102,20 +102,6 @@ void MainWindow::processUpdated(QString logMessage,QString statusBarText){
 		ui->logTextEdit->appendPlainText(statusBarText+"\n");
 }
 
-void MainWindow::processStopped(QString resultText,QList<QVector3D> points,QSize imageSize,double scaleMetadata){
-	if(!resultText.isNull() && !resultText.isEmpty()){
-		ui->saveButton->setEnabled(true);
-		ui->logTextEdit->appendHtml("<b>"+resultText+"</b>");
-	}
-
-	if(!points.empty())
-		thread.surface(points,imageSize,ui->actionPrefer_scale_from_metadata->isChecked()?scaleMetadata:-1);
-	else{
-		ui->statusBar->clearMessage();
-		ui->startProcessButton->setEnabled(true);
-	}
-}
-
 void MainWindow::processStopped(QString resultText,cybervision::Surface surface){
 	ui->statusBar->clearMessage();
 	ui->startProcessButton->setEnabled(true);
@@ -143,7 +129,7 @@ void MainWindow::on_startProcessButton_clicked(){
 			filenames<<(*i)->data(32).toString();
 	}
 
-	thread.extract(filenames,scaleXY,scaleZ,angle);
+	thread.reconstruct3DShape(filenames,scaleXY,scaleZ,angle,ui->actionPrefer_scale_from_metadata->isChecked());
 }
 
 void MainWindow::on_saveButton_clicked(){

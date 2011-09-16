@@ -51,7 +51,6 @@ private slots:
 	//Slots for receiving messages from process thread
 	void processStarted();
 	void processUpdated(QString logMessage,QString statusBarText=QString());
-	void processStopped(QString resultText,QList<QVector3D> points=QList<QVector3D>(),QSize imageSize=QSize(),double scaleMetadata=-1);
 	void processStopped(QString resultText,cybervision::Surface);
 };
 
