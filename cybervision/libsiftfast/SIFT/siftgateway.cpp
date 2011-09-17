@@ -1,6 +1,5 @@
 #include "siftgateway.h"
 #include <SIFT/siftfast.h>
-#include <Reconstruction/options.h>
 #include <cmath>
 
 #include <QDebug>
