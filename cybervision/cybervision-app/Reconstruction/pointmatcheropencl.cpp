@@ -27,7 +27,7 @@ namespace cybervision{
 		kernelFirstRun= true;
 
 		//Prepare buffers
-		kernelWorkGroupSize= (Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU)?4:1024;
+		kernelWorkGroupSize= (Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU)?128:1024;
 
 		//Get optimal vector size
 		{
@@ -531,7 +531,7 @@ namespace cybervision{
 
 		//Compute distances for all keypoints from keypoints1, then choose the minumum distance
 		#pragma omp parallel
-		for(QList<SIFT::Keypoint>::const_iterator it=keypoints1.begin();it!=keypoints1.end();it++){
+		for(QList<SIFT::Keypoint>::const_iterator it1=keypoints1.begin();it1!=keypoints1.end();it1++){
 			#pragma omp single nowait
 			if(!openCLFailed)
 			{
@@ -557,9 +557,11 @@ namespace cybervision{
 				if(useGPU && kernelFirstRun){
 					inputVectorsCount= keypoints2.size();
 					//Copy data for keypoints2
-					for(int i=0;i<keypoints2.size();i++)
+					for(int i=0;i<keypoints2.size();i++){
+						const SIFT::Keypoint& keypoint2= keypoints2[i];
 						for(cl_uint j=0;j<vectorSize;j++)
-							input[i*vectorSize+j]= keypoints2[i][j];
+							input[i*vectorSize+j]= keypoint2[j];
+					}
 
 					inputVectorsCopied= false;
 				}
@@ -567,7 +569,7 @@ namespace cybervision{
 				if(useGPU){
 					//Prepare current vector
 					for(cl_uint i=0;i<vectorSize;i++)
-						vector[i]= (*it)[i];
+						vector[i]= (*it1)[i];
 
 					//Run OpenCL stuff
 					if(!CalcDistances())
@@ -580,9 +582,9 @@ namespace cybervision{
 							if(output[i]<output[min_i])
 								min_i=i;
 						const SIFT::Keypoint& keypoint2= keypoints2[min_i];
-						minDistance= it->distance(keypoint2);
+						minDistance= it1->distance(keypoint2);
 						if(minDistance<Options::MaxKeypointDistance){
-							match.a= QPointF(it->getX(),it->getY());
+							match.a= QPointF(it1->getX(),it1->getY());
 							match.b= QPointF(keypoint2.getX(),keypoint2.getY());
 
 							//Add point
@@ -595,10 +597,10 @@ namespace cybervision{
 					minDistance= std::numeric_limits<float>::infinity();
 					double MaxKeypointDistanceSquared= Options::MaxKeypointDistance*Options::MaxKeypointDistance;
 					for(QList<SIFT::Keypoint>::const_iterator it2= keypoints2.begin();it2!=keypoints2.end();it2++){
-						float distance= it->distance(*it2,MaxKeypointDistanceSquared);
+						float distance= it1->distance(*it2,MaxKeypointDistanceSquared);
 						if(distance<minDistance && distance<Options::MaxKeypointDistance){
 							minDistance= distance;
-							match.a= QPointF(it->getX(),it->getY());
+							match.a= QPointF(it1->getX(),it1->getY());
 							match.b= QPointF(it2->getX(),it2->getY());
 						}
 					}
@@ -630,9 +632,11 @@ namespace cybervision{
 
 		inputVectorsCount= keypoints2.size();
 		//Copy data for keypoints2
-		for(int i=0;i<keypoints2.size();i++)
+		for(int i=0;i<keypoints2.size();i++){
+			const SIFT::Keypoint& keypoint2= keypoints2[i];
 			for(cl_uint j=0;j<vectorSize;j++)
-				input[i*vectorSize+j]= keypoints2[i][j];
+				input[i*vectorSize+j]= keypoint2[j];
+		}
 
 		inputVectorsCopied= false;
 
