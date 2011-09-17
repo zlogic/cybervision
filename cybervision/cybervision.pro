@@ -77,7 +77,8 @@ QMAKE_CXXFLAGS_DEBUG +=
 
 DEFINES += CYBERVISION_OPENCL
 
-win32 { 
+win32 {
+	RC_FILE = UI/cybervision.rc
 	QMAKE_LIBS += -static \
 				-lOpenCL -laticalrt -laticalcl \
 				-lgomp \
@@ -103,8 +104,7 @@ OTHER_FILES += \
     Reconstruction/PointMatcherKernel.cl \
     UI/icons/texture-right.png \
     UI/icons/texture-left.png \
-    UI/icons/texture-empty.png
-
-
-
-
+    UI/icons/texture-empty.png \
+	UI/icons/cybervision.png \
+	UI/cybervision.rc \
+    UI/icons/cybervision.ico

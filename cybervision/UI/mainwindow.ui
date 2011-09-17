@@ -13,6 +13,10 @@
   <property name="windowTitle">
    <string>Cybervision</string>
   </property>
+  <property name="windowIcon">
+   <iconset resource="../ReconstructionResources.qrc">
+    <normaloff>:/icons/UI/icons/cybervision.png</normaloff>:/icons/UI/icons/cybervision.png</iconset>
+  </property>
   <widget class="QWidget" name="centralWidget">
    <layout class="QGridLayout" name="gridLayout">
     <item row="0" column="0">

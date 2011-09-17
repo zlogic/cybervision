@@ -9,6 +9,7 @@
         <file>UI/icons/texture-empty.png</file>
         <file>UI/icons/texture-left.png</file>
         <file>UI/icons/texture-right.png</file>
+        <file>UI/icons/cybervision.png</file>
     </qresource>
     <qresource prefix="/opencl">
         <file alias="PointMatcherKernel.cl">Reconstruction/PointMatcherKernel.cl</file>
