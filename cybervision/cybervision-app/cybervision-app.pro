@@ -86,7 +86,7 @@ OTHER_FILES += \
 
 include( ../cybervision-options.pri )
 
-QMAKE_CXXFLAGS += -fopenmp
+QMAKE_CXXFLAGS += -fopenmp -msse3
 
 INCLUDEPATH += $$PWD/../libsiftfast
 DEPENDPATH += $$PWD/../libsiftfast
@@ -99,7 +99,7 @@ win32 {
 	RC_FILE = UI/cybervision.rc
 	LIBS += \
 			-static -lgcc_eh \
-			-lgomp -lpthread.dll
+			-lgomp -lpthread
 
 	equals(CYBERVISION_OPENCL, true){
 		LIBS += -lOpenCL -laticalrt -laticalcl

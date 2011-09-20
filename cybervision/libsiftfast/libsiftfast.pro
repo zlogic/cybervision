@@ -14,20 +14,16 @@ SOURCES += \
 
 include( ../cybervision-options.pri )
 
-equals(CYBERVISION_SSE, true){
-    QMAKE_CXXFLAGS_RELEASE += -msse3
-    #QMAKE_CXXFLAGS_DEBUG +=
-}
+QMAKE_CXXFLAGS += -msse3 -fopenmp
 
 win32 {
-        LIBS += \
-				-static -lgomp -lpthread.dll
+	LIBS += \
+			-static -lgcc_eh -lgomp -lpthread
 
-	QMAKE_CXXFLAGS += -U_WIN32 -fopenmp
+	QMAKE_CXXFLAGS += -U_WIN32
 	QMAKE_CFLAGS += -U_WIN32
 }
 unix {
         LIBS += -lgomp \
 		-lpthread
-	QMAKE_CXXFLAGS += -fopenmp
 }

@@ -586,10 +586,6 @@ namespace cybervision{
 						if(minDistance<Options::MaxKeypointDistance){
 							match.a= QPointF(it1->getX(),it1->getY());
 							match.b= QPointF(keypoint2.getX(),keypoint2.getY());
-
-							//Add point
-							if(!result.contains(minDistance,match))
-								result.insert(minDistance,match);
 						}
 					}
 					gpuBusy= false;
