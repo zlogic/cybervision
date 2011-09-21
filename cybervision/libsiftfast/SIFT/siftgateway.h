@@ -4,11 +4,12 @@
 #include <QList>
 #include <QImage>
 #include <QMutex>
+#include <SIFT/msvc-exports.h>
 
 #include <limits>
 
 namespace SIFT{
-	class Keypoint{
+	class DLL_API Keypoint{
 		friend class Extractor;
 	protected:
 		int x,y;
@@ -26,7 +27,7 @@ namespace SIFT{
 		inline float operator[](size_t i)const{return descriptor[i];}
 	};
 
-	class Extractor{
+	class DLL_API Extractor{
 	protected:
 		static QMutex mutex;
 		double SIFTContrastCorrection;

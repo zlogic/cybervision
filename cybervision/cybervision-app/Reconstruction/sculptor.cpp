@@ -52,8 +52,8 @@ namespace cybervision{
 	QList<QVector3D> Sculptor::filterPoints(const QList<QVector3D>& points){
 		//Get data from the point set
 		QVector3D centroid(0,0,0);
-		QVector3D min( std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
-		QVector3D max(-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity());
+		QVector3D minCoords( std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
+		QVector3D maxCoords(-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity());
 
 		//These values are unwanted
 		qreal max_z=points.begin()->z(), min_z=points.begin()->z();
@@ -63,12 +63,12 @@ namespace cybervision{
 		}
 
 		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
-			min.setX(qMin(min.x(),it->x()));
-			min.setY(qMin(min.y(),it->y()));
-			min.setZ(qMin(min.z(),it->z()));
-			max.setX(qMax(max.x(),it->x()));
-			max.setY(qMax(max.y(),it->y()));
-			max.setZ(qMax(max.z(),it->z()));
+			minCoords.setX(qMin(minCoords.x(),it->x()));
+			minCoords.setY(qMin(minCoords.y(),it->y()));
+			minCoords.setZ(qMin(minCoords.z(),it->z()));
+			maxCoords.setX(qMax(maxCoords.x(),it->x()));
+			maxCoords.setY(qMax(maxCoords.y(),it->y()));
+			maxCoords.setZ(qMax(maxCoords.z(),it->z()));
 
 			centroid.setX(centroid.x()+it->x());
 			centroid.setY(centroid.y()+it->y());
@@ -85,11 +85,11 @@ namespace cybervision{
 
 		QPointF center;
 		{
-			center.setX((max.x()-min.x())*scaleXY/2.0);
-			center.setY((max.y()-min.y())*scaleXY/2.0);
+			center.setX((maxCoords.x()-minCoords.x())*scaleXY/2.0);
+			center.setY((maxCoords.y()-minCoords.y())*scaleXY/2.0);
 		}
 
-		surface.scale= Options::surfaceSize/(scaleXY*qMax(max.x()-min.x(),max.y()-min.y()));
+		surface.scale= Options::surfaceSize/(scaleXY*qMax(maxCoords.x()-minCoords.x(),maxCoords.y()-minCoords.y()));
 
 		QMap<QPointF,qreal> pointsMap;
 		for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
@@ -105,9 +105,9 @@ namespace cybervision{
 			count++;
 			if((it+1)==pointsMap.end() || it.key()!=(it+1).key()){
 				qreal z= sum/(qreal)count;
-				QVector3D scaled_point((it.key().x()-min.x())*scale_x-center.x(),
-							-(it.key().y()-min.y())*scale_y+center.y(),
-							-(z-min.z())*scale_z
+				QVector3D scaled_point((it.key().x()-minCoords.x())*scale_x-center.x(),
+							-(it.key().y()-minCoords.y())*scale_y+center.y(),
+							-(z-minCoords.z())*scale_z
 				);
 				filteredPoints.push_back(scaled_point);
 				sum= 0;
@@ -424,21 +424,21 @@ namespace cybervision{
 			Find the maximum and minimum vertex bounds.
 			This is to allow calculation of the bounding triangle
 			*/
-			QVector3D min( std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
-			QVector3D max(-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity());
+			QVector3D minCoords( std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
+			QVector3D maxCoords(-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity());
 			for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
-				min.setX(qMin(min.x(),it->x()));
-				min.setY(qMin(min.y(),it->y()));
-				min.setZ(qMin(min.z(),it->z()));
-				max.setX(qMax(max.x(),it->x()));
-				max.setY(qMax(max.y(),it->y()));
-				max.setZ(qMax(max.z(),it->z()));
+				minCoords.setX(qMin(minCoords.x(),it->x()));
+				minCoords.setY(qMin(minCoords.y(),it->y()));
+				minCoords.setZ(qMin(minCoords.z(),it->z()));
+				maxCoords.setX(qMax(maxCoords.x(),it->x()));
+				maxCoords.setY(qMax(maxCoords.y(),it->y()));
+				maxCoords.setZ(qMax(maxCoords.z(),it->z()));
 			}
-			float dx= max.x()-min.x();
-			float dy= max.y()-min.y();
+			float dx= maxCoords.x()-minCoords.x();
+			float dy= maxCoords.y()-minCoords.y();
 			float dmax= (dx > dy) ? dx : dy;
-			float xmid= (max.x()+min.x())/2.0;
-			float ymid= (max.y()+min.x())/2.0;
+			float xmid= (maxCoords.x()+minCoords.x())/2.0;
+			float ymid= (maxCoords.y()+minCoords.x())/2.0;
 
 			points<<QVector3D(xmid-2.0*dmax,ymid-dmax,0);
 			superTriangle.a= points.length()-1;

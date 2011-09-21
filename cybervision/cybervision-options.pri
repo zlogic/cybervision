@@ -6,15 +6,15 @@ CYBERVISION_SSE = false
 CYBERVISION_OPENCL = false
 
 contains(CYBERVISION_BUILD_OPTIONS,"noSSE"){
-	#message("SSE disabled in qmake")
+    #message("SSE disabled in qmake")
 }else{
-	#message("SSE enabled in qmake")
+    #message("SSE enabled in qmake")
     CYBERVISION_SSE = true
 }
 
 contains(CYBERVISION_BUILD_OPTIONS,"noOpenCL"){
-	#message("OpenCL disabled in qmake")
+    #message("OpenCL disabled in qmake")
 }else{
-	#message("OpenCL enabled in qmake")
+    #message("OpenCL enabled in qmake")
     CYBERVISION_OPENCL = true
 }

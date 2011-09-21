@@ -213,8 +213,8 @@ namespace cybervision{
 			}
 			distA/= this->matches.size();
 			distB/= this->matches.size();
-			scalingA= sqrt(2)/distA;
-			scalingB= sqrt(2)/distB;
+			scalingA= sqrt(2.0)/distA;
+			scalingB= sqrt(2.0)/distB;
 
 			//De-normalize2dpts
 			T1.fill(0.0);

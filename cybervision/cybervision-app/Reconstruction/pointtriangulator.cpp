@@ -11,6 +11,11 @@
 #include <Eigen/Dense>
 #include <Eigen/SVD>
 
+#ifdef _MSC_VER
+#define _USE_MATH_DEFINES
+#include <math.h>
+#endif
+
 namespace cybervision{
 
 	PointTriangulator::PointTriangulator(QObject *parent) : QObject(parent){

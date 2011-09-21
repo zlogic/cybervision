@@ -86,35 +86,60 @@ OTHER_FILES += \
 
 include( ../cybervision-options.pri )
 
-QMAKE_CXXFLAGS += -fopenmp -msse3
-
 INCLUDEPATH += $$PWD/../libsiftfast
 DEPENDPATH += $$PWD/../libsiftfast
 
+
+#CONFIG(release, debug|release): DESTDIR = ../release
+#CONFIG(debug, debug|release): DESTDIR = ../debug
+
 equals(CYBERVISION_OPENCL, true){
-	DEFINES += CYBERVISION_OPENCL
+    DEFINES += CYBERVISION_OPENCL
 }
 
 win32 {
-	RC_FILE = UI/cybervision.rc
-	LIBS += \
-			-static -lgcc_eh \
-			-lgomp -lpthread
+    RC_FILE = UI/cybervision.rc
+}
+win32-g++ {
+    QMAKE_CXXFLAGS += -fopenmp
+    equals(CYBERVISION_SSE, true): QMAKE_CXXFLAGS += -msse3
+    LIBS += \
+            -static -lgcc_eh \
+            -lgomp -lpthread
 
-	equals(CYBERVISION_OPENCL, true){
-		LIBS += -lOpenCL -laticalrt -laticalcl
-	}
+    equals(CYBERVISION_OPENCL, true){
+        LIBS += -lOpenCL -laticalrt -laticalcl
+    }
 
-	QMAKE_CXXFLAGS += -U_WIN32
-	QMAKE_CFLAGS += -U_WIN32
+    #QMAKE_CXXFLAGS += -U_WIN32
+    #QMAKE_CFLAGS += -U_WIN32
+}
+
+win32-msvc* {
+    INCLUDEPATH += $$quote(C:/QtSDK/MSVC-Libs/include)
+
+    QMAKE_CXXFLAGS_RELEASE += /O2
+    QMAKE_CXXFLAGS += /openmp
+
+    equals(CYBERVISION_SSE, true): QMAKE_CXXFLAGS += /arch:SSE2
+
+    equals(CYBERVISION_OPENCL, true){
+        QMAKE_LIBDIR += $$quote(C:/QtSDK/MSVC-Libs/lib/x86)
+        LIBS += -lOpenCL
+    }
 }
 unix {
-	equals(CYBERVISION_OPENCL, true){
-		LIBS += -L/opt/AMDAPP/lib/x86_64 -lOpenCL
-	}
+    QMAKE_CXXFLAGS += -fopenmp -msse3
+    equals(CYBERVISION_OPENCL, true){
+        LIBS += -L/opt/AMDAPP/lib/x86_64 -lOpenCL
+    }
 }
 
-win32:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/release/ -dynamic -lsiftfast
-else:win32:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug/ -dynamic -lsiftfast
+win32-msvc*:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/release -lsiftfast
+else:win32-msvc*:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -lsiftfast
+else:win32-g++:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/release -dynamic -lsiftfast
+else:win32-g++:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -dynamic -lsiftfast
+else:win32:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/release -lsiftfast
+else:win32:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -lsiftfast
 else:symbian: LIBS += -lsiftfast
 else:unix: LIBS += -L$$OUT_PWD/../libsiftfast -dynamic -lsiftfast
