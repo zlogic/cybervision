@@ -10,20 +10,20 @@
 
 namespace Ui
 {
-    class MainWindow;
+class MainWindow;
 }
 
 
 class MainWindow : public QMainWindow
 {
-    Q_OBJECT
+	Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = 0);
-    ~MainWindow();
+	MainWindow(QWidget *parent = 0);
+	~MainWindow();
 
 private:
-    Ui::MainWindow *ui;
+	Ui::MainWindow *ui;
 
 	QGraphicsScene scene;
 	ProcessThread thread;
@@ -37,10 +37,10 @@ private:
 	void loadDebugPreferences();
 
 private slots:
- void on_addImageButton_clicked();
- void on_deleteImageButton_clicked();
- void on_imageList_itemSelectionChanged();
-	void on_actionShowlog_toggled(bool);
+	void on_addImageButton_clicked();
+	void on_deleteImageButton_clicked();
+	void on_imageList_itemSelectionChanged();
+	void on_actionShowlog_triggered(bool checked);
 	void on_logDockWidget_visibilityChanged(bool visible);
 	void on_saveButton_clicked();
 	void on_startProcessButton_clicked();

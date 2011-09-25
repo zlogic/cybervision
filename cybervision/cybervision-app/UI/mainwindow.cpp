@@ -89,6 +89,7 @@ void MainWindow::processStarted(){
 	ui->startProcessButton->setEnabled(false);
 	ui->saveButton->setEnabled(false);
 	ui->logTextEdit->clear();
+	ui->logTextEdit->setCurrentCharFormat(QTextCharFormat());
 }
 
 
@@ -173,7 +174,7 @@ void MainWindow::on_logDockWidget_visibilityChanged(bool visible){
 	ui->actionShowlog->setChecked(visible);
 }
 
-void MainWindow::on_actionShowlog_toggled(bool checked){
+void MainWindow::on_actionShowlog_triggered(bool checked){
 	ui->logDockWidget->setVisible(checked);
 }
 
@@ -231,3 +232,4 @@ void MainWindow::on_texture2ToolButton_clicked(){
 void MainWindow::on_textureNoneToolButton_clicked(){
 	ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_NONE);
 }
+

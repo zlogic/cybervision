@@ -39,36 +39,35 @@ void ProcessThread::run(){
 		emit processStopped("Need exactly 2 images for reconstruction");
 
 	if(reconstructor_success){
-				//Run surface generation
-				qreal scaleMetadata= reconstructor.getScaleMetadata();
-				if(scaleMetadata>0 && preferScaleFromMetadata){
-					scaleXY= scaleMetadata;
-					scaleZ= scaleMetadata;
-				}
-				emit processUpdated("Creating 3D surface","Creating 3D surface...");
-				cybervision::Sculptor sculptor(reconstructor.get3DPoints(),reconstructor.getImageSize(),scaleXY,scaleZ);
+		//Run surface generation
+		qreal scaleMetadata= reconstructor.getScaleMetadata();
+		if(scaleMetadata>0 && preferScaleFromMetadata){
+			scaleXY= scaleMetadata;
+			scaleZ= scaleMetadata;
+		}
+		emit processUpdated("Creating 3D surface","Creating 3D surface...");
+		cybervision::Sculptor sculptor(reconstructor.get3DPoints(),reconstructor.getImageSize(),scaleXY,scaleZ);
 
-				cybervision::Surface surface= sculptor.getSurface();
+		cybervision::Surface surface= sculptor.getSurface();
 
-				surface.setTextures(reconstructor.getImage1(),reconstructor.getImage2());
+		surface.setTextures(reconstructor.getImage1(),reconstructor.getImage2());
 
-				//Output time
-				{
-					qint64 msecs= stopwatch.elapsed();
-					qint64 mins= msecs/(1000*60);
-					msecs-= mins*(1000*60);
-					qint64 secs= msecs/1000;
-					msecs-= secs*1000;
-					QString timeString= QString("Reconstruction completed in %1:%2.%3")
-							.arg((int)mins,2,10,QChar('0'))
-							.arg((int)secs,2,10,QChar('0'))
-							.arg((int)msecs,3,10,QChar('0'));
-					emit sgnLogMessage(timeString);
-				}
-
-				emit processStopped(QString(),surface);
-			}else
-				emit processStopped(reconstructor.getErrorString());
+		//Output time
+		{
+			qint64 msecs= stopwatch.elapsed();
+			qint64 mins= msecs/(1000*60);
+			msecs-= mins*(1000*60);
+			qint64 secs= msecs/1000;
+			msecs-= secs*1000;
+			QString timeString= QString("Reconstruction completed in %1:%2.%3")
+					.arg((int)mins,2,10,QChar('0'))
+					.arg((int)secs,2,10,QChar('0'))
+					.arg((int)msecs,3,10,QChar('0'));
+			emit sgnLogMessage(timeString);
+		}
+		emit processStopped(QString(),surface);
+	}else
+		emit processStopped(reconstructor.getErrorString());
 }
 
 void ProcessThread::setUi(MainWindow* mw){
