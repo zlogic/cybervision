@@ -1060,7 +1060,9 @@ Keypoint FindMaxMin(Image* imdiff, Image* imgaus, float fscale, Keypoint keypts)
 		//            }
 		//        }
 
+#if defined(__SSE__)
 		#pragma omp parallel for schedule(dynamic,8)
+#endif
 		for( int rowstart = 5; rowstart < rows-5; ++rowstart ) {
 			Keypoint newkeypts = NULL;
 			float* diffpixels = _diffpixels + rowstart*stride;
@@ -1082,8 +1084,9 @@ Keypoint FindMaxMin(Image* imdiff, Image* imgaus, float fscale, Keypoint keypts)
 				Keypoint lastkeypt = newkeypts;
 				while(lastkeypt->next)
 					lastkeypt = lastkeypt->next;;
-
+#if defined(__SSE__)
 #pragma omp critical
+#endif
 				{
 					lastkeypt->next = keypts;
 					keypts = newkeypts;

@@ -43,4 +43,3 @@ unix {
 
     QMAKE_CXXFLAGS += -msse3 -fopenmp
 }
-
