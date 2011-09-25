@@ -20,6 +20,7 @@ public:
 	enum TriangulationMode {TRIANGULATION_PERSPECTIVE,TRIANGULATION_PARALLEL};//Mode for triangulation (perspective or parallel (V or SV) projection mode)
 	static const TriangulationMode triangulationMode;//Selected point triangulation mode
 	static const double constraintsThreshold;//Minimum non-zero value in Sigma matrix in SVD for linear constraints (only for parallel triangulation)
+	static const int maxTriangulationPointSize;//Maximum point set size for parallel triangulation (to prevent SVD memory issues leading to a segfault)
 
 	static const int RANSAC_k;//RANSAC k parameter
 	static const int RANSAC_n;//RANSAC n parameter

@@ -119,7 +119,7 @@ namespace cybervision{
 
 		Eigen::JacobiSVD<Eigen::Matrix3d,Eigen::FullPivHouseholderQRPreconditioner> svd(Essential_matrix, Eigen::ComputeFullV|Eigen::ComputeFullU);
 		Eigen::Matrix3d U= svd.matrixU(), V=svd.matrixV();
-		Eigen::Vector3d Sigma= svd.singularValues();
+		//Eigen::Vector3d Sigma= svd.singularValues();
 
 		for(QList<double>::const_iterator i= pi_values.begin();i!=pi_values.end();i++){
 			double PI_R= *i;
@@ -158,7 +158,6 @@ namespace cybervision{
 		double best_min_depth=std::numeric_limits<double>::infinity(),best_max_depth=-std::numeric_limits<double>::infinity();
 
 		StereopairPosition bestPosition=RTList.first();
-		bool found=false;
 		//Find best R/T pair
 		for(QList<StereopairPosition>::const_iterator it1=RTList.begin();it1!=RTList.end();it1++){
 			QList<QVector3D> Points3d= computeTriangulatedPoints(matches,it1->R,it1->T,false);
@@ -176,7 +175,6 @@ namespace cybervision{
 				best_min_depth= min_depth;
 				best_max_depth= max_depth;
 				bestPosition= *it1;
-				found=true;
 			}
 
 			emit sgnLogMessage(QString("Minimum depth is %1, maximum depth is %2").arg(min_depth).arg(max_depth));
@@ -410,116 +408,153 @@ namespace cybervision{
 		}
 		return true;
 	}
-}
 
-bool cybervision::PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,qreal angle,bool filterPeaks){
-	QList<cybervision::KeypointMatch> matches_values= matches.values();
-	bool ok= triangulatePoints(matches_values,angle);
-	if(!ok/* || !filterPeaks*/)
-		return ok;
-	{
-		QSet<int> peaks= findPeaks(Points3D);
-		QList<cybervision::KeypointMatch> matches_values_no_peaks;
-		for(int i=0;i<matches_values.size();i++){
-			if(!peaks.contains(i))
-				matches_values_no_peaks<<matches_values[i];
+	bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,qreal angle,bool filterPeaks){
+		QList<cybervision::KeypointMatch> matches_values= matches.values();
+		QList<QVector3D> Points3DTotal;
+
+		bool ok=true;
+
+		int point_set_count= (matches_values.size()/Options::maxTriangulationPointSize)+1;
+		int point_set_size= matches_values.size()/point_set_count;
+
+		//First reconstruction run
+		for(int k=0;k<point_set_count;k++){
+			QList<cybervision::KeypointMatch> matches_values_current;
+			for(int i=k*point_set_size,i_start=k*point_set_size;i<i_start+point_set_size && i<matches_values.size();i++)
+				matches_values_current<<matches_values.at(i);
+
+			ok&= triangulatePoints(matches_values_current,angle);
+			if(!ok)
+				return ok;
+			Points3DTotal<<Points3D;
 		}
-		matches_values= matches_values_no_peaks;
-	}
-	return triangulatePoints(matches_values,angle);
-}
-
-QSet<int> cybervision::PointTriangulator::findPeaks(const QList<QVector3D> &points) const{
-	QSet<int> discardedPoints;
-	QList<qreal> values_x,values_y;
-
-	//Find min/max values
-	//Fill the first cell
-	{
-		qreal minX= points.begin()->x(), minY= points.begin()->y(), maxX= points.begin()->x(), maxY= points.begin()->y();
-		for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
-			minX= qMin(minX,it->x());
-			minY= qMin(minY,it->y());
-			maxX= qMax(maxX,it->x());
-			maxY= qMax(maxY,it->y());
-		}
-		values_x<<minX<<maxX;
-		values_y<<minY<<maxY;
-	}
-
-	for(int resolution=0;resolution<Options::gridResolution;resolution++){
-		//Increase grid density (steps)
-		for(QList<qreal>::iterator it=values_x.begin();it!=values_x.end()-1;){
-			//Add X-middle
-			qreal min_x= *it,max_x= *(it+1);
-			qreal middle_x=(min_x+max_x)/2;
-			it= values_x.insert(it+1,middle_x)+1;
-		}
-		for(QList<qreal>::iterator jt=values_y.begin();jt!=values_y.end()-1;){
-			//Add Y-middle
-			qreal min_y= *jt,max_y= *(jt+1);
-			qreal middle_y=(min_y+max_y)/2;
-			jt= values_y.insert(jt+1,middle_y)+1;
-		}
-		//Iterate through grid
-
-		#pragma omp parallel
-		for(QList<qreal>::const_iterator it=values_x.begin();it!=values_x.end()-1;it++){
-			qreal min_x= *it,max_x= *(it+1);
-			#pragma omp single nowait
+		if(filterPeaks){
+			//Filter peaks
 			{
-				for(QList<qreal>::const_iterator jt=values_y.begin();jt!=values_y.end()-1;jt++){
-					qreal min_y= *jt,max_y= *(jt+1);
-					//Create filter for peaks
-					QVector2D min(min_x,min_y);
-					QVector2D max(max_x,max_y);
-					QVector2D middle= min+(max-min)/2;
-					QList<qreal> Zp;
-					for(QList<QVector3D>::const_iterator kt=points.begin();kt!=points.end();kt++){
-						qreal distance= (QVector2D(*kt)-middle).length();
-						if(distance <= Options::gridPeakFilterRadius*(max-middle).length())
-							Zp<< kt->z();
-					}
-					qSort(Zp);
-					qreal median,
-							Zmax= !Zp.isEmpty()?Zp.at(Zp.size()-1):0,
-							Zmin= !Zp.isEmpty()?Zp.at(0):0;
+				QSet<int> peaks= findPeaks(Points3DTotal);
+				QList<cybervision::KeypointMatch> matches_values_no_peaks;
+				for(int i=0;i<matches_values.size();i++){
+					if(!peaks.contains(i))
+						matches_values_no_peaks<<matches_values[i];
+				}
+				matches_values= matches_values_no_peaks;
+			}
+			Points3DTotal.clear();
 
-					if(Zp.isEmpty())
-						continue;
-					else
-						median= Zp.size()%2==1 ?
-									Zp[(Zp.size()-1)/2] :
-									((Zp[Zp.size()/2-1]+Zp[Zp.size()/2])/2.0);
+			point_set_count= (matches_values.size()/Options::maxTriangulationPointSize)+1;
+			point_set_size= matches_values.size()/point_set_count;
 
-					if(Zp.size()>=3){
-						for(int i=0;i<Zp.size()/2;i++)
-							if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i+1)-median))
-								Zmin= Zp.at(i+1);
-							else break;
+			//Second run (after filtering peaks)
+			for(int k=0;k<point_set_count;k++){
+				QList<cybervision::KeypointMatch> matches_values_current;
+				for(int i=k*point_set_size,i_start=k*point_set_size;i<i_start+point_set_size && i<matches_values.size();i++)
+					matches_values_current<<matches_values.at(i);
 
-						for(int i=Zp.size()-1;i>Zp.size()/2;i--)
-							if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i-1)-median))
-								Zmax= Zp.at(i-1);
-							else break;
-					}
-					Zp.clear();
+				ok&= triangulatePoints(matches_values_current,angle);
+				if(!ok)
+					return ok;
+				Points3DTotal<<Points3D;
+			}
+		}
 
-					for(int k=0;k<points.length();k++){
-						if((points[k].z()>=Zmin) && (points[k].z()<=Zmax))
+		Points3D= Points3DTotal;
+		return ok;
+	}
+
+	QSet<int> PointTriangulator::findPeaks(const QList<QVector3D> &points) const{
+		QSet<int> discardedPoints;
+		QList<qreal> values_x,values_y;
+
+		//Find min/max values
+		//Fill the first cell
+		{
+			qreal minX= points.begin()->x(), minY= points.begin()->y(), maxX= points.begin()->x(), maxY= points.begin()->y();
+			for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
+				minX= qMin(minX,it->x());
+				minY= qMin(minY,it->y());
+				maxX= qMax(maxX,it->x());
+				maxY= qMax(maxY,it->y());
+			}
+			values_x<<minX<<maxX;
+			values_y<<minY<<maxY;
+		}
+
+		for(int resolution=0;resolution<Options::gridResolution;resolution++){
+			//Increase grid density (steps)
+			for(QList<qreal>::iterator it=values_x.begin();it!=values_x.end()-1;){
+				//Add X-middle
+				qreal min_x= *it,max_x= *(it+1);
+				qreal middle_x=(min_x+max_x)/2;
+				it= values_x.insert(it+1,middle_x)+1;
+			}
+			for(QList<qreal>::iterator jt=values_y.begin();jt!=values_y.end()-1;){
+				//Add Y-middle
+				qreal min_y= *jt,max_y= *(jt+1);
+				qreal middle_y=(min_y+max_y)/2;
+				jt= values_y.insert(jt+1,middle_y)+1;
+			}
+			//Iterate through grid
+
+			#pragma omp parallel
+			for(QList<qreal>::const_iterator it=values_x.begin();it!=values_x.end()-1;it++){
+				qreal min_x= *it,max_x= *(it+1);
+				#pragma omp single nowait
+				{
+					for(QList<qreal>::const_iterator jt=values_y.begin();jt!=values_y.end()-1;jt++){
+						qreal min_y= *jt,max_y= *(jt+1);
+						//Create filter for peaks
+						QVector2D min(min_x,min_y);
+						QVector2D max(max_x,max_y);
+						QVector2D middle= min+(max-min)/2;
+						QList<qreal> Zp;
+						for(QList<QVector3D>::const_iterator kt=points.begin();kt!=points.end();kt++){
+							qreal distance= (QVector2D(*kt)-middle).length();
+							if(distance <= Options::gridPeakFilterRadius*(max-middle).length())
+								Zp<< kt->z();
+						}
+						qSort(Zp);
+						qreal median,
+								Zmax= !Zp.isEmpty()?Zp.at(Zp.size()-1):0,
+								Zmin= !Zp.isEmpty()?Zp.at(0):0;
+
+						if(Zp.isEmpty())
 							continue;
+						else
+							median= Zp.size()%2==1 ?
+										Zp[(Zp.size()-1)/2] :
+										((Zp[Zp.size()/2-1]+Zp[Zp.size()/2])/2.0);
 
-						if(points[k].x()>=min.x() && points[k].x()<=max.x() && points[k].y()>=min.y() && points[k].y()<=max.y()){
-							#pragma omp critical
-							{
-								discardedPoints.insert(k);
+						if(Zp.size()>=3){
+							for(int i=0;i<Zp.size()/2;i++)
+								if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i+1)-median))
+									Zmin= Zp.at(i+1);
+								else break;
+
+							for(int i=Zp.size()-1;i>Zp.size()/2;i--)
+								if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i-1)-median))
+									Zmax= Zp.at(i-1);
+								else break;
+						}
+						Zp.clear();
+
+						for(int k=0;k<points.length();k++){
+							if((points[k].z()>=Zmin) && (points[k].z()<=Zmax))
+								continue;
+
+							if(points[k].x()>=min.x() && points[k].x()<=max.x() && points[k].y()>=min.y() && points[k].y()<=max.y()){
+								#pragma omp critical
+								{
+									discardedPoints.insert(k);
+								}
 							}
 						}
 					}
 				}
 			}
-		}
 
+		}
+		return discardedPoints;
 	}
-	return discardedPoints;
+
 }

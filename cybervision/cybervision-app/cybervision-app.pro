@@ -19,6 +19,7 @@ SOURCES += main.cpp \
 	KDTree/kdtreegateway.cpp \
     Reconstruction/imageloader.cpp \
     Reconstruction/pointmatcheropencl.cpp
+
 HEADERS += \
 	Reconstruction/pointmatcher.h \
 	Reconstruction/pointmatch.h \
@@ -131,6 +132,7 @@ win32-msvc* {
 unix {
     QMAKE_CXXFLAGS += -fopenmp -msse3
     equals(CYBERVISION_OPENCL, true){
+		INCLUDEPATH += /opt/AMDAPP/include
         LIBS += -L/opt/AMDAPP/lib/x86_64 -lOpenCL
     }
 }
@@ -143,3 +145,7 @@ else:win32:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/re
 else:win32:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -lsiftfast
 else:symbian: LIBS += -lsiftfast
 else:unix: LIBS += -L$$OUT_PWD/../libsiftfast -dynamic -lsiftfast
+
+
+
+

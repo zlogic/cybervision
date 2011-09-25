@@ -13,6 +13,7 @@ namespace cybervision{
 	const size_t Options::bbf_steps= 1000;
 	const Options::TriangulationMode Options::triangulationMode= Options::TRIANGULATION_PARALLEL;
 	const double Options::constraintsThreshold= 0.0000001;
+	const int Options::maxTriangulationPointSize= 8000;
 
 	const int Options::RANSAC_k= 10000;
 	const int Options::RANSAC_n= 8;

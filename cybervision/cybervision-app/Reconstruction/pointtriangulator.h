@@ -62,7 +62,7 @@ namespace cybervision{
 		//Performs a triangulation without pose estimation (for parallel projection), no peak filtering
 		bool triangulatePoints(const QList<cybervision::KeypointMatch>&matches,qreal angle);
 		//Performs a triangulation without pose estimation (for parallel projection), with configurable peak filtering
-		bool triangulatePoints(const SortedKeypointMatches&matches,qreal angle,bool findPeaks);
+		bool triangulatePoints(const SortedKeypointMatches&matches,qreal angle,bool filterPeaks);
 
 		//Getters
 		QList<QVector3D> getPoints3D()const;
