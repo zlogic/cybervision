@@ -61,17 +61,6 @@ namespace cybervision{
 				glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
 				glTexCoord2d(pc.uv.x(),pc.uv.y());
 				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
-
-				//Back side
-				glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-				glTexCoord2d(pc.uv.x(),pc.uv.y());
-				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
-				glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-				glTexCoord2d(pb.uv.x(),pb.uv.y());
-				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
-				glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-				glTexCoord2d(pa.uv.x(),pa.uv.y());
-				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
 			}else if(Options::renderNormalsMode== Options::RENDER_NORMALS_POINT){
 				//Use point normals
 				//Front side
@@ -84,17 +73,6 @@ namespace cybervision{
 				glNormal3f(pc.normal.x(),pc.normal.y(),pc.normal.z());
 				glTexCoord2d(pc.uv.x(),pc.uv.y());
 				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
-
-				//Back side
-				glNormal3f(-pc.normal.x(),-pc.normal.y(),-pc.normal.z());
-				glTexCoord2d(pc.uv.x(),pc.uv.y());
-				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
-				glNormal3f(-pb.normal.x(),-pb.normal.y(),-pb.normal.z());
-				glTexCoord2d(pb.uv.x(),pb.uv.y());
-				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
-				glNormal3f(-pa.normal.x(),-pa.normal.y(),-pa.normal.z());
-				glTexCoord2d(pa.uv.x(),pa.uv.y());
-				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
 			}
 			//glBegin(GL_POINTS);
 			//glColor3f(0.0f, 0.0f, 0.0f);
@@ -188,7 +166,7 @@ namespace cybervision{
 
 		QString result=xmlTemplate;
 		if(Options::colladaFormat==Options::COLLADA_SHARED_POINTS){
-			//Output points and normals
+			//Output points, normals and texture coordinates
 			for(QList<Point>::const_iterator it= points.begin();it!=points.end();it++){
 				QString currentVertexString;
 				currentVertexString.append(QString("%1 %2 %3 ").arg(it->coord.x()).arg(it->coord.y()).arg(it->coord.z()));
@@ -252,6 +230,62 @@ namespace cybervision{
 			result.replace("##[texture-coordinates-array-size]##",QString("%1").arg(triangles.length()*6));
 			result.replace("##[texture-coordinates-count]##",QString("%1").arg(triangles.length()*3));
 			result.replace("##[triangles-count]##",QString("%1").arg(triangles.length()));
+		}
+
+		QString fileNameTexture= fileName+".png";
+
+		result.replace("##[points]##",vertexesString);
+		result.replace("##[normals]##",normalsString);
+		result.replace("##[texture-coordinates]##",textureCoordinatesString);
+		result.replace("##[triangles-indexes]##",trianglesString);
+		result.replace("##[texture-image-filename]##",QFileInfo(fileNameTexture).fileName());
+
+		if(!image1.save(fileNameTexture,"png"))
+			;//TODO:error
+
+		stream<<result;
+		file.close();
+	}
+	void Surface::saveSceneJS(QString fileName)const{
+		//Read SceneJS template
+		QString sceneJSTemplate;
+		{
+			QFile templateFile(":/scenejs/Template.js");
+			templateFile.open(QIODevice::ReadOnly);
+			QTextStream stream(&templateFile);
+			sceneJSTemplate= stream.readAll();
+		}
+
+		QFile file(fileName);
+		file.open(QIODevice::WriteOnly);
+
+		QTextStream stream(&file);
+
+		QString vertexesString,normalsString,textureCoordinatesString,trianglesString;
+
+		QString result=sceneJSTemplate;
+		//Output points and normals
+		for(QList<Point>::const_iterator it= points.begin();it!=points.end();it++){
+			bool last= it==(points.end()-1);
+			QString currentVertexString;
+			currentVertexString.append(QString("%1,%2,%3%4").arg(it->coord.x()*scale).arg(it->coord.y()*scale).arg(it->coord.z()*scale).arg(!last?",":""));
+			QString currentNormalString;
+			currentNormalString.append(QString("%1,%2,%3%4").arg(it->normal.x()).arg(it->normal.y()).arg(it->normal.z()).arg(!last?",":""));
+			QString currentTextureCoordinatesString;
+			currentTextureCoordinatesString.append(QString("%1,%2%3").arg(it->uv.x()).arg(it->uv.y()).arg(!last?",":""));
+
+			vertexesString.append(currentVertexString);
+			normalsString.append(currentNormalString);
+			textureCoordinatesString.append(currentTextureCoordinatesString);
+		}
+
+		//Output polygons
+		for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
+			bool last= it==(triangles.end()-1);
+			QString currentTriangleString;
+			currentTriangleString.append(QString("%1,%2,%3%4").arg(it->a).arg(it->b).arg(it->c).arg(!last?",":""));
+
+			trianglesString.append(currentTriangleString);
 		}
 
 		QString fileNameTexture= fileName+".png";

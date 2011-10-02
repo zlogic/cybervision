@@ -104,10 +104,10 @@
 							<texture texture="tex1-sampler" texcoord="TEX_UV"/>
 						</diffuse>
 						<specular>
-							<color>0.5 0.5 0.5 1</color>
+							<color>1 1 1 1</color>
 						</specular>
 						<shininess>
-							<float>16</float>
+							<float>50</float>
 						</shininess>
 						<reflective>
 							<color>0 0 0 1</color>

@@ -83,7 +83,8 @@ OTHER_FILES += \
 	UI/icons/texture-empty.png \
 	UI/icons/cybervision.png \
 	UI/cybervision.rc \
-	UI/icons/cybervision.ico
+	UI/icons/cybervision.ico \
+    Reconstruction/SceneJSTemplate.js
 
 include( ../cybervision-options.pri )
 

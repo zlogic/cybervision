@@ -67,7 +67,7 @@ void CybervisionViewer::initializeGL(){
 	// Set up the rendering context, define display lists etc.:
 	glClearColor(1.0, 1.0, 1.0, 0.0);
 	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_CULL_FACE);
+	//glEnable(GL_CULL_FACE);
 	glShadeModel(GL_SMOOTH);
 	glEnable(GL_LIGHTING);
 	glEnable(GL_LIGHT0);
@@ -86,6 +86,8 @@ void CybervisionViewer::initializeGL(){
 	static GLfloat light0Ambiance[4] = { 0.2f, 0.2f, 0.2f, 0.2f };
 	glLightfv(GL_LIGHT0, GL_POSITION, light0Position);
 	glLightfv(GL_LIGHT0,GL_AMBIENT,light0Ambiance);
+	float modelTwoside[] = {GL_TRUE};
+	glLightModelfv(GL_LIGHT_MODEL_TWO_SIDE, modelTwoside);
 
 	//Texture options
 	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);

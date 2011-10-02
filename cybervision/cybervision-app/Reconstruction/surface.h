@@ -70,6 +70,7 @@ namespace cybervision{
 		void savePoints(QString fileName)const;
 		void savePolygons(QString fileName)const;
 		void saveCollada(QString fileName)const;
+		void saveSceneJS(QString fileName)const;
 	signals:
 
 	public slots:

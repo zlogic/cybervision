@@ -14,4 +14,7 @@
     <qresource prefix="/opencl">
         <file alias="PointMatcherKernel.cl">Reconstruction/PointMatcherKernel.cl</file>
     </qresource>
+    <qresource prefix="/scenejs">
+        <file alias="Template.js">Reconstruction/SceneJSTemplate.js</file>
+    </qresource>
 </RCC>

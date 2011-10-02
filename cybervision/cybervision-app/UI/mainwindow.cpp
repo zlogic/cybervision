@@ -138,6 +138,7 @@ void MainWindow::on_saveButton_clicked(){
 	formats<<"Surface points (*.txt)";
 	formats<<"Surface polygons (*.txt)";
 	formats<<"PNG image (*.png)";
+	formats<<"SceneJS model (*.js)";
 	formats<<"Collada model (*.dae)";
 	QString filter;
 	for(QStringList::const_iterator it=formats.begin();it!=formats.end();it++)
@@ -160,6 +161,10 @@ void MainWindow::on_saveButton_clicked(){
 			QImage screenshot= ui->openGLViewport->grabFrameBuffer();
 			screenshot.save(fileName,"png");
 		}else if(selectedFilter==formats[3]){
+			if(fileInfo.suffix()!="js")
+				fileName.append(".js");
+			ui->openGLViewport->getSurface3D().saveSceneJS(fileName);
+		}else if(selectedFilter==formats[4]){
 			if(fileInfo.suffix()!="dae")
 				fileName.append(".dae");
 			ui->openGLViewport->getSurface3D().saveCollada(fileName);
