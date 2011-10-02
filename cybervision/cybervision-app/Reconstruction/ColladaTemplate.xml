@@ -66,9 +66,31 @@
 			<instance_effect url="#Blue-fx"/>
 		</material>
 	</library_materials>
+	<library_images>
+		<image id="tex1" name="tex1">
+			<init_from>./##[texture-image-filename]##</init_from>
+		</image>
+		<!--
+		<image id="tex2.png" name="tex2">
+			<init_from>./tex2.png</init_from>
+		</image>
+		-->
+	</library_images>
 	<library_effects>
 		<effect id="Blue-fx">
 			<profile_COMMON>
+				<newparam sid="tex1-surface">
+					<surface type="2D">
+						<init_from>tex1</init_from>
+					</surface>
+				</newparam>
+				<newparam sid="tex1-sampler">
+					<sampler2D>
+						<source>tex1-surface</source>
+						<minfilter>LINEAR_MIPMAP_LINEAR</minfilter>
+						<magfilter>LINEAR</magfilter>
+					</sampler2D>
+				</newparam>
 				<technique sid="common">
 					<phong>
 						<emission>
@@ -79,6 +101,7 @@
 						</ambient>
 						<diffuse>
 							<color>1 1 1 1</color>
+							<texture texture="tex1-sampler" texcoord="TEX_UV"/>
 						</diffuse>
 						<specular>
 							<color>0.5 0.5 0.5 1</color>
@@ -129,12 +152,22 @@
 						</accessor>
 					</technique_common>
 				</source>
+				<source id="box-lib-texture-coordinates" name="texture-coordinates">
+					<float_array id="box-lib-texture-coordinates-array" count="##[texture-coordinates-array-size]##">##[texture-coordinates]##</float_array>
+					<technique_common>
+						<accessor count="##[texture-coordinates-count]##" offset="0" source="#box-lib-texture-coordinates-array" stride="2">
+							<param name="U" type="float"></param>
+							<param name="V" type="float"></param>
+						</accessor>
+					</technique_common>
+				</source>
 				<vertices id="box-lib-vertices">
 					<input semantic="POSITION" source="#box-lib-positions"/>
 				</vertices>
 				<triangles count="##[triangles-count]##" material="BlueSG">
 					<input offset="0" semantic="VERTEX" source="#box-lib-vertices"/>
 					<input offset="0" semantic="NORMAL" source="#box-lib-normals"/>
+					<input offset="0" semantic="TEXCOORD" source="#box-lib-texture-coordinates"/>
 					<p>##[triangles-indexes]##</p>
 				</triangles>
 			</mesh>

@@ -184,7 +184,7 @@ namespace cybervision{
 
 		QTextStream stream(&file);
 
-		QString vertexesString,normalsString,trianglesString;
+		QString vertexesString,normalsString,textureCoordinatesString,trianglesString;
 
 		QString result=xmlTemplate;
 		if(Options::colladaFormat==Options::COLLADA_SHARED_POINTS){
@@ -194,9 +194,12 @@ namespace cybervision{
 				currentVertexString.append(QString("%1 %2 %3 ").arg(it->coord.x()).arg(it->coord.y()).arg(it->coord.z()));
 				QString currentNormalString;
 				currentNormalString.append(QString("%1 %2 %3 ").arg(it->normal.x()).arg(it->normal.y()).arg(it->normal.z()));
+				QString currentTextureCoordinatesString;
+				currentTextureCoordinatesString.append(QString("%1 %2 ").arg(it->uv.x()).arg(it->uv.y()));
 
 				vertexesString.append(currentVertexString);
 				normalsString.append(currentNormalString);
+				textureCoordinatesString.append(currentTextureCoordinatesString);
 			}
 
 			//Output polygons
@@ -211,6 +214,8 @@ namespace cybervision{
 			result.replace("##[points-count]##",QString("%1").arg(points.length()));
 			result.replace("##[normals-array-size]##",QString("%1").arg(points.length()*3));
 			result.replace("##[normals-count]##",QString("%1").arg(triangles.length()));
+			result.replace("##[texture-coordinates-array-size]##",QString("%1").arg(points.length()*2));
+			result.replace("##[texture-coordinates-count]##",QString("%1").arg(points.length()));
 			result.replace("##[triangles-count]##",QString("%1").arg(triangles.length()));
 		}else if(Options::colladaFormat==Options::COLLADA_INDEPENDENT_POLYGONS){
 			PolygonPoint i=0;//Triangle indexes
@@ -226,11 +231,16 @@ namespace cybervision{
 				currentNormalString.append(QString("%1 %2 %3 ").arg(pa.normal.x()).arg(pa.normal.y()).arg(pa.normal.z()));
 				currentNormalString.append(QString("%1 %2 %3 ").arg(pb.normal.x()).arg(pb.normal.y()).arg(pb.normal.z()));
 				currentNormalString.append(QString("%1 %2 %3 ").arg(pc.normal.x()).arg(pc.normal.y()).arg(pc.normal.z()));
+				QString currentTextureCoordinatesString;
+				currentTextureCoordinatesString.append(QString("%1 %2 ").arg(pa.uv.x()).arg(pa.uv.y()));
+				currentTextureCoordinatesString.append(QString("%1 %2 ").arg(pb.uv.x()).arg(pb.uv.y()));
+				currentTextureCoordinatesString.append(QString("%1 %2 ").arg(pc.uv.x()).arg(pc.uv.y()));
 				QString currentTriangleString;
 				currentTriangleString.append(QString("%1 %2 %3 ").arg(i).arg(i+1).arg(i+2));
 
 				vertexesString.append(currentVertexString);
 				normalsString.append(currentNormalString);
+				textureCoordinatesString.append(currentTextureCoordinatesString);
 				trianglesString.append(currentTriangleString);
 				i+=3;
 			}
@@ -239,12 +249,21 @@ namespace cybervision{
 			result.replace("##[points-count]##",QString("%1").arg(triangles.length()*3));
 			result.replace("##[normals-array-size]##",QString("%1").arg(triangles.length()*9));
 			result.replace("##[normals-count]##",QString("%1").arg(triangles.length()*3));
+			result.replace("##[texture-coordinates-array-size]##",QString("%1").arg(triangles.length()*6));
+			result.replace("##[texture-coordinates-count]##",QString("%1").arg(triangles.length()*3));
 			result.replace("##[triangles-count]##",QString("%1").arg(triangles.length()));
 		}
 
+		QString fileNameTexture= fileName+".png";
+
 		result.replace("##[points]##",vertexesString);
 		result.replace("##[normals]##",normalsString);
+		result.replace("##[texture-coordinates]##",textureCoordinatesString);
 		result.replace("##[triangles-indexes]##",trianglesString);
+		result.replace("##[texture-image-filename]##",QFileInfo(fileNameTexture).fileName());
+
+		if(!image1.save(fileNameTexture,"png"))
+			;//TODO:error
 
 		stream<<result;
 		file.close();

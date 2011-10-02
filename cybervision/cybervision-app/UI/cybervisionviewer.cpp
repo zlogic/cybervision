@@ -37,7 +37,7 @@ void CybervisionViewer::setSurface3D(const cybervision::Surface& surface){
 		glGenTextures(2,textures);
 		textures[0]= bindTexture(this->surface.getTexture1());
 		textures[1]= bindTexture(this->surface.getTexture2());
-		this->surface.setTextures(QImage(),QImage());
+		//this->surface.setTextures(QImage(),QImage());
 	}
 	updateGL();
 }
