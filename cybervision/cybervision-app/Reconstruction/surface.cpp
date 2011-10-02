@@ -53,47 +53,47 @@ namespace cybervision{
 				//Use triangle normals
 				//Front side
 				glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-				glTexCoord2d(pa.coord.x()*scale/Options::surfaceSize+0.5,pa.coord.y()*scale/Options::surfaceSize+0.5);
+				glTexCoord2d(pa.uv.x(),pa.uv.y());
 				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
 				glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-				glTexCoord2d(pb.coord.x()*scale/Options::surfaceSize+0.5,pb.coord.y()*scale/Options::surfaceSize+0.5);
+				glTexCoord2d(pb.uv.x(),pb.uv.y());
 				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
 				glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-				glTexCoord2d(pc.coord.x()*scale/Options::surfaceSize+0.5,pc.coord.y()*scale/Options::surfaceSize+0.5);
+				glTexCoord2d(pc.uv.x(),pc.uv.y());
 				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
 
 				//Back side
 				glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-				glTexCoord2d(-pc.coord.x()*scale/Options::surfaceSize-0.5,-pc.coord.y()*scale/Options::surfaceSize-0.5);
+				glTexCoord2d(pc.uv.x(),pc.uv.y());
 				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
 				glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-				glTexCoord2d(-pb.coord.x()*scale/Options::surfaceSize-0.5,-pb.coord.y()*scale/Options::surfaceSize-0.5);
+				glTexCoord2d(pb.uv.x(),pb.uv.y());
 				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
 				glNormal3f(-it->normal.x(),-it->normal.y(),-it->normal.z());
-				glTexCoord2d(-pa.coord.x()*scale/Options::surfaceSize-0.5,-pa.coord.y()*scale/Options::surfaceSize-0.5);
+				glTexCoord2d(pa.uv.x(),pa.uv.y());
 				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
 			}else if(Options::renderNormalsMode== Options::RENDER_NORMALS_POINT){
 				//Use point normals
 				//Front side
 				glNormal3f(pa.normal.x(),pa.normal.y(),pa.normal.z());
-				glTexCoord2d(pa.coord.x()*scale/Options::surfaceSize+0.5,pa.coord.y()*scale/Options::surfaceSize+0.5);
+				glTexCoord2d(pa.uv.x(),pa.uv.y());
 				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
 				glNormal3f(pb.normal.x(),pb.normal.y(),pb.normal.z());
-				glTexCoord2d(pb.coord.x()*scale/Options::surfaceSize+0.5,pb.coord.y()*scale/Options::surfaceSize+0.5);
+				glTexCoord2d(pb.uv.x(),pb.uv.y());
 				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
 				glNormal3f(pc.normal.x(),pc.normal.y(),pc.normal.z());
-				glTexCoord2d(pc.coord.x()*scale/Options::surfaceSize+0.5,pc.coord.y()*scale/Options::surfaceSize+0.5);
+				glTexCoord2d(pc.uv.x(),pc.uv.y());
 				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
 
 				//Back side
 				glNormal3f(-pc.normal.x(),-pc.normal.y(),-pc.normal.z());
-				glTexCoord2d(-pc.coord.x()*scale/Options::surfaceSize-0.5,-pc.coord.y()*scale/Options::surfaceSize-0.5);
+				glTexCoord2d(pc.uv.x(),pc.uv.y());
 				glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
 				glNormal3f(-pb.normal.x(),-pb.normal.y(),-pb.normal.z());
-				glTexCoord2d(-pb.coord.x()*scale/Options::surfaceSize-0.5,-pb.coord.y()*scale/Options::surfaceSize-0.5);
+				glTexCoord2d(pb.uv.x(),pb.uv.y());
 				glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
 				glNormal3f(-pa.normal.x(),-pa.normal.y(),-pa.normal.z());
-				glTexCoord2d(-pa.coord.x()*scale/Options::surfaceSize-0.5,-pa.coord.y()*scale/Options::surfaceSize-0.5);
+				glTexCoord2d(pa.uv.x(),pa.uv.y());
 				glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
 			}
 			//glBegin(GL_POINTS);

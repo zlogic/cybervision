@@ -1,6 +1,7 @@
 #ifndef SURFACE_H
 #define SURFACE_H
 
+#include <QVector2D>
 #include <QVector3D>
 #include <QFileInfo>
 
@@ -19,6 +20,7 @@ namespace cybervision{
 		class Point{
 		public :
 			QVector3D coord, normal;
+			QVector2D uv;
 		};
 
 		//Surface data in two formats

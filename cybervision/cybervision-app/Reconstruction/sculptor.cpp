@@ -550,6 +550,10 @@ namespace cybervision{
 			Surface::Point point;
 			point.coord= points[i];
 			point.normal= calcNormal(surface.triangles,points,i);
+			point.uv= QVector2D(
+						(points[i].x()-surface.imageSize.left())/surface.imageSize.width(),
+						(points[i].y()-surface.imageSize.top())/surface.imageSize.height()
+						);
 			surface.points.append(point);
 		}
 
