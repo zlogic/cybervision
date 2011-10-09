@@ -1,0 +1,55 @@
+<!DOCTYPE QPH>
+<QPH sourcelanguage="en" language="ru_RU">
+<phrase>
+    <source>3D</source>
+    <target>трехмерная</target>
+</phrase>
+<phrase>
+    <source>match</source>
+    <target>совпадение</target>
+</phrase>
+<phrase>
+    <source>match</source>
+    <target>пара соответствия</target>
+</phrase>
+<phrase>
+    <source>pose</source>
+    <target>взаимное расположение</target>
+</phrase>
+<phrase>
+    <source>consensus</source>
+    <target>общее решение</target>
+</phrase>
+<phrase>
+    <source>estimating</source>
+    <target>оценочное вычисление</target>
+</phrase>
+<phrase>
+    <source>detecting</source>
+    <target>поиск</target>
+</phrase>
+<phrase>
+    <source>extract</source>
+    <target>получение</target>
+</phrase>
+<phrase>
+    <source>matches</source>
+    <target>пар соответствия</target>
+</phrase>
+<phrase>
+    <source>OpenCL Error</source>
+    <target>Ошибка OpenCL</target>
+</phrase>
+<phrase>
+    <source>failed</source>
+    <target>не выполнено</target>
+</phrase>
+<phrase>
+    <source>warning</source>
+    <target>предупреждение</target>
+</phrase>
+<phrase>
+    <source>error</source>
+    <target>ошибка</target>
+</phrase>
+</QPH>

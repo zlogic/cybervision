@@ -85,9 +85,9 @@ OTHER_FILES += \
 	UI/cybervision.rc \
 	UI/icons/cybervision.ico \
     Reconstruction/SceneJSTemplate.js \
-    UI/cybervision-app_ru.ts
+    UI/translations/cybervision-app_ru.ts
 
-TRANSLATIONS = UI/cybervision-app_ru.ts
+TRANSLATIONS = UI/translations/cybervision-app_ru.ts UI/translations/cybervision-app_jp.ts
 CODECFORTR = UTF-8
 
 include( ../cybervision-options.pri )
@@ -150,6 +150,8 @@ else:win32:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/re
 else:win32:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -lsiftfast
 else:symbian: LIBS += -lsiftfast
 else:unix: LIBS += -L$$OUT_PWD/../libsiftfast -dynamic -lsiftfast
+
+
 
 
 

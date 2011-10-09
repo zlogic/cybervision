@@ -145,11 +145,11 @@ void MainWindow::on_startProcessButton_clicked(){
 
 void MainWindow::on_saveButton_clicked(){
 	QStringList formats;
-	formats<<tr("Surface points (*.txt)");
-	formats<<tr("Surface polygons (*.txt)");
-	formats<<tr("PNG image (*.png)");
-	formats<<tr("SceneJS model (*.js)");
-	formats<<tr("Collada model (*.dae)");
+	formats<<tr("Surface points")+ " (*.txt)";
+	formats<<tr("Surface polygons")+ " (*.txt)";
+	formats<<tr("PNG image")+ " (*.png)";
+	formats<<tr("SceneJS model")+ " (*.js)";
+	formats<<tr("COLLADA model")+ " (*.dae)";
 	QString filter;
 	for(QStringList::const_iterator it=formats.begin();it!=formats.end();it++)
 		filter.append(*it+";;");
@@ -202,7 +202,7 @@ void MainWindow::on_actionShow_statistics_triggered(bool checked){
 }
 
 void MainWindow::on_addImageButton_clicked(){
-	QString filter= tr("Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;All files(*.*)");
+	QString filter= tr("Images") + "(*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;"+tr("All files")+"(*.*)";
 	QStringList filenames = QFileDialog::getOpenFileNames(this,tr("Select images to add"),"",filter,0,0);
 	for(QStringList::const_iterator it=filenames.begin();it!=filenames.end();it++){
 		QString name= QFileInfo(*it).fileName();

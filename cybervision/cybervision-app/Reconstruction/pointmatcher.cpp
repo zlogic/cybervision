@@ -104,7 +104,7 @@ namespace cybervision{
 			keypoints1= extractor.extract(image1);
 			emit sgnLogMessage(QString(tr("Extracted %1 keypoints from %2")).arg(keypoints1.size()).arg(filename1));
 
-			emit sgnLogMessage(QString(tr("Extracting keypoints from %2")).arg(filename2));
+			emit sgnLogMessage(QString(tr("Extracting keypoints from %1")).arg(filename2));
 			keypoints2= extractor.extract(image2);
 			emit sgnLogMessage(QString(tr("Extracted %1 keypoints from %2")).arg(keypoints2.size()).arg(filename2));
 		}

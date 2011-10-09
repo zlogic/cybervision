@@ -109,7 +109,7 @@ namespace cybervision{
 		}
 
 		if(NULL == platform){
-			emit sgnLogMessage(QString(tr("OpenCL Error: NULL platform found so Exiting Application.")));
+			emit sgnLogMessage(QString(tr("OpenCL Error: NULL platform found")));
 			return false;
 		}
 
