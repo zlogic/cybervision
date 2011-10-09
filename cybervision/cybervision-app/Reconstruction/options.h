@@ -49,6 +49,8 @@ public:
 	static const bool renderShiny; //Render surface as a shiny texture
 	enum RenderNormalsMode {RENDER_NORMALS_TRIANGLE,RENDER_NORMALS_POINT}; //Use normals from polygon or from point when rendering
 	static const RenderNormalsMode renderNormalsMode; //Selected normals source for rendering
+	enum PointDrawingMode {POINT_DRAW_AS_POINT,POINT_DRAW_AS_3DCIRCLE}; //Draw points as a simple point or as a small circle (with 3D scaling)
+	static const PointDrawingMode pointDrawingMode;
 };
 
 }

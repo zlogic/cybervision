@@ -32,14 +32,21 @@ protected:
 	enum Corner{ CORNER_NONE,CORNER_xyz,CORNER_xyZ,CORNER_xYz,CORNER_xYZ,CORNER_Xyz,CORNER_XyZ,CORNER_XYz,CORNER_XYZ };
 
 	//Grid functions
+	//Draw the grid
 	void drawGrid();
 	//Returns the optimal scale step for the min/max value pair
 	qreal getOptimalGridStep(qreal min,qreal max) const;
 	//Returns the best visible corner
 	Corner getOptimalCorner(const QVector3D& min,const QVector3D& max)const;
+
+	//Point selection stuff
+	//Selected point
+	QVector3D clickLocation;
+	//Click detection
+	QVector3D getClickLocation(const QPointF&)const;
+	void drawPoint(const QVector3D&)const;
 public:
 	CybervisionViewer(QWidget *parent);
-
 
 	//Getters/setters
 	void setSurface3D(const cybervision::Surface&);
@@ -52,7 +59,6 @@ protected:
 	void initializeGL();
 	void resizeGL(int w, int h);
 	void paintGL();
-
 
 	//Rotation/movement with mouse
 	float normalizeAngle(float angle)const;

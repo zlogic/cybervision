@@ -12,6 +12,7 @@
 
 #include <QMatrix4x4>
 #include <GL/glext.h>
+#include <GL/glu.h>
 
 
 CybervisionViewer::CybervisionViewer(QWidget *parent): QGLWidget(parent){
@@ -23,10 +24,12 @@ CybervisionViewer::CybervisionViewer(QWidget *parent): QGLWidget(parent){
 	glNearPlane= 1;
 	glAspectRatio= 1;
 	glFOV= 90;
+	clickLocation= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
 }
 
 
 void CybervisionViewer::setSurface3D(const cybervision::Surface& surface){
+	clickLocation= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
 	{
 		QMutexLocker lock(&surfaceMutex);
 		this->surface= surface;
@@ -130,8 +133,35 @@ void CybervisionViewer::paintGL(){
 		glDisable(GL_TEXTURE_2D);
 
 		drawGrid();
+
+		//Draw click point
+		drawPoint(clickLocation);
 	}
 }
+void CybervisionViewer::drawPoint(const QVector3D& point)const{
+	if(point.x()==std::numeric_limits<qreal>::infinity() || point.y()==std::numeric_limits<qreal>::infinity() || point.z()==std::numeric_limits<qreal>::infinity())
+		return;
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_LIGHTING);
+	glColor3f(1,.0,.0);
+	if(cybervision::Options::pointDrawingMode==cybervision::Options::POINT_DRAW_AS_3DCIRCLE){
+		double radius=.08;
+		int num_segments=36;
+		glBegin(GL_POLYGON);
+		for(int i=0;i<num_segments;i++){
+			double angle = i*M_PI*2/(double)num_segments;
+			glVertex3f(point.x()+cos(angle)*radius,point.y()+sin(angle)*radius,point.z());
+		}
+		glEnd();
+	}else if(cybervision::Options::pointDrawingMode==cybervision::Options::POINT_DRAW_AS_POINT){
+		glBegin(GL_POINTS);
+		glVertex3f(point.x(),point.y(),point.z());
+		glEnd();
+	}
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_LIGHTING);
+}
+
 void CybervisionViewer::drawGrid(){
 	if(!surface.isOk() || !showGrid)
 		return;
@@ -369,6 +399,31 @@ float CybervisionViewer::normalizeAngle(float angle) const{
 
 void CybervisionViewer::mousePressEvent(QMouseEvent *event){
 	lastMousePos= event->pos();
+
+	//Detect click location
+	clickLocation= getClickLocation(event->pos());
+	updateGL();
+}
+
+QVector3D CybervisionViewer::getClickLocation(const QPointF& location) const{
+	//See http://nehe.gamedev.net/article/using_gluunproject/16013/
+	GLint viewport[4];
+	GLdouble modelview[16];
+	GLdouble projection[16];
+	GLfloat winX, winY, winZ;
+	GLdouble posX, posY, posZ;
+
+	glGetDoublev(GL_MODELVIEW_MATRIX,modelview);
+	glGetDoublev(GL_PROJECTION_MATRIX,projection);
+	glGetIntegerv(GL_VIEWPORT,viewport);
+
+	winX= (GLfloat)location.x();
+	winY= (GLfloat)viewport[3]-(GLfloat)location.y();
+	glReadPixels(int(winX),int(winY),1,1,GL_DEPTH_COMPONENT,GL_FLOAT,&winZ);
+
+	gluUnProject(winX,winY,winZ,modelview,projection,viewport,&posX,&posY,&posZ);
+
+	return QVector3D(posX,posY,posZ);
 }
 
 void CybervisionViewer::mouseMoveEvent(QMouseEvent *event){

@@ -36,4 +36,5 @@ namespace cybervision{
 
 	const bool Options::renderShiny= true;
 	const Options::RenderNormalsMode Options::renderNormalsMode= Options::RENDER_NORMALS_POINT;
+	const Options::PointDrawingMode Options::pointDrawingMode= Options::POINT_DRAW_AS_POINT;
 }
