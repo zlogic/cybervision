@@ -30,6 +30,7 @@ CybervisionViewer::CybervisionViewer(QWidget *parent): QGLWidget(parent){
 
 void CybervisionViewer::setSurface3D(const cybervision::Surface& surface){
 	clickLocation= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+	emit selectedPointUpdated(clickLocation);
 	{
 		QMutexLocker lock(&surfaceMutex);
 		this->surface= surface;
@@ -62,6 +63,10 @@ void CybervisionViewer::setShowGrid(bool show){
 
 const cybervision::Surface& CybervisionViewer::getSurface3D()const{
 	return surface;
+}
+
+QVector3D CybervisionViewer::getSelectedPoint() const{
+	return clickLocation;
 }
 
 //OpenGL-specific stuff
@@ -399,9 +404,18 @@ float CybervisionViewer::normalizeAngle(float angle) const{
 
 void CybervisionViewer::mousePressEvent(QMouseEvent *event){
 	lastMousePos= event->pos();
+	clickMousePos= event->pos();
+}
 
+void CybervisionViewer::mouseReleaseEvent(QMouseEvent *event){
 	//Detect click location
-	clickLocation= getClickLocation(event->pos());
+	if(clickMousePos==event->pos())
+		clickLocation= getClickLocation(event->pos());
+	else
+		clickLocation= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+
+	emit selectedPointUpdated(QVector3D(clickLocation.x()/surface.getScale(),clickLocation.y()/surface.getScale(),clickLocation.z()/surface.getScale()));
+
 	updateGL();
 }
 

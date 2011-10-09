@@ -20,7 +20,7 @@ protected:
 
 	//Viewport configuration
 	QVector3D vpRotation,vpTranslation;
-	QPoint lastMousePos;
+	QPoint lastMousePos,clickMousePos;
 	MouseMode mouseMode;
 	TextureMode textureMode;
 	bool showGrid;
@@ -54,6 +54,7 @@ public:
 	void setTextureMode(TextureMode textureMode);
 	void setShowGrid(bool show);
 	const cybervision::Surface& getSurface3D()const;
+	QVector3D getSelectedPoint() const;
 protected:
 	//Inherited opengl stuff
 	void initializeGL();
@@ -63,7 +64,10 @@ protected:
 	//Rotation/movement with mouse
 	float normalizeAngle(float angle)const;
 	void mousePressEvent(QMouseEvent *event);
+	void mouseReleaseEvent(QMouseEvent *event);
 	void mouseMoveEvent(QMouseEvent *event);
+signals:
+	void selectedPointUpdated(QVector3D);
 };
 
 #endif // CYBERVISIONVIEWER_H

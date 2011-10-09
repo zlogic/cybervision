@@ -2,7 +2,6 @@
 #define MAINWINDOW_H
 
 #include <QtGui/QMainWindow>
-#include <QGraphicsScene>
 #include <QTextStream>
 #include <QDoubleValidator>
 
@@ -25,7 +24,6 @@ public:
 private:
 	Ui::MainWindow *ui;
 
-	QGraphicsScene scene;
 	ProcessThread thread;
 
 	QDoubleValidator scaleXYValidator,scaleZValidator,angleValidator;
@@ -37,24 +35,31 @@ private:
 	void loadDebugPreferences();
 
 private slots:
+	//Slots for receiving messages from process thread
+	void processStarted();
+	void processUpdated(QString logMessage,QString statusBarText=QString());
+	void processStopped(QString resultText,cybervision::Surface);
+
+	//Slots for receiving messages from OpenGL viewport
+	void viewerSelectedPointUpdated(QVector3D);
+
+	//UI slots
 	void on_addImageButton_clicked();
 	void on_deleteImageButton_clicked();
 	void on_imageList_itemSelectionChanged();
-	void on_actionShowlog_triggered(bool checked);
+	void on_actionShow_log_triggered(bool checked);
 	void on_logDockWidget_visibilityChanged(bool visible);
+	void on_actionShow_statistics_triggered(bool checked);
+	void on_statsDockWidget_visibilityChanged(bool visible);
 	void on_saveButton_clicked();
 	void on_startProcessButton_clicked();
 	void on_moveToolButton_toggled(bool checked);
 	void on_rotateToolButton_toggled(bool checked);
 	void on_gridToolButton_toggled(bool checked);
-
-	//Slots for receiving messages from process thread
-	void processStarted();
-	void processUpdated(QString logMessage,QString statusBarText=QString());
-	void processStopped(QString resultText,cybervision::Surface);
 	void on_texture1ToolButton_clicked();
 	void on_texture2ToolButton_clicked();
 	void on_textureNoneToolButton_clicked();
+
 };
 
 #endif // MAINWINDOW_H

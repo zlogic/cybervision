@@ -2,13 +2,16 @@
 #include "ui_mainwindow.h"
 
 #include <QFileDialog>
-#include <QGraphicsItem>
+
+#include <limits>
 
 MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWindow){
     ui->setupUi(this);
 	thread.setUi(this);
 	updateWidgetStatus();
 	loadDebugPreferences();
+
+	QObject::connect(ui->openGLViewport, SIGNAL(selectedPointUpdated(QVector3D)),this, SLOT(viewerSelectedPointUpdated(QVector3D)),Qt::AutoConnection);
 }
 
 MainWindow::~MainWindow(){
@@ -37,6 +40,7 @@ void MainWindow::updateWidgetStatus(){
 	ui->scaleXYEdit->setValidator(&scaleXYValidator);
 	ui->scaleZEdit->setValidator(&scaleZValidator);
 	ui->angleEdit->setValidator(&angleValidator);
+	viewerSelectedPointUpdated(ui->openGLViewport->getSelectedPoint());
 }
 
 
@@ -115,6 +119,12 @@ void MainWindow::processStopped(QString resultText,cybervision::Surface surface)
 	updateWidgetStatus();
 }
 
+void MainWindow::viewerSelectedPointUpdated(QVector3D point){
+	if(point.x()==std::numeric_limits<qreal>::infinity() || point.y()==std::numeric_limits<qreal>::infinity() || point.z()==std::numeric_limits<qreal>::infinity())
+		ui->pointCoordinatesLabel->setText(tr("No point selected or surface is not ready"));
+	else
+		ui->pointCoordinatesLabel->setText(QString("x: %1\ny: %2\nz:%3").arg(point.x()).arg(point.y()).arg(point.z()));
+}
 
 void MainWindow::on_startProcessButton_clicked(){
 	QStringList filenames;
@@ -176,11 +186,19 @@ void MainWindow::on_saveButton_clicked(){
 }
 
 void MainWindow::on_logDockWidget_visibilityChanged(bool visible){
-	ui->actionShowlog->setChecked(visible);
+	ui->actionShow_log->setChecked(visible);
 }
 
-void MainWindow::on_actionShowlog_triggered(bool checked){
+void MainWindow::on_actionShow_log_triggered(bool checked){
 	ui->logDockWidget->setVisible(checked);
+}
+
+void MainWindow::on_statsDockWidget_visibilityChanged(bool visible){
+	ui->actionShow_statistics->setChecked(visible);
+}
+
+void MainWindow::on_actionShow_statistics_triggered(bool checked){
+	ui->statsDockWidget->setVisible(checked);
 }
 
 void MainWindow::on_addImageButton_clicked(){
