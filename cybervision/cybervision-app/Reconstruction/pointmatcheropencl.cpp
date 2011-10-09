@@ -54,11 +54,11 @@ namespace cybervision{
 		kernelInitialized= false;
 
 		if(input == NULL){
-			emit sgnLogMessage(QString("OpenCL Error: Failed to allocate input memory on host"));
+			emit sgnLogMessage(QString(tr("OpenCL Error: Failed to allocate input memory on host")));
 			return false;
 		}
 		if(output == NULL){
-			emit sgnLogMessage(QString("OpenCL Error: Failed to allocate output memory on host"));
+			emit sgnLogMessage(QString(tr("OpenCL Error: Failed to allocate output memory on host")));
 			return false;
 		}
 
@@ -73,7 +73,7 @@ namespace cybervision{
 		cl_platform_id platform = NULL;
 		status = clGetPlatformIDs(0, NULL, &numPlatforms);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: Getting Platforms. (clGetPlatformsIDs) code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: Getting Platforms. (clGetPlatformsIDs) code=%1")).arg(status));
 			return false;
 		}
 
@@ -82,7 +82,7 @@ namespace cybervision{
 			cl_platform_id* platforms = new cl_platform_id[numPlatforms];
 			status = clGetPlatformIDs(numPlatforms, platforms, NULL);
 			if(status != CL_SUCCESS){
-				emit sgnLogMessage(QString("OpenCL Error: Getting Platform Ids. (clGetPlatformsIDs) code=%1").arg(status));
+				emit sgnLogMessage(QString(tr("OpenCL Error: Getting Platform Ids. (clGetPlatformsIDs) code=%1")).arg(status));
 				return false;
 			}
 
@@ -96,7 +96,7 @@ namespace cybervision{
 							pbuff,
 							NULL);
 				if(status != CL_SUCCESS){
-					emit sgnLogMessage(QString("OpenCL Error: Getting Platform Info.(clGetPlatformInfo) code=%1").arg(status));
+					emit sgnLogMessage(QString(tr("OpenCL Error: Getting Platform Info.(clGetPlatformInfo) code=%1")).arg(status));
 					return false;
 				}
 				platform = platforms[i];
@@ -109,7 +109,7 @@ namespace cybervision{
 		}
 
 		if(NULL == platform){
-			emit sgnLogMessage(QString("OpenCL Error: NULL platform found so Exiting Application."));
+			emit sgnLogMessage(QString(tr("OpenCL Error: NULL platform found so Exiting Application.")));
 			return false;
 		}
 
@@ -127,7 +127,7 @@ namespace cybervision{
 										  NULL,
 										  &status);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: Creating Context. (clCreateContextFromType) code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: Creating Context. (clCreateContextFromType) code=%1")).arg(status));
 			return false;
 		}
 
@@ -138,7 +138,7 @@ namespace cybervision{
 								  NULL,
 								  &deviceListSize);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: Getting Context Info (device list size, clGetContextInfo) code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: Getting Context Info (device list size, clGetContextInfo) code=%1")).arg(status));
 			return false;
 		}
 
@@ -147,7 +147,7 @@ namespace cybervision{
 		/////////////////////////////////////////////////////////////////
 		devices.reset(new cl_device_id[deviceListSize]);
 		if(devices == 0){
-			emit sgnLogMessage(QString("OpenCL Error: No devices found."));
+			emit sgnLogMessage(QString(tr("OpenCL Error: No devices found.")));
 			return false;
 		}
 
@@ -159,7 +159,7 @@ namespace cybervision{
 					 devices.data(),
 					 NULL);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: Getting Context Info (device list, clGetContextInfo) code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: Getting Context Info (device list, clGetContextInfo) code=%1")).arg(status));
 			return false;
 		}
 
@@ -172,7 +172,7 @@ namespace cybervision{
 						   0,
 						   &status);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: Creating Command Queue. (clCreateCommandQueue) code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: Creating Command Queue. (clCreateCommandQueue) code=%1")).arg(status));
 			return false;
 		}
 
@@ -186,7 +186,7 @@ namespace cybervision{
 						  input.data(),
 						  &status);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clCreateBuffer (inputBuffer) code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clCreateBuffer (inputBuffer) code=%1")).arg(status));
 			return false;
 		}
 
@@ -197,7 +197,7 @@ namespace cybervision{
 						   output.data(),
 						   &status);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clCreateBuffer (outputBuffer) code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clCreateBuffer (outputBuffer) code=%1")).arg(status));
 			return false;
 		}
 
@@ -208,7 +208,7 @@ namespace cybervision{
 						   vector.data(),
 						   &status);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clCreateBuffer (vectorBuffer) code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clCreateBuffer (vectorBuffer) code=%1")).arg(status));
 			return false;
 		}
 
@@ -227,7 +227,7 @@ namespace cybervision{
 					  sourceSize,
 					  &status);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: Loading Binary into cl_program (clCreateProgramWithSource) code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: Loading Binary into cl_program (clCreateProgramWithSource) code=%1")).arg(status));
 			return false;
 		}
 
@@ -246,14 +246,14 @@ namespace cybervision{
 			clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, log_size, build_log.data(), NULL);
 			build_log[log_size] = '\0';
 
-			emit sgnLogMessage(QString("OpenCL Error: Building Program (clBuildProgram) code=%1, build log: \'%2\'").arg(status).arg(build_log.data()));
+			emit sgnLogMessage(QString(tr("OpenCL Error: Building Program (clBuildProgram) code=%1, build log: \'%2\'")).arg(status).arg(build_log.data()));
 			return false;
 		}
 
 		/* get a kernel object handle for a kernel with the given name */
 		kernel = clCreateKernel(program, "computeDistances", &status);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: Creating Kernel from program. (clCreateKernel) code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: Creating Kernel from program. (clCreateKernel) code=%1")).arg(status));
 			return false;
 		}
 
@@ -270,32 +270,32 @@ namespace cybervision{
 
 		status = clReleaseKernel(kernel);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: In clReleaseKernel code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: In clReleaseKernel code=%1")).arg(status));
 			return false;
 		}
 		status = clReleaseProgram(program);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: In clReleaseProgram code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: In clReleaseProgram code=%1")).arg(status));
 			return false;
 		}
 		status = clReleaseMemObject(inputBuffer);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: In clReleaseMemObject (inputBuffer) code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: In clReleaseMemObject (inputBuffer) code=%1")).arg(status));
 			return false;
 		}
 		status = clReleaseMemObject(outputBuffer);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: In clReleaseMemObject (outputBuffer) code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: In clReleaseMemObject (outputBuffer) code=%1")).arg(status));
 			return false;
 		}
 		status = clReleaseCommandQueue(commandQueue);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: In clReleaseCommandQueue code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: In clReleaseCommandQueue code=%1")).arg(status));
 			return false;
 		}
 		status = clReleaseContext(context);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: In clReleaseContext code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: In clReleaseContext code=%1")).arg(status));
 			return false;
 		}
 
@@ -321,12 +321,12 @@ namespace cybervision{
 											  &kernelWorkGroupSize,
 											  0);
 			if(status != CL_SUCCESS){
-				emit sgnLogMessage(QString("OpenCL Error: clGetKernelWorkGroupInfo failed, code=%1").arg(status));
+				emit sgnLogMessage(QString(tr("OpenCL Error: clGetKernelWorkGroupInfo failed, code=%1")).arg(status));
 				return false;
 			}
 
 			if((cl_uint)(localThreads[0]) > kernelWorkGroupSize){
-				emit sgnLogMessage(QString("OpenCL Warning: Out of Resources! Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3.").arg(localThreads[0]).arg(kernelWorkGroupSize).arg(kernelWorkGroupSize));
+				emit sgnLogMessage(QString(tr("OpenCL Warning: Out of Resources! Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3.")).arg(localThreads[0]).arg(kernelWorkGroupSize).arg(kernelWorkGroupSize));
 
 				localThreads[0] = kernelWorkGroupSize;
 			}
@@ -347,19 +347,19 @@ namespace cybervision{
 							NULL,
 							&events[0]);
 				if(status != CL_SUCCESS){
-					emit sgnLogMessage(QString("OpenCL Error: clEnqueueWriteBuffer (inputBuffer) failed, code=%1").arg(status));
+					emit sgnLogMessage(QString(tr("OpenCL Error: clEnqueueWriteBuffer (inputBuffer) failed, code=%1")).arg(status));
 					return false;
 				}
 
 				/* wait for the write buffer call to finish execution */
 				status = clWaitForEvents(1, &events[0]);
 				if(status != CL_SUCCESS){
-					emit sgnLogMessage(QString("OpenCL Error: clWaitForEvents (0) failed, code=%1").arg(status));
+					emit sgnLogMessage(QString(tr("OpenCL Error: clWaitForEvents (0) failed, code=%1")).arg(status));
 					return false;
 				}
 				status = clReleaseEvent(events[0]);
 				if(status != CL_SUCCESS){
-					emit sgnLogMessage(QString("OpenCL Error: clReleaseEvents (0) failed, code=%1").arg(status));
+					emit sgnLogMessage(QString(tr("OpenCL Error: clReleaseEvents (0) failed, code=%1")).arg(status));
 					return false;
 				}
 			}
@@ -379,20 +379,20 @@ namespace cybervision{
 						NULL,
 						&events[1]);
 			if(status != CL_SUCCESS){
-				emit sgnLogMessage(QString("OpenCL Error: clEnqueueWriteBuffer (vectorBuffer) failed, code=%1").arg(status));
+				emit sgnLogMessage(QString(tr("OpenCL Error: clEnqueueWriteBuffer (vectorBuffer) failed, code=%1")).arg(status));
 				return false;
 			}
 
 			/* wait for the write buffer call to finish execution */
 			status = clWaitForEvents(1, &events[1]);
 			if(status != CL_SUCCESS){
-				emit sgnLogMessage(QString("OpenCL Error: clWaitForEvents (1) failed, code=%1").arg(status));
+				emit sgnLogMessage(QString(tr("OpenCL Error: clWaitForEvents (1) failed, code=%1")).arg(status));
 				return false;
 			}
 
 			status = clReleaseEvent(events[1]);
 			if(status != CL_SUCCESS){
-				emit sgnLogMessage(QString("OpenCL Error: clReleaseEvents (1) failed, code=%1").arg(status));
+				emit sgnLogMessage(QString(tr("OpenCL Error: clReleaseEvents (1) failed, code=%1")).arg(status));
 				return false;
 			}
 		}
@@ -403,7 +403,7 @@ namespace cybervision{
 						sizeof(cl_mem),
 						(void *)&outputBuffer);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (outputBuffer), code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clSetKernelArg failed. (outputBuffer), code=%1")).arg(status));
 			return false;
 		}
 
@@ -413,7 +413,7 @@ namespace cybervision{
 						sizeof(cl_mem),
 						(void *)&inputBuffer);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (inputBuffer), code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clSetKernelArg failed. (inputBuffer), code=%1")).arg(status));
 			return false;
 		}
 
@@ -423,7 +423,7 @@ namespace cybervision{
 						sizeof(cl_mem),
 						(void *)&vectorBuffer);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (vectorBuffer), code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clSetKernelArg failed. (vectorBuffer), code=%1")).arg(status));
 			return false;
 		}
 
@@ -434,7 +434,7 @@ namespace cybervision{
 						sizeof(cl_uint),
 						(void *)&clInputVectorsCount);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (inputVectorsCount), code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clSetKernelArg failed. (inputVectorsCount), code=%1")).arg(status));
 			return false;
 		}
 
@@ -445,7 +445,7 @@ namespace cybervision{
 						sizeof(cl_float),
 						(void *)&clMaxKeypointDistance);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clSetKernelArg failed. (MaxKeypointDistance), code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clSetKernelArg failed. (MaxKeypointDistance), code=%1")).arg(status));
 			return false;
 		}
 
@@ -464,7 +464,7 @@ namespace cybervision{
 				&events[2]);
 
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clEnqueueNDRangeKernel failed, code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clEnqueueNDRangeKernel failed, code=%1")).arg(status));
 			return false;
 		}
 
@@ -472,7 +472,7 @@ namespace cybervision{
 		/* wait for the kernel call to finish execution */
 		status = clWaitForEvents(1, &events[2]);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clWaitForEvents (2) failed, code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clWaitForEvents (2) failed, code=%1")).arg(status));
 			return false;
 		}
 
@@ -488,26 +488,26 @@ namespace cybervision{
 					NULL,
 					&events[3]);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clEnqueueReadBuffer failed, code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clEnqueueReadBuffer failed, code=%1")).arg(status));
 			return false;
 		}
 
 		/* Wait for the read buffer to finish execution */
 		status = clWaitForEvents(1, &events[3]);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clWaitForEvents (3) failed, code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clWaitForEvents (3) failed, code=%1")).arg(status));
 			return false;
 		}
 
 		status = clReleaseEvent(events[2]);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clReleaseEvents (2) failed, code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clReleaseEvents (2) failed, code=%1")).arg(status));
 			return false;
 		}
 
 		status = clReleaseEvent(events[3]);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString("OpenCL Error: clReleaseEvents (3) failed, code=%1").arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clReleaseEvents (3) failed, code=%1")).arg(status));
 			return false;
 		}
 

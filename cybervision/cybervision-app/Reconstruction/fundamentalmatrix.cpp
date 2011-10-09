@@ -30,7 +30,7 @@ namespace cybervision{
 
 	Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(const KeypointMatches& matches){
 		if(matches.size()!=8){
-			emit sgnLogMessage(QString("Wrong consensus set size (%1), should be %2").arg(matches.size()).arg(8));
+			emit sgnLogMessage(QString(tr("Wrong consensus set size (%1), should be %2")).arg(matches.size()).arg(8));
 			//TODO:fail here
 		}
 		//Create the Chi matrix
@@ -78,7 +78,7 @@ namespace cybervision{
 	}
 
 	Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(){
-		emit sgnStatusMessage("Estimating fundamental matrix...");
+		emit sgnStatusMessage(tr("Estimating fundamental matrix..."));
 
 		//Increase speed with precomputed lists
 		QList<float> matches_keys= matches.uniqueKeys();
@@ -101,7 +101,7 @@ namespace cybervision{
 			#pragma omp single nowait
 			{
 				if(i%(Options::RANSAC_k/10)==0)
-					emit sgnLogMessage(QString("RANSAC %1% complete").arg((i*100)/Options::RANSAC_k));
+					emit sgnLogMessage(QString(tr("RANSAC %1% complete")).arg((i*100)/Options::RANSAC_k));
 
 				//Extract RANSAC_n random values
 				KeypointMatches consensus_set,consensus_set_normalized;
@@ -176,11 +176,11 @@ namespace cybervision{
 		}
 
 		if(best_consensus_set.empty()){
-			emit sgnLogMessage("No RANSAC consensus found");
+			emit sgnLogMessage(tr("No RANSAC consensus found"));
 			Eigen::Matrix3d zero; zero.fill(0);
 			return zero;
 		}else{
-			emit sgnLogMessage(QString("RANSAC consensus found, error=%1, size=%2").arg(best_error,0,'g',4).arg(best_consensus_set.size()));
+			emit sgnLogMessage(QString(tr("RANSAC consensus found, error=%1, size=%2")).arg(best_error,0,'g',4).arg(best_consensus_set.size()));
 		}
 
 		//Update matches
@@ -262,9 +262,9 @@ namespace cybervision{
 				out<<QString("%1\t%2\t%3\t%4\n").arg(i.value().a.x()).arg(i.value().a.y()).arg(i.value().b.x()).arg(i.value().b.y());
 			}
 			file.close();
-			emit sgnLogMessage(QString("Saved RANSAC-filtered matches to %1").arg(target.absoluteFilePath()));
+			emit sgnLogMessage(QString(tr("Saved RANSAC-filtered matches to %1")).arg(target.absoluteFilePath()));
 		}else{
-			emit sgnLogMessage(QString("Error when saving RANSAC-filtered matches to file %1").arg(target.absoluteFilePath()));
+			emit sgnLogMessage(QString(tr("Error when saving RANSAC-filtered matches to file %1")).arg(target.absoluteFilePath()));
 		}
 	}
 }

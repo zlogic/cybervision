@@ -32,7 +32,7 @@ namespace cybervision{
 			precomputed_file_info= QFileInfo(file1.absoluteDir(),precomputed_filename);
 			QFile precomputed_file(precomputed_file_info.absoluteFilePath());
 			if(precomputed_file.exists()){
-				emit sgnLogMessage("Loading precomputed SIFT matches from "+QDir::convertSeparators(precomputed_file.fileName()));
+				emit sgnLogMessage(tr("Loading precomputed SIFT matches from %1").arg(QDir::convertSeparators(precomputed_file.fileName())));
 				precomputed_file.open(QFile::ReadOnly);
 				QTextStream in_stream(&precomputed_file);
 
@@ -44,71 +44,71 @@ namespace cybervision{
 				}
 				precomputed_file.close();
 
-				emit sgnLogMessage(QString("Loading images %1 and %2 to obtain image sizes").arg(filename1).arg(filename2));
+				emit sgnLogMessage(QString(tr("Loading images %1 and %2 to obtain image sizes")).arg(filename1).arg(filename2));
 				ImageLoader img1Metadata(filename1),img2Metadata(filename2);
 				if(img1Metadata.getSize()!=img2Metadata.getSize()){
-					emit sgnLogMessage(QString("Images %1 and %2 have different sizes!").arg(filename1).arg(filename2));
+					emit sgnLogMessage(QString(tr("Images %1 and %2 have different sizes!")).arg(filename1).arg(filename2));
 					return false;
 				}else
 					imageSize= img1Metadata.getSize();
 
 				double scale1= img1Metadata.getScale(), scale2= img2Metadata.getScale();
 				if(scale1!=scale2){
-					emit sgnLogMessage(QString("Images %1 and %2 have different scales in metadata!").arg(filename1).arg(filename2));
+					emit sgnLogMessage(QString(tr("Images %1 and %2 have different scales in metadata!")).arg(filename1).arg(filename2));
 					return false;
 				}
 				else{
 					scaleMetadata= scale1;
 					if(scaleMetadata>0)
-						emit sgnLogMessage(QString("Extracted scale %1 from metadata").arg(scaleMetadata));
+						emit sgnLogMessage(QString(tr("Extracted scale %1 from metadata")).arg(scaleMetadata));
 					else
-						emit sgnLogMessage(QString("No scale in metadata").arg(scaleMetadata));
+						emit sgnLogMessage(QString(tr("No scale in metadata")).arg(scaleMetadata));
 				}
-				//emit sgnLogMessage(QString("Extracted fields from image 1 metadata:\n%1\n\n").arg(img1Metadata.getMetadataString()));
-				//emit sgnLogMessage(QString("Extracted fields from image 2 metadata:\n%1\n\n").arg(img2Metadata.getMetadataString()));
+				//emit sgnLogMessage(QString(tr("Extracted fields from image 1 metadata:\n%1\n\n")).arg(img1Metadata.getMetadataString()));
+				//emit sgnLogMessage(QString(tr("Extracted fields from image 2 metadata:\n%1\n\n")).arg(img2Metadata.getMetadataString()));
 				return true;
 			}
 		}
 
-		emit sgnStatusMessage("Detecting SIFT keypoints...");
+		emit sgnStatusMessage(tr("Detecting SIFT keypoints..."));
 		{
-			emit sgnLogMessage("Starting SIFT keypoint detection");
-			emit sgnLogMessage(QString("Loading images %1 and %2").arg(filename1).arg(filename2));
+			emit sgnLogMessage(tr("Starting SIFT keypoint detection"));
+			emit sgnLogMessage(QString(tr("Loading images %1 and %2")).arg(filename1).arg(filename2));
 			ImageLoader img1Metadata(filename1),img2Metadata(filename2);
 			if(img1Metadata.getSize()!=img1Metadata.getSize()){
-				emit sgnLogMessage(QString("Images %1 and %2 have different sizes!").arg(filename1).arg(filename2));
+				emit sgnLogMessage(QString(tr("Images %1 and %2 have different sizes!")).arg(filename1).arg(filename2));
 				return false;
 			}else
 				imageSize= img1Metadata.getSize();
 
 			double scale1= img1Metadata.getScale(), scale2= img2Metadata.getScale();
 			if(scale1!=scale2){
-				emit sgnLogMessage(QString("Images %1 and %2 have different scales in metadata!").arg(filename1).arg(filename2));
+				emit sgnLogMessage(QString(tr("Images %1 and %2 have different scales in metadata!")).arg(filename1).arg(filename2));
 				return false;
 			}else{
 				scaleMetadata= scale1;
 				if(scaleMetadata>0)
-					emit sgnLogMessage(QString("Extracted scale %1 from metadata").arg(scaleMetadata));
+					emit sgnLogMessage(QString(tr("Extracted scale %1 from metadata")).arg(scaleMetadata));
 				else
-					emit sgnLogMessage(QString("No scale in metadata").arg(scaleMetadata));
+					emit sgnLogMessage(QString(tr("No scale in metadata")).arg(scaleMetadata));
 			}
-			//emit sgnLogMessage(QString("Extracted fields from image 1 metadata:\n%1\n\n").arg(img1Metadata.getMetadataString()));
-			//emit sgnLogMessage(QString("Extracted fields from image 2 metadata:\n%1\n\n").arg(img2Metadata.getMetadataString()));
+			//emit sgnLogMessage(QString(tr("Extracted fields from image 1 metadata:\n%1\n\n")).arg(img1Metadata.getMetadataString()));
+			//emit sgnLogMessage(QString(tr("Extracted fields from image 2 metadata:\n%1\n\n")).arg(img2Metadata.getMetadataString()));
 
 			image1= img1Metadata.getImage(),image2= img2Metadata.getImage();
 		}
 		QList <SIFT::Keypoint> keypoints1,keypoints2;
 		{
 			SIFT::Extractor extractor(Options::SIFTContrastCorrection);
-			emit sgnLogMessage(QString("Extracting keypoints from %1").arg(filename1));
+			emit sgnLogMessage(QString(tr("Extracting keypoints from %1")).arg(filename1));
 			keypoints1= extractor.extract(image1);
-			emit sgnLogMessage(QString("Extracted %1 keypoints from %2").arg(keypoints1.size()).arg(filename1));
+			emit sgnLogMessage(QString(tr("Extracted %1 keypoints from %2")).arg(keypoints1.size()).arg(filename1));
 
-			emit sgnLogMessage(QString("Extracting keypoints from %2").arg(filename2));
+			emit sgnLogMessage(QString(tr("Extracting keypoints from %2")).arg(filename2));
 			keypoints2= extractor.extract(image2);
-			emit sgnLogMessage(QString("Extracted %1 keypoints from %2").arg(keypoints2.size()).arg(filename2));
+			emit sgnLogMessage(QString(tr("Extracted %1 keypoints from %2")).arg(keypoints2.size()).arg(filename2));
 		}
-		emit sgnStatusMessage("Matching SIFT keypoints...");
+		emit sgnStatusMessage(tr("Matching SIFT keypoints..."));
 
 		bool OpenCLSucceeded= true;
 		if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU || Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU){
@@ -118,7 +118,7 @@ namespace cybervision{
 			QObject::connect(&clMatcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);
 
 			if(OpenCLSucceeded){
-				emit sgnLogMessage(QString("Matching keypoints from %1 to %2").arg(filename1).arg(filename2));
+				emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2")).arg(filename1).arg(filename2));
 				//Match first image with second
 				matches= clMatcher.CalcDistances(keypoints1,keypoints2);
 				if(matches.empty())
@@ -126,7 +126,7 @@ namespace cybervision{
 
 				cybervision::SortedKeypointMatches current_matches;
 				if(OpenCLSucceeded){
-					emit sgnLogMessage(QString("Matching keypoints from %1 to %2").arg(filename2).arg(filename1));
+					emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2")).arg(filename2).arg(filename1));
 					//Match second image with first
 					current_matches= clMatcher.CalcDistances(keypoints2,keypoints1);
 					if(current_matches.empty())
@@ -155,7 +155,7 @@ namespace cybervision{
 		if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_SIMPLE || !OpenCLSucceeded){
 			double MaxKeypointDistanceSquared= Options::MaxKeypointDistance*Options::MaxKeypointDistance;
 			//Simple matching
-			emit sgnLogMessage(QString("Matching keypoints from %1 to %2").arg(filename1).arg(filename2));
+			emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2")).arg(filename1).arg(filename2));
 			//Match first image with second
 			#pragma omp parallel
 			for(QList<SIFT::Keypoint>::const_iterator it1= keypoints1.begin();it1!=keypoints1.end();it1++){
@@ -180,7 +180,7 @@ namespace cybervision{
 					}
 				}
 			}
-			emit sgnLogMessage(QString("Matching keypoints from %1 to %2").arg(filename2).arg(filename1));
+			emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2")).arg(filename2).arg(filename1));
 			//Match second image with first
 			#pragma omp parallel
 			for(QList<SIFT::Keypoint>::const_iterator it2= keypoints2.begin();it2!=keypoints2.end();it2++){
@@ -207,7 +207,7 @@ namespace cybervision{
 			}
 		}else if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_KDTREE){
 			//KD tree matching
-			emit sgnLogMessage(QString("Matching keypoints from %1 to %2 with kd-tree").arg(filename1).arg(filename2));
+			emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2 with kd-tree")).arg(filename1).arg(filename2));
 			KDTree::KDTreeGateway kdTree(Options::MaxKeypointDistance,Options::bbf_steps);
 			cybervision::SortedKeypointMatches current_matches= kdTree.matchKeypoints(keypoints1,keypoints2);
 			for(cybervision::SortedKeypointMatches::const_iterator it=current_matches.begin();it!=current_matches.end();it++){
@@ -216,7 +216,7 @@ namespace cybervision{
 				matches.insert(it.key(),m);
 			}
 
-			emit sgnLogMessage(QString("Matching keypoints from %1 to %2 with kd-tree").arg(filename2).arg(filename1));
+			emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2 with kd-tree")).arg(filename2).arg(filename1));
 			current_matches= kdTree.matchKeypoints(keypoints2,keypoints1);
 			for(cybervision::SortedKeypointMatches::const_iterator it=current_matches.begin();it!=current_matches.end();it++){
 				KeypointMatch m;
@@ -226,10 +226,10 @@ namespace cybervision{
 			}
 		}
 
-		emit sgnLogMessage(QString("Found %1 keypoint matches").arg(matches.size()));
+		emit sgnLogMessage(QString(tr("Found %1 keypoint matches")).arg(matches.size()));
 
 		if(Options::UsePrecomputedKeypointData){
-			emit sgnLogMessage("Saving computed SIFT matches to "+QDir::convertSeparators(precomputed_file_info.fileName()));
+			emit sgnLogMessage(QString(tr("Saving computed SIFT matches to %1")).arg(QDir::convertSeparators(precomputed_file_info.fileName())));
 			QFile precomputed_file(precomputed_file_info.absoluteFilePath());
 			precomputed_file.open(QFile::WriteOnly);
 			QTextStream out_stream(&precomputed_file);

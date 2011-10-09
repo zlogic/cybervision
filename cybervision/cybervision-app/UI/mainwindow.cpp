@@ -135,16 +135,16 @@ void MainWindow::on_startProcessButton_clicked(){
 
 void MainWindow::on_saveButton_clicked(){
 	QStringList formats;
-	formats<<"Surface points (*.txt)";
-	formats<<"Surface polygons (*.txt)";
-	formats<<"PNG image (*.png)";
-	formats<<"SceneJS model (*.js)";
-	formats<<"Collada model (*.dae)";
+	formats<<tr("Surface points (*.txt)");
+	formats<<tr("Surface polygons (*.txt)");
+	formats<<tr("PNG image (*.png)");
+	formats<<tr("SceneJS model (*.js)");
+	formats<<tr("Collada model (*.dae)");
 	QString filter;
 	for(QStringList::const_iterator it=formats.begin();it!=formats.end();it++)
 		filter.append(*it+";;");
 	QString selectedFilter;
-	QString fileName = QFileDialog::getSaveFileName(this,"Save the surface","",filter,&selectedFilter,0);
+	QString fileName = QFileDialog::getSaveFileName(this,tr("Save the surface"),"",filter,&selectedFilter,0);
 	if(!fileName.isNull()){
 		QFileInfo fileInfo(fileName);
 		if(selectedFilter==formats[0]){
@@ -169,8 +169,8 @@ void MainWindow::on_saveButton_clicked(){
 				fileName.append(".dae");
 			ui->openGLViewport->getSurface3D().saveCollada(fileName);
 		}else{
-			ui->statusBar->showMessage("Bad save format selected");
-			ui->logTextEdit->appendHtml("<b>Bad save format selected:</b> "+selectedFilter);
+			ui->statusBar->showMessage(tr("Bad save format selected"));
+			ui->logTextEdit->appendHtml(QString(tr("<b>Bad save format selected:</b> %1")).arg(selectedFilter));
 		}
 	}
 }
@@ -184,8 +184,8 @@ void MainWindow::on_actionShowlog_triggered(bool checked){
 }
 
 void MainWindow::on_addImageButton_clicked(){
-	QString filter= "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;All files(*.*)";
-	QStringList filenames = QFileDialog::getOpenFileNames(this,"Select images to add","",filter,0,0);
+	QString filter= tr("Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;All files(*.*)");
+	QStringList filenames = QFileDialog::getOpenFileNames(this,tr("Select images to add"),"",filter,0,0);
 	for(QStringList::const_iterator it=filenames.begin();it!=filenames.end();it++){
 		QString name= QFileInfo(*it).fileName();
 		QListWidgetItem* newItem= new QListWidgetItem(name);

@@ -36,7 +36,7 @@ void ProcessThread::run(){
 		//Run reconstruction
 		reconstructor_success= reconstructor.run(image_filenames.first(),image_filenames.last(),angle);
 	}else
-		emit processStopped("Need exactly 2 images for reconstruction");
+		emit processStopped(tr("Need exactly 2 images for reconstruction"));
 
 	if(reconstructor_success){
 		//Run surface generation
@@ -45,7 +45,7 @@ void ProcessThread::run(){
 			scaleXY= scaleMetadata;
 			scaleZ= scaleMetadata;
 		}
-		emit processUpdated("Creating 3D surface","Creating 3D surface...");
+		emit processUpdated(tr("Creating 3D surface"),tr("Creating 3D surface..."));
 		cybervision::Sculptor sculptor(reconstructor.get3DPoints(),reconstructor.getImageSize(),scaleXY,scaleZ);
 
 		cybervision::Surface surface= sculptor.getSurface();
@@ -59,7 +59,7 @@ void ProcessThread::run(){
 			msecs-= mins*(1000*60);
 			qint64 secs= msecs/1000;
 			msecs-= secs*1000;
-			QString timeString= QString("Reconstruction completed in %1:%2.%3")
+			QString timeString= QString(tr("Reconstruction completed in %1:%2.%3"))
 					.arg((int)mins,2,10,QChar('0'))
 					.arg((int)secs,2,10,QChar('0'))
 					.arg((int)msecs,3,10,QChar('0'));

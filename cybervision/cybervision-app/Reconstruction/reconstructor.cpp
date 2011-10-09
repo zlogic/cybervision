@@ -35,7 +35,7 @@ namespace cybervision{
 			}
 		}
 		if(matches.size()<Options::MinMatches){
-			errorString= QString("Not enough matches (%1), need at least %2").arg(matches.size()).arg(Options::MinMatches);
+			errorString= QString(tr("Not enough matches (%1), need at least %2")).arg(matches.size()).arg(Options::MinMatches);
 			return false;
 		}
 		//Compute fundamental matrix
@@ -50,7 +50,7 @@ namespace cybervision{
 			matches= fundamentalMatrix.getAcceptedMatches();
 			F= fundamentalMatrix.getFundamentalMatrix();
 			if(!ok || matches.isEmpty()){
-				errorString= "Error when computing fundamental matrix";
+				errorString= tr("Error when computing fundamental matrix");
 				return false;
 			}
 			//Save matches if needed
@@ -77,16 +77,16 @@ namespace cybervision{
 			if(!ok || Points3D.isEmpty()){
 				switch(triangulator.getResult()){
 				case PointTriangulator::RESULT_POSE_UNDETERMINED:
-					errorString= "Error when estimating pose";
+					errorString= tr("Error when estimating pose");
 					break;
 				case PointTriangulator::RESULT_TRIANGULATION_ERROR:
-					errorString= "Error during 3D triangulation";
+					errorString= tr("Error during 3D triangulation");
 					break;
 				case PointTriangulator::RESULT_OK:
-					errorString= "Internal logic error: triangulation failed, but result is OK";
+					errorString= tr("Internal logic error: triangulation failed, but result is OK");
 					break;
 				default:
-					errorString= "Unknown error";
+					errorString= tr("Unknown error");
 					break;
 				}
 				return false;

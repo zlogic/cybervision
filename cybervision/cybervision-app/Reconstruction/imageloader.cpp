@@ -77,7 +77,7 @@ QString ImageLoader::extractTagStringTIFF(const QString& filename) const{
 		char buffer[8];
 		qint64 read_bytes= file.read(buffer,8);
 		if(read_bytes!=8){
-			//QString error("File less than 8 bytes");
+			//QString error(tr("File less than 8 bytes"));
 			file.close();
 			return "";//TODO: log error
 		}
@@ -87,7 +87,7 @@ QString ImageLoader::extractTagStringTIFF(const QString& filename) const{
 		else if(buffer[0]==0x4d && buffer[1]==0x4d)
 			endian= QDataStream::LittleEndian;
 		else{
-			//QString error("Bad byte order");
+			//QString error(tr("Bad byte order"));
 			file.close();
 			return "";//TODO: log error
 		}
@@ -98,7 +98,7 @@ QString ImageLoader::extractTagStringTIFF(const QString& filename) const{
 		else if (endian == QDataStream::LittleEndian)
 			fortyTwo= (buffer[3]&0xff) | ((buffer[2]&0xff) << 8);
 		if (fortyTwo != 42){
-			//QString error("Bad version");
+			//QString error(tr("Bad version"));
 			file.close();
 			return "";//TODO: log error
 		}
@@ -109,7 +109,7 @@ QString ImageLoader::extractTagStringTIFF(const QString& filename) const{
 		else if (endian == QDataStream::LittleEndian)
 			IFD = (buffer[7] & 0xff) | ((buffer[6]&0xff) << 8) | ((buffer[5]&0xff) << 16) | ((buffer[4]&0xff) << 24);
 		if(IFD==0){
-			//QString error("No initial IFD");
+			//QString error(tr("No initial IFD"));
 			file.close();
 			return "";//TODO: log error
 		}
@@ -121,7 +121,7 @@ QString ImageLoader::extractTagStringTIFF(const QString& filename) const{
 		file.seek(IFD);
 		//Get the number of IFDs
 		if(file.read(buffer, 2)!=2){
-			//QString error("Unexpected end of file");
+			//QString error(tr("Unexpected end of file"));
 			file.close();
 			return "";//TODO: log error
 		}
@@ -131,7 +131,7 @@ QString ImageLoader::extractTagStringTIFF(const QString& filename) const{
 		else if (endian == QDataStream::LittleEndian)
 			numIFDs = (buffer[1]&0xff) | ((buffer[0]&0xff)<<8);
 		if (numIFDs < 1){
-			//QString error("Not enough IFDs");
+			//QString error(tr("Not enough IFDs"));
 			file.close();
 			return "";//TODO: log error
 		}
@@ -140,7 +140,7 @@ QString ImageLoader::extractTagStringTIFF(const QString& filename) const{
 		for (qint64 i = 0; i < numIFDs; i++) {
 			//Read an IFD
 			if(file.read(buffer,12)!=12){
-				//QString error("Unexpected end of file");
+				//QString error(tr("Unexpected end of file"));
 				file.close();
 				return "";//TODO: log error
 			}

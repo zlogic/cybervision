@@ -26,7 +26,7 @@ namespace cybervision{
 	PointTriangulator::TriangulationResult PointTriangulator::getResult()const{ return result; }
 
 	QList<PointTriangulator::StereopairPosition> PointTriangulator::computePose(const Eigen::Matrix3d& F){
-		emit sgnStatusMessage("Estimating pose...");
+		emit sgnStatusMessage(tr("Estimating pose..."));
 
 		QList<StereopairPosition> RTList= computeRT(F);
 		//Output R,T matrices to log
@@ -40,7 +40,7 @@ namespace cybervision{
 				RT_str.append(matrix_row);
 			}
 		}
-		emit sgnLogMessage(QString("Resulting camera poses\n").append(RT_str));
+		emit sgnLogMessage(QString(tr("Resulting camera poses\n")).append(RT_str));
 		return RTList;
 	}
 
@@ -153,7 +153,7 @@ namespace cybervision{
 
 
 	QList<QVector3D> PointTriangulator::compute3DPoints(const SortedKeypointMatches&matches,const QList<StereopairPosition>& RTList){
-		emit sgnStatusMessage("Performing 3D triangulation...");
+		emit sgnStatusMessage(tr("Performing 3D triangulation..."));
 
 		double best_min_depth=std::numeric_limits<double>::infinity(),best_max_depth=-std::numeric_limits<double>::infinity();
 
@@ -177,14 +177,14 @@ namespace cybervision{
 				bestPosition= *it1;
 			}
 
-			emit sgnLogMessage(QString("Minimum depth is %1, maximum depth is %2").arg(min_depth).arg(max_depth));
+			emit sgnLogMessage(QString(tr("Minimum depth is %1, maximum depth is %2")).arg(min_depth).arg(max_depth));
 		}
 
 		if(best_min_depth<0)
-			emit sgnLogMessage(QString("Warning: minimum depth is %1, less than zero!").arg(best_min_depth));
+			emit sgnLogMessage(QString(tr("Warning: minimum depth is %1, less than zero!")).arg(best_min_depth));
 
 		if(best_min_depth==std::numeric_limits<double>::infinity())
-			emit sgnLogMessage(QString("Warning: minimum depth is less than zero!"));
+			emit sgnLogMessage(QString(tr("Warning: minimum depth is less than zero!")));
 
 		return computeTriangulatedPoints(matches,bestPosition.R,bestPosition.T,true);
 	}
