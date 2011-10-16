@@ -107,91 +107,148 @@
     </message>
     <message>
         <location filename="../mainwindow.ui" line="488"/>
+        <source>Inspector</source>
+        <translation>Инспектор</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="498"/>
+        <source>Selected point coordinates</source>
+        <translation>Координаты выбранной точки</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="514"/>
         <source>Statistics</source>
         <translation>Статистика</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="504"/>
-        <source>Point coordinates</source>
-        <translation>Координаты точки</translation>
+        <location filename="../mainwindow.ui" line="530"/>
+        <source>Cross-section</source>
+        <translation>Профиль поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="538"/>
+        <location filename="../mainwindow.ui" line="539"/>
+        <source>Draw cross-section plane</source>
+        <translation>Провести плоскость среза</translation>
+    </message>
+    <message>
+        <source>Cross-Section</source>
+        <translation type="obsolete">Профиль поверхности</translation>
+    </message>
+    <message>
+        <source>Draw cross-section line</source>
+        <translation type="obsolete">Провести линию среза</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="605"/>
+        <source>Show inspector</source>
+        <translation>Показать инспектор</translation>
+    </message>
+    <message>
+        <source>Point coordinates</source>
+        <translation type="obsolete">Координаты точки</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="583"/>
         <source>Show log</source>
         <translation>Показать журнал</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="541"/>
+        <location filename="../mainwindow.ui" line="586"/>
         <source>Show the log</source>
         <translation>Показать журнал</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="552"/>
+        <location filename="../mainwindow.ui" line="597"/>
         <source>Prefer scale from metadata</source>
         <translation>При возможности использовать масштаб из метаданных</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="560"/>
         <source>Show statistics</source>
-        <translation>Показать статистику</translation>
+        <translation type="obsolete">Показать статистику</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="124"/>
+        <source>Depth range: %1 m
+Base depth: %2
+Median depth: %3</source>
+        <translation type="obsolete">Диапазон глубины: %1 м
+Базовая глубина: %2
+Медиана глубины: %3</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="58"/>
+        <source>Depth range: %1 m
+Base depth: %2 m
+Median depth: %3 m</source>
+        <translation>Диапазон глубины: %1 м
+Базовая глубина: %2 м
+Медиана глубины: %3 м</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="60"/>
+        <source>No surface available</source>
+        <translation>Поверхность не доступна</translation>
+    </message>
+    <message>
         <source>No point selected or surface is not ready</source>
-        <translation>Точка не выбрана или поверхность не готова</translation>
+        <translation type="obsolete">Точка не выбрана или поверхность не готова</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="148"/>
+        <location filename="../mainwindow.cpp" line="141"/>
+        <source>No point selected</source>
+        <translation>Точка не выбрана</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="170"/>
         <source>Surface points</source>
         <translation>Точки поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="149"/>
+        <location filename="../mainwindow.cpp" line="171"/>
         <source>Surface polygons</source>
         <translation>Полигоны поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="150"/>
+        <location filename="../mainwindow.cpp" line="172"/>
         <source>PNG image</source>
         <translation>Изображение PNG</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="151"/>
+        <location filename="../mainwindow.cpp" line="173"/>
         <source>SceneJS model</source>
         <translation>Модель SceneJS</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="152"/>
+        <location filename="../mainwindow.cpp" line="174"/>
         <source>COLLADA model</source>
         <translation>Модель COLLADA</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="157"/>
+        <location filename="../mainwindow.cpp" line="179"/>
         <source>Save the surface</source>
         <translation>Сохранить поверхность</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="182"/>
+        <location filename="../mainwindow.cpp" line="204"/>
         <source>Bad save format selected</source>
         <translation>Выбран неправильный формат для записи</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="183"/>
+        <location filename="../mainwindow.cpp" line="205"/>
         <source>&lt;b&gt;Bad save format selected:&lt;/b&gt; %1</source>
         <translation>&lt;b&gt;Выбран неправильный формат для записи:&lt;/b&gt; %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="205"/>
+        <location filename="../mainwindow.cpp" line="227"/>
         <source>Images</source>
         <translation>Изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="205"/>
+        <location filename="../mainwindow.cpp" line="227"/>
         <source>All files</source>
         <translation>Все файлы</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="206"/>
+        <location filename="../mainwindow.cpp" line="228"/>
         <source>Select images to add</source>
         <translation>Выберите изображения, которые нужно добавить</translation>
     </message>
