@@ -460,7 +460,8 @@ void CybervisionViewer::mouseReleaseEvent(QMouseEvent *event){
 	}
 
 	if(drawingCrossSectionLine){
-		emit crossSectionLineChanged(crossSectionLine.first,crossSectionLine.second);
+		emit crossSectionLineChanged(QVector3D(crossSectionLine.first.x()/surface.getScale(),crossSectionLine.first.y()/surface.getScale(),0),
+									 QVector3D(crossSectionLine.second.x()/surface.getScale(),crossSectionLine.second.y()/surface.getScale(),0));
 		drawingCrossSectionLine= false;
 	}
 	emit selectedPointUpdated(QVector3D(clickLocation.x()/surface.getScale(),clickLocation.y()/surface.getScale(),clickLocation.z()/surface.getScale()-surface.getBaseDepth()));

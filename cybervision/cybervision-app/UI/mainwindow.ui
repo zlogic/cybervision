@@ -478,7 +478,7 @@
    <property name="minimumSize">
     <size>
      <width>200</width>
-     <height>206</height>
+     <height>412</height>
     </size>
    </property>
    <property name="features">
@@ -530,13 +530,29 @@
         <string>Cross-section</string>
        </property>
        <layout class="QFormLayout" name="formLayout_2">
+        <property name="fieldGrowthPolicy">
+         <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
+        </property>
         <item row="0" column="1">
          <widget class="QPushButton" name="crosssectionButton">
           <property name="text">
-           <string>Draw cross-section line</string>
+           <string>Draw cross-section plane</string>
           </property>
           <property name="checkable">
            <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QLabel" name="crosssectiomImage">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>200</height>
+           </size>
+          </property>
+          <property name="text">
+           <string/>
           </property>
          </widget>
         </item>
