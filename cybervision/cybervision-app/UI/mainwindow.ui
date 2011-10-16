@@ -478,7 +478,7 @@
    <property name="minimumSize">
     <size>
      <width>200</width>
-     <height>160</height>
+     <height>206</height>
     </size>
    </property>
    <property name="features">
@@ -492,12 +492,6 @@
    </attribute>
    <widget class="QWidget" name="inspectorDockWidgetContents">
     <layout class="QVBoxLayout" name="verticalLayout">
-     <property name="spacing">
-      <number>0</number>
-     </property>
-     <property name="margin">
-      <number>0</number>
-     </property>
      <item>
       <widget class="QGroupBox" name="inspectorPointGroupBox">
        <property name="title">
@@ -533,13 +527,16 @@
      <item>
       <widget class="QGroupBox" name="crosssectionGroupBox">
        <property name="title">
-        <string>Cross-Section</string>
+        <string>Cross-section</string>
        </property>
        <layout class="QFormLayout" name="formLayout_2">
-        <item row="0" column="0">
-         <widget class="QLabel" name="crosssectionLabel">
+        <item row="0" column="1">
+         <widget class="QPushButton" name="crosssectionButton">
           <property name="text">
-           <string/>
+           <string>Draw cross-section line</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
           </property>
          </widget>
         </item>

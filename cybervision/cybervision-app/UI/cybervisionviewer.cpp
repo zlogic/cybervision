@@ -20,16 +20,21 @@ CybervisionViewer::CybervisionViewer(QWidget *parent): QGLWidget(parent){
 	this->mouseMode= MOUSE_ROTATION;
 	this->textureMode= TEXTURE_1;
 	this->showGrid= false;
+	this->drawingCrossSectionLine= false;
 	glFarPlane= 1000000;
 	glNearPlane= 1;
 	glAspectRatio= 1;
 	glFOV= 90;
 	clickLocation= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+	crossSectionLine.first= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+	crossSectionLine.second= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
 }
 
 
 void CybervisionViewer::setSurface3D(const cybervision::Surface& surface){
 	clickLocation= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+	crossSectionLine.first= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+	crossSectionLine.second= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
 	emit selectedPointUpdated(clickLocation);
 	{
 		QMutexLocker lock(&surfaceMutex);
@@ -59,6 +64,10 @@ void CybervisionViewer::setTextureMode(TextureMode textureMode){
 void CybervisionViewer::setShowGrid(bool show){
 	showGrid= show;
 	updateGL();
+}
+
+void CybervisionViewer::setDrawCrossSectionLine(bool enable){
+	drawingCrossSectionLine= enable;
 }
 
 const cybervision::Surface& CybervisionViewer::getSurface3D()const{
@@ -104,8 +113,8 @@ void CybervisionViewer::initializeGL(){
 	//Texture options
 	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
-	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 }
 
 void CybervisionViewer::resizeGL(int w, int h){
@@ -145,6 +154,9 @@ void CybervisionViewer::paintGL(){
 
 		//Draw click point
 		drawPoint(clickLocation);
+
+		//Draw cross-section line
+		drawLine(crossSectionLine.first,crossSectionLine.second);
 	}
 }
 void CybervisionViewer::drawPoint(const QVector3D& point)const{
@@ -168,6 +180,25 @@ void CybervisionViewer::drawPoint(const QVector3D& point)const{
 		glEnd();
 	}
 	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_LIGHTING);
+}
+
+void CybervisionViewer::drawLine(const QVector3D& start,const QVector3D& end)const{
+	if(start.x()==std::numeric_limits<qreal>::infinity() || start.y()==std::numeric_limits<qreal>::infinity() || start.z()==std::numeric_limits<qreal>::infinity())
+		return;
+	if(end.x()==std::numeric_limits<qreal>::infinity() || end.y()==std::numeric_limits<qreal>::infinity() || end.z()==std::numeric_limits<qreal>::infinity())
+		return;
+	//glDisable(GL_DEPTH_TEST);
+	glDisable(GL_LIGHTING);
+	if(drawingCrossSectionLine)
+		glColor3f(1,.0,.0);
+	else
+		glColor3f(.0,1,.0);
+	glBegin(GL_LINES);
+	glVertex3f(start.x(),start.y(),start.z());
+	glVertex3f(end.x(),end.y(),end.z());
+	glEnd();
+	//glEnable(GL_DEPTH_TEST);
 	glEnable(GL_LIGHTING);
 }
 
@@ -409,17 +440,28 @@ float CybervisionViewer::normalizeAngle(float angle) const{
 void CybervisionViewer::mousePressEvent(QMouseEvent *event){
 	lastMousePos= event->pos();
 	clickMousePos= event->pos();
+	if(drawingCrossSectionLine){
+		crossSectionLine.first= getClickLocation(event->pos());
+		crossSectionLine.first.setZ(0);
+	}
 }
 
 void CybervisionViewer::mouseReleaseEvent(QMouseEvent *event){
 	//Detect click location
-	if(clickMousePos==event->pos()){
+	if((clickMousePos-event->pos()).manhattanLength()<=3){
 		clickLocation= getClickLocation(event->pos());
-		if(clickLocation.x()/surface.getScale()>surface.getImageSize().right()
-				|| clickLocation.x()/surface.getScale()<surface.getImageSize().left()
-				|| clickLocation.y()/surface.getScale()>surface.getImageSize().bottom()
-				|| clickLocation.y()/surface.getScale()<surface.getImageSize().top())
-			clickLocation= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+		if(drawingCrossSectionLine){
+			crossSectionLine.first= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+			crossSectionLine.second= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+		}
+	}else if(drawingCrossSectionLine){
+		crossSectionLine.second= getClickLocation(event->pos());
+		crossSectionLine.second.setZ(0);
+	}
+
+	if(drawingCrossSectionLine){
+		emit crossSectionLineChanged(crossSectionLine.first,crossSectionLine.second);
+		drawingCrossSectionLine= false;
 	}
 	emit selectedPointUpdated(QVector3D(clickLocation.x()/surface.getScale(),clickLocation.y()/surface.getScale(),clickLocation.z()/surface.getScale()-surface.getBaseDepth()));
 
@@ -444,13 +486,24 @@ QVector3D CybervisionViewer::getClickLocation(const QPointF& location) const{
 
 	gluUnProject(winX,winY,winZ,modelview,projection,viewport,&posX,&posY,&posZ);
 
+	if(posX/surface.getScale()>surface.getImageSize().right()
+			|| posX/surface.getScale()<surface.getImageSize().left()
+			|| posY/surface.getScale()>surface.getImageSize().bottom()
+			|| posY/surface.getScale()<surface.getImageSize().top())
+		return QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+
 	return QVector3D(posX,posY,posZ);
 }
 
 void CybervisionViewer::mouseMoveEvent(QMouseEvent *event){
 	int dx= event->pos().x()-lastMousePos.x(), dy=event->pos().y()-lastMousePos.y();
 
-	if(mouseMode==MOUSE_ROTATION){
+	if(drawingCrossSectionLine){
+		//Draw line
+		crossSectionLine.second= getClickLocation(event->pos());
+		crossSectionLine.second.setZ(0);
+		updateGL();
+	}else if(mouseMode==MOUSE_ROTATION){
 		//Rotation
 		if ((event->buttons() & Qt::LeftButton) && event->modifiers()==Qt::NoModifier) {
 			vpRotation.setX(normalizeAngle(vpRotation.x() + dy));

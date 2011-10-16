@@ -44,6 +44,7 @@ private slots:
 
 	//Slots for receiving messages from OpenGL viewport
 	void viewerSelectedPointUpdated(QVector3D);
+	void viewerCrosssectionLineChanged(QVector3D start,QVector3D end);
 
 	//UI slots
 	void on_addImageButton_clicked();
@@ -61,6 +62,7 @@ private slots:
 	void on_texture1ToolButton_clicked();
 	void on_texture2ToolButton_clicked();
 	void on_textureNoneToolButton_clicked();
+	void on_crosssectionButton_clicked(bool checked);
 };
 
 #endif // MAINWINDOW_H

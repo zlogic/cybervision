@@ -12,6 +12,7 @@ MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWi
 	loadDebugPreferences();
 
 	QObject::connect(ui->openGLViewport, SIGNAL(selectedPointUpdated(QVector3D)),this, SLOT(viewerSelectedPointUpdated(QVector3D)),Qt::AutoConnection);
+	QObject::connect(ui->openGLViewport, SIGNAL(crossSectionLineChanged(QVector3D,QVector3D)),this, SLOT(viewerCrosssectionLineChanged(QVector3D,QVector3D)),Qt::AutoConnection);
 }
 
 MainWindow::~MainWindow(){
@@ -33,6 +34,7 @@ void MainWindow::updateWidgetStatus(){
 
 	ui->deleteImageButton->setEnabled(!ui->imageList->selectedItems().empty());
 	ui->saveButton->setEnabled(ui->openGLViewport->getSurface3D().isOk());
+	ui->crosssectionButton->setEnabled(ui->openGLViewport->getSurface3D().isOk());
 
 	scaleXYValidator.setBottom(0.0);
 	scaleZValidator.setBottom(0.0);
@@ -53,7 +55,7 @@ void MainWindow::updateSurfaceStats(){
 	qreal medianDepth= ui->openGLViewport->getSurface3D().getMedianDepth();
 	qreal baseDepth= ui->openGLViewport->getSurface3D().getBaseDepth();
 	if(ui->openGLViewport->getSurface3D().isOk())
-		ui->statisticsLabel->setText(QString(tr("Depth range: %1 m\nBase depth: %2\nMedian depth: %3")).arg(maxDepth-minDepth).arg(baseDepth).arg(medianDepth));
+		ui->statisticsLabel->setText(QString(tr("Depth range: %1 m\nBase depth: %2 m\nMedian depth: %3 m")).arg(maxDepth-minDepth).arg(baseDepth).arg(medianDepth));
 	else
 		ui->statisticsLabel->setText(tr("No surface available"));
 }
@@ -136,9 +138,13 @@ void MainWindow::processStopped(QString resultText,cybervision::Surface surface)
 
 void MainWindow::viewerSelectedPointUpdated(QVector3D point){
 	if(point.x()==std::numeric_limits<qreal>::infinity() || point.y()==std::numeric_limits<qreal>::infinity() || point.z()==std::numeric_limits<qreal>::infinity())
-		ui->pointCoordinatesLabel->setText(tr("No point selected or surface is not ready"));
+		ui->pointCoordinatesLabel->setText(tr("No point selected"));
 	else
 		ui->pointCoordinatesLabel->setText(QString("x: %1\ny: %2\nz:%3").arg(point.x()).arg(point.y()).arg(point.z()));
+}
+
+void MainWindow::viewerCrosssectionLineChanged(QVector3D start, QVector3D end){
+	ui->crosssectionButton->setChecked(false);
 }
 
 void MainWindow::on_startProcessButton_clicked(){
@@ -269,3 +275,14 @@ void MainWindow::on_textureNoneToolButton_clicked(){
 	ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_NONE);
 }
 
+void MainWindow::on_crosssectionButton_clicked(bool checked){
+	if(checked){
+		if(ui->openGLViewport->getSurface3D().isOk())
+			ui->openGLViewport->setDrawCrossSectionLine(checked);
+		else{
+			ui->crosssectionButton->setChecked(false);
+			ui->crosssectionButton->setEnabled(false);
+		}
+	}else
+		ui->openGLViewport->setDrawCrossSectionLine(checked);
+}
