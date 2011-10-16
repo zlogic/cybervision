@@ -31,7 +31,7 @@ namespace cybervision{
 		qreal scale;
 
 		//Depth statistics
-		qreal medianDepth,minDepth,maxDepth;
+		qreal medianDepth,baseDepth,minDepth,maxDepth;
 
 		//Image size
 		QRectF imageSize;
@@ -52,6 +52,7 @@ namespace cybervision{
 		qreal getMedianDepth()const;
 		qreal getMinDepth()const;
 		qreal getMaxDepth()const;
+		qreal getBaseDepth()const;
 
 		//Returns source image size
 		QRectF getImageSize()const;

@@ -563,21 +563,47 @@ namespace cybervision{
 			surface.points.append(point);
 		}
 
-		//Calculate height median, min & max
+		//Calculate depth median, min & max
 		{
-			QList<qreal> heights;
+			QList<qreal> depthList;
 			for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++)
-				heights<<it->z();
-			qSort(heights);
+				depthList<<it->z();
+			qSort(depthList);
 
-			if(heights.length()>0){
-				double median=heights.length()%2==1 ?
-							  heights[(heights.length()-1)/2] :
-							  ((heights[heights.length()/2-1]+heights[heights.length()/2])/2);
+			if(depthList.length()>0){
+				double median=depthList.length()%2==1 ?
+							  depthList[(depthList.length()-1)/2] :
+							  ((depthList[depthList.length()/2-1]+depthList[depthList.length()/2])/2);
 				surface.medianDepth= median;
-				surface.minDepth= heights[0];
-				surface.maxDepth= heights[heights.length()-1];
+				if(Options::statsBaseLevelMethod == Options::STATS_BASELEVEL_MEDIAN)
+					surface.baseDepth= median;
+				surface.minDepth= depthList[0];
+				surface.maxDepth= depthList[depthList.length()-1];
 			}
+		}
+
+		//Calculate base level with histogram
+		if(Options::statsBaseLevelMethod == Options::STATS_BASELEVEL_HISTOGRAM){
+			//Prepare histogram
+			QVector<qreal> depthHistogram(Options::statsDepthHistogramSize,0),depthHistogramCount(Options::statsDepthHistogramSize,0);
+			qreal histogramStep= (surface.maxDepth-surface.minDepth)/Options::statsDepthHistogramSize;
+			//Build histogram
+			for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
+				int pos= (it->z()-surface.minDepth)/histogramStep;
+				pos= (pos<0)?0:pos;
+				pos= (pos>=Options::statsDepthHistogramSize)?Options::statsDepthHistogramSize-1:pos;
+				depthHistogram[pos]+= it->z();
+				depthHistogramCount[pos]++;
+			}
+			int maxPoints=0;
+			for(int i=0;i<Options::statsDepthHistogramSize;i++){
+				depthHistogram[i]/=depthHistogramCount[i];
+				if(depthHistogramCount[i]>depthHistogramCount[maxPoints])
+					maxPoints= i;
+			}
+			depthHistogramCount.clear();
+			qreal baseLevel= depthHistogram[maxPoints];
+			surface.baseDepth= baseLevel;
 		}
 	}
 

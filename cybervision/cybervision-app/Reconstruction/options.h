@@ -44,6 +44,9 @@ public:
 	static const double gridCellArea;//Maximum distance from point to cell center to use the point for averaging (may be more than sqrt(2) to overlap neighboring cells). Works only when mapPointsToGrid is true.
 	static const float gridPeakFilterRadius;//Radius factor for checking the peak filter
 	static const float gridPeakSize;//Minimum height ratio of two close point for the higher point to be considered to be a peak
+	enum StatsBaseLevelMethod{STATS_BASELEVEL_MEDIAN,STATS_BASELEVEL_HISTOGRAM};//Methods for calculating the depth base level
+	static const StatsBaseLevelMethod statsBaseLevelMethod;
+	static const int statsDepthHistogramSize;//Number of histogram elements for computing base depth level
 
 	//Rendering options
 	static const bool renderShiny; //Render surface as a shiny texture
@@ -51,6 +54,7 @@ public:
 	static const RenderNormalsMode renderNormalsMode; //Selected normals source for rendering
 	enum PointDrawingMode {POINT_DRAW_AS_POINT,POINT_DRAW_AS_3DCIRCLE}; //Draw points as a simple point or as a small circle (with 3D scaling)
 	static const PointDrawingMode pointDrawingMode;
+	static const float PointDiameter;//Point diameter for OpenGL
 };
 
 }

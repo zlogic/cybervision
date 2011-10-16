@@ -8,7 +8,7 @@
 namespace cybervision{
 	Surface::Surface(){
 		scale= 1.0;
-		medianDepth= 0,minDepth= 0,maxDepth= 0;
+		medianDepth= 0,baseDepth=0,minDepth= 0,maxDepth= 0;
 	}
 
 	Surface::Surface(const Surface&sc){
@@ -20,6 +20,7 @@ namespace cybervision{
 		this->points= sc.points;
 		this->scale= sc.scale;
 		this->medianDepth= sc.medianDepth;
+		this->baseDepth= sc.baseDepth;
 		this->minDepth= sc.minDepth;
 		this->maxDepth= sc.maxDepth;
 		this->imageSize= sc.imageSize;
@@ -105,6 +106,7 @@ namespace cybervision{
 	qreal Surface::getMedianDepth()const{ return medianDepth; }
 	qreal Surface::getMinDepth()const{ return minDepth; }
 	qreal Surface::getMaxDepth()const{ return maxDepth; }
+	qreal Surface::getBaseDepth()const{ return baseDepth; }
 	QRectF cybervision::Surface::getImageSize() const{ return imageSize; }
 
 	qreal Surface::getScale()const{ return scale; }

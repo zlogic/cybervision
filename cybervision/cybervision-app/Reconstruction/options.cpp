@@ -33,8 +33,11 @@ namespace cybervision{
 	const double Options::gridCellArea= 4.0;
 	const float Options::gridPeakFilterRadius= 5;
 	const float Options::gridPeakSize= 1.2;
+	const Options::StatsBaseLevelMethod Options::statsBaseLevelMethod= Options::STATS_BASELEVEL_HISTOGRAM;
+	const int Options::statsDepthHistogramSize= 50;
 
 	const bool Options::renderShiny= true;
 	const Options::RenderNormalsMode Options::renderNormalsMode= Options::RENDER_NORMALS_POINT;
 	const Options::PointDrawingMode Options::pointDrawingMode= Options::POINT_DRAW_AS_POINT;
+	const float Options::PointDiameter= 3;
 }

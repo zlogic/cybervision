@@ -40,7 +40,22 @@ void MainWindow::updateWidgetStatus(){
 	ui->scaleXYEdit->setValidator(&scaleXYValidator);
 	ui->scaleZEdit->setValidator(&scaleZValidator);
 	ui->angleEdit->setValidator(&angleValidator);
+
 	viewerSelectedPointUpdated(ui->openGLViewport->getSelectedPoint());
+
+	updateSurfaceStats();
+}
+
+
+void MainWindow::updateSurfaceStats(){
+	qreal minDepth= ui->openGLViewport->getSurface3D().getMinDepth();
+	qreal maxDepth= ui->openGLViewport->getSurface3D().getMaxDepth();
+	qreal medianDepth= ui->openGLViewport->getSurface3D().getMedianDepth();
+	qreal baseDepth= ui->openGLViewport->getSurface3D().getBaseDepth();
+	if(ui->openGLViewport->getSurface3D().isOk())
+		ui->statisticsLabel->setText(QString(tr("Depth range: %1 m\nBase depth: %2\nMedian depth: %3")).arg(maxDepth-minDepth).arg(baseDepth).arg(medianDepth));
+	else
+		ui->statisticsLabel->setText(tr("No surface available"));
 }
 
 
@@ -193,12 +208,12 @@ void MainWindow::on_actionShow_log_triggered(bool checked){
 	ui->logDockWidget->setVisible(checked);
 }
 
-void MainWindow::on_statsDockWidget_visibilityChanged(bool visible){
+void MainWindow::on_inspectorDockWidget_visibilityChanged(bool visible){
 	ui->actionShow_statistics->setChecked(visible);
 }
 
 void MainWindow::on_actionShow_statistics_triggered(bool checked){
-	ui->statsDockWidget->setVisible(checked);
+	ui->inspectorDockWidget->setVisible(checked);
 }
 
 void MainWindow::on_addImageButton_clicked(){
@@ -241,8 +256,6 @@ void MainWindow::on_rotateToolButton_toggled(bool checked){
 void MainWindow::on_gridToolButton_toggled(bool checked){
 	ui->openGLViewport->setShowGrid(checked);
 }
-
-
 
 void MainWindow::on_texture1ToolButton_clicked(){
 	ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_1);

@@ -87,7 +87,7 @@ OTHER_FILES += \
     Reconstruction/SceneJSTemplate.js \
     UI/translations/cybervision-app_ru.ts
 
-TRANSLATIONS = UI/translations/cybervision-app_ru.ts UI/translations/cybervision-app_jp.ts
+TRANSLATIONS = UI/translations/cybervision-app_ru.ts
 CODECFORTR = UTF-8
 
 include( ../cybervision-options.pri )

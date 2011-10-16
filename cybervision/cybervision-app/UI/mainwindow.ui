@@ -474,23 +474,23 @@
    </widget>
    <addaction name="menuOptions"/>
   </widget>
-  <widget class="QDockWidget" name="statsDockWidget">
+  <widget class="QDockWidget" name="inspectorDockWidget">
    <property name="minimumSize">
     <size>
      <width>200</width>
-     <height>92</height>
+     <height>160</height>
     </size>
    </property>
    <property name="features">
     <set>QDockWidget::AllDockWidgetFeatures</set>
    </property>
    <property name="windowTitle">
-    <string>Statistics</string>
+    <string>Inspector</string>
    </property>
    <attribute name="dockWidgetArea">
     <number>2</number>
    </attribute>
-   <widget class="QWidget" name="statsDockWidgetContents">
+   <widget class="QWidget" name="inspectorDockWidgetContents">
     <layout class="QVBoxLayout" name="verticalLayout">
      <property name="spacing">
       <number>0</number>
@@ -499,13 +499,45 @@
       <number>0</number>
      </property>
      <item>
-      <widget class="QGroupBox" name="statsPointGroupBox">
+      <widget class="QGroupBox" name="inspectorPointGroupBox">
        <property name="title">
-        <string>Point coordinates</string>
+        <string>Selected point coordinates</string>
        </property>
        <layout class="QGridLayout" name="gridLayout_3">
         <item row="0" column="0">
          <widget class="QLabel" name="pointCoordinatesLabel">
+          <property name="text">
+           <string/>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QGroupBox" name="statisticsGroupBox">
+       <property name="title">
+        <string>Statistics</string>
+       </property>
+       <layout class="QFormLayout" name="formLayout">
+        <item row="0" column="0">
+         <widget class="QLabel" name="statisticsLabel">
+          <property name="text">
+           <string/>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QGroupBox" name="crosssectionGroupBox">
+       <property name="title">
+        <string>Cross-Section</string>
+       </property>
+       <layout class="QFormLayout" name="formLayout_2">
+        <item row="0" column="0">
+         <widget class="QLabel" name="crosssectionLabel">
           <property name="text">
            <string/>
           </property>
@@ -557,7 +589,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Show statistics</string>
+    <string>Show inspector</string>
    </property>
   </action>
  </widget>

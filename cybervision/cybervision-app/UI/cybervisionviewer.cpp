@@ -77,9 +77,6 @@ void CybervisionViewer::initializeGL(){
 	glEnable(GL_DEPTH_TEST);
 	//glEnable(GL_CULL_FACE);
 	glShadeModel(GL_SMOOTH);
-	glEnable(GL_LIGHTING);
-	glEnable(GL_LIGHT0);
-
 
 	//Line smoothing
 	/*
@@ -89,6 +86,9 @@ void CybervisionViewer::initializeGL(){
 	glHint (GL_LINE_SMOOTH_HINT, GL_NICEST);
 	*/
 
+	//Light options
+	glEnable(GL_LIGHTING);
+	glEnable(GL_LIGHT0);
 	//static GLfloat lightPosition[4] = { 0.5, 5.0, 7.0, 1.0 };
 	static GLfloat light0Position[4] = { 5.0f, 5.0f, 10.0f, 1.0f };
 	static GLfloat light0Ambiance[4] = { 0.2f, 0.2f, 0.2f, 0.2f };
@@ -96,6 +96,10 @@ void CybervisionViewer::initializeGL(){
 	glLightfv(GL_LIGHT0,GL_AMBIENT,light0Ambiance);
 	float modelTwoside[] = {GL_TRUE};
 	glLightModelfv(GL_LIGHT_MODEL_TWO_SIDE, modelTwoside);
+
+	//Point options
+	glPointSize(cybervision::Options::PointDiameter);
+	glEnable(GL_POINT_SMOOTH);
 
 	//Texture options
 	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -409,12 +413,15 @@ void CybervisionViewer::mousePressEvent(QMouseEvent *event){
 
 void CybervisionViewer::mouseReleaseEvent(QMouseEvent *event){
 	//Detect click location
-	if(clickMousePos==event->pos())
+	if(clickMousePos==event->pos()){
 		clickLocation= getClickLocation(event->pos());
-	else
-		clickLocation= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
-
-	emit selectedPointUpdated(QVector3D(clickLocation.x()/surface.getScale(),clickLocation.y()/surface.getScale(),clickLocation.z()/surface.getScale()));
+		if(clickLocation.x()/surface.getScale()>surface.getImageSize().right()
+				|| clickLocation.x()/surface.getScale()<surface.getImageSize().left()
+				|| clickLocation.y()/surface.getScale()>surface.getImageSize().bottom()
+				|| clickLocation.y()/surface.getScale()<surface.getImageSize().top())
+			clickLocation= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+	}
+	emit selectedPointUpdated(QVector3D(clickLocation.x()/surface.getScale(),clickLocation.y()/surface.getScale(),clickLocation.z()/surface.getScale()-surface.getBaseDepth()));
 
 	updateGL();
 }

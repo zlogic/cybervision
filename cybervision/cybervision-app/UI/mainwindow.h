@@ -34,6 +34,8 @@ private:
 	//Loads debugging data from file
 	void loadDebugPreferences();
 
+	//Updates the surface stats
+	void updateSurfaceStats();
 private slots:
 	//Slots for receiving messages from process thread
 	void processStarted();
@@ -50,7 +52,7 @@ private slots:
 	void on_actionShow_log_triggered(bool checked);
 	void on_logDockWidget_visibilityChanged(bool visible);
 	void on_actionShow_statistics_triggered(bool checked);
-	void on_statsDockWidget_visibilityChanged(bool visible);
+	void on_inspectorDockWidget_visibilityChanged(bool visible);
 	void on_saveButton_clicked();
 	void on_startProcessButton_clicked();
 	void on_moveToolButton_toggled(bool checked);
@@ -59,7 +61,6 @@ private slots:
 	void on_texture1ToolButton_clicked();
 	void on_texture2ToolButton_clicked();
 	void on_textureNoneToolButton_clicked();
-
 };
 
 #endif // MAINWINDOW_H
