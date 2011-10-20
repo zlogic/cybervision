@@ -5,6 +5,8 @@
 
 #include <limits>
 
+#include "Reconstruction/inspector.h"
+
 MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWindow){
     ui->setupUi(this);
 	thread.setUi(this);
@@ -145,8 +147,10 @@ void MainWindow::viewerSelectedPointUpdated(QVector3D point){
 
 void MainWindow::viewerCrosssectionLineChanged(QVector3D start, QVector3D end){
 	ui->crosssectionButton->setChecked(false);
+	cybervision::Inspector inspector(ui->openGLViewport->getSurface3D());
+	QImage img= inspector.renderCrossSection(inspector.getCrossSection(start,end),ui->crosssectionImage->size());
 
-	drawCrossSection(ui->openGLViewport->getSurface3D().getCrossSection(start,end));
+	ui->crosssectionImage->setPixmap(QPixmap::fromImage(img));
 }
 
 void MainWindow::on_startProcessButton_clicked(){
@@ -286,46 +290,4 @@ void MainWindow::on_crosssectionButton_clicked(bool checked){
 		}
 	}else
 		ui->openGLViewport->setDrawCrossSectionLine(checked);
-}
-
-void MainWindow::drawCrossSection(const QList<QPointF>& crossSection){
-	//Prepare data
-	qreal minX= std::numeric_limits<qreal>::infinity(),
-			minY= std::numeric_limits<qreal>::infinity(),
-			maxX= -std::numeric_limits<qreal>::infinity(),
-			maxY= -std::numeric_limits<qreal>::infinity();
-	for(QList<QPointF>::const_iterator it=crossSection.begin();it!=crossSection.end();it++){
-		minX= qMin(minX,it->x());
-		minY= qMin(minY,it->y());
-		maxX= qMax(maxX,it->x());
-		maxY= qMax(maxY,it->y());
-	}
-	//Preapare image
-	QImage img(ui->crosssectiomImage->width(),ui->crosssectiomImage->height(),QImage::Format_ARGB32);
-	img.fill(0x00000000);
-
-	//Draw lines
-	QPainter painter(&img);
-	painter.setPen(QColor(0,255,0));
-	for(QList<QPointF>::const_iterator it=crossSection.begin();it!=crossSection.end();it++){
-		if((it+1)==crossSection.end())
-			continue;
-		QPoint point1(img.width()*(    it->x()-minX)/(maxX-minX),img.height()*(maxY-    it->y())/(maxY-minY));
-		QPoint point2(img.width()*((it+1)->x()-minX)/(maxX-minX),img.height()*(maxY-(it+1)->y())/(maxY-minY));
-
-		point1.setX(qMax(point1.x(),0));
-		point1.setY(qMax(point1.y(),0));
-		point1.setX(qMin(point1.x(),img.width()-1));
-		point1.setY(qMin(point1.y(),img.height()-1));
-		point2.setX(qMax(point2.x(),0));
-		point2.setY(qMax(point2.y(),0));
-		point2.setX(qMin(point2.x(),img.width()-1));
-		point2.setY(qMin(point2.y(),img.height()-1));
-
-		painter.drawLine(point1,point2);
-	}
-
-	//Display the image
-	painter.end();
-	ui->crosssectiomImage->setPixmap(QPixmap::fromImage(img));
 }

@@ -18,7 +18,8 @@ SOURCES += main.cpp \
 	Reconstruction/surface.cpp \
 	KDTree/kdtreegateway.cpp \
     Reconstruction/imageloader.cpp \
-    Reconstruction/pointmatcheropencl.cpp
+    Reconstruction/pointmatcheropencl.cpp \
+    Reconstruction/inspector.cpp
 
 HEADERS += \
 	Reconstruction/pointmatcher.h \
@@ -65,7 +66,8 @@ HEADERS += \
 	Eigen/Dense \
     UI/mainwindow.h \
     Reconstruction/imageloader.h \
-    Reconstruction/pointmatcheropencl.h
+    Reconstruction/pointmatcheropencl.h \
+    Reconstruction/inspector.h
 
 FORMS += UI/mainwindow.ui
 
@@ -150,6 +152,8 @@ else:win32:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/re
 else:win32:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -lsiftfast
 else:symbian: LIBS += -lsiftfast
 else:unix: LIBS += -L$$OUT_PWD/../libsiftfast -dynamic -lsiftfast
+
+
 
 
 

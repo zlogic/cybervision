@@ -4,10 +4,13 @@
 #include <QVector2D>
 #include <QVector3D>
 #include <QFileInfo>
+#include <QRectF>
+#include <QImage>
 
 namespace cybervision{
 	class Surface{
 		friend class Sculptor;
+		friend class Inspector;
 	protected:
 		//Internal classes
 		typedef int PolygonPoint;//Index of point in array. NOT checked! TODO: remove int limits
@@ -53,8 +56,6 @@ namespace cybervision{
 		qreal getMinDepth()const;
 		qreal getMaxDepth()const;
 		qreal getBaseDepth()const;
-		//Compute cross-section with line
-		QList<QPointF> getCrossSection(const QVector3D& start,const QVector3D& end)const;
 
 		//Returns source image size
 		QRectF getImageSize()const;

@@ -175,7 +175,7 @@ Median depth: %3</source>
 Медиана глубины: %3</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="58"/>
+        <location filename="../mainwindow.cpp" line="60"/>
         <source>Depth range: %1 m
 Base depth: %2 m
 Median depth: %3 m</source>
@@ -184,7 +184,7 @@ Median depth: %3 m</source>
 Медиана глубины: %3 м</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="60"/>
+        <location filename="../mainwindow.cpp" line="62"/>
         <source>No surface available</source>
         <translation>Поверхность не доступна</translation>
     </message>
@@ -193,62 +193,62 @@ Median depth: %3 m</source>
         <translation type="obsolete">Точка не выбрана или поверхность не готова</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="141"/>
+        <location filename="../mainwindow.cpp" line="143"/>
         <source>No point selected</source>
         <translation>Точка не выбрана</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="170"/>
+        <location filename="../mainwindow.cpp" line="174"/>
         <source>Surface points</source>
         <translation>Точки поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="171"/>
+        <location filename="../mainwindow.cpp" line="175"/>
         <source>Surface polygons</source>
         <translation>Полигоны поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="172"/>
+        <location filename="../mainwindow.cpp" line="176"/>
         <source>PNG image</source>
         <translation>Изображение PNG</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="173"/>
+        <location filename="../mainwindow.cpp" line="177"/>
         <source>SceneJS model</source>
         <translation>Модель SceneJS</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="174"/>
+        <location filename="../mainwindow.cpp" line="178"/>
         <source>COLLADA model</source>
         <translation>Модель COLLADA</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="179"/>
+        <location filename="../mainwindow.cpp" line="183"/>
         <source>Save the surface</source>
         <translation>Сохранить поверхность</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="204"/>
+        <location filename="../mainwindow.cpp" line="208"/>
         <source>Bad save format selected</source>
         <translation>Выбран неправильный формат для записи</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="205"/>
+        <location filename="../mainwindow.cpp" line="209"/>
         <source>&lt;b&gt;Bad save format selected:&lt;/b&gt; %1</source>
         <translation>&lt;b&gt;Выбран неправильный формат для записи:&lt;/b&gt; %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="227"/>
+        <location filename="../mainwindow.cpp" line="231"/>
         <source>Images</source>
         <translation>Изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="227"/>
+        <location filename="../mainwindow.cpp" line="231"/>
         <source>All files</source>
         <translation>Все файлы</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="228"/>
+        <location filename="../mainwindow.cpp" line="232"/>
         <source>Select images to add</source>
         <translation>Выберите изображения, которые нужно добавить</translation>
     </message>

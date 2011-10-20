@@ -36,9 +36,6 @@ private:
 
 	//Updates the surface stats
 	void updateSurfaceStats();
-
-	//Cross-section drawing function
-	void drawCrossSection(const QList<QPointF>& crossSection);
 private slots:
 	//Slots for receiving messages from process thread
 	void processStarted();

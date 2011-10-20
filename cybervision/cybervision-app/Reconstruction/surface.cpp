@@ -119,65 +119,6 @@ namespace cybervision{
 		this->image1= image1, this->image2= image2;
 	}
 
-	QList<QPointF> cybervision::Surface::getCrossSection(const QVector3D &start, const QVector3D &end) const{
-		QMultiMap<qreal,qreal> intersections;
-		QLineF intersectionLine(start.x(),start.y(),end.x(),end.y());
-
-		for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
-			QLineF lineAB(points[it->a].coord.x(),points[it->a].coord.y(),points[it->b].coord.x(),points[it->b].coord.y());
-			QLineF lineBC(points[it->b].coord.x(),points[it->b].coord.y(),points[it->c].coord.x(),points[it->c].coord.y());
-			QLineF lineCA(points[it->c].coord.x(),points[it->c].coord.y(),points[it->a].coord.x(),points[it->a].coord.y());
-			QPointF intersectionPoint;
-			if(lineAB.intersect(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
-				qreal tLine= qAbs(intersectionLine.dx())>qAbs(intersectionLine.dy())?
-							(intersectionPoint.x()-intersectionLine.x1())/(intersectionLine.x2()-intersectionLine.x1()):
-							(intersectionPoint.y()-intersectionLine.y1())/(intersectionLine.y2()-intersectionLine.y1());
-				qreal tPolygon= qAbs(lineAB.dx())>qAbs(lineAB.dy())?
-							(intersectionPoint.x()-lineAB.x1())/(lineAB.x2()-(lineAB.x1())):
-							(intersectionPoint.y()-lineAB.y1())/(lineAB.y2()-(lineAB.y1()));
-				qreal z= points[it->a].coord.z()*tPolygon+points[it->b].coord.z()*(1-tPolygon);
-				intersections.insert(tLine,z);
-			}
-			if(lineBC.intersect(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
-				qreal tLine= qAbs(intersectionLine.dx())>qAbs(intersectionLine.dy())?
-							(intersectionPoint.x()-intersectionLine.x1())/(intersectionLine.x2()-intersectionLine.x1()):
-							(intersectionPoint.y()-intersectionLine.y1())/(intersectionLine.y2()-intersectionLine.y1());
-				qreal tPolygon= qAbs(lineBC.dx())>qAbs(lineBC.dy())?
-							(intersectionPoint.x()-lineBC.x1())/(lineBC.x2()-(lineBC.x1())):
-							(intersectionPoint.y()-lineBC.y1())/(lineBC.y2()-(lineBC.y1()));
-				qreal z= points[it->b].coord.z()*tPolygon+points[it->c].coord.z()*(1-tPolygon);
-				intersections.insert(tLine,z);
-			}
-			if(lineCA.intersect(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
-				qreal tLine= qAbs(intersectionLine.dx())>qAbs(intersectionLine.dy())?
-							(intersectionPoint.x()-intersectionLine.x1())/(intersectionLine.x2()-intersectionLine.x1()):
-							(intersectionPoint.y()-intersectionLine.y1())/(intersectionLine.y2()-intersectionLine.y1());
-				qreal tPolygon= qAbs(lineCA.dx())>qAbs(lineCA.dy())?
-							(intersectionPoint.x()-lineCA.x1())/(lineCA.x2()-(lineCA.x1())):
-							(intersectionPoint.y()-lineCA.y1())/(lineCA.y2()-(lineCA.y1()));
-				qreal z= points[it->c].coord.z()*tPolygon+points[it->a].coord.z()*(1-tPolygon);
-				intersections.insert(tLine,z);
-			}
-		}
-		qreal sum=0;
-		int count=0;
-		qreal lineLength= intersectionLine.length();
-
-		QList<QPointF> result;
-		for(QMap<qreal,qreal>::const_iterator it=intersections.begin();it!=intersections.end();it++){
-			sum+= it.value();
-			count++;
-			if((it+1)==intersections.end() || !qFuzzyCompare(it.key(),(it+1).key())){
-				qreal z= sum/(qreal)count;
-				QPointF point(it.key()*lineLength,z);
-				result.push_back(point);
-				sum= 0;
-				count= 0;
-			}
-		}
-		return result;
-	}
-
 	/*
 	 Functions for saving image data
 	 */
