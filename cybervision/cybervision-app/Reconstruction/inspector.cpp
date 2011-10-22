@@ -4,10 +4,14 @@
 #include <QPainter>
 
 #include <limits>
+#include <cmath>
 
-cybervision::Inspector::Inspector(const cybervision::Surface&surface, QObject *parent):QObject(parent),surface(surface) {}
+cybervision::Inspector::Inspector(const cybervision::Surface&surface, QObject *parent):QObject(parent),surface(surface) {
+	mA= std::numeric_limits<qreal>::quiet_NaN(), mB= std::numeric_limits<qreal>::quiet_NaN(), mL= std::numeric_limits<qreal>::quiet_NaN();
+	Ra= std::numeric_limits<qreal>::quiet_NaN(), Rz= std::numeric_limits<qreal>::quiet_NaN(), Rmax= std::numeric_limits<qreal>::quiet_NaN();
+}
 
-QList<QPointF> cybervision::Inspector::getCrossSection(const QVector3D &start, const QVector3D &end) const{
+void cybervision::Inspector::updateCrossSection(const QVector3D &start, const QVector3D &end){
 	QMultiMap<qreal,qreal> intersections;
 	QLineF intersectionLine(start.x(),start.y(),end.x(),end.y());
 
@@ -51,22 +55,101 @@ QList<QPointF> cybervision::Inspector::getCrossSection(const QVector3D &start, c
 	int count=0;
 	qreal lineLength= intersectionLine.length();
 
-	QList<QPointF> result;
 	for(QMap<qreal,qreal>::const_iterator it=intersections.begin();it!=intersections.end();it++){
 		sum+= it.value();
 		count++;
 		if((it+1)==intersections.end() || !qFuzzyCompare(it.key(),(it+1).key())){
 			qreal z= sum/(qreal)count;
 			QPointF point(it.key()*lineLength,z);
-			result.push_back(point);
+			crossSection.push_back(point);
 			sum= 0;
 			count= 0;
 		}
 	}
-	return result;
+
+	if(crossSection.size()>0)
+		computeParams();
 }
 
-QImage cybervision::Inspector::renderCrossSection(const QList<QPointF>& crossSection,const QSize& imageSize) const{
+void cybervision::Inspector::computeParams(){
+	{
+		//Compute middle-line with least-squares
+		//See http://mathworld.wolfram.com/LeastSquaresFitting.html
+		qreal xAverage=0,yAverage=0;
+		qreal xSquares=0,ySquares=0;
+		qreal xy=0;
+		for(QList<QPointF>::const_iterator it=crossSection.begin();it!=crossSection.end();it++){
+			xAverage+= it->x();
+			yAverage+= it->y();
+			xSquares+= it->x()*it->x();
+			ySquares+= it->y()*it->y();
+			xy+= it->x()*it->y();
+		}
+		xAverage/= (qreal)crossSection.size();
+		yAverage/= (qreal)crossSection.size();
+		//Compute a and b
+		qreal ssXX= xSquares-(qreal)crossSection.size()*xAverage*xAverage;
+		qreal ssXY= xy-(qreal)crossSection.size()*xAverage*yAverage;
+		mB= ssXY/ssXX;
+		mA= yAverage-mB*xAverage;
+
+		qreal minX= std::numeric_limits<qreal>::infinity(),
+				maxX= -std::numeric_limits<qreal>::infinity();
+		for(QList<QPointF>::const_iterator it=crossSection.begin();it!=crossSection.end();it++){
+			minX= qMin(minX,it->x());
+			maxX= qMax(maxX,it->x());
+		}
+		qreal deltaX= (maxX-minX);
+		mL= sqrt(deltaX*deltaX*mB*mB+deltaX*deltaX);
+	}
+
+	//Compute height parameters
+	{
+		Ra= 0;
+		QList<qreal> maxHeights,minHeights;
+		bool lastHeightPositive= true;
+		qreal peakHeight= 0;
+		qreal maxHeight= -std::numeric_limits<qreal>::infinity(),minHeight= std::numeric_limits<qreal>::infinity();
+		for(QList<QPointF>::const_iterator it=crossSection.begin();it!=crossSection.end();it++){
+			qreal height= it->y()-it->x()*mB-mA;
+
+			Ra+= qAbs(height);
+
+			if(it!=crossSection.begin()){
+				if(lastHeightPositive && (height<0 || (it+1)==crossSection.end())){
+					maxHeights<<qAbs(peakHeight);
+					qSort(maxHeights);
+					if(maxHeights.size()>5)
+						maxHeights.pop_front();
+					peakHeight= 0;
+				}
+				if(!lastHeightPositive && (height>0 || (it+1)==crossSection.end())){
+					minHeights<<qAbs(peakHeight);
+					qSort(minHeights);
+					if(minHeights.size()>5)
+						minHeights.pop_back();
+					peakHeight= 0;
+				}
+			}
+			lastHeightPositive= height>0;
+			peakHeight= qAbs(height)>qAbs(peakHeight)?height:peakHeight;
+			maxHeight= qMax(maxHeight,height);
+			minHeight= qMin(minHeight,height);
+		}
+		Ra/= (qreal)crossSection.size();
+		Rmax= maxHeight-minHeight;
+		if(crossSection.size()<5)
+			Rz= std::numeric_limits<qreal>::quiet_NaN();
+		else{
+			Rz= 0;
+			for(int i=0;i<qMin(maxHeights.size(),minHeights.size());i++)
+				Rz+= maxHeights[i]+minHeights[i];
+			Rz/= 5.0;
+		}
+	}
+}
+
+QImage cybervision::Inspector::renderCrossSection(const QSize& imageSize) const{
 	//Prepare data
 	qreal minX= std::numeric_limits<qreal>::infinity(),
 			minY= std::numeric_limits<qreal>::infinity(),
@@ -84,7 +167,8 @@ QImage cybervision::Inspector::renderCrossSection(const QList<QPointF>& crossSec
 
 	//Draw lines
 	QPainter painter(&img);
-	painter.setPen(QColor(0,255,0));
+	painter.setRenderHint(QPainter::Antialiasing,true);
+	painter.setPen(QColor(0xff,0x99,0x00));
 	for(QList<QPointF>::const_iterator it=crossSection.begin();it!=crossSection.end();it++){
 		if((it+1)==crossSection.end())
 			continue;
@@ -103,7 +187,18 @@ QImage cybervision::Inspector::renderCrossSection(const QList<QPointF>& crossSec
 		painter.drawLine(point1,point2);
 	}
 
+	//Draw the m-line
+	painter.setPen((QColor(0x66,0x66,0x66)));
+	painter.drawLine(QPointF(img.width()*minX/(maxX-minX),img.height()*(maxY-minX*mB-mA)/(maxY-minY)),
+					 QPointF(img.width()*maxX/(maxX-minX),img.height()*(maxY-maxX*mB-mA)/(maxY-minY))
+	);
 	//Display the image
 	painter.end();
 	return img;
 }
+
+QList<QPointF> cybervision::Inspector::getCrossSection() const{	return crossSection; }
+qreal cybervision::Inspector::getRoughnessRa() const{ return Ra; }
+qreal cybervision::Inspector::getRoughnessRz() const{ return Rz; }
+qreal cybervision::Inspector::getRoughnessRmax() const{ return Rmax; }
+

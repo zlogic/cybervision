@@ -148,9 +148,21 @@ void MainWindow::viewerSelectedPointUpdated(QVector3D point){
 void MainWindow::viewerCrosssectionLineChanged(QVector3D start, QVector3D end){
 	ui->crosssectionButton->setChecked(false);
 	cybervision::Inspector inspector(ui->openGLViewport->getSurface3D());
-	QImage img= inspector.renderCrossSection(inspector.getCrossSection(start,end),ui->crosssectionImage->size());
+	inspector.updateCrossSection(start,end);
 
+	//Set the cross-section image
+	QImage img= inspector.renderCrossSection(ui->crosssectionImage->size());
 	ui->crosssectionImage->setPixmap(QPixmap::fromImage(img));
+
+	//Set the height parameters
+	QString heightParamsString= QString(tr("Height parameters\nRa= %1 m\nRz= %2 m\nRmax= %3 m\nS= %4 m\nSm= %5 m\ntp=%6"))
+			.arg(inspector.getRoughnessRa())
+			.arg(inspector.getRoughnessRz())
+			.arg(inspector.getRoughnessRmax())
+			.arg(0)
+			.arg(0)
+			.arg(0);
+	ui->crosssectionLabel->setText(heightParamsString);
 }
 
 void MainWindow::on_startProcessButton_clicked(){

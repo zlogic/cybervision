@@ -164,7 +164,7 @@ void CybervisionViewer::drawPoint(const QVector3D& point)const{
 		return;
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_LIGHTING);
-	glColor3f(1,.0,.0);
+	glColor3f(0xff/255.0,0x99/255.0,.0);
 	if(cybervision::Options::pointDrawingMode==cybervision::Options::POINT_DRAW_AS_3DCIRCLE){
 		double radius=.08;
 		int num_segments=36;
@@ -191,9 +191,9 @@ void CybervisionViewer::drawLine(const QVector3D& start,const QVector3D& end)con
 	//glDisable(GL_DEPTH_TEST);
 	glDisable(GL_LIGHTING);
 	if(drawingCrossSectionLine)
-		glColor3f(1,.0,.0);
+		glColor3f(0xff/255.0,0x99/255.0,.0);
 	else
-		glColor3f(.0,1,.0);
+		glColor3f(0xff/255.0,0x99/255.0,.0);
 	glBegin(GL_LINES);
 	glVertex3f(start.x(),start.y(),start.z());
 	glVertex3f(end.x(),end.y(),end.z());

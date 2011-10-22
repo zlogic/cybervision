@@ -131,48 +131,24 @@
         <translation>Провести плоскость среза</translation>
     </message>
     <message>
-        <source>Cross-Section</source>
-        <translation type="obsolete">Профиль поверхности</translation>
-    </message>
-    <message>
-        <source>Draw cross-section line</source>
-        <translation type="obsolete">Провести линию среза</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.ui" line="605"/>
+        <location filename="../mainwindow.ui" line="612"/>
         <source>Show inspector</source>
         <translation>Показать инспектор</translation>
     </message>
     <message>
-        <source>Point coordinates</source>
-        <translation type="obsolete">Координаты точки</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.ui" line="583"/>
+        <location filename="../mainwindow.ui" line="590"/>
         <source>Show log</source>
         <translation>Показать журнал</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="586"/>
+        <location filename="../mainwindow.ui" line="593"/>
         <source>Show the log</source>
         <translation>Показать журнал</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="597"/>
+        <location filename="../mainwindow.ui" line="604"/>
         <source>Prefer scale from metadata</source>
         <translation>При возможности использовать масштаб из метаданных</translation>
-    </message>
-    <message>
-        <source>Show statistics</source>
-        <translation type="obsolete">Показать статистику</translation>
-    </message>
-    <message>
-        <source>Depth range: %1 m
-Base depth: %2
-Median depth: %3</source>
-        <translation type="obsolete">Диапазон глубины: %1 м
-Базовая глубина: %2
-Медиана глубины: %3</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="60"/>
@@ -189,66 +165,79 @@ Median depth: %3 m</source>
         <translation>Поверхность не доступна</translation>
     </message>
     <message>
-        <source>No point selected or surface is not ready</source>
-        <translation type="obsolete">Точка не выбрана или поверхность не готова</translation>
-    </message>
-    <message>
         <location filename="../mainwindow.cpp" line="143"/>
         <source>No point selected</source>
         <translation>Точка не выбрана</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="174"/>
+        <location filename="../mainwindow.cpp" line="158"/>
+        <source>Height parameters
+Ra= %1 m
+Rz= %2 m
+Rmax= %3 m
+S= %4 m
+Sm= %5 m
+tp=%6</source>
+        <translation>Высотные параметры
+Ra= %1 м
+Rz= %2 м
+Rmax= %3 м
+S= %4 м
+Sm= %5 м
+tp=%6</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="186"/>
         <source>Surface points</source>
         <translation>Точки поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="175"/>
+        <location filename="../mainwindow.cpp" line="187"/>
         <source>Surface polygons</source>
         <translation>Полигоны поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="176"/>
+        <location filename="../mainwindow.cpp" line="188"/>
         <source>PNG image</source>
         <translation>Изображение PNG</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="177"/>
+        <location filename="../mainwindow.cpp" line="189"/>
         <source>SceneJS model</source>
         <translation>Модель SceneJS</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="178"/>
+        <location filename="../mainwindow.cpp" line="190"/>
         <source>COLLADA model</source>
         <translation>Модель COLLADA</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="183"/>
+        <location filename="../mainwindow.cpp" line="195"/>
         <source>Save the surface</source>
         <translation>Сохранить поверхность</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="208"/>
+        <location filename="../mainwindow.cpp" line="220"/>
         <source>Bad save format selected</source>
         <translation>Выбран неправильный формат для записи</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="209"/>
+        <location filename="../mainwindow.cpp" line="221"/>
         <source>&lt;b&gt;Bad save format selected:&lt;/b&gt; %1</source>
         <translation>&lt;b&gt;Выбран неправильный формат для записи:&lt;/b&gt; %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="231"/>
+        <location filename="../mainwindow.cpp" line="243"/>
         <source>Images</source>
         <translation>Изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="231"/>
+        <location filename="../mainwindow.cpp" line="243"/>
         <source>All files</source>
         <translation>Все файлы</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="232"/>
+        <location filename="../mainwindow.cpp" line="244"/>
         <source>Select images to add</source>
         <translation>Выберите изображения, которые нужно добавить</translation>
     </message>
