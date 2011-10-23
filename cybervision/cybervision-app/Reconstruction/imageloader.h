@@ -12,7 +12,7 @@ namespace cybervision{
  */
 class ImageLoader : public QObject
 {
-    Q_OBJECT
+	Q_OBJECT
 protected:
 	//Static data
 	static const qint32 TIFFTAG_META_PHENOM = 34683;

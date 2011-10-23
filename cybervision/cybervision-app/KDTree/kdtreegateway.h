@@ -8,7 +8,9 @@
 #include <Reconstruction/pointmatch.h>
 
 namespace SIFT{
-	class Keypoint;
+
+class Keypoint;
+
 }
 
 namespace KDTree{

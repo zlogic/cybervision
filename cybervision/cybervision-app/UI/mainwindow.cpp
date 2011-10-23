@@ -9,7 +9,7 @@
 
 MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWindow){
 	inspectorOk= false;
-    ui->setupUi(this);
+	ui->setupUi(this);
 	thread.setUi(this);
 	updateWidgetStatus();
 	loadDebugPreferences();
@@ -19,7 +19,7 @@ MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWi
 }
 
 MainWindow::~MainWindow(){
-    delete ui;
+	delete ui;
 }
 
 void MainWindow::updateWidgetStatus(){

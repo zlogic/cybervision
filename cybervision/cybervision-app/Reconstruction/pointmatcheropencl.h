@@ -20,11 +20,11 @@
 
 namespace cybervision{
 /*
-  Class for matching points with OpenCL. Most of the code is borrowed/recycled from AMD APP SDK.
-  */
+ * Class for matching points with OpenCL. Most of the code is borrowed/recycled from AMD APP SDK.
+ */
 class PointMatcherOpenCL : public QObject
 {
-    Q_OBJECT
+	Q_OBJECT
 protected:
 	QString kernelStr;
 
@@ -84,5 +84,6 @@ class PointMatcherOpenCL : public QObject
 {
 	Q_OBJECT
 };
+
 }
 #endif // CYBERVISION_OPENCL

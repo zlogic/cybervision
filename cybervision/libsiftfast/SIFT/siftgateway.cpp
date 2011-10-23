@@ -146,4 +146,3 @@ QList<SIFT::Keypoint> SIFT::Extractor::extract(const QImage& sourceImg)const{
 
 	return points;
 }
-

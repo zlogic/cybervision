@@ -3,7 +3,9 @@
 #include <cstddef>
 
 namespace cybervision{
-
+/*
+ * Class for storing options, constants, etc. At the moment is read-only and can be changed before compilation.
+ */
 class Options{
 public:
 	//SIFT options

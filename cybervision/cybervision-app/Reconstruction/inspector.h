@@ -6,6 +6,9 @@
 #include <Reconstruction/surface.h>
 
 namespace cybervision{
+/*
+ * Class for computing surface cross-section and roughness statistics
+ */
 class Inspector : public QObject
 {
 	Q_OBJECT

@@ -306,7 +306,7 @@ QImage cybervision::Inspector::renderCrossSection(const QSize& imageSize) const{
 	painter.setPen((QColor(0x66,0x66,0x66)));
 	painter.drawLine(QPointF(img.width()*minX/(maxX-minX),img.height()*(maxY-minX*mB-mA)/(maxY-minY)),
 					 QPointF(img.width()*maxX/(maxX-minX),img.height()*(maxY-maxX*mB-mA)/(maxY-minY))
-	);
+					 );
 	//Display the image
 	painter.end();
 	return img;
