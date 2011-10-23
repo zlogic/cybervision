@@ -21,12 +21,6 @@
    <layout class="QGridLayout" name="gridLayout">
     <item row="0" column="0">
      <widget class="QSplitter" name="splitter">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
       <property name="locale">
        <locale language="English" country="UnitedStates"/>
       </property>
@@ -34,16 +28,10 @@
        <enum>Qt::Horizontal</enum>
       </property>
       <widget class="QGroupBox" name="controlsGroupBox">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
        <property name="title">
         <string>Controls</string>
        </property>
-       <layout class="QGridLayout" name="gridLayout_2">
+       <layout class="QGridLayout" name="gridLayout_2" columnstretch="50,50">
         <item row="0" column="0">
          <widget class="QPushButton" name="addImageButton">
           <property name="locale">
@@ -52,45 +40,34 @@
           <property name="text">
            <string>Add images</string>
           </property>
+          <property name="icon">
+           <iconset resource="../ReconstructionResources.qrc">
+            <normaloff>:/icons/UI/icons/plus.png</normaloff>:/icons/UI/icons/plus.png</iconset>
+          </property>
          </widget>
         </item>
         <item row="2" column="0" colspan="2">
          <widget class="QListWidget" name="imageList">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="baseSize">
+           <size>
+            <width>200</width>
+            <height>0</height>
+           </size>
+          </property>
           <property name="locale">
            <locale language="English" country="UnitedStates"/>
           </property>
           <property name="selectionMode">
            <enum>QAbstractItemView::MultiSelection</enum>
           </property>
-         </widget>
-        </item>
-        <item row="10" column="0" colspan="2">
-         <widget class="QPushButton" name="startProcessButton">
-          <property name="locale">
-           <locale language="English" country="UnitedStates"/>
-          </property>
-          <property name="text">
-           <string>Reconstruct</string>
-          </property>
-         </widget>
-        </item>
-        <item row="12" column="0" colspan="2">
-         <widget class="QPushButton" name="saveButton">
-          <property name="locale">
-           <locale language="English" country="UnitedStates"/>
-          </property>
-          <property name="text">
-           <string>Save result</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="1">
-         <widget class="QPushButton" name="deleteImageButton">
-          <property name="locale">
-           <locale language="English" country="UnitedStates"/>
-          </property>
-          <property name="text">
-           <string>Delete selected images</string>
+          <property name="resizeMode">
+           <enum>QListView::Adjust</enum>
           </property>
          </widget>
         </item>
@@ -104,16 +81,10 @@
           </property>
          </widget>
         </item>
-        <item row="5" column="1">
-         <widget class="QLineEdit" name="scaleXYEdit">
-          <property name="accessibleDescription">
-           <string notr="true"/>
-          </property>
+        <item row="4" column="0">
+         <widget class="QLabel" name="angleLabel">
           <property name="text">
-           <string notr="true">1.0</string>
-          </property>
-          <property name="alignment">
-           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           <string>Angle °</string>
           </property>
          </widget>
         </item>
@@ -131,6 +102,45 @@
           </property>
          </widget>
         </item>
+        <item row="10" column="0" colspan="2">
+         <widget class="QPushButton" name="startProcessButton">
+          <property name="locale">
+           <locale language="English" country="UnitedStates"/>
+          </property>
+          <property name="text">
+           <string>Reconstruct</string>
+          </property>
+          <property name="icon">
+           <iconset resource="../ReconstructionResources.qrc">
+            <normaloff>:/icons/UI/icons/border-draw.png</normaloff>:/icons/UI/icons/border-draw.png</iconset>
+          </property>
+         </widget>
+        </item>
+        <item row="12" column="0" colspan="2">
+         <widget class="QPushButton" name="saveButton">
+          <property name="locale">
+           <locale language="English" country="UnitedStates"/>
+          </property>
+          <property name="text">
+           <string>Save result</string>
+          </property>
+          <property name="icon">
+           <iconset resource="../ReconstructionResources.qrc">
+            <normaloff>:/icons/UI/icons/disk.png</normaloff>:/icons/UI/icons/disk.png</iconset>
+          </property>
+         </widget>
+        </item>
+        <item row="13" column="0" colspan="2">
+         <widget class="QPushButton" name="loadSurfaceButton">
+          <property name="text">
+           <string>Load reconstructed surface</string>
+          </property>
+          <property name="icon">
+           <iconset resource="../ReconstructionResources.qrc">
+            <normaloff>:/icons/UI/icons/document-import.png</normaloff>:/icons/UI/icons/document-import.png</iconset>
+          </property>
+         </widget>
+        </item>
         <item row="6" column="1">
          <widget class="QLineEdit" name="scaleZEdit">
           <property name="text">
@@ -141,18 +151,18 @@
           </property>
          </widget>
         </item>
-        <item row="4" column="0">
-         <widget class="QLabel" name="angleLabel">
+        <item row="5" column="1">
+         <widget class="QLineEdit" name="scaleXYEdit">
           <property name="text">
-           <string>Angle °</string>
+           <string notr="true">1.0</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
           </property>
          </widget>
         </item>
         <item row="4" column="1">
          <widget class="QLineEdit" name="angleEdit">
-          <property name="accessibleDescription">
-           <string notr="true"/>
-          </property>
           <property name="text">
            <string notr="true">0.0</string>
           </property>
@@ -161,10 +171,17 @@
           </property>
          </widget>
         </item>
-        <item row="13" column="0" colspan="2">
-         <widget class="QPushButton" name="loadSurfaceButton">
+        <item row="0" column="1">
+         <widget class="QPushButton" name="deleteImageButton">
+          <property name="locale">
+           <locale language="English" country="UnitedStates"/>
+          </property>
           <property name="text">
-           <string>Load reconstructed surface</string>
+           <string>Remove images</string>
+          </property>
+          <property name="icon">
+           <iconset resource="../ReconstructionResources.qrc">
+            <normaloff>:/icons/UI/icons/minus.png</normaloff>:/icons/UI/icons/minus.png</iconset>
           </property>
          </widget>
         </item>
@@ -172,7 +189,7 @@
       </widget>
       <widget class="QGroupBox" name="viewportGroupBox">
        <property name="sizePolicy">
-        <sizepolicy hsizetype="MinimumExpanding" vsizetype="Expanding">
+        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
          <horstretch>5</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
@@ -485,7 +502,7 @@
    <property name="minimumSize">
     <size>
      <width>250</width>
-     <height>474</height>
+     <height>475</height>
     </size>
    </property>
    <property name="features">
@@ -547,6 +564,10 @@
          <widget class="QPushButton" name="crosssectionButton">
           <property name="text">
            <string>Draw cross-section plane</string>
+          </property>
+          <property name="icon">
+           <iconset resource="../ReconstructionResources.qrc">
+            <normaloff>:/icons/UI/icons/pencil-ruler.png</normaloff>:/icons/UI/icons/pencil-ruler.png</iconset>
           </property>
           <property name="checkable">
            <bool>true</bool>

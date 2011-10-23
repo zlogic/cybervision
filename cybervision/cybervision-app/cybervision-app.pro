@@ -76,18 +76,24 @@ RESOURCES += \
 
 OTHER_FILES += \
 	Reconstruction/ColladaTemplate.xml \
-	UI/icons/arrow-move.png \
-	UI/icons/arrow-circle.png \
-	UI/icons/grid.png \
 	Reconstruction/PointMatcherKernel.cl \
-	UI/icons/texture-right.png \
-	UI/icons/texture-left.png \
-	UI/icons/texture-empty.png \
-	UI/icons/cybervision.png \
 	UI/cybervision.rc \
-	UI/icons/cybervision.ico \
     Reconstruction/SceneJSTemplate.js \
-    UI/translations/cybervision-app_ru.ts
+	UI/translations/cybervision-app_ru.ts \
+    UI/icons/texture-right.png \
+    UI/icons/texture-left.png \
+    UI/icons/texture-empty.png \
+    UI/icons/plus.png \
+    UI/icons/pencil-ruler.png \
+    UI/icons/minus.png \
+    UI/icons/grid.png \
+    UI/icons/document-import.png \
+    UI/icons/disk.png \
+    UI/icons/cybervision.png \
+    UI/icons/cybervision.ico \
+    UI/icons/border-draw.png \
+    UI/icons/arrow-move.png \
+    UI/icons/arrow-circle.png
 
 TRANSLATIONS = UI/translations/cybervision-app_ru.ts
 CODECFORTR = UTF-8
@@ -152,6 +158,8 @@ else:win32:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/re
 else:win32:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -lsiftfast
 else:symbian: LIBS += -lsiftfast
 else:unix: LIBS += -L$$OUT_PWD/../libsiftfast -dynamic -lsiftfast
+
+
 
 
 

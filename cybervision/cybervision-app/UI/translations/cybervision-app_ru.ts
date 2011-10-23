@@ -10,153 +10,153 @@
         <translation>Программа Cybervision</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="44"/>
+        <location filename="../mainwindow.ui" line="32"/>
         <source>Controls</source>
         <translation>Управление</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="53"/>
+        <location filename="../mainwindow.ui" line="41"/>
         <source>Add images</source>
         <translation>Добавить изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="73"/>
+        <location filename="../mainwindow.ui" line="111"/>
         <source>Reconstruct</source>
         <translation>Реконструировать</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="83"/>
+        <location filename="../mainwindow.ui" line="125"/>
         <source>Save result</source>
         <translation>Сохранить результат</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="93"/>
-        <source>Delete selected images</source>
-        <translation>Убрать выбранные изображения</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.ui" line="103"/>
+        <location filename="../mainwindow.ui" line="80"/>
         <source>Select exactly two images from the list</source>
         <translation>Выберите ровно два изображения из списка</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="123"/>
+        <location filename="../mainwindow.ui" line="94"/>
         <source>Scale XY</source>
         <translation>Масштаб по XY</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="130"/>
+        <location filename="../mainwindow.ui" line="101"/>
         <source>Scale Z</source>
         <translation>Мастшаб по Z</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="147"/>
+        <location filename="../mainwindow.ui" line="87"/>
         <source>Angle °</source>
         <translation>Угол °</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="167"/>
+        <location filename="../mainwindow.ui" line="136"/>
         <source>Load reconstructed surface</source>
         <translation>Загрузить реконструированную поверхность</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="190"/>
+        <location filename="../mainwindow.ui" line="180"/>
+        <source>Remove images</source>
+        <translation>Убрать изображения</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="207"/>
         <source>3D image</source>
         <translation>Трехмерное изображение</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="220"/>
-        <location filename="../mainwindow.ui" line="223"/>
+        <location filename="../mainwindow.ui" line="237"/>
+        <location filename="../mainwindow.ui" line="240"/>
         <source>Rotate object</source>
         <translation>Повернуть объект</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="246"/>
-        <location filename="../mainwindow.ui" line="249"/>
+        <location filename="../mainwindow.ui" line="263"/>
+        <location filename="../mainwindow.ui" line="266"/>
         <source>Move object</source>
         <translation>Передвинуть объект</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="281"/>
-        <location filename="../mainwindow.ui" line="284"/>
+        <location filename="../mainwindow.ui" line="298"/>
+        <location filename="../mainwindow.ui" line="301"/>
         <source>Texture from first image</source>
         <translation>Текстура с первого изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="307"/>
-        <location filename="../mainwindow.ui" line="310"/>
+        <location filename="../mainwindow.ui" line="324"/>
+        <location filename="../mainwindow.ui" line="327"/>
         <source>Disable texture</source>
         <translation>Отключить текстуру</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="330"/>
-        <location filename="../mainwindow.ui" line="333"/>
+        <location filename="../mainwindow.ui" line="347"/>
+        <location filename="../mainwindow.ui" line="350"/>
         <source>Texture from second image</source>
         <translation>Текстура со второго изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="356"/>
-        <location filename="../mainwindow.ui" line="359"/>
+        <location filename="../mainwindow.ui" line="373"/>
+        <location filename="../mainwindow.ui" line="376"/>
         <source>Show grid</source>
         <translation>Показать сетку</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="418"/>
+        <location filename="../mainwindow.ui" line="435"/>
         <source>Log</source>
         <translation>Журнал</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="476"/>
+        <location filename="../mainwindow.ui" line="493"/>
         <source>Options</source>
         <translation>Настройки</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="495"/>
+        <location filename="../mainwindow.ui" line="512"/>
         <source>Inspector</source>
         <translation>Инспектор</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="505"/>
+        <location filename="../mainwindow.ui" line="522"/>
         <source>Selected point coordinates</source>
         <translation>Координаты выбранной точки</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="524"/>
+        <location filename="../mainwindow.ui" line="541"/>
         <source>Statistics</source>
         <translation>Статистика</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="543"/>
+        <location filename="../mainwindow.ui" line="560"/>
         <source>Cross-section</source>
         <translation>Профиль поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="549"/>
+        <location filename="../mainwindow.ui" line="566"/>
         <source>Draw cross-section plane</source>
         <translation>Провести плоскость среза</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="578"/>
+        <location filename="../mainwindow.ui" line="599"/>
         <source>Roughness parameters</source>
         <translation>Параметры шероховатости</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="673"/>
+        <location filename="../mainwindow.ui" line="694"/>
         <source>Show inspector</source>
         <translation>Показать инспектор</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="651"/>
+        <location filename="../mainwindow.ui" line="672"/>
         <source>Show log</source>
         <translation>Показать журнал</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="654"/>
+        <location filename="../mainwindow.ui" line="675"/>
         <source>Show the log</source>
         <translation>Показать журнал</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="665"/>
+        <location filename="../mainwindow.ui" line="686"/>
         <source>Prefer scale from metadata</source>
         <translation>При возможности использовать масштаб из метаданных</translation>
     </message>

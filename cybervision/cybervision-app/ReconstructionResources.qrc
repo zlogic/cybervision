@@ -10,6 +10,12 @@
         <file>UI/icons/texture-left.png</file>
         <file>UI/icons/texture-right.png</file>
         <file>UI/icons/cybervision.png</file>
+        <file>UI/icons/minus.png</file>
+        <file>UI/icons/plus.png</file>
+        <file>UI/icons/disk.png</file>
+        <file>UI/icons/document-import.png</file>
+        <file>UI/icons/border-draw.png</file>
+        <file>UI/icons/pencil-ruler.png</file>
     </qresource>
     <qresource prefix="/opencl">
         <file alias="PointMatcherKernel.cl">Reconstruction/PointMatcherKernel.cl</file>
