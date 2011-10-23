@@ -337,7 +337,7 @@ namespace cybervision{
 			}
 		}
 		normal= normal/N;
-		if(N==0 || normal.x()==std::numeric_limits<qreal>::quiet_NaN() || normal.y()==std::numeric_limits<qreal>::quiet_NaN() || normal.z()==std::numeric_limits<qreal>::quiet_NaN())
+		if(N==0 || std::isnan(normal.x()) || std::isnan(normal.y()) || std::isnan(normal.z()))
 			normal= QVector3D(0,0,0);//This is not good!
 		return normal;
 	}
@@ -345,7 +345,7 @@ namespace cybervision{
 	QVector3D Sculptor::calcNormal(const QVector3D& a, const QVector3D& b)const{
 		QVector3D dotProduct=QVector3D::crossProduct(a,b);
 		QVector3D normal= dotProduct/dotProduct.length();
-		if(normal.x()==std::numeric_limits<qreal>::quiet_NaN() || normal.y()==std::numeric_limits<qreal>::quiet_NaN() || normal.z()==std::numeric_limits<qreal>::quiet_NaN())
+		if(std::isnan(normal.x()) || std::isnan(normal.y()) || std::isnan(normal.z()))
 			normal= QVector3D(0,0,0);//This is not good!
 		return normal;
 	}

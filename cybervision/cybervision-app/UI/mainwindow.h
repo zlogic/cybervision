@@ -28,6 +28,8 @@ private:
 
 	QDoubleValidator scaleXYValidator,scaleZValidator,angleValidator;
 
+	bool inspectorOk;
+
 	//Updates widgets enabled/disabled/visible status
 	void updateWidgetStatus();
 
@@ -63,6 +65,7 @@ private slots:
 	void on_texture2ToolButton_clicked();
 	void on_textureNoneToolButton_clicked();
 	void on_crosssectionButton_clicked(bool checked);
+	void on_crosssectionPSpinBox_valueChanged(int arg1);
 };
 
 #endif // MAINWINDOW_H

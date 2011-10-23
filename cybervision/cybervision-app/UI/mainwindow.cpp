@@ -8,6 +8,7 @@
 #include "Reconstruction/inspector.h"
 
 MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWindow){
+	inspectorOk= false;
     ui->setupUi(this);
 	thread.setUi(this);
 	updateWidgetStatus();
@@ -37,6 +38,8 @@ void MainWindow::updateWidgetStatus(){
 	ui->deleteImageButton->setEnabled(!ui->imageList->selectedItems().empty());
 	ui->saveButton->setEnabled(ui->openGLViewport->getSurface3D().isOk());
 	ui->crosssectionButton->setEnabled(ui->openGLViewport->getSurface3D().isOk());
+	ui->crosssectionPSpinBox->setVisible(inspectorOk);
+	ui->crosssectionRoughnessParametersLabel->setVisible(inspectorOk);
 
 	scaleXYValidator.setBottom(0.0);
 	scaleZValidator.setBottom(0.0);
@@ -60,6 +63,43 @@ void MainWindow::updateSurfaceStats(){
 		ui->statisticsLabel->setText(QString(tr("Depth range: %1 m\nBase depth: %2 m\nMedian depth: %3 m")).arg(maxDepth-minDepth).arg(baseDepth).arg(medianDepth));
 	else
 		ui->statisticsLabel->setText(tr("No surface available"));
+
+	QPair<QVector3D,QVector3D> crossSectionLine= ui->openGLViewport->getCrossSectionLine();
+	inspectorOk= crossSectionLine.first!=crossSectionLine.second;
+
+	//Compute surface roughness, if possible
+	cybervision::Inspector inspector(ui->openGLViewport->getSurface3D());
+	inspector.updateCrossSection(crossSectionLine.first,crossSectionLine.second,ui->crosssectionPSpinBox->value());
+
+	//Set the cross-section image
+	QImage img= inspector.renderCrossSection(ui->crosssectionImage->size());
+
+	if(!inspectorOk){
+		img= QImage(0,0);
+	}
+	ui->crosssectionImage->setPixmap(QPixmap::fromImage(img));
+
+	//Set the roughness parameters
+	QString heightParamsString,stepParamsString;
+	if(inspectorOk){
+		heightParamsString= QString(tr("Ra= %1 m\nRz= %2 m\nRmax= %3 m"))
+				.arg(inspector.getRoughnessRa())
+				.arg(inspector.getRoughnessRz())
+				.arg(inspector.getRoughnessRmax());
+		stepParamsString= QString(tr("S= %1 m\nSm= %2 m\ntp= %3"))
+				.arg(inspector.getRoughnessS())
+				.arg(inspector.getRoughnessSm())
+				.arg(inspector.getRoughnessTp());
+
+	}else{
+		heightParamsString= "";
+		stepParamsString= "";
+	}
+
+	ui->crosssectionPSpinBox->setVisible(inspectorOk);
+	ui->crosssectionRoughnessParametersLabel->setVisible(inspectorOk);
+	ui->crosssectionHeightStatsLabel->setText(heightParamsString);
+	ui->crosssectionStepStatsLabel->setText(stepParamsString);
 }
 
 
@@ -147,22 +187,7 @@ void MainWindow::viewerSelectedPointUpdated(QVector3D point){
 
 void MainWindow::viewerCrosssectionLineChanged(QVector3D start, QVector3D end){
 	ui->crosssectionButton->setChecked(false);
-	cybervision::Inspector inspector(ui->openGLViewport->getSurface3D());
-	inspector.updateCrossSection(start,end);
-
-	//Set the cross-section image
-	QImage img= inspector.renderCrossSection(ui->crosssectionImage->size());
-	ui->crosssectionImage->setPixmap(QPixmap::fromImage(img));
-
-	//Set the height parameters
-	QString heightParamsString= QString(tr("Height parameters\nRa= %1 m\nRz= %2 m\nRmax= %3 m\nS= %4 m\nSm= %5 m\ntp=%6"))
-			.arg(inspector.getRoughnessRa())
-			.arg(inspector.getRoughnessRz())
-			.arg(inspector.getRoughnessRmax())
-			.arg(0)
-			.arg(0)
-			.arg(0);
-	ui->crosssectionLabel->setText(heightParamsString);
+	updateSurfaceStats();
 }
 
 void MainWindow::on_startProcessButton_clicked(){
@@ -302,4 +327,8 @@ void MainWindow::on_crosssectionButton_clicked(bool checked){
 		}
 	}else
 		ui->openGLViewport->setDrawCrossSectionLine(checked);
+}
+
+void MainWindow::on_crosssectionPSpinBox_valueChanged(int arg1){
+	updateSurfaceStats();
 }

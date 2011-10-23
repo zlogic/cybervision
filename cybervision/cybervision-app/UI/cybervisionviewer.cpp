@@ -78,6 +78,14 @@ QVector3D CybervisionViewer::getSelectedPoint() const{
 	return clickLocation;
 }
 
+QPair<QVector3D,QVector3D> CybervisionViewer::getCrossSectionLine() const{
+	QPair<QVector3D,QVector3D> result(
+				QVector3D(crossSectionLine.first.x()/surface.getScale(),crossSectionLine.first.y()/surface.getScale(),0),
+				QVector3D(crossSectionLine.second.x()/surface.getScale(),crossSectionLine.second.y()/surface.getScale(),0)
+				);
+	return result;
+}
+
 //OpenGL-specific stuff
 
 void CybervisionViewer::initializeGL(){
@@ -460,8 +468,8 @@ void CybervisionViewer::mouseReleaseEvent(QMouseEvent *event){
 	}
 
 	if(drawingCrossSectionLine){
-		emit crossSectionLineChanged(QVector3D(crossSectionLine.first.x()/surface.getScale(),crossSectionLine.first.y()/surface.getScale(),0),
-									 QVector3D(crossSectionLine.second.x()/surface.getScale(),crossSectionLine.second.y()/surface.getScale(),0));
+		QPair<QVector3D,QVector3D> result= getCrossSectionLine();
+		emit crossSectionLineChanged(result.first,result.second);
 		drawingCrossSectionLine= false;
 	}
 	emit selectedPointUpdated(QVector3D(clickLocation.x()/surface.getScale(),clickLocation.y()/surface.getScale(),clickLocation.z()/surface.getScale()-surface.getBaseDepth()));

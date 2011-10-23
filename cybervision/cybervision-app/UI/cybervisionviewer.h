@@ -60,6 +60,7 @@ public:
 	void setDrawCrossSectionLine(bool enable);
 	const cybervision::Surface& getSurface3D()const;
 	QVector3D getSelectedPoint() const;
+	QPair<QVector3D,QVector3D> getCrossSectionLine()const;
 protected:
 	//Inherited opengl stuff
 	void initializeGL();
