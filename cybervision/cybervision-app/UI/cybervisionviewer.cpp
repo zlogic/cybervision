@@ -74,6 +74,10 @@ const cybervision::Surface& CybervisionViewer::getSurface3D()const{
 	return surface;
 }
 
+QMutex& CybervisionViewer::getSurfaceMutex(){
+	return surfaceMutex;
+}
+
 QVector3D CybervisionViewer::getSelectedPoint() const{
 	return clickLocation;
 }
@@ -472,12 +476,15 @@ void CybervisionViewer::mouseReleaseEvent(QMouseEvent *event){
 		emit crossSectionLineChanged(result.first,result.second);
 		drawingCrossSectionLine= false;
 	}
-	emit selectedPointUpdated(QVector3D(clickLocation.x()/surface.getScale(),clickLocation.y()/surface.getScale(),clickLocation.z()/surface.getScale()-surface.getBaseDepth()));
+	{
+		QMutexLocker lock(&surfaceMutex);
+		emit selectedPointUpdated(QVector3D(clickLocation.x()/surface.getScale(),clickLocation.y()/surface.getScale(),clickLocation.z()/surface.getScale()-surface.getBaseDepth()));
+	}
 
 	updateGL();
 }
 
-QVector3D CybervisionViewer::getClickLocation(const QPointF& location) const{
+QVector3D CybervisionViewer::getClickLocation(const QPointF& location){
 	//See http://nehe.gamedev.net/article/using_gluunproject/16013/
 	GLint viewport[4];
 	GLdouble modelview[16];
@@ -495,12 +502,14 @@ QVector3D CybervisionViewer::getClickLocation(const QPointF& location) const{
 
 	gluUnProject(winX,winY,winZ,modelview,projection,viewport,&posX,&posY,&posZ);
 
-	if(posX/surface.getScale()>surface.getImageSize().right()
-			|| posX/surface.getScale()<surface.getImageSize().left()
-			|| posY/surface.getScale()>surface.getImageSize().bottom()
-			|| posY/surface.getScale()<surface.getImageSize().top())
-		return QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
-
+	{
+		QMutexLocker lock(&surfaceMutex);
+		if(posX/surface.getScale()>surface.getImageSize().right()
+				|| posX/surface.getScale()<surface.getImageSize().left()
+				|| posY/surface.getScale()>surface.getImageSize().bottom()
+				|| posY/surface.getScale()<surface.getImageSize().top())
+			return QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+	}
 	return QVector3D(posX,posY,posZ);
 }
 

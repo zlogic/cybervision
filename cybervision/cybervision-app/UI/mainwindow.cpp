@@ -23,6 +23,12 @@ MainWindow::~MainWindow(){
 }
 
 void MainWindow::updateWidgetStatus(){
+	bool surfaceIsOK;
+	{
+		QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
+		surfaceIsOK= ui->openGLViewport->getSurface3D().isOk();
+	}
+
 	if(ui->imageList->count()==0){
 		ui->selectionHintLabel->setVisible(false);
 		ui->deleteImageButton->setEnabled(false);
@@ -36,8 +42,8 @@ void MainWindow::updateWidgetStatus(){
 	}
 
 	ui->deleteImageButton->setEnabled(!ui->imageList->selectedItems().empty());
-	ui->saveButton->setEnabled(ui->openGLViewport->getSurface3D().isOk());
-	ui->crosssectionButton->setEnabled(ui->openGLViewport->getSurface3D().isOk());
+	ui->saveButton->setEnabled(surfaceIsOK);
+	ui->crosssectionButton->setEnabled(surfaceIsOK);
 	ui->crosssectionPSpinBox->setVisible(inspectorOk);
 	ui->crosssectionRoughnessParametersLabel->setVisible(inspectorOk);
 
@@ -55,6 +61,7 @@ void MainWindow::updateWidgetStatus(){
 
 
 void MainWindow::updateSurfaceStats(){
+	QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
 	qreal minDepth= ui->openGLViewport->getSurface3D().getMinDepth();
 	qreal maxDepth= ui->openGLViewport->getSurface3D().getMaxDepth();
 	qreal medianDepth= ui->openGLViewport->getSurface3D().getMedianDepth();
@@ -224,6 +231,8 @@ void MainWindow::on_saveButton_clicked(){
 	QString selectedFilter;
 	QString fileName = QFileDialog::getSaveFileName(this,tr("Save the surface"),startPath,filter,&selectedFilter,0);
 	if(!fileName.isNull()){
+		QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
+
 		QFileInfo fileInfo(fileName);
 		if(selectedFilter==formats[0]){
 			if(fileInfo.suffix()!="txt")
@@ -346,6 +355,7 @@ void MainWindow::on_textureNoneToolButton_clicked(){
 
 void MainWindow::on_crosssectionButton_clicked(bool checked){
 	if(checked){
+		QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
 		if(ui->openGLViewport->getSurface3D().isOk())
 			ui->openGLViewport->setDrawCrossSectionLine(checked);
 		else{

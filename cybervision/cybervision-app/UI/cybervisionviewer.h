@@ -45,7 +45,7 @@ protected:
 	QVector3D clickLocation;
 	QPair<QVector3D,QVector3D> crossSectionLine;
 	//Click detection
-	QVector3D getClickLocation(const QPointF&)const;
+	QVector3D getClickLocation(const QPointF&);
 	void drawPoint(const QVector3D&)const;
 	//Cross-section line
 	void drawLine(const QVector3D& start,const QVector3D& end)const;
@@ -59,6 +59,7 @@ public:
 	void setShowGrid(bool show);
 	void setDrawCrossSectionLine(bool enable);
 	const cybervision::Surface& getSurface3D()const;
+	QMutex& getSurfaceMutex();
 	QVector3D getSelectedPoint() const;
 	QPair<QVector3D,QVector3D> getCrossSectionLine()const;
 protected:
