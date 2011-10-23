@@ -135,6 +135,8 @@ void MainWindow::loadDebugPreferences(){
 					QListWidgetItem* newItem= new QListWidgetItem(name);
 					newItem->setData(32,QDir::convertSeparators(fileName));
 					ui->imageList->addItem(newItem);
+
+					startPath= QFileInfo(fileName).canonicalPath();
 				}else if(scaleXYRegexp.exactMatch(line) && scaleXYRegexp.capturedTexts().size()>=2){
 					ui->scaleXYEdit->setText(scaleXYRegexp.capturedTexts().at(1));
 				}else if(scaleZRegexp.exactMatch(line) && scaleZRegexp.capturedTexts().size()>=2){
@@ -220,7 +222,7 @@ void MainWindow::on_saveButton_clicked(){
 	for(QStringList::const_iterator it=formats.begin();it!=formats.end();it++)
 		filter.append(*it+";;");
 	QString selectedFilter;
-	QString fileName = QFileDialog::getSaveFileName(this,tr("Save the surface"),"",filter,&selectedFilter,0);
+	QString fileName = QFileDialog::getSaveFileName(this,tr("Save the surface"),startPath,filter,&selectedFilter,0);
 	if(!fileName.isNull()){
 		QFileInfo fileInfo(fileName);
 		if(selectedFilter==formats[0]){
@@ -252,12 +254,13 @@ void MainWindow::on_saveButton_clicked(){
 			ui->statusBar->showMessage(tr("Bad save format selected"));
 			ui->logTextEdit->appendHtml(QString(tr("<b>Bad save format selected:</b> %1")).arg(selectedFilter));
 		}
+		startPath= fileInfo.canonicalPath();
 	}
 }
 
 void MainWindow::on_loadSurfaceButton_clicked(){
 	QString filter= tr("Cybervision surface") + "(*.cvs);;"+tr("All files")+"(*.*)";
-	QString filename = QFileDialog::getOpenFileName(this,tr("Select surface to load"),"",filter,0,0);
+	QString filename = QFileDialog::getOpenFileName(this,tr("Select surface to load"),startPath,filter,0,0);
 	if(!filename.isNull()){
 		cybervision::Surface surface= cybervision::Surface::fromFile(filename);
 		if(!surface.isOk())
@@ -265,6 +268,8 @@ void MainWindow::on_loadSurfaceButton_clicked(){
 
 		ui->openGLViewport->setSurface3D(surface);
 		updateWidgetStatus();
+
+		startPath= QFileInfo(filename).canonicalPath();
 	}
 }
 
@@ -286,12 +291,14 @@ void MainWindow::on_actionShow_statistics_triggered(bool checked){
 
 void MainWindow::on_addImageButton_clicked(){
 	QString filter= tr("Images") + "(*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;"+tr("All files")+"(*.*)";
-	QStringList filenames = QFileDialog::getOpenFileNames(this,tr("Select images to add"),"",filter,0,0);
+	QStringList filenames = QFileDialog::getOpenFileNames(this,tr("Select images to add"),startPath,filter,0,0);
 	for(QStringList::const_iterator it=filenames.begin();it!=filenames.end();it++){
 		QString name= QFileInfo(*it).fileName();
 		QListWidgetItem* newItem= new QListWidgetItem(name);
 		newItem->setData(32,QDir::convertSeparators(*it));
 		ui->imageList->addItem(newItem);
+
+		startPath= QFileInfo(*it).canonicalPath();
 	}
 
 	updateWidgetStatus();

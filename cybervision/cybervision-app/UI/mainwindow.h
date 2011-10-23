@@ -28,6 +28,8 @@ private:
 
 	QDoubleValidator scaleXYValidator,scaleZValidator,angleValidator;
 
+	QString startPath;
+
 	bool inspectorOk;
 
 	//Updates widgets enabled/disabled/visible status
