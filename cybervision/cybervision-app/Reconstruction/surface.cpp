@@ -306,5 +306,59 @@ void Surface::saveSceneJS(QString fileName)const{
 	file.close();
 }
 
+void Surface::saveCybervision(QString fileName) const{
+	QFile file(fileName);
+	file.open(QIODevice::WriteOnly);
+	QDataStream out(&file);
+
+	out<<(int)1;//Image format version
+
+	out<<points.size();
+	for(QList<Point>::const_iterator it= points.begin();it!=points.end();it++)
+		out<<it->coord<<it->normal<<it->uv;
+
+	out<<triangles.size();
+	for(QList<Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++)
+		out<<it->a<<it->b<<it->c<<it->normal;
+
+	out<<scale;
+	out<<medianDepth<<baseDepth<<minDepth<<maxDepth;
+	out<<imageSize;
+	out<<image1<<image2;
+	file.close();
 }
 
+const Surface Surface::fromFile(QString fileName){
+	Surface surface;
+	QFile file(fileName);
+	file.open(QIODevice::ReadOnly);
+	QDataStream in(&file);
+
+	int version;
+	in>>version;
+	if(version==1){
+		int pointsCount;
+		in>>pointsCount;
+		for(int i=0;i<pointsCount;i++){
+			Point point;
+			in>>point.coord>>point.normal>>point.uv;
+			surface.points<<point;
+		}
+		int trianglesCount;
+		in>>trianglesCount;
+		for(int i=0;i<trianglesCount;i++){
+			Triangle triangle;
+			in>>triangle.a>>triangle.b>>triangle.c>>triangle.normal;
+			surface.triangles<<triangle;
+		}
+		in>>surface.scale;
+		in>>surface.medianDepth>>surface.baseDepth>>surface.minDepth>>surface.maxDepth;
+		in>>surface.imageSize;
+		in>>surface.image1>>surface.image2;
+	}
+
+	file.close();
+	return surface;
+}
+
+}

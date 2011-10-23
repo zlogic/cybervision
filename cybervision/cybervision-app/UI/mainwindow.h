@@ -57,6 +57,7 @@ private slots:
 	void on_actionShow_statistics_triggered(bool checked);
 	void on_inspectorDockWidget_visibilityChanged(bool visible);
 	void on_saveButton_clicked();
+	void on_loadSurfaceButton_clicked();
 	void on_startProcessButton_clicked();
 	void on_moveToolButton_toggled(bool checked);
 	void on_rotateToolButton_toggled(bool checked);

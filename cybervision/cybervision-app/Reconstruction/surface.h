@@ -78,6 +78,10 @@ public:
 	void savePolygons(QString fileName)const;
 	void saveCollada(QString fileName)const;
 	void saveSceneJS(QString fileName)const;
+	void saveCybervision(QString fileName)const;
+
+	//Loads the image from file
+	static const Surface fromFile(QString fileName);
 signals:
 
 public slots:

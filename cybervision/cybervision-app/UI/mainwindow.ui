@@ -64,7 +64,7 @@
           </property>
          </widget>
         </item>
-        <item row="8" column="0" colspan="2">
+        <item row="10" column="0" colspan="2">
          <widget class="QPushButton" name="startProcessButton">
           <property name="locale">
            <locale language="English" country="UnitedStates"/>
@@ -74,7 +74,7 @@
           </property>
          </widget>
         </item>
-        <item row="9" column="0" colspan="2">
+        <item row="12" column="0" colspan="2">
          <widget class="QPushButton" name="saveButton">
           <property name="locale">
            <locale language="English" country="UnitedStates"/>
@@ -158,6 +158,13 @@
           </property>
           <property name="alignment">
            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item row="13" column="0" colspan="2">
+         <widget class="QPushButton" name="loadSurfaceButton">
+          <property name="text">
+           <string>Load reconstructed surface</string>
           </property>
          </widget>
         </item>

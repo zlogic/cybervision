@@ -151,6 +151,7 @@ void MainWindow::loadDebugPreferences(){
 void MainWindow::processStarted(){
 	ui->startProcessButton->setEnabled(false);
 	ui->saveButton->setEnabled(false);
+	ui->loadSurfaceButton->setEnabled(false);
 	ui->logTextEdit->clear();
 	ui->logTextEdit->setCurrentCharFormat(QTextCharFormat());
 }
@@ -173,6 +174,7 @@ void MainWindow::processStopped(QString resultText,cybervision::Surface surface)
 		ui->saveButton->setEnabled(true);
 		ui->logTextEdit->appendHtml("<b>"+resultText+"</b>");
 	}
+	ui->loadSurfaceButton->setEnabled(true);
 
 	ui->openGLViewport->setSurface3D(surface);
 	updateWidgetStatus();
@@ -213,6 +215,7 @@ void MainWindow::on_saveButton_clicked(){
 	formats<<tr("PNG image")+ " (*.png)";
 	formats<<tr("SceneJS model")+ " (*.js)";
 	formats<<tr("COLLADA model")+ " (*.dae)";
+	formats<<tr("Cybervision surface")+ " (*.cvs)";
 	QString filter;
 	for(QStringList::const_iterator it=formats.begin();it!=formats.end();it++)
 		filter.append(*it+";;");
@@ -241,10 +244,27 @@ void MainWindow::on_saveButton_clicked(){
 			if(fileInfo.suffix()!="dae")
 				fileName.append(".dae");
 			ui->openGLViewport->getSurface3D().saveCollada(fileName);
+		}else if(selectedFilter==formats[5]){
+			if(fileInfo.suffix()!="cvs")
+				fileName.append(".cvs");
+			ui->openGLViewport->getSurface3D().saveCybervision(fileName);
 		}else{
 			ui->statusBar->showMessage(tr("Bad save format selected"));
 			ui->logTextEdit->appendHtml(QString(tr("<b>Bad save format selected:</b> %1")).arg(selectedFilter));
 		}
+	}
+}
+
+void MainWindow::on_loadSurfaceButton_clicked(){
+	QString filter= tr("Cybervision surface") + "(*.cvs);;"+tr("All files")+"(*.*)";
+	QString filename = QFileDialog::getOpenFileName(this,tr("Select surface to load"),"",filter,0,0);
+	if(!filename.isNull()){
+		cybervision::Surface surface= cybervision::Surface::fromFile(filename);
+		if(!surface.isOk())
+			ui->logTextEdit->appendHtml("<b>"+QString(tr("Error loading surface from %1")).arg(QDir::convertSeparators(filename))+"</b>");
+
+		ui->openGLViewport->setSurface3D(surface);
+		updateWidgetStatus();
 	}
 }
 
@@ -332,3 +352,4 @@ void MainWindow::on_crosssectionButton_clicked(bool checked){
 void MainWindow::on_crosssectionPSpinBox_valueChanged(int arg1){
 	updateSurfaceStats();
 }
+
