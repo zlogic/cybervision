@@ -32,7 +32,7 @@ void cybervision::Inspector::updateCrossSection(const QVector3D &start, const QV
 			qreal tPolygon= qAbs(lineAB.dx())>qAbs(lineAB.dy())?
 						(intersectionPoint.x()-lineAB.x1())/(lineAB.x2()-(lineAB.x1())):
 						(intersectionPoint.y()-lineAB.y1())/(lineAB.y2()-(lineAB.y1()));
-			qreal z= surface.points[it->a].coord.z()*tPolygon+surface.points[it->b].coord.z()*(1-tPolygon);
+			qreal z= surface.points[it->a].coord.z()*(1-tPolygon)+surface.points[it->b].coord.z()*tPolygon;
 			intersections.insert(tLine,z);
 		}
 		if(lineBC.intersect(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
@@ -42,7 +42,7 @@ void cybervision::Inspector::updateCrossSection(const QVector3D &start, const QV
 			qreal tPolygon= qAbs(lineBC.dx())>qAbs(lineBC.dy())?
 						(intersectionPoint.x()-lineBC.x1())/(lineBC.x2()-(lineBC.x1())):
 						(intersectionPoint.y()-lineBC.y1())/(lineBC.y2()-(lineBC.y1()));
-			qreal z= surface.points[it->b].coord.z()*tPolygon+surface.points[it->c].coord.z()*(1-tPolygon);
+			qreal z= surface.points[it->b].coord.z()*(1-tPolygon)+surface.points[it->a].coord.z()*tPolygon;
 			intersections.insert(tLine,z);
 		}
 		if(lineCA.intersect(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
@@ -52,7 +52,7 @@ void cybervision::Inspector::updateCrossSection(const QVector3D &start, const QV
 			qreal tPolygon= qAbs(lineCA.dx())>qAbs(lineCA.dy())?
 						(intersectionPoint.x()-lineCA.x1())/(lineCA.x2()-(lineCA.x1())):
 						(intersectionPoint.y()-lineCA.y1())/(lineCA.y2()-(lineCA.y1()));
-			qreal z= surface.points[it->c].coord.z()*tPolygon+surface.points[it->a].coord.z()*(1-tPolygon);
+			qreal z= surface.points[it->c].coord.z()*(1-tPolygon)+surface.points[it->a].coord.z()*tPolygon;
 			intersections.insert(tLine,z);
 		}
 	}
