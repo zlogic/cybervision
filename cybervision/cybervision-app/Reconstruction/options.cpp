@@ -33,7 +33,7 @@ const int Options::gridResolution= 6;
 const bool Options::gridAddRealPoints= false;
 const double Options::gridCellArea= 4.0;
 const float Options::gridPeakFilterRadius= 5;
-const float Options::gridPeakSize= 1.2;
+const float Options::gridPeakSize= 2.0;
 const Options::StatsBaseLevelMethod Options::statsBaseLevelMethod= Options::STATS_BASELEVEL_HISTOGRAM;
 const int Options::statsDepthHistogramSize= 50;
 
