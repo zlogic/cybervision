@@ -502,7 +502,7 @@
    <property name="minimumSize">
     <size>
      <width>250</width>
-     <height>475</height>
+     <height>477</height>
     </size>
    </property>
    <property name="features">
@@ -622,9 +622,6 @@
         </item>
         <item row="4" column="1">
          <widget class="QSpinBox" name="crosssectionPSpinBox">
-          <property name="frame">
-           <bool>false</bool>
-          </property>
           <property name="suffix">
            <string notr="true">%</string>
           </property>
@@ -704,6 +701,26 @@
    <container>1</container>
   </customwidget>
  </customwidgets>
+ <tabstops>
+  <tabstop>addImageButton</tabstop>
+  <tabstop>deleteImageButton</tabstop>
+  <tabstop>imageList</tabstop>
+  <tabstop>angleEdit</tabstop>
+  <tabstop>scaleXYEdit</tabstop>
+  <tabstop>scaleZEdit</tabstop>
+  <tabstop>startProcessButton</tabstop>
+  <tabstop>saveButton</tabstop>
+  <tabstop>loadSurfaceButton</tabstop>
+  <tabstop>crosssectionButton</tabstop>
+  <tabstop>crosssectionPSpinBox</tabstop>
+  <tabstop>rotateToolButton</tabstop>
+  <tabstop>moveToolButton</tabstop>
+  <tabstop>texture1ToolButton</tabstop>
+  <tabstop>textureNoneToolButton</tabstop>
+  <tabstop>texture2ToolButton</tabstop>
+  <tabstop>gridToolButton</tabstop>
+  <tabstop>logTextEdit</tabstop>
+ </tabstops>
  <resources>
   <include location="../ReconstructionResources.qrc"/>
  </resources>
