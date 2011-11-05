@@ -2,6 +2,7 @@
 #define CROSSSECTIONWINDOW_H
 
 #include <QDialog>
+#include <QGraphicsScene>
 #include <Reconstruction/crosssection.h>
 
 namespace Ui {
@@ -19,18 +20,23 @@ public:
 	//Updates the displayed cross-section
 	void updateCrossSection(const cybervision::CrossSection&);
 
-	//Updates widgets enabled/disabled/visible status
-	void updateWidgetStatus();
+	//Updates the cross-section image and stats labels
+	void updateSurfaceStats();
 protected:
 	//Sends signal on close
 	void closeEvent(QCloseEvent *event);
+	void resizeEvent(QResizeEvent *);
+
+	//Updates widgets enabled/disabled/visible status
+	void updateWidgetStatus();
+
+	void renderCrossSection();
 private:
 	Ui::CrossSectionWindow *ui;
 
 	cybervision::CrossSection crossSection;
 
-	//Updates the cross-section image and stats labels
-	void updateSurfaceStats();
+	QGraphicsScene crossSectionScene;
 signals:
 	void closed();
 private slots:

@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QImage>
 #include <QVector3D>
+#include <QGraphicsScene>
 
 namespace cybervision{
 
@@ -19,7 +20,8 @@ protected:
 	bool ok;
 	//Computed cross-section data
 	QList<QPointF> crossSection;//profile
-	qreal mA,mB,mL;//average line (y=bx+a)
+	qreal mA,mB,mL;//average line equation (y=bx+a)
+	QLineF mLine;//average line points
 	qreal Ra,Rz,Rmax;//Height parameters
 	qreal S,Sm,tp;//Step parameters
 
@@ -33,11 +35,11 @@ public:
 	//Computation code for roughness analysis
 	void computeParams(int p);
 
-	//Create the cross-section image
-	QImage renderCrossSection(const QSize& imageSize)const;
-
 	//Returns the cross-section profile
 	QList<QPointF> getCrossSection()const;
+
+	//Returns the average line
+	QLineF getMLine()const;
 
 	//Returns if cross-section contains valid information
 	bool isOk()const;

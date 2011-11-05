@@ -75,8 +75,10 @@ void MainWindow::updateSurfaceStats(){
 	cybervision::CrossSection crossSection;
 	crossSection.computeCrossSection(ui->openGLViewport->getSurface3D(),crossSectionLine.first,crossSectionLine.second);
 	crossSectionWindow.updateCrossSection(crossSection);
-	if(crossSection.isOk())
+	if(crossSection.isOk()){
 		crossSectionWindow.show();
+		crossSectionWindow.updateSurfaceStats();
+	}
 }
 
 
