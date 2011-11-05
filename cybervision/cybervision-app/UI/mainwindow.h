@@ -6,6 +6,7 @@
 #include <QDoubleValidator>
 
 #include <UI/processthread.h>
+#include <UI/crosssectionwindow.h>
 
 namespace Ui
 {
@@ -23,14 +24,13 @@ public:
 
 private:
 	Ui::MainWindow *ui;
+	CrossSectionWindow crossSectionWindow;
 
 	ProcessThread thread;
 
 	QDoubleValidator scaleXYValidator,scaleZValidator,angleValidator;
 
 	QString startPath;
-
-	bool inspectorOk;
 
 	//Updates widgets enabled/disabled/visible status
 	void updateWidgetStatus();
@@ -50,6 +50,9 @@ private slots:
 	void viewerSelectedPointUpdated(QVector3D);
 	void viewerCrosssectionLineChanged(QVector3D start,QVector3D end);
 
+	//Slots for receiving messages from cross-section viewer
+	void crosssectionClosed();
+
 	//UI slots
 	void on_addImageButton_clicked();
 	void on_deleteImageButton_clicked();
@@ -58,6 +61,7 @@ private slots:
 	void on_logDockWidget_visibilityChanged(bool visible);
 	void on_actionShow_statistics_triggered(bool checked);
 	void on_inspectorDockWidget_visibilityChanged(bool visible);
+	void on_actionShow_cross_section_window_triggered(bool checked);
 	void on_saveButton_clicked();
 	void on_loadSurfaceButton_clicked();
 	void on_startProcessButton_clicked();
@@ -68,7 +72,6 @@ private slots:
 	void on_texture2ToolButton_clicked();
 	void on_textureNoneToolButton_clicked();
 	void on_crosssectionButton_clicked(bool checked);
-	void on_crosssectionPSpinBox_valueChanged(int arg1);
 };
 
 #endif // MAINWINDOW_H

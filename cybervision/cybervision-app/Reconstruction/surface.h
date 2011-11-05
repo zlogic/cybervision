@@ -13,7 +13,7 @@ namespace cybervision{
  */
 class Surface{
 	friend class Sculptor;
-	friend class Inspector;
+	friend class CrossSection;
 protected:
 	//Internal classes
 	typedef int PolygonPoint;//Index of point in array. NOT checked! TODO: remove int limits

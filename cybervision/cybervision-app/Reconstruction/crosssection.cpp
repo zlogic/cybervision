@@ -1,4 +1,6 @@
-#include "inspector.h"
+#include "crosssection.h"
+
+#include <Reconstruction/surface.h>
 
 #include <QMultiMap>
 #include <QPainter>
@@ -6,16 +8,32 @@
 #include <limits>
 #include <cmath>
 
-cybervision::Inspector::Inspector(const cybervision::Surface&surface, QObject *parent):QObject(parent),surface(surface) {
+cybervision::CrossSection::CrossSection(QObject *parent):QObject(parent) {
 	mA= std::numeric_limits<qreal>::quiet_NaN(), mB= std::numeric_limits<qreal>::quiet_NaN(), mL= std::numeric_limits<qreal>::quiet_NaN();
 	Ra= std::numeric_limits<qreal>::quiet_NaN(), Rz= std::numeric_limits<qreal>::quiet_NaN(), Rmax= std::numeric_limits<qreal>::quiet_NaN();
 	S= std::numeric_limits<qreal>::quiet_NaN(),  Sm= std::numeric_limits<qreal>::quiet_NaN(), tp= std::numeric_limits<qreal>::quiet_NaN();
+
+	ok= false;
 }
 
-void cybervision::Inspector::updateCrossSection(const QVector3D &start, const QVector3D &end,int p){
+
+void cybervision::CrossSection::operator =(const cybervision::CrossSection &crossSection){
+	mA= crossSection.mA, mB= crossSection.mB, mL= crossSection.mL;
+	Ra= crossSection.Ra, Rz= crossSection.Rz, Rmax= crossSection.Rmax;
+	S= crossSection.S,   Sm= crossSection.Sm, tp= crossSection.tp;
+	this->crossSection= crossSection.crossSection;
+	ok= crossSection.ok;
+}
+
+
+void cybervision::CrossSection::computeCrossSection(const cybervision::Surface&surface,const QVector3D &start, const QVector3D &end){
 	mA= std::numeric_limits<qreal>::quiet_NaN(), mB= std::numeric_limits<qreal>::quiet_NaN(), mL= std::numeric_limits<qreal>::quiet_NaN();
 	Ra= std::numeric_limits<qreal>::quiet_NaN(), Rz= std::numeric_limits<qreal>::quiet_NaN(), Rmax= std::numeric_limits<qreal>::quiet_NaN();
 	S= std::numeric_limits<qreal>::quiet_NaN(),  Sm= std::numeric_limits<qreal>::quiet_NaN(), tp= std::numeric_limits<qreal>::quiet_NaN();
+	ok= false;
+
+	if(start==end)
+		return;
 
 	QMultiMap<qreal,qreal> intersections;
 	QLineF intersectionLine(start.x(),start.y(),end.x(),end.y());
@@ -72,11 +90,12 @@ void cybervision::Inspector::updateCrossSection(const QVector3D &start, const QV
 		}
 	}
 
-	if(crossSection.size()>0)
-		computeParams(p);
+	ok= intersectionLine.length()>0 && crossSection.size()>0;
 }
 
-void cybervision::Inspector::computeParams(int p){
+void cybervision::CrossSection::computeParams(int p){
+	if(!ok)
+		return;
 	QLineF mLine,mLineNormal;
 	{
 		//Compute middle-line with least-squares
@@ -264,7 +283,7 @@ void cybervision::Inspector::computeParams(int p){
 	}
 }
 
-QImage cybervision::Inspector::renderCrossSection(const QSize& imageSize) const{
+QImage cybervision::CrossSection::renderCrossSection(const QSize& imageSize) const{
 	//Prepare data
 	qreal minX= std::numeric_limits<qreal>::infinity(),
 			minY= std::numeric_limits<qreal>::infinity(),
@@ -312,10 +331,13 @@ QImage cybervision::Inspector::renderCrossSection(const QSize& imageSize) const{
 	return img;
 }
 
-QList<QPointF> cybervision::Inspector::getCrossSection() const{	return crossSection; }
-qreal cybervision::Inspector::getRoughnessRa() const{ return Ra; }
-qreal cybervision::Inspector::getRoughnessRz() const{ return Rz; }
-qreal cybervision::Inspector::getRoughnessRmax() const{ return Rmax; }
-qreal cybervision::Inspector::getRoughnessS() const{ return S; }
-qreal cybervision::Inspector::getRoughnessSm() const{ return Sm; }
-qreal cybervision::Inspector::getRoughnessTp() const{ return tp; }
+
+bool cybervision::CrossSection::isOk() const{ return ok; }
+QList<QPointF> cybervision::CrossSection::getCrossSection() const{	return crossSection; }
+qreal cybervision::CrossSection::getRoughnessRa() const{ return Ra; }
+qreal cybervision::CrossSection::getRoughnessRz() const{ return Rz; }
+qreal cybervision::CrossSection::getRoughnessRmax() const{ return Rmax; }
+qreal cybervision::CrossSection::getRoughnessS() const{ return S; }
+qreal cybervision::CrossSection::getRoughnessSm() const{ return Sm; }
+qreal cybervision::CrossSection::getRoughnessTp() const{ return tp; }
+

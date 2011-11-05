@@ -12,14 +12,15 @@ SOURCES += main.cpp \
 	Reconstruction/pointtriangulator.cpp \
 	Reconstruction/reconstructor.cpp \
 	Reconstruction/options.cpp \
-	UI/processthread.cpp \
-	UI/cybervisionviewer.cpp \
 	Reconstruction/sculptor.cpp \
 	Reconstruction/surface.cpp \
+	Reconstruction/imageloader.cpp \
+	Reconstruction/pointmatcheropencl.cpp \
+	Reconstruction/crosssection.cpp \
 	KDTree/kdtreegateway.cpp \
-    Reconstruction/imageloader.cpp \
-    Reconstruction/pointmatcheropencl.cpp \
-    Reconstruction/inspector.cpp
+	UI/processthread.cpp \
+	UI/cybervisionviewer.cpp \
+	UI/crosssectionwindow.cpp
 
 HEADERS += \
 	Reconstruction/pointmatcher.h \
@@ -28,10 +29,11 @@ HEADERS += \
 	Reconstruction/reconstructor.h \
 	Reconstruction/pointtriangulator.h \
 	Reconstruction/options.h \
-	UI/processthread.h \
-	UI/cybervisionviewer.h \
 	Reconstruction/sculptor.h \
 	Reconstruction/surface.h \
+	Reconstruction/imageloader.h \
+	Reconstruction/pointmatcheropencl.h \
+	Reconstruction/crosssection.h \
 	KDTree/region.hpp \
 	KDTree/node.hpp \
 	KDTree/kdtreegateway.h \
@@ -64,12 +66,13 @@ HEADERS += \
 	Eigen/Array \
 	Eigen/Eigen \
 	Eigen/Dense \
-    UI/mainwindow.h \
-    Reconstruction/imageloader.h \
-    Reconstruction/pointmatcheropencl.h \
-    Reconstruction/inspector.h
+	UI/mainwindow.h \
+	UI/processthread.h \
+	UI/cybervisionviewer.h \
+	UI/crosssectionwindow.h
 
-FORMS += UI/mainwindow.ui
+FORMS += UI/mainwindow.ui \
+    UI/crosssectionwindow.ui
 
 RESOURCES += \
 	ReconstructionResources.qrc
@@ -77,8 +80,8 @@ RESOURCES += \
 OTHER_FILES += \
 	Reconstruction/ColladaTemplate.xml \
 	Reconstruction/PointMatcherKernel.cl \
+	Reconstruction/SceneJSTemplate.js \
 	UI/cybervision.rc \
-    Reconstruction/SceneJSTemplate.js \
 	UI/translations/cybervision-app_ru.ts \
     UI/icons/texture-right.png \
     UI/icons/texture-left.png \
@@ -158,14 +161,3 @@ else:win32:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/re
 else:win32:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -lsiftfast
 else:symbian: LIBS += -lsiftfast
 else:unix: LIBS += -L$$OUT_PWD/../libsiftfast -dynamic -lsiftfast
-
-
-
-
-
-
-
-
-
-
-

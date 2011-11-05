@@ -5,10 +5,9 @@
 
 #include <limits>
 
-#include "Reconstruction/inspector.h"
+#include <Reconstruction/crosssection.h>
 
-MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWindow){
-	inspectorOk= false;
+MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWindow), crossSectionWindow(this){
 	ui->setupUi(this);
 	thread.setUi(this);
 	updateWidgetStatus();
@@ -16,6 +15,7 @@ MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWi
 
 	QObject::connect(ui->openGLViewport, SIGNAL(selectedPointUpdated(QVector3D)),this, SLOT(viewerSelectedPointUpdated(QVector3D)),Qt::AutoConnection);
 	QObject::connect(ui->openGLViewport, SIGNAL(crossSectionLineChanged(QVector3D,QVector3D)),this, SLOT(viewerCrosssectionLineChanged(QVector3D,QVector3D)),Qt::AutoConnection);
+	QObject::connect(&crossSectionWindow, SIGNAL(closed()),this, SLOT(crosssectionClosed()),Qt::AutoConnection);
 }
 
 MainWindow::~MainWindow(){
@@ -44,8 +44,6 @@ void MainWindow::updateWidgetStatus(){
 	ui->deleteImageButton->setEnabled(!ui->imageList->selectedItems().empty());
 	ui->saveButton->setEnabled(surfaceIsOK);
 	ui->crosssectionButton->setEnabled(surfaceIsOK);
-	ui->crosssectionPSpinBox->setVisible(inspectorOk);
-	ui->crosssectionRoughnessParametersLabel->setVisible(inspectorOk);
 
 	scaleXYValidator.setBottom(0.0);
 	scaleZValidator.setBottom(0.0);
@@ -72,41 +70,13 @@ void MainWindow::updateSurfaceStats(){
 		ui->statisticsLabel->setText(tr("No surface available"));
 
 	QPair<QVector3D,QVector3D> crossSectionLine= ui->openGLViewport->getCrossSectionLine();
-	inspectorOk= crossSectionLine.first!=crossSectionLine.second;
 
 	//Compute surface roughness, if possible
-	cybervision::Inspector inspector(ui->openGLViewport->getSurface3D());
-	inspector.updateCrossSection(crossSectionLine.first,crossSectionLine.second,ui->crosssectionPSpinBox->value());
-
-	//Set the cross-section image
-	QImage img= inspector.renderCrossSection(ui->crosssectionImage->size());
-
-	if(!inspectorOk){
-		img= QImage(0,0);
-	}
-	ui->crosssectionImage->setPixmap(QPixmap::fromImage(img));
-
-	//Set the roughness parameters
-	QString heightParamsString,stepParamsString;
-	if(inspectorOk){
-		heightParamsString= QString(tr("Ra= %1 m\nRz= %2 m\nRmax= %3 m"))
-				.arg(inspector.getRoughnessRa())
-				.arg(inspector.getRoughnessRz())
-				.arg(inspector.getRoughnessRmax());
-		stepParamsString= QString(tr("S= %1 m\nSm= %2 m\ntp= %3"))
-				.arg(inspector.getRoughnessS())
-				.arg(inspector.getRoughnessSm())
-				.arg(inspector.getRoughnessTp());
-
-	}else{
-		heightParamsString= "";
-		stepParamsString= "";
-	}
-
-	ui->crosssectionPSpinBox->setVisible(inspectorOk);
-	ui->crosssectionRoughnessParametersLabel->setVisible(inspectorOk);
-	ui->crosssectionHeightStatsLabel->setText(heightParamsString);
-	ui->crosssectionStepStatsLabel->setText(stepParamsString);
+	cybervision::CrossSection crossSection;
+	crossSection.computeCrossSection(ui->openGLViewport->getSurface3D(),crossSectionLine.first,crossSectionLine.second);
+	crossSectionWindow.updateCrossSection(crossSection);
+	if(crossSection.isOk())
+		crossSectionWindow.show();
 }
 
 
@@ -200,6 +170,12 @@ void MainWindow::viewerCrosssectionLineChanged(QVector3D start, QVector3D end){
 	ui->crosssectionButton->setChecked(false);
 	updateSurfaceStats();
 }
+
+
+void MainWindow::crosssectionClosed(){
+	ui->actionShow_cross_section_window->setChecked(false);
+}
+
 
 void MainWindow::on_startProcessButton_clicked(){
 	QStringList filenames;
@@ -298,6 +274,10 @@ void MainWindow::on_actionShow_statistics_triggered(bool checked){
 	ui->inspectorDockWidget->setVisible(checked);
 }
 
+void MainWindow::on_actionShow_cross_section_window_triggered(bool checked){
+	crossSectionWindow.setVisible(checked);
+}
+
 void MainWindow::on_addImageButton_clicked(){
 	QString filter= tr("Images") + "(*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;"+tr("All files")+"(*.*)";
 	QStringList filenames = QFileDialog::getOpenFileNames(this,tr("Select images to add"),startPath,filter,0,0);
@@ -365,8 +345,3 @@ void MainWindow::on_crosssectionButton_clicked(bool checked){
 	}else
 		ui->openGLViewport->setDrawCrossSectionLine(checked);
 }
-
-void MainWindow::on_crosssectionPSpinBox_valueChanged(int arg1){
-	updateSurfaceStats();
-}
-

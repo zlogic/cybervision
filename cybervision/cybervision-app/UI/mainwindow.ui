@@ -492,9 +492,10 @@
     <property name="title">
      <string>Options</string>
     </property>
+    <addaction name="actionPrefer_scale_from_metadata"/>
     <addaction name="actionShow_log"/>
     <addaction name="actionShow_statistics"/>
-    <addaction name="actionPrefer_scale_from_metadata"/>
+    <addaction name="actionShow_cross_section_window"/>
    </widget>
    <addaction name="menuOptions"/>
   </widget>
@@ -555,108 +556,31 @@
       </widget>
      </item>
      <item>
-      <widget class="QGroupBox" name="crosssectionGroupBox">
-       <property name="title">
-        <string>Cross-section</string>
+      <widget class="QPushButton" name="crosssectionButton">
+       <property name="text">
+        <string>Draw cross-section plane</string>
        </property>
-       <layout class="QGridLayout" name="gridLayout_4">
-        <item row="0" column="0" colspan="2">
-         <widget class="QPushButton" name="crosssectionButton">
-          <property name="text">
-           <string>Draw cross-section plane</string>
-          </property>
-          <property name="icon">
-           <iconset resource="../ReconstructionResources.qrc">
-            <normaloff>:/icons/UI/icons/pencil-ruler.png</normaloff>:/icons/UI/icons/pencil-ruler.png</iconset>
-          </property>
-          <property name="checkable">
-           <bool>true</bool>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="0" colspan="2">
-         <widget class="QLabel" name="crosssectionImage">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>200</height>
-           </size>
-          </property>
-          <property name="text">
-           <string/>
-          </property>
-         </widget>
-        </item>
-        <item row="2" column="0" colspan="2">
-         <widget class="QLabel" name="crosssectionRoughnessParametersLabel">
-          <property name="text">
-           <string>Roughness parameters</string>
-          </property>
-         </widget>
-        </item>
-        <item row="3" column="0">
-         <widget class="QLabel" name="crosssectionHeightStatsLabel">
-          <property name="text">
-           <string/>
-          </property>
-          <property name="textInteractionFlags">
-           <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByMouse</set>
-          </property>
-         </widget>
-        </item>
-        <item row="3" column="1">
-         <widget class="QLabel" name="crosssectionStepStatsLabel">
-          <property name="text">
-           <string/>
-          </property>
-          <property name="textInteractionFlags">
-           <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByMouse</set>
-          </property>
-         </widget>
-        </item>
-        <item row="4" column="1">
-         <widget class="QSpinBox" name="crosssectionPSpinBox">
-          <property name="suffix">
-           <string notr="true">%</string>
-          </property>
-          <property name="prefix">
-           <string notr="true">p=</string>
-          </property>
-          <property name="minimum">
-           <number>10</number>
-          </property>
-          <property name="maximum">
-           <number>90</number>
-          </property>
-          <property name="singleStep">
-           <number>10</number>
-          </property>
-          <property name="value">
-           <number>10</number>
-          </property>
-         </widget>
-        </item>
-        <item row="5" column="1">
-         <spacer name="verticalSpacer">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>0</width>
-            <height>0</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-       </layout>
+       <property name="icon">
+        <iconset resource="../ReconstructionResources.qrc">
+         <normaloff>:/icons/UI/icons/pencil-ruler.png</normaloff>:/icons/UI/icons/pencil-ruler.png</iconset>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
       </widget>
+     </item>
+     <item>
+      <spacer name="verticalSpacer">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>40</height>
+        </size>
+       </property>
+      </spacer>
      </item>
     </layout>
    </widget>
@@ -691,6 +615,14 @@
     <string>Show inspector</string>
    </property>
   </action>
+  <action name="actionShow_cross_section_window">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show cross-section window</string>
+   </property>
+  </action>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
  <customwidgets>
@@ -711,8 +643,6 @@
   <tabstop>startProcessButton</tabstop>
   <tabstop>saveButton</tabstop>
   <tabstop>loadSurfaceButton</tabstop>
-  <tabstop>crosssectionButton</tabstop>
-  <tabstop>crosssectionPSpinBox</tabstop>
   <tabstop>rotateToolButton</tabstop>
   <tabstop>moveToolButton</tabstop>
   <tabstop>texture1ToolButton</tabstop>
