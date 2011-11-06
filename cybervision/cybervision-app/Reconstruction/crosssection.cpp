@@ -8,30 +8,35 @@
 #include <limits>
 #include <cmath>
 
-cybervision::CrossSection::CrossSection(QObject *parent):QObject(parent) {
+namespace cybervision{
+
+CrossSection::CrossSection(QObject *parent):QObject(parent) {
 	mA= std::numeric_limits<qreal>::quiet_NaN(), mB= std::numeric_limits<qreal>::quiet_NaN(), mL= std::numeric_limits<qreal>::quiet_NaN();
 	Ra= std::numeric_limits<qreal>::quiet_NaN(), Rz= std::numeric_limits<qreal>::quiet_NaN(), Rmax= std::numeric_limits<qreal>::quiet_NaN();
 	S= std::numeric_limits<qreal>::quiet_NaN(),  Sm= std::numeric_limits<qreal>::quiet_NaN(), tp= std::numeric_limits<qreal>::quiet_NaN();
 	mLine= QLineF(std::numeric_limits<qreal>::quiet_NaN(),std::numeric_limits<qreal>::quiet_NaN(),std::numeric_limits<qreal>::quiet_NaN(),std::numeric_limits<qreal>::quiet_NaN());
+	pLine= QLineF(std::numeric_limits<qreal>::quiet_NaN(),std::numeric_limits<qreal>::quiet_NaN(),std::numeric_limits<qreal>::quiet_NaN(),std::numeric_limits<qreal>::quiet_NaN());
 	ok= false;
 }
 
 
-void cybervision::CrossSection::operator =(const cybervision::CrossSection &crossSection){
+void CrossSection::operator =(const CrossSection &crossSection){
 	mA= crossSection.mA, mB= crossSection.mB, mL= crossSection.mL;
 	Ra= crossSection.Ra, Rz= crossSection.Rz, Rmax= crossSection.Rmax;
 	S= crossSection.S,   Sm= crossSection.Sm, tp= crossSection.tp;
 	mLine= crossSection.mLine;
+	pLine= crossSection.pLine;
 	this->crossSection= crossSection.crossSection;
 	ok= crossSection.ok;
 }
 
 
-void cybervision::CrossSection::computeCrossSection(const cybervision::Surface&surface,const QVector3D &start, const QVector3D &end){
+void CrossSection::computeCrossSection(const Surface&surface,const QVector3D &start, const QVector3D &end){
 	mA= std::numeric_limits<qreal>::quiet_NaN(), mB= std::numeric_limits<qreal>::quiet_NaN(), mL= std::numeric_limits<qreal>::quiet_NaN();
 	Ra= std::numeric_limits<qreal>::quiet_NaN(), Rz= std::numeric_limits<qreal>::quiet_NaN(), Rmax= std::numeric_limits<qreal>::quiet_NaN();
 	S= std::numeric_limits<qreal>::quiet_NaN(),  Sm= std::numeric_limits<qreal>::quiet_NaN(), tp= std::numeric_limits<qreal>::quiet_NaN();
 	mLine= QLineF(std::numeric_limits<qreal>::quiet_NaN(),std::numeric_limits<qreal>::quiet_NaN(),std::numeric_limits<qreal>::quiet_NaN(),std::numeric_limits<qreal>::quiet_NaN());
+	pLine= QLineF(std::numeric_limits<qreal>::quiet_NaN(),std::numeric_limits<qreal>::quiet_NaN(),std::numeric_limits<qreal>::quiet_NaN(),std::numeric_limits<qreal>::quiet_NaN());
 	ok= false;
 
 	if(start==end)
@@ -95,7 +100,7 @@ void cybervision::CrossSection::computeCrossSection(const cybervision::Surface&s
 	ok= intersectionLine.length()>0 && crossSection.size()>0;
 }
 
-void cybervision::CrossSection::computeParams(int p){
+void CrossSection::computeParams(int p){
 	if(!ok)
 		return;
 	QLineF mLineNormal;
@@ -136,6 +141,7 @@ void cybervision::CrossSection::computeParams(int p){
 	QList<QPointF> crossSectionProjected;
 	{
 		QMultiMap<qreal,qreal> crossSectionSorted;
+		qreal minDeltaY= std::numeric_limits<qreal>::infinity(), maxDeltaY= -std::numeric_limits<qreal>::infinity();
 		for(QList<QPointF>::const_iterator it=crossSection.begin();it!=crossSection.end();it++){
 			//Create a line going through the point, parallel to m-line
 			qreal deltaY= it->y()-it->x()*mB-mA;
@@ -149,6 +155,10 @@ void cybervision::CrossSection::computeParams(int p){
 			qreal pointX= lineX.length()*(qAbs(lineX.angleTo(pointLine))<90?1:-1);
 
 			crossSectionSorted.insert(pointX,pointY);
+
+			//Compute the lowest Y for p-level line
+			minDeltaY= qMin(deltaY,minDeltaY);
+			maxDeltaY= qMax(deltaY,maxDeltaY);
 		}
 
 		qreal sum=0;
@@ -164,6 +174,11 @@ void cybervision::CrossSection::computeParams(int p){
 				count= 0;
 			}
 		}
+
+		//Create the p-level line
+		qreal percentMline= 100.0*minDeltaY/(maxDeltaY-minDeltaY);
+		pLine= mLine;
+		pLine.translate(0,(maxDeltaY-minDeltaY)*(percentMline+p)/100.0);
 	}
 
 	//Compute height and step parameters
@@ -251,8 +266,6 @@ void cybervision::CrossSection::computeParams(int p){
 			Sm= std::numeric_limits<qreal>::quiet_NaN();
 		else
 			Sm/= (qreal)SCrossingCount;
-		//tp
-		tp= p;
 	}
 	//Compute tp
 	{
@@ -281,17 +294,18 @@ void cybervision::CrossSection::computeParams(int p){
 			tp= std::numeric_limits<qreal>::quiet_NaN();
 		else
 			tp/= (qreal)tpCount;
-		//tp= tpCount;
 	}
 }
 
-bool cybervision::CrossSection::isOk() const{ return ok; }
-QList<QPointF> cybervision::CrossSection::getCrossSection() const{	return crossSection; }
-QLineF cybervision::CrossSection::getMLine() const{	return mLine; }
-qreal cybervision::CrossSection::getRoughnessRa() const{ return Ra; }
-qreal cybervision::CrossSection::getRoughnessRz() const{ return Rz; }
-qreal cybervision::CrossSection::getRoughnessRmax() const{ return Rmax; }
-qreal cybervision::CrossSection::getRoughnessS() const{ return S; }
-qreal cybervision::CrossSection::getRoughnessSm() const{ return Sm; }
-qreal cybervision::CrossSection::getRoughnessTp() const{ return tp; }
+bool CrossSection::isOk() const{ return ok; }
+QList<QPointF> CrossSection::getCrossSection() const{	return crossSection; }
+QLineF CrossSection::getMLine() const{	return mLine; }
+QLineF CrossSection::getPLine() const{	return pLine; }
+qreal CrossSection::getRoughnessRa() const{ return Ra; }
+qreal CrossSection::getRoughnessRz() const{ return Rz; }
+qreal CrossSection::getRoughnessRmax() const{ return Rmax; }
+qreal CrossSection::getRoughnessS() const{ return S; }
+qreal CrossSection::getRoughnessSm() const{ return Sm; }
+qreal CrossSection::getRoughnessTp() const{ return tp; }
 
+}

@@ -419,7 +419,6 @@ void CybervisionViewer::drawGrid(){
 	//glEnable(GL_DEPTH_TEST);
 }
 
-
 qreal CybervisionViewer::getOptimalGridStep(qreal min, qreal max) const{
 	qreal delta= max-min;
 	qreal exp_x= pow(10.0,floor(log10(delta)));

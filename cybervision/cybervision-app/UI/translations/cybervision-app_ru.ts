@@ -15,7 +15,7 @@
         <translation>Параметры шероховатости</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="46"/>
+        <location filename="../crosssectionwindow.cpp" line="51"/>
         <source>Ra= %1 m
 Rz= %2 m
 Rmax= %3 m</source>
@@ -24,7 +24,7 @@ Rz= %2 м
 Rmax= %3 м</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="50"/>
+        <location filename="../crosssectionwindow.cpp" line="55"/>
         <source>S= %1 m
 Sm= %2 m
 tp= %3</source>

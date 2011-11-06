@@ -24,6 +24,7 @@ protected:
 	QLineF mLine;//average line points
 	qreal Ra,Rz,Rmax;//Height parameters
 	qreal S,Sm,tp;//Step parameters
+	QLineF pLine;//p-level line points
 
 public:
 	CrossSection(QObject *parent = 0);
@@ -40,6 +41,9 @@ public:
 
 	//Returns the average line
 	QLineF getMLine()const;
+
+	//Returns the p-level line
+	QLineF getPLine()const;
 
 	//Returns if cross-section contains valid information
 	bool isOk()const;

@@ -30,7 +30,11 @@ protected:
 	//Updates widgets enabled/disabled/visible status
 	void updateWidgetStatus();
 
+	//Re-draws the cross-section
 	void renderCrossSection();
+
+	//Returns the optimal scale step for the min/max value pair. Imported from CybervisionViewer.
+	qreal getOptimalGridStep(qreal min,qreal max) const;
 private:
 	Ui::CrossSectionWindow *ui;
 
