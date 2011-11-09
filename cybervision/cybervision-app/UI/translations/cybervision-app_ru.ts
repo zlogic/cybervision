@@ -409,25 +409,24 @@ Median depth: %3 m</source>
     </message>
     <message>
         <location filename="../../Reconstruction/pointmatcher.cpp" line="121"/>
-        <location filename="../../Reconstruction/pointmatcher.cpp" line="129"/>
-        <location filename="../../Reconstruction/pointmatcher.cpp" line="158"/>
-        <location filename="../../Reconstruction/pointmatcher.cpp" line="183"/>
+        <location filename="../../Reconstruction/pointmatcher.cpp" line="138"/>
+        <location filename="../../Reconstruction/pointmatcher.cpp" line="163"/>
         <source>Matching keypoints from %1 to %2</source>
         <translation>Сопоставление ключевых точек из %1 с %2</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcher.cpp" line="210"/>
-        <location filename="../../Reconstruction/pointmatcher.cpp" line="219"/>
+        <location filename="../../Reconstruction/pointmatcher.cpp" line="190"/>
+        <location filename="../../Reconstruction/pointmatcher.cpp" line="199"/>
         <source>Matching keypoints from %1 to %2 with kd-tree</source>
         <translation>Сопоставление ключевых точек из %1 с %2 с использованием kd-дерева</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcher.cpp" line="229"/>
+        <location filename="../../Reconstruction/pointmatcher.cpp" line="209"/>
         <source>Found %1 keypoint matches</source>
         <translation>Найдено %1 пар соответствия</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcher.cpp" line="232"/>
+        <location filename="../../Reconstruction/pointmatcher.cpp" line="212"/>
         <source>Saving computed SIFT matches to %1</source>
         <translation>Сохранение найденных пар соответствия SIFT в %1</translation>
     </message>
@@ -435,212 +434,207 @@ Median depth: %3 m</source>
 <context>
     <name>cybervision::PointMatcherOpenCL</name>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="57"/>
-        <source>OpenCL Error: Failed to allocate input memory on host</source>
-        <translation>Ошибка OpenCL: Не получилось выделить входную память на хосте</translation>
-    </message>
-    <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="61"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="63"/>
         <source>OpenCL Error: Failed to allocate output memory on host</source>
         <translation>Ошибка OpenCL: Не получилось выделить выходную память на хосте</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="76"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="78"/>
         <source>OpenCL Error: Getting Platforms. (clGetPlatformsIDs) code=%1</source>
         <translation>Ошибка OpenCL: Получение Платформ (clGetPlatformsIDs) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="85"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="87"/>
         <source>OpenCL Error: Getting Platform Ids. (clGetPlatformsIDs) code=%1</source>
         <translation>Ошибка OpenCL: Получение Идентификаторов Платформ (clGetPlatformsIDs) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="99"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="101"/>
         <source>OpenCL Error: Getting Platform Info.(clGetPlatformInfo) code=%1</source>
         <translation>Ошибка OpenCL: Получение Информации о Платформах (clGetPlatformInfo) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="112"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="114"/>
         <source>OpenCL Error: NULL platform found</source>
         <translation>Ошибка OpenCL: найденная платформа - NULL</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="130"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="132"/>
         <source>OpenCL Error: Creating Context. (clCreateContextFromType) code=%1</source>
         <translation>Ошибка OpenCL: Создание Контекста. (clCreateContextFromType) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="141"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="143"/>
         <source>OpenCL Error: Getting Context Info (device list size, clGetContextInfo) code=%1</source>
         <translation>Ошибка OpenCL: Получение Информации о Контекстах (размер списка устройств, clGetContextInfo) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="150"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="152"/>
         <source>OpenCL Error: No devices found.</source>
         <translation>Ошибка OpenCL: Не найдены устройства.</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="162"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="164"/>
         <source>OpenCL Error: Getting Context Info (device list, clGetContextInfo) code=%1</source>
         <translation>Ошибка OpenCL: Получение Информации о Контекстах (список устройств, clGetContextInfo) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="175"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="177"/>
         <source>OpenCL Error: Creating Command Queue. (clCreateCommandQueue) code=%1</source>
         <translation>Ошибка OpenCL: Получение Очереди Команд (clCreateCommandQueue) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="189"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="197"/>
         <source>OpenCL Error: clCreateBuffer (inputBuffer) code=%1</source>
         <translation>Ошибка OpenCL: clCreateBuffer (inputBuffer) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="200"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="208"/>
         <source>OpenCL Error: clCreateBuffer (outputBuffer) code=%1</source>
         <translation>Ошибка OpenCL: clCreateBuffer (outputBuffer) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="211"/>
-        <source>OpenCL Error: clCreateBuffer (vectorBuffer) code=%1</source>
-        <translation>Ошибка OpenCL: clCreateBuffer (vectorBuffer) код ошибки=%1</translation>
-    </message>
-    <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="230"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="227"/>
         <source>OpenCL Error: Loading Binary into cl_program (clCreateProgramWithSource) code=%1</source>
         <translation>Ошибка OpenCL: Загрузка Бинарного Кода в cl_program (clCreateProgramWithSource) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="249"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="246"/>
         <source>OpenCL Error: Building Program (clBuildProgram) code=%1, build log: &apos;%2&apos;</source>
         <translation>Ошибка OpenCL: Сборка Программы (clBuildProgram) код ошибки=%1, журнал сборки: &apos;%2&apos;</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="256"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="253"/>
         <source>OpenCL Error: Creating Kernel from program. (clCreateKernel) code=%1</source>
         <translation>Ошибка OpenCL: СозданиеЯдра из программы (clCreateKernel) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="273"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="270"/>
         <source>OpenCL Error: In clReleaseKernel code=%1</source>
         <translation>Ошибка OpenCL: В clReleaseKernel код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="278"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="275"/>
         <source>OpenCL Error: In clReleaseProgram code=%1</source>
         <translation>Ошибка OpenCL: В clReleaseProgram код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="283"/>
-        <source>OpenCL Error: In clReleaseMemObject (inputBuffer) code=%1</source>
-        <translation>Ошибка OpenCL: В clReleaseMemObject (inputBuffer) код ошибки=%1</translation>
-    </message>
-    <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="288"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="290"/>
         <source>OpenCL Error: In clReleaseMemObject (outputBuffer) code=%1</source>
         <translation>Ошибка OpenCL: В clReleaseMemObject (outputBuffer) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="293"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="295"/>
         <source>OpenCL Error: In clReleaseCommandQueue code=%1</source>
         <translation>Ошибка OpenCL: В clReleaseCommandQueue код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="298"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="300"/>
         <source>OpenCL Error: In clReleaseContext code=%1</source>
         <translation>Ошибка OpenCL: В clReleaseContext код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="324"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="328"/>
         <source>OpenCL Error: clGetKernelWorkGroupInfo failed, code=%1</source>
         <translation>Ошибка OpenCL: clGetKernelWorkGroupInfo не выполнено, код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="329"/>
-        <source>OpenCL Warning: Out of Resources! Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3.</source>
-        <translation>Предупреждение OpenCL: Недостаточно ресурсов! Заданный Размер Группы:%1. Максимальный поддерживаемый ядром размер группы: %2. Будет использоваться размер группs %3.</translation>
-    </message>
-    <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="350"/>
-        <source>OpenCL Error: clEnqueueWriteBuffer (inputBuffer) failed, code=%1</source>
-        <translation>Ошибка OpenCL: clEnqueueWriteBuffer (inputBuffer) не выполнено, код ошибки=%1</translation>
-    </message>
-    <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="357"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="364"/>
         <source>OpenCL Error: clWaitForEvents (0) failed, code=%1</source>
         <translation>Ошибка OpenCL: clWaitForEvents (0), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="362"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="369"/>
         <source>OpenCL Error: clReleaseEvents (0) failed, code=%1</source>
         <translation>Ошибка OpenCL: clReleaseEvents (0), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="382"/>
-        <source>OpenCL Error: clEnqueueWriteBuffer (vectorBuffer) failed, code=%1</source>
-        <translation>Ошибка OpenCL: clEnqueueWriteBuffer (vectorBuffer) не выполнено, код ошибки=%1</translation>
-    </message>
-    <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="389"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="392"/>
         <source>OpenCL Error: clWaitForEvents (1) failed, code=%1</source>
         <translation>Ошибка OpenCL: clWaitForEvents (1), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="395"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="397"/>
         <source>OpenCL Error: clReleaseEvents (1) failed, code=%1</source>
         <translation>Ошибка OpenCL: clReleaseEvents (1), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="406"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="408"/>
         <source>OpenCL Error: clSetKernelArg failed. (outputBuffer), code=%1</source>
         <translation>Ошибка OpenCL: clSetKernelArg не выполнено. (outputBuffer), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="416"/>
-        <source>OpenCL Error: clSetKernelArg failed. (inputBuffer), code=%1</source>
-        <translation>Ошибка OpenCL: clSetKernelArg не выполнено. (inputBuffer), код ошибки=%1</translation>
-    </message>
-    <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="426"/>
-        <source>OpenCL Error: clSetKernelArg failed. (vectorBuffer), code=%1</source>
-        <translation>Ошибка OpenCL: clSetKernelArg не выполнено. (vectorBuffer), код ошибки=%1</translation>
-    </message>
-    <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="437"/>
-        <source>OpenCL Error: clSetKernelArg failed. (inputVectorsCount), code=%1</source>
-        <translation>Ошибка OpenCL: clSetKernelArg не выполнено. (inputVectorsCount), код ошибки=%1</translation>
-    </message>
-    <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="448"/>
-        <source>OpenCL Error: clSetKernelArg failed. (MaxKeypointDistance), code=%1</source>
-        <translation>Ошибка OpenCL: clSetKernelArg не выполнено. (MaxKeypointDistance), код ошибки=%1</translation>
-    </message>
-    <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="467"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="447"/>
         <source>OpenCL Error: clEnqueueNDRangeKernel failed, code=%1</source>
         <translation>Ошибка OpenCL: clEnqueueNDRangeKernel не выполнено, код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="475"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="455"/>
         <source>OpenCL Error: clWaitForEvents (2) failed, code=%1</source>
         <translation>Ошибка OpenCL: clWaitForEvents (2), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="491"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="477"/>
         <source>OpenCL Error: clEnqueueReadBuffer failed, code=%1</source>
         <translation>Ошибка OpenCL: clEnqueueReadBuffer не выполнено, код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="498"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="484"/>
         <source>OpenCL Error: clWaitForEvents (3) failed, code=%1</source>
         <translation>Ошибка OpenCL: clWaitForEvents (3), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="504"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="461"/>
         <source>OpenCL Error: clReleaseEvents (2) failed, code=%1</source>
         <translation>Ошибка OpenCL: clReleaseEvents (2), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="510"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="55"/>
+        <source>OpenCL Error: Failed to allocate input1 memory on host</source>
+        <translation>Ошибка OpenCL: Не получилось выделить входную память для первого изображения на хосте</translation>
+    </message>
+    <message>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="59"/>
+        <source>OpenCL Error: Failed to allocate input2 memory on host</source>
+        <translation>Ошибка OpenCL: Не получилось выделить входную память для второго изображения на хосте</translation>
+    </message>
+    <message>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="280"/>
+        <source>OpenCL Error: In clReleaseMemObject (input1Buffer) code=%1</source>
+        <translation>Ошибка OpenCL: В clReleaseMemObject (input1Buffer) код ошибки=%1</translation>
+    </message>
+    <message>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="285"/>
+        <source>OpenCL Error: In clReleaseMemObject (input2Buffer) code=%1</source>
+        <translation>Ошибка OpenCL: В clReleaseMemObject (input2Buffer) код ошибки=%1</translation>
+    </message>
+    <message>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="336"/>
+        <source>OpenCL Warning: Out of Resources! Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3x%4.</source>
+        <translation>Предупреждение OpenCL: Недостаточно ресурсов! Заданный Размер Группы:%1. Максимальный поддерживаемый ядром размер группы: %2. Будет использоваться размер группs %3x%4.</translation>
+    </message>
+    <message>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="357"/>
+        <source>OpenCL Error: clEnqueueWriteBuffer (input1Buffer) failed, code=%1</source>
+        <translation>Ошибка OpenCL: clEnqueueWriteBuffer (input1Buffer) не выполнено, код ошибки=%1</translation>
+    </message>
+    <message>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="385"/>
+        <source>OpenCL Error: clEnqueueWriteBuffer (input2Buffer) failed, code=%1</source>
+        <translation>Ошибка OpenCL: clEnqueueWriteBuffer (input2Buffer) не выполнено, код ошибки=%1</translation>
+    </message>
+    <message>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="418"/>
+        <source>OpenCL Error: clSetKernelArg failed. (input1Buffer), code=%1</source>
+        <translation>Ошибка OpenCL: clSetKernelArg не выполнено. (input1Buffer), код ошибки=%1</translation>
+    </message>
+    <message>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="428"/>
+        <source>OpenCL Error: clSetKernelArg failed. (input2Buffer), code=%1</source>
+        <translation>Ошибка OpenCL: clSetKernelArg не выполнено. (input2Buffer), код ошибки=%1</translation>
+    </message>
+    <message>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="490"/>
         <source>OpenCL Error: clReleaseEvents (3) failed, code=%1</source>
         <translation>Ошибка OpenCL: clReleaseEvents (3), код ошибки=%1</translation>
     </message>

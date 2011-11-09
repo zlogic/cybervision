@@ -113,7 +113,7 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 	bool OpenCLSucceeded= true;
 	if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU || Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU){
 #ifdef CYBERVISION_OPENCL
-		PointMatcherOpenCL clMatcher(128,qMax(keypoints1.size(),keypoints2.size()),this);
+		PointMatcherOpenCL clMatcher(128,this);
 
 		QObject::connect(&clMatcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);
 
@@ -123,26 +123,6 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 			matches= clMatcher.CalcDistances(keypoints1,keypoints2);
 			if(matches.empty())
 				OpenCLSucceeded= false;
-
-			cybervision::SortedKeypointMatches current_matches;
-			if(OpenCLSucceeded){
-				emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2")).arg(filename2).arg(filename1));
-				//Match second image with first
-				current_matches= clMatcher.CalcDistances(keypoints2,keypoints1);
-				if(current_matches.empty())
-					OpenCLSucceeded= false;
-			}
-
-			//Merge matches
-
-			if(OpenCLSucceeded){
-				for(cybervision::SortedKeypointMatches::const_iterator it=current_matches.begin();it!=current_matches.end();it++){
-					KeypointMatch m;
-					m.a= it.value().b, m.b= it.value().a;
-					if(!matches.contains(it.key(),m))
-						matches.insert(it.key(),m);
-				}
-			}
 
 			OpenCLSucceeded&= clMatcher.ShutdownCL();
 		}

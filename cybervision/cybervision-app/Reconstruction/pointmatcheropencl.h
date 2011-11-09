@@ -29,18 +29,16 @@ protected:
 	QString kernelStr;
 
 	bool kernelInitialized;
-	bool inputVectorsCopied,kernelFirstRun;
+	bool kernelFirstRun;
 
 	//OpenCL kernel paramaters
-	cl_uint vectorSize,inputVectorsBufferSize,inputVectorsCount;
-	QScopedArrayPointer<cl_float> vector;
-	QScopedArrayPointer<cl_float> input;
+	cl_uint vectorSize,inputVectorsBufferSize;
+	QScopedArrayPointer<cl_float> input1,input2;
 	QScopedArrayPointer<cl_float> output;
 
 	//OpenCL stuff
-	cl_mem inputBuffer;
+	cl_mem input1Buffer,input2Buffer;
 	cl_mem outputBuffer;
-	cl_mem vectorBuffer;
 
 	cl_context context;
 	QScopedArrayPointer<cl_device_id> devices;
@@ -48,7 +46,9 @@ protected:
 
 	cl_program program;
 	cl_kernel kernel;
-	size_t kernelWorkGroupSize;
+	size_t kernelWorkGroupSizeFull;
+	size_t kernelWorkGroupSize1,kernelWorkGroupSize2;
+	size_t kernelWorkGroupSize2Max;
 
 	//Runs OpenCL for the prepared buffers
 	bool CalcDistances();
@@ -58,7 +58,7 @@ protected:
 	//Compute distances with OpenCL only
 	SortedKeypointMatches CalcDistancesOpenCL(const QList<SIFT::Keypoint>& keypoints1,const QList<SIFT::Keypoint>& keypoints2);
 public:
-	explicit PointMatcherOpenCL(int vectorSize, int maxVectorsCount, QObject *parent = 0);
+	explicit PointMatcherOpenCL(int vectorSize, QObject *parent = 0);
 	~PointMatcherOpenCL();
 
 	//OpenCL init/release code. Returns true on success, emits messages and returns false on errors.

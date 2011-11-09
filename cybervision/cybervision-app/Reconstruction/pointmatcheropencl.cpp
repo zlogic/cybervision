@@ -6,14 +6,16 @@
 
 #include <QFile>
 #include <QVector>
+#include <QSet>
 #include <QTextStream>
 #include <QList>
 
 #include <cstdlib>
+#include <cmath>
 
 
 namespace cybervision{
-PointMatcherOpenCL::PointMatcherOpenCL(int vectorSize, int maxVectorsCount, QObject *parent) : QObject(parent){
+PointMatcherOpenCL::PointMatcherOpenCL(int vectorSize, QObject *parent) : QObject(parent){
 	//Read kernel from file
 	{
 		QFile kernelFile(":/opencl/PointMatcherKernel.cl");
@@ -23,29 +25,25 @@ PointMatcherOpenCL::PointMatcherOpenCL(int vectorSize, int maxVectorsCount, QObj
 	}
 
 	kernelInitialized= false;
-	inputVectorsCopied= false;
 	kernelFirstRun= true;
 
 	//Prepare buffers
-	kernelWorkGroupSize= (Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU)?128:1024;
+	kernelWorkGroupSizeFull= (Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU)?128:1024;
+	kernelWorkGroupSize1= kernelWorkGroupSizeFull;
+	kernelWorkGroupSize2= kernelWorkGroupSizeFull;
+	kernelWorkGroupSize2Max= 16;
 
 	//Get optimal vector size
-	{
-		int workRounding= (Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU)?1024:512;
-		maxVectorsCount= (maxVectorsCount/workRounding + 1)*workRounding;
-		maxVectorsCount= qMax(maxVectorsCount,(int)kernelWorkGroupSize);
-	}
-
 	this->vectorSize= vectorSize;
-	inputVectorsBufferSize= maxVectorsCount;
+	inputVectorsBufferSize= 1024;
 
 
 	/////////////////////////////////////////////////////////////////
 	// Allocate and initialize memory used by host
 	/////////////////////////////////////////////////////////////////
-	input.reset(new cl_float[vectorSize * inputVectorsBufferSize]);
-	vector.reset(new cl_float[vectorSize]);
-	output.reset(new cl_float[inputVectorsBufferSize]);
+	input1.reset(new cl_float[vectorSize * inputVectorsBufferSize]);
+	input2.reset(new cl_float[vectorSize * inputVectorsBufferSize]);
+	output.reset(new cl_float[inputVectorsBufferSize*inputVectorsBufferSize]);
 }
 PointMatcherOpenCL::~PointMatcherOpenCL(){
 }
@@ -53,8 +51,12 @@ PointMatcherOpenCL::~PointMatcherOpenCL(){
 bool PointMatcherOpenCL::InitCL(){
 	kernelInitialized= false;
 
-	if(input == NULL){
-		emit sgnLogMessage(QString(tr("OpenCL Error: Failed to allocate input memory on host")));
+	if(input1 == NULL){
+		emit sgnLogMessage(QString(tr("OpenCL Error: Failed to allocate input1 memory on host")));
+		return false;
+	}
+	if(input2 == NULL){
+		emit sgnLogMessage(QString(tr("OpenCL Error: Failed to allocate input2 memory on host")));
 		return false;
 	}
 	if(output == NULL){
@@ -179,11 +181,17 @@ bool PointMatcherOpenCL::InitCL(){
 	/////////////////////////////////////////////////////////////////
 	// Create OpenCL memory buffers
 	/////////////////////////////////////////////////////////////////
-	inputBuffer = clCreateBuffer(
+	input1Buffer = clCreateBuffer(
 				context,
 				CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
 				sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
-				input.data(),
+				input1.data(),
+				&status);
+	input2Buffer = clCreateBuffer(
+				context,
+				CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+				sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
+				input2.data(),
 				&status);
 	if(status != CL_SUCCESS){
 		emit sgnLogMessage(QString(tr("OpenCL Error: clCreateBuffer (inputBuffer) code=%1")).arg(status));
@@ -193,22 +201,11 @@ bool PointMatcherOpenCL::InitCL(){
 	outputBuffer = clCreateBuffer(
 				context,
 				CL_MEM_WRITE_ONLY | CL_MEM_USE_HOST_PTR,
-				sizeof(cl_float) * inputVectorsBufferSize,
+				sizeof(cl_float) * inputVectorsBufferSize * inputVectorsBufferSize,
 				output.data(),
 				&status);
 	if(status != CL_SUCCESS){
 		emit sgnLogMessage(QString(tr("OpenCL Error: clCreateBuffer (outputBuffer) code=%1")).arg(status));
-		return false;
-	}
-
-	vectorBuffer = clCreateBuffer(
-				context,
-				CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
-				sizeof(cl_float) * vectorSize,
-				vector.data(),
-				&status);
-	if(status != CL_SUCCESS){
-		emit sgnLogMessage(QString(tr("OpenCL Error: clCreateBuffer (vectorBuffer) code=%1")).arg(status));
 		return false;
 	}
 
@@ -231,7 +228,7 @@ bool PointMatcherOpenCL::InitCL(){
 		return false;
 	}
 
-	QString qOptions= QString("-D VECTOR_SIZE=%1").arg(vectorSize);
+	QString qOptions= QString("-D VECTOR_SIZE=%1 -D MAX_THREADS_DIM2=%2").arg(vectorSize).arg(kernelWorkGroupSize2Max);
 
 	/* create a cl program executable for all the devices specified */
 	status = clBuildProgram(program, 1, devices.data(), qOptions.toStdString().c_str(), NULL, NULL);
@@ -278,9 +275,14 @@ bool PointMatcherOpenCL::ShutdownCL(){
 		emit sgnLogMessage(QString(tr("OpenCL Error: In clReleaseProgram code=%1")).arg(status));
 		return false;
 	}
-	status = clReleaseMemObject(inputBuffer);
+	status = clReleaseMemObject(input1Buffer);
 	if(status != CL_SUCCESS){
-		emit sgnLogMessage(QString(tr("OpenCL Error: In clReleaseMemObject (inputBuffer) code=%1")).arg(status));
+		emit sgnLogMessage(QString(tr("OpenCL Error: In clReleaseMemObject (input1Buffer) code=%1")).arg(status));
+		return false;
+	}
+	status = clReleaseMemObject(input2Buffer);
+	if(status != CL_SUCCESS){
+		emit sgnLogMessage(QString(tr("OpenCL Error: In clReleaseMemObject (input2Buffer) code=%1")).arg(status));
 		return false;
 	}
 	status = clReleaseMemObject(outputBuffer);
@@ -306,11 +308,13 @@ bool PointMatcherOpenCL::CalcDistances(){
 	cl_int   status;
 	cl_event events[4];
 
-	size_t globalThreads[1];
-	size_t localThreads[1];
+	size_t globalThreads[2];
+	size_t localThreads[2];
 
 	globalThreads[0] = inputVectorsBufferSize;
-	localThreads[0] = kernelWorkGroupSize;
+	globalThreads[1] = inputVectorsBufferSize;
+	localThreads[0] = kernelWorkGroupSize1;
+	localThreads[1] = kernelWorkGroupSize2;
 
 	if(kernelFirstRun){
 		/* Check group size against kernelWorkGroupSize */
@@ -318,68 +322,67 @@ bool PointMatcherOpenCL::CalcDistances(){
 										  devices[0],
 										  CL_KERNEL_WORK_GROUP_SIZE,
 										  sizeof(size_t),
-										  &kernelWorkGroupSize,
+										  &kernelWorkGroupSizeFull,
 										  0);
 		if(status != CL_SUCCESS){
 			emit sgnLogMessage(QString(tr("OpenCL Error: clGetKernelWorkGroupInfo failed, code=%1")).arg(status));
 			return false;
 		}
 
-		if((cl_uint)(localThreads[0]) > kernelWorkGroupSize){
-			emit sgnLogMessage(QString(tr("OpenCL Warning: Out of Resources! Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3.")).arg(localThreads[0]).arg(kernelWorkGroupSize).arg(kernelWorkGroupSize));
+		if((cl_uint)(localThreads[0]*localThreads[1]) > kernelWorkGroupSizeFull){
+			kernelWorkGroupSize2= qMin(kernelWorkGroupSize2,kernelWorkGroupSize2Max);
+			kernelWorkGroupSize1= kernelWorkGroupSizeFull/kernelWorkGroupSize2;
 
-			localThreads[0] = kernelWorkGroupSize;
+			emit sgnLogMessage(QString(tr("OpenCL Warning: Out of Resources! Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3x%4.")).arg(localThreads[0]).arg(kernelWorkGroupSizeFull).arg(kernelWorkGroupSize1).arg(kernelWorkGroupSize2));
+
+			localThreads[0] = kernelWorkGroupSize1;
+			localThreads[1] = kernelWorkGroupSize2;
 		}
 		kernelFirstRun= false;
 	}
 
-	if(!inputVectorsCopied){
-		if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU){
-			/* Enqueue clEnqueueWriteBuffer for input buffer */
-			status = clEnqueueWriteBuffer(
-						commandQueue,
-						inputBuffer,
-						CL_FALSE,
-						0,
-						sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
-						input.data(),
-						0,
-						NULL,
-						&events[0]);
-			if(status != CL_SUCCESS){
-				emit sgnLogMessage(QString(tr("OpenCL Error: clEnqueueWriteBuffer (inputBuffer) failed, code=%1")).arg(status));
-				return false;
-			}
-
-			/* wait for the write buffer call to finish execution */
-			status = clWaitForEvents(1, &events[0]);
-			if(status != CL_SUCCESS){
-				emit sgnLogMessage(QString(tr("OpenCL Error: clWaitForEvents (0) failed, code=%1")).arg(status));
-				return false;
-			}
-			status = clReleaseEvent(events[0]);
-			if(status != CL_SUCCESS){
-				emit sgnLogMessage(QString(tr("OpenCL Error: clReleaseEvents (0) failed, code=%1")).arg(status));
-				return false;
-			}
-		}
-		inputVectorsCopied= true;
-	}
-
 	if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU){
-		/* Enqueue clEnqueueWriteBuffer for input vector buffer */
+		/* Enqueue clEnqueueWriteBuffer for input1 buffer */
 		status = clEnqueueWriteBuffer(
 					commandQueue,
-					vectorBuffer,
+					input1Buffer,
 					CL_FALSE,
 					0,
-					sizeof(cl_float) * vectorSize,
-					vector.data(),
+					sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
+					input1.data(),
+					0,
+					NULL,
+					&events[0]);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString(tr("OpenCL Error: clEnqueueWriteBuffer (input1Buffer) failed, code=%1")).arg(status));
+			return false;
+		}
+
+		/* wait for the write buffer call to finish execution */
+		status = clWaitForEvents(1, &events[0]);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString(tr("OpenCL Error: clWaitForEvents (0) failed, code=%1")).arg(status));
+			return false;
+		}
+		status = clReleaseEvent(events[0]);
+		if(status != CL_SUCCESS){
+			emit sgnLogMessage(QString(tr("OpenCL Error: clReleaseEvents (0) failed, code=%1")).arg(status));
+			return false;
+		}
+
+		/* Enqueue clEnqueueWriteBuffer for input2 buffer */
+		status = clEnqueueWriteBuffer(
+					commandQueue,
+					input2Buffer,
+					CL_FALSE,
+					0,
+					sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
+					input2.data(),
 					0,
 					NULL,
 					&events[1]);
 		if(status != CL_SUCCESS){
-			emit sgnLogMessage(QString(tr("OpenCL Error: clEnqueueWriteBuffer (vectorBuffer) failed, code=%1")).arg(status));
+			emit sgnLogMessage(QString(tr("OpenCL Error: clEnqueueWriteBuffer (input2Buffer) failed, code=%1")).arg(status));
 			return false;
 		}
 
@@ -389,7 +392,6 @@ bool PointMatcherOpenCL::CalcDistances(){
 			emit sgnLogMessage(QString(tr("OpenCL Error: clWaitForEvents (1) failed, code=%1")).arg(status));
 			return false;
 		}
-
 		status = clReleaseEvent(events[1]);
 		if(status != CL_SUCCESS){
 			emit sgnLogMessage(QString(tr("OpenCL Error: clReleaseEvents (1) failed, code=%1")).arg(status));
@@ -411,9 +413,9 @@ bool PointMatcherOpenCL::CalcDistances(){
 				kernel,
 				1,
 				sizeof(cl_mem),
-				(void *)&inputBuffer);
+				(void *)&input1Buffer);
 	if(status != CL_SUCCESS){
-		emit sgnLogMessage(QString(tr("OpenCL Error: clSetKernelArg failed. (inputBuffer), code=%1")).arg(status));
+		emit sgnLogMessage(QString(tr("OpenCL Error: clSetKernelArg failed. (input1Buffer), code=%1")).arg(status));
 		return false;
 	}
 
@@ -421,31 +423,9 @@ bool PointMatcherOpenCL::CalcDistances(){
 				kernel,
 				2,
 				sizeof(cl_mem),
-				(void *)&vectorBuffer);
+				(void *)&input2Buffer);
 	if(status != CL_SUCCESS){
-		emit sgnLogMessage(QString(tr("OpenCL Error: clSetKernelArg failed. (vectorBuffer), code=%1")).arg(status));
-		return false;
-	}
-
-	cl_uint clInputVectorsCount= inputVectorsCount;
-	status = clSetKernelArg(
-				kernel,
-				3,
-				sizeof(cl_uint),
-				(void *)&clInputVectorsCount);
-	if(status != CL_SUCCESS){
-		emit sgnLogMessage(QString(tr("OpenCL Error: clSetKernelArg failed. (inputVectorsCount), code=%1")).arg(status));
-		return false;
-	}
-
-	cl_float clMaxKeypointDistance= Options::MaxKeypointDistance*Options::MaxKeypointDistance;
-	status = clSetKernelArg(
-				kernel,
-				4,
-				sizeof(cl_float),
-				(void *)&clMaxKeypointDistance);
-	if(status != CL_SUCCESS){
-		emit sgnLogMessage(QString(tr("OpenCL Error: clSetKernelArg failed. (MaxKeypointDistance), code=%1")).arg(status));
+		emit sgnLogMessage(QString(tr("OpenCL Error: clSetKernelArg failed. (input2Buffer), code=%1")).arg(status));
 		return false;
 	}
 
@@ -455,7 +435,7 @@ bool PointMatcherOpenCL::CalcDistances(){
 	status = clEnqueueNDRangeKernel(
 				commandQueue,
 				kernel,
-				1,
+				2,
 				NULL,
 				globalThreads,
 				localThreads,
@@ -476,13 +456,19 @@ bool PointMatcherOpenCL::CalcDistances(){
 		return false;
 	}
 
+	status = clReleaseEvent(events[2]);
+	if(status != CL_SUCCESS){
+		emit sgnLogMessage(QString(tr("OpenCL Error: clReleaseEvents (2) failed, code=%1")).arg(status));
+		return false;
+	}
+
 	/* Enqueue readBuffer*/
 	status = clEnqueueReadBuffer(
 				commandQueue,
 				outputBuffer,
 				CL_FALSE,
 				0,
-				inputVectorsBufferSize * sizeof(cl_float),
+				inputVectorsBufferSize * inputVectorsBufferSize * sizeof(cl_float),
 				output.data(),
 				0,
 				NULL,
@@ -496,12 +482,6 @@ bool PointMatcherOpenCL::CalcDistances(){
 	status = clWaitForEvents(1, &events[3]);
 	if(status != CL_SUCCESS){
 		emit sgnLogMessage(QString(tr("OpenCL Error: clWaitForEvents (3) failed, code=%1")).arg(status));
-		return false;
-	}
-
-	status = clReleaseEvent(events[2]);
-	if(status != CL_SUCCESS){
-		emit sgnLogMessage(QString(tr("OpenCL Error: clReleaseEvents (2) failed, code=%1")).arg(status));
 		return false;
 	}
 
@@ -529,91 +509,185 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesHybrid(const QList<SIFT::
 	bool gpuBusy= false;
 	bool openCLFailed= false;
 
+	QVector<QSet<int> > keypoints1Matches(keypoints1.size(),QSet<int>());
+	QVector<QSet<int> > keypoints2Matches(keypoints2.size(),QSet<int>());
+
+
 	//Compute distances for all keypoints from keypoints1, then choose the minumum distance
 	#pragma omp parallel
-	for(QList<SIFT::Keypoint>::const_iterator it1=keypoints1.begin();it1!=keypoints1.end();it1++){
+	for(int x1=0;x1<keypoints1.size();x1+=inputVectorsBufferSize){
 		#pragma omp single nowait
-		if(!openCLFailed)
 		{
-			bool useGPU=false;
-			#pragma omp critical
-			{
-				if(!gpuBusy && Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU){
-					useGPU= true;
-					gpuBusy= true;
-				}
-			}
-
-			KeypointMatch match;
-			float minDistance= std::numeric_limits<float>::infinity();
-
-			if(useGPU && !kernelInitialized){
-				if(!InitCL()){
-					openCLFailed= true;
-					useGPU= false;
-				}
-			}
-
-			if(useGPU && kernelFirstRun){
-				inputVectorsCount= keypoints2.size();
-				//Copy data for keypoints2
-				for(int i=0;i<keypoints2.size();i++){
-					const SIFT::Keypoint& keypoint2= keypoints2[i];
-					for(cl_uint j=0;j<vectorSize;j++)
-						input[i*vectorSize+j]= keypoint2[j];
-				}
-
-				inputVectorsCopied= false;
-			}
-
-			if(useGPU){
-				//Prepare current vector
-				for(cl_uint i=0;i<vectorSize;i++)
-					vector[i]= (*it1)[i];
-
-				//Run OpenCL stuff
-				if(!CalcDistances())
-					openCLFailed= true;
-
-				if(!openCLFailed){
-					//Parse OpenCL result
-					int min_i=0;
-					for(int i=0;i<keypoints2.size();i++)
-						if(output[i]<output[min_i])
-							min_i=i;
-					const SIFT::Keypoint& keypoint2= keypoints2[min_i];
-					minDistance= it1->distance(keypoint2);
-					if(minDistance<Options::MaxKeypointDistance){
-						match.a= QPointF(it1->getX(),it1->getY());
-						match.b= QPointF(keypoint2.getX(),keypoint2.getY());
-					}
-				}
-				gpuBusy= false;
-			}else{
-				minDistance= std::numeric_limits<float>::infinity();
-				double MaxKeypointDistanceSquared= Options::MaxKeypointDistance*Options::MaxKeypointDistance;
-				for(QList<SIFT::Keypoint>::const_iterator it2= keypoints2.begin();it2!=keypoints2.end();it2++){
-					float distance= it1->distance(*it2,MaxKeypointDistanceSquared);
-					if(distance<minDistance && distance<Options::MaxKeypointDistance){
-						minDistance= distance;
-						match.a= QPointF(it1->getX(),it1->getY());
-						match.b= QPointF(it2->getX(),it2->getY());
-					}
-				}
-			}
-
-			if(minDistance!=std::numeric_limits<float>::infinity() && minDistance<Options::MaxKeypointDistance){
-				#pragma omp critical
+			QVector<float> outputCpu(inputVectorsBufferSize*inputVectorsBufferSize);
+			for(int x2=0;x2<keypoints2.size();x2+=inputVectorsBufferSize){
+				if(!openCLFailed)
 				{
-					if(!result.contains(minDistance,match))
-						result.insert(minDistance,match);
+					bool useGPU=false;
+					#pragma omp critical
+					{
+						if(!gpuBusy && Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU){
+							useGPU= true;
+							gpuBusy= true;
+						}
+					}
+
+					if(useGPU && !kernelInitialized){
+						if(!InitCL()){
+							openCLFailed= true;
+							useGPU= false;
+						}
+					}
+
+					if(useGPU){
+						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
+							const SIFT::Keypoint& keypoint1= keypoints1[x1+i];
+							for(cl_uint j=0;j<vectorSize;j++)
+								input1[i*vectorSize+j]= keypoint1[j];
+						}
+
+						//Prepare matches set from second image
+						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
+							const SIFT::Keypoint& keypoint2= keypoints2[x2+i];
+							for(cl_uint j=0;j<vectorSize;j++)
+								input2[i*vectorSize+j]= keypoint2[j];
+						}
+						//Run OpenCL procedure
+						if(!CalcDistances())
+							openCLFailed= true;
+
+						//Extract matches
+						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
+							float minDistance= std::numeric_limits<float>::infinity();
+							int min_j=0;
+							for(int j=0;(j<(int)inputVectorsBufferSize) && ((x2+j)<keypoints2.size());j++){
+								float distance= output[inputVectorsBufferSize*i+j];
+								if(distance<minDistance){
+									minDistance=distance;
+									min_j= j;
+								}
+							}
+							#pragma omp critical
+							{
+								keypoints1Matches[x1+i].insert(x2+min_j);
+							}
+						}
+						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
+							float minDistance= std::numeric_limits<float>::infinity();
+							int min_j=0;
+							for(int j=0;(j<(int)inputVectorsBufferSize) && ((x1+j)<keypoints1.size());j++){
+								float distance= output[inputVectorsBufferSize*j+i];
+								if(distance<minDistance){
+									minDistance=distance;
+									min_j= j;
+								}
+							}
+							#pragma omp critical
+							{
+								keypoints2Matches[x2+i].insert(x1+min_j);
+							}
+						}
+						gpuBusy= false;
+					}else{
+						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
+							for(int j=0;(j<(int)inputVectorsBufferSize) && ((x2+j)<keypoints2.size());j++){
+								outputCpu[inputVectorsBufferSize*i+j]= keypoints1[x1+i].distance(keypoints2[x2+j]);
+							}
+						}
+
+						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
+							float minDistance= std::numeric_limits<float>::infinity();
+							int min_j=0;
+							for(int j=0;(j<(int)inputVectorsBufferSize) && ((x2+j)<keypoints2.size());j++){
+								float distance= outputCpu[inputVectorsBufferSize*i+j];
+								if(distance<minDistance){
+									minDistance=distance;
+									min_j=j;
+								}
+							}
+							#pragma omp critical
+							{
+								keypoints1Matches[x1+i].insert(x2+min_j);
+							}
+						}
+						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
+							float minDistance= std::numeric_limits<float>::infinity();
+							int min_j=0;
+							for(int j=0;(j<(int)inputVectorsBufferSize) && ((x1+j)<keypoints1.size());j++){
+								float distance= outputCpu[inputVectorsBufferSize*j+i];
+								if(distance<minDistance){
+									minDistance=distance;
+									min_j=j;
+								}
+							}
+							#pragma omp critical
+							{
+								keypoints2Matches[x2+i].insert(x1+min_j);
+							}
+						}
+					}
 				}
 			}
 		}
 	}
 
 	if(openCLFailed)
-		result= SortedKeypointMatches();
+		return SortedKeypointMatches();
+
+	for(int i=0;i<keypoints1Matches.size();i++){
+		const SIFT::Keypoint& keypoint1= keypoints1[i];
+		float minDistance= std::numeric_limits<float>::infinity();
+		int min_j=0;
+		{
+			const QSet<int>& keypoint1Distances= keypoints1Matches[i];
+			if(keypoint1Distances.empty())
+				continue;
+			for(QSet<int>::const_iterator it=keypoint1Distances.begin();it!=keypoint1Distances.end();it++){
+				float distance= keypoint1.distance(keypoints2[*it]);
+				if(distance<minDistance){
+					minDistance= distance;
+					min_j= *it;
+				}
+			}
+		}
+		if(minDistance<Options::MaxKeypointDistance){
+			const SIFT::Keypoint& keypoint2= keypoints2[min_j];
+			KeypointMatch match;
+			match.a= QPointF(keypoint1.getX(),keypoint1.getY());
+			match.b= QPointF(keypoint2.getX(),keypoint2.getY());
+
+			//Add point
+			if(!result.contains(minDistance,match))
+				result.insert(minDistance,match);
+		}
+	}
+
+	for(int i=0;i<keypoints2Matches.size();i++){
+		const SIFT::Keypoint& keypoint2= keypoints2[i];
+		float minDistance= std::numeric_limits<float>::infinity();
+		int min_j=0;
+		{
+			const QSet<int>& keypoint2Distances= keypoints2Matches[i];
+			if(keypoint2Distances.empty())
+				continue;
+			for(QSet<int>::const_iterator it=keypoint2Distances.begin();it!=keypoint2Distances.end();it++){
+				float distance= keypoint2.distance(keypoints1[*it]);
+				if(distance<minDistance){
+					minDistance= distance;
+					min_j= *it;
+				}
+			}
+		}
+		if(minDistance<Options::MaxKeypointDistance){
+			const SIFT::Keypoint& keypoint1= keypoints1[min_j];
+			KeypointMatch match;
+			match.a= QPointF(keypoint1.getX(),keypoint1.getY());
+			match.b= QPointF(keypoint2.getX(),keypoint2.getY());
+
+			//Add point
+			if(!result.contains(minDistance,match))
+				result.insert(minDistance,match);
+		}
+	}
 
 	return result;
 }
@@ -626,36 +700,103 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesOpenCL(const QList<SIFT::
 
 	SortedKeypointMatches result;
 
-	inputVectorsCount= keypoints2.size();
-	//Copy data for keypoints2
-	for(int i=0;i<keypoints2.size();i++){
-		const SIFT::Keypoint& keypoint2= keypoints2[i];
-		for(cl_uint j=0;j<vectorSize;j++)
-			input[i*vectorSize+j]= keypoint2[j];
+	QVector<QSet<int> > keypoints1Matches(keypoints1.size(),QSet<int>());
+	QVector<QSet<int> > keypoints2Matches(keypoints2.size(),QSet<int>());
+	for(int x1=0;x1<keypoints1.size();x1+=inputVectorsBufferSize){
+		//Prepare matches set from first image
+		for(int i=0;(i<(int)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
+			const SIFT::Keypoint& keypoint1= keypoints1[x1+i];
+			for(cl_uint j=0;j<vectorSize;j++)
+				input1[i*vectorSize+j]= keypoint1[j];
+		}
+		for(int x2=0;x2<keypoints2.size();x2+=inputVectorsBufferSize){
+			//Prepare matches set from second image
+			for(int i=0;(i<(int)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
+				const SIFT::Keypoint& keypoint2= keypoints2[x2+i];
+				for(cl_uint j=0;j<vectorSize;j++)
+					input2[i*vectorSize+j]= keypoint2[j];
+			}
+			//Run OpenCL procedure
+			if(!CalcDistances())
+				return SortedKeypointMatches();
+
+			//Extract matches
+			for(int i=0;(i<(int)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
+				float minDistance= std::numeric_limits<float>::infinity();
+				int min_j=0;
+				for(int j=0;(j<(int)inputVectorsBufferSize) && ((x2+j)<keypoints2.size());j++){
+					float distance= output[inputVectorsBufferSize*i+j];
+					if(distance<minDistance){
+						minDistance=distance;
+						min_j=j;
+					}
+				}
+				keypoints1Matches[x1+i].insert(x2+min_j);
+			}
+			for(int i=0;(i<(int)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
+				float minDistance= std::numeric_limits<float>::infinity();
+				int min_j=0;
+				for(int j=0;(j<(int)inputVectorsBufferSize) && ((x1+j)<keypoints1.size());j++){
+					float distance= output[inputVectorsBufferSize*j+i];
+					if(distance<minDistance){
+						minDistance=distance;
+						min_j=j;
+					}
+				}
+				keypoints2Matches[x2+i].insert(x1+min_j);
+			}
+		}
 	}
 
-	inputVectorsCopied= false;
-
-	//Compute distances for all keypoints from keypoints1, then choose the minumum distance
-	for(QList<SIFT::Keypoint>::const_iterator it=keypoints1.begin();it!=keypoints1.end();it++){
-		//Prepare current vector
-		for(cl_uint i=0;i<vectorSize;i++)
-			vector[i]= (*it)[i];
-
-		//Run OpenCL stuff
-		if(!CalcDistances())
-			return SortedKeypointMatches();
-
-		//Parse OpenCL result
-		int min_i=0;
-		for(int i=0;i<keypoints2.size();i++)
-			if(output[i]<output[min_i])
-				min_i=i;
-		KeypointMatch match;
-		float minDistance= output[min_i];
+	for(int i=0;i<keypoints1Matches.size();i++){
+		const SIFT::Keypoint& keypoint1= keypoints1[i];
+		float minDistance= std::numeric_limits<float>::infinity();
+		int min_j=0;
+		{
+			const QSet<int>& keypoint1Distances= keypoints1Matches[i];
+			if(keypoint1Distances.empty())
+				continue;
+			for(QSet<int>::const_iterator it=keypoint1Distances.begin();it!=keypoint1Distances.end();it++){
+				float distance= keypoint1.distance(keypoints2[*it]);
+				if(distance<minDistance){
+					minDistance= distance;
+					min_j= *it;
+				}
+			}
+		}
 		if(minDistance<Options::MaxKeypointDistance){
-			match.a= QPointF(it->getX(),it->getY());
-			match.b= QPointF(keypoints2[min_i].getX(),keypoints2[min_i].getY());
+			const SIFT::Keypoint& keypoint2= keypoints2[min_j];
+			KeypointMatch match;
+			match.a= QPointF(keypoint1.getX(),keypoint1.getY());
+			match.b= QPointF(keypoint2.getX(),keypoint2.getY());
+
+			//Add point
+			if(!result.contains(minDistance,match))
+				result.insert(minDistance,match);
+		}
+	}
+
+	for(int i=0;i<keypoints2Matches.size();i++){
+		const SIFT::Keypoint& keypoint2= keypoints2[i];
+		float minDistance= std::numeric_limits<float>::infinity();
+		int min_j=0;
+		{
+			const QSet<int>& keypoint2Distances= keypoints2Matches[i];
+			if(keypoint2Distances.empty())
+				continue;
+			for(QSet<int>::const_iterator it=keypoint2Distances.begin();it!=keypoint2Distances.end();it++){
+				float distance= keypoint2.distance(keypoints1[*it]);
+				if(distance<minDistance){
+					minDistance= distance;
+					min_j= *it;
+				}
+			}
+		}
+		if(minDistance<Options::MaxKeypointDistance){
+			const SIFT::Keypoint& keypoint1= keypoints1[min_j];
+			KeypointMatch match;
+			match.a= QPointF(keypoint1.getX(),keypoint1.getY());
+			match.b= QPointF(keypoint2.getX(),keypoint2.getY());
 
 			//Add point
 			if(!result.contains(minDistance,match))
