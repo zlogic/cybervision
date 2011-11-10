@@ -9,7 +9,7 @@ __kernel void computeDistances(__global   float  * outputDistances,
 	uint lTid1 = get_local_id(0);
 	uint lTid2 = get_local_id(1);
 	//float input1Local[VECTOR_SIZE];
-	__local float input2Local[MAX_THREADS_DIM2*VECTOR_SIZE];
+	__local float input2Local[MAX_THREADS_SECOND_DIMENSION*VECTOR_SIZE];
 
 	//#pragma unroll
 	//for(uint i=0;i<VECTOR_SIZE;i++)

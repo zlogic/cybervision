@@ -228,7 +228,7 @@ bool PointMatcherOpenCL::InitCL(){
 		return false;
 	}
 
-	QString qOptions= QString("-D VECTOR_SIZE=%1 -D MAX_THREADS_DIM2=%2").arg(vectorSize).arg(kernelWorkGroupSize2Max);
+	QString qOptions= QString("-D VECTOR_SIZE=%1 -D MAX_THREADS_SECOND_DIMENSION=%2").arg(vectorSize).arg(kernelWorkGroupSize2Max);
 
 	/* create a cl program executable for all the devices specified */
 	status = clBuildProgram(program, 1, devices.data(), qOptions.toStdString().c_str(), NULL, NULL);
@@ -518,7 +518,6 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesHybrid(const QList<SIFT::
 	for(int x1=0;x1<keypoints1.size();x1+=inputVectorsBufferSize){
 		#pragma omp single nowait
 		{
-			QVector<float> outputCpu(inputVectorsBufferSize*inputVectorsBufferSize);
 			for(int x2=0;x2<keypoints2.size();x2+=inputVectorsBufferSize){
 				if(!openCLFailed)
 				{
@@ -588,6 +587,8 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesHybrid(const QList<SIFT::
 						}
 						gpuBusy= false;
 					}else{
+						QVector<float> outputCpu(inputVectorsBufferSize*inputVectorsBufferSize);
+
 						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
 							for(int j=0;(j<(int)inputVectorsBufferSize) && ((x2+j)<keypoints2.size());j++){
 								outputCpu[inputVectorsBufferSize*i+j]= keypoints1[x1+i].distance(keypoints2[x2+j]);
