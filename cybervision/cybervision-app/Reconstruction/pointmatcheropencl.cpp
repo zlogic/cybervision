@@ -124,7 +124,8 @@ bool PointMatcherOpenCL::InitCL(){
 	// Create an OpenCL context
 	/////////////////////////////////////////////////////////////////
 	context = clCreateContextFromType(cps,
-									  Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU?CL_DEVICE_TYPE_GPU:CL_DEVICE_TYPE_CPU,
+									  (Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU || Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_HYBRID)
+									  ?CL_DEVICE_TYPE_GPU:CL_DEVICE_TYPE_CPU,
 									  NULL,
 									  NULL,
 									  &status);
@@ -341,7 +342,7 @@ bool PointMatcherOpenCL::CalcDistances(){
 		kernelFirstRun= false;
 	}
 
-	if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU){
+	if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU || Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_HYBRID){
 		/* Enqueue clEnqueueWriteBuffer for input1 buffer */
 		status = clEnqueueWriteBuffer(
 					commandQueue,
@@ -495,8 +496,10 @@ bool PointMatcherOpenCL::CalcDistances(){
 }
 
 SortedKeypointMatches PointMatcherOpenCL::CalcDistances(const QList<SIFT::Keypoint>& keypoints1,const QList<SIFT::Keypoint>& keypoints2){
-	if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU)
+	if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_HYBRID)
 		return CalcDistancesHybrid(keypoints1,keypoints2);
+	else if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU)
+		return CalcDistancesOpenCL(keypoints1,keypoints2);
 	else if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU)
 		return CalcDistancesOpenCL(keypoints1,keypoints2);
 	else
@@ -524,7 +527,7 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesHybrid(const QList<SIFT::
 					bool useGPU=false;
 					#pragma omp critical
 					{
-						if(!gpuBusy && Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU){
+						if(!gpuBusy && (Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU || Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_HYBRID)){
 							useGPU= true;
 							gpuBusy= true;
 						}

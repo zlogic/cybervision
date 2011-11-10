@@ -111,7 +111,7 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 	emit sgnStatusMessage(tr("Matching SIFT keypoints..."));
 
 	bool OpenCLSucceeded= true;
-	if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU || Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU){
+	if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_CPU || Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_GPU || Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_OPENCL_HYBRID){
 #ifdef CYBERVISION_OPENCL
 		PointMatcherOpenCL clMatcher(128,this);
 
