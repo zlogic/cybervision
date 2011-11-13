@@ -297,6 +297,22 @@ void CrossSection::computeParams(int p){
 	}
 }
 
+qreal CrossSection::getHeight(qreal x){
+	qreal height= std::numeric_limits<qreal>::quiet_NaN();
+
+	for(QList<QPointF>::const_iterator it=crossSection.begin();it!=crossSection.end();it++){
+		if(it!=crossSection.begin()){
+			QList<QPointF>::const_iterator it_prev= it-1;
+			if(it_prev->x()<=x && it->x()>=x){
+				height= (it->y()-it_prev->y())*(x-it_prev->x())/(it->x()-it_prev->x()) + it_prev->y();
+				break;
+			}
+		}
+	}
+
+	return height;
+}
+
 bool CrossSection::isOk() const{ return ok; }
 QList<QPointF> CrossSection::getCrossSection() const{	return crossSection; }
 QLineF CrossSection::getMLine() const{	return mLine; }

@@ -10,12 +10,17 @@
         <translation>Профиль поверхности</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.ui" line="24"/>
-        <source>Roughness parameters</source>
+        <location filename="../crosssectionwindow.ui" line="46"/>
+        <source>Roughness paramenters</source>
         <translation>Параметры шероховатости</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="51"/>
+        <location filename="../crosssectionwindow.ui" line="97"/>
+        <source>Height measurement</source>
+        <translation>Измерение глубины</translation>
+    </message>
+    <message>
+        <location filename="../crosssectionwindow.cpp" line="54"/>
         <source>Ra= %1 m
 Rz= %2 m
 Rmax= %3 m</source>
@@ -24,13 +29,26 @@ Rz= %2 м
 Rmax= %3 м</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="55"/>
+        <location filename="../crosssectionwindow.cpp" line="58"/>
         <source>S= %1 m
 Sm= %2 m
 tp= %3</source>
         <translation>S= %1 м
 Sm= %2 м
 tp= %3</translation>
+    </message>
+    <message>
+        <location filename="../crosssectionwindow.cpp" line="220"/>
+        <source>x1= %1 m
+h1= %2 m
+x2= %3 m
+h2= %4 m
+Height difference= %5 m</source>
+        <translation>x1= %1 м
+h1= %2 м
+x2= %3 м
+h2= %4 м
+Перепад высот= %5 м</translation>
     </message>
 </context>
 <context>

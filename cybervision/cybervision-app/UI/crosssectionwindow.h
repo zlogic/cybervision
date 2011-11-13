@@ -9,6 +9,31 @@ namespace Ui {
     class CrossSectionWindow;
 }
 
+/*
+ * Modified QGraphicsScene with customized mouse interaction
+ */
+class CybervisionCrosssectionScene : public QGraphicsScene{
+	Q_OBJECT
+public:
+	CybervisionCrosssectionScene(QObject *parent = 0);
+	CybervisionCrosssectionScene(const QRectF &sceneRect, QObject *parent = 0);
+	CybervisionCrosssectionScene(qreal x, qreal y, qreal width, qreal height, QObject *parent = 0);
+	void updateSceneData(QList<QGraphicsItem*> measurementLines,const QRect &crossSectionArea,qreal scaleX);
+protected:
+	QPointF clickPos;
+	QList<QGraphicsItem*> measurementLines;
+	QRect crossSectionArea;
+	qreal scaleX;
+	void mouseMoveEvent(QGraphicsSceneMouseEvent *event);
+	void mousePressEvent(QGraphicsSceneMouseEvent *event);
+signals:
+	void measurementLineDragged(qreal x,int id);
+};
+
+
+/*
+ * Dialog window for cross-section viewer
+ */
 class CrossSectionWindow : public QDialog
 {
     Q_OBJECT
@@ -23,6 +48,8 @@ public:
 	//Updates the cross-section image and stats labels
 	void updateSurfaceStats();
 protected:
+	qreal measurementLinePos1,measurementLinePos2;
+
 	//Sends signal on close
 	void closeEvent(QCloseEvent *event);
 	void resizeEvent(QResizeEvent *);
@@ -33,6 +60,9 @@ protected:
 	//Re-draws the cross-section
 	void renderCrossSection();
 
+	//Updates the measurement lines label with the latest height information
+	void updateMeasurementLinesLabel();
+
 	//Returns the optimal scale step for the min/max value pair. Imported from CybervisionViewer.
 	qreal getOptimalGridStep(qreal min,qreal max) const;
 private:
@@ -40,11 +70,12 @@ private:
 
 	cybervision::CrossSection crossSection;
 
-	QGraphicsScene crossSectionScene;
+	CybervisionCrosssectionScene crossSectionScene;
 signals:
 	void closed();
 private slots:
-	void on_crosssectionPSpinBox_valueChanged(int arg1);
+	void on_roughnessPSpinBox_valueChanged(int arg1);
+	void measurementLineDragged(qreal x,int id);
 };
 
 #endif // CROSSSECTIONWINDOW_H

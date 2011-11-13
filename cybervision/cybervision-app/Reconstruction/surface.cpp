@@ -121,7 +121,7 @@ void Surface::setTextures(const QImage& image1,const QImage& image2){
 }
 
 /*
- Functions for saving image data
+ * Functions for saving image data
  */
 void Surface::savePoints(QString fileName)const{
 	QFile file(fileName);

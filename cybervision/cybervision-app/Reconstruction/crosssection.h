@@ -36,6 +36,9 @@ public:
 	//Computation code for roughness analysis
 	void computeParams(int p);
 
+	//Returns the height at a specific location (y(x))
+	qreal getHeight(qreal x);
+
 	//Returns the cross-section profile
 	QList<QPointF> getCrossSection()const;
 

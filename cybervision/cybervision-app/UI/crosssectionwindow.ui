@@ -18,57 +18,8 @@
     <normaloff>:/icons/UI/icons/pencil-ruler.png</normaloff>:/icons/UI/icons/pencil-ruler.png</iconset>
   </property>
   <layout class="QGridLayout" name="gridLayout">
-   <item row="2" column="0" colspan="2">
-    <widget class="QLabel" name="crosssectionRoughnessParametersLabel">
-     <property name="text">
-      <string>Roughness parameters</string>
-     </property>
-    </widget>
-   </item>
-   <item row="3" column="0">
-    <widget class="QLabel" name="crosssectionHeightStatsLabel">
-     <property name="text">
-      <string/>
-     </property>
-     <property name="textInteractionFlags">
-      <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByMouse</set>
-     </property>
-    </widget>
-   </item>
-   <item row="3" column="1">
-    <widget class="QLabel" name="crosssectionStepStatsLabel">
-     <property name="text">
-      <string/>
-     </property>
-     <property name="textInteractionFlags">
-      <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByMouse</set>
-     </property>
-    </widget>
-   </item>
-   <item row="4" column="1">
-    <widget class="QSpinBox" name="crosssectionPSpinBox">
-     <property name="suffix">
-      <string notr="true">%</string>
-     </property>
-     <property name="prefix">
-      <string notr="true">p=</string>
-     </property>
-     <property name="minimum">
-      <number>10</number>
-     </property>
-     <property name="maximum">
-      <number>90</number>
-     </property>
-     <property name="singleStep">
-      <number>10</number>
-     </property>
-     <property name="value">
-      <number>10</number>
-     </property>
-    </widget>
-   </item>
    <item row="1" column="0" colspan="2">
-    <widget class="QGraphicsView" name="crossSectionViewport">
+    <widget class="QGraphicsView" name="crosssectionViewport">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -82,11 +33,78 @@
       <enum>Qt::ScrollBarAlwaysOff</enum>
      </property>
      <property name="interactive">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <property name="renderHints">
       <set>QPainter::Antialiasing|QPainter::HighQualityAntialiasing|QPainter::SmoothPixmapTransform|QPainter::TextAntialiasing</set>
      </property>
+    </widget>
+   </item>
+   <item row="2" column="0" colspan="2">
+    <widget class="QGroupBox" name="roughnessGroupBox">
+     <property name="title">
+      <string>Roughness paramenters</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout_2">
+      <item row="0" column="0">
+       <widget class="QLabel" name="roughnessHeightStatsLabel">
+        <property name="text">
+         <string/>
+        </property>
+        <property name="textInteractionFlags">
+         <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByMouse</set>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="roughnessStepStatsLabel">
+        <property name="text">
+         <string/>
+        </property>
+        <property name="textInteractionFlags">
+         <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByMouse</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QSpinBox" name="roughnessPSpinBox">
+        <property name="suffix">
+         <string notr="true">%</string>
+        </property>
+        <property name="prefix">
+         <string notr="true">p=</string>
+        </property>
+        <property name="minimum">
+         <number>10</number>
+        </property>
+        <property name="maximum">
+         <number>90</number>
+        </property>
+        <property name="singleStep">
+         <number>10</number>
+        </property>
+        <property name="value">
+         <number>10</number>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="5" column="0" colspan="2">
+    <widget class="QGroupBox" name="heightGroupBox">
+     <property name="title">
+      <string>Height measurement</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout_3">
+      <item row="0" column="0">
+       <widget class="QLabel" name="heightMeasurementLabel">
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
   </layout>

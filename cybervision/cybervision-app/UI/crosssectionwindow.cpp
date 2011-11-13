@@ -2,6 +2,7 @@
 #include "ui_crosssectionwindow.h"
 
 #include <QCloseEvent>
+#include <QGraphicsSceneMouseEvent>
 
 #define _USE_MATH_DEFINES
 #include <cmath>
@@ -13,11 +14,13 @@
 CrossSectionWindow::CrossSectionWindow(QWidget *parent) :
     QDialog(parent),
 	ui(new Ui::CrossSectionWindow),
-	crossSectionScene(ui->crossSectionViewport)
+	crossSectionScene(this)
 {
     ui->setupUi(this);
-	ui->crossSectionViewport->setUpdatesEnabled(true);
-	ui->crossSectionViewport->setScene(&crossSectionScene);
+	ui->crosssectionViewport->setUpdatesEnabled(true);
+	ui->crosssectionViewport->setScene(&crossSectionScene);
+
+	connect(&crossSectionScene,SIGNAL(measurementLineDragged(qreal,int)),this,SLOT(measurementLineDragged(qreal,int)),Qt::AutoConnection);
 
 	updateSurfaceStats();
 }
@@ -33,13 +36,13 @@ void CrossSectionWindow::updateCrossSection(const cybervision::CrossSection& cro
 
 
 void CrossSectionWindow::updateWidgetStatus(){
-	ui->crosssectionPSpinBox->setVisible(crossSection.isOk());
-	ui->crosssectionRoughnessParametersLabel->setVisible(crossSection.isOk());
+	ui->roughnessGroupBox->setVisible(crossSection.isOk());
+	ui->heightGroupBox->setVisible(crossSection.isOk());
 }
 
 
 void CrossSectionWindow::updateSurfaceStats(){
-	crossSection.computeParams(ui->crosssectionPSpinBox->value());
+	crossSection.computeParams(ui->roughnessPSpinBox->value());
 
 	//Render the image
 	crossSectionScene.clear();
@@ -62,10 +65,10 @@ void CrossSectionWindow::updateSurfaceStats(){
 		stepParamsString= "";
 	}
 
-	ui->crosssectionPSpinBox->setVisible(crossSection.isOk());
-	ui->crosssectionRoughnessParametersLabel->setVisible(crossSection.isOk());
-	ui->crosssectionHeightStatsLabel->setText(heightParamsString);
-	ui->crosssectionStepStatsLabel->setText(stepParamsString);
+	ui->roughnessGroupBox->setVisible(crossSection.isOk());
+	ui->heightGroupBox->setVisible(crossSection.isOk());
+	ui->roughnessHeightStatsLabel->setText(heightParamsString);
+	ui->roughnessStepStatsLabel->setText(stepParamsString);
 }
 
 void CrossSectionWindow::closeEvent(QCloseEvent *event){
@@ -77,13 +80,12 @@ void CrossSectionWindow::resizeEvent(QResizeEvent* event){
 	updateSurfaceStats();
 }
 
-
-void CrossSectionWindow::on_crosssectionPSpinBox_valueChanged(int arg1){
+void CrossSectionWindow::on_roughnessPSpinBox_valueChanged(int arg1){
 	updateSurfaceStats();
 }
 
 void CrossSectionWindow::renderCrossSection(){
-	QSize imageSize(ui->crossSectionViewport->viewport()->contentsRect().width(),ui->crossSectionViewport->viewport()->contentsRect().height());
+	QSize imageSize(ui->crosssectionViewport->viewport()->contentsRect().width(),ui->crosssectionViewport->viewport()->contentsRect().height());
 	QList<QPointF> crossSectionPoints= crossSection.getCrossSection();
 	//Prepare data
 	qreal minX= std::numeric_limits<qreal>::infinity(),
@@ -176,7 +178,52 @@ void CrossSectionWindow::renderCrossSection(){
 				crossSectionArea.height()*(maxY-crossSection.getPLine().y2())/(maxY-minY)+crossSectionArea.y(),
 				penTline
 	);
+
+	//Draw the level measurement lines
+	QPen measurementLinePen(QColor(0,0,0x66),1,Qt::SolidLine);
+	QGraphicsItem *measurementLine1= crossSectionScene.addLine(
+				crossSectionArea.x(),
+				crossSectionArea.y(),
+				crossSectionArea.x(),
+				crossSectionArea.bottom(),
+				measurementLinePen);
+	if(measurementLine1){
+		measurementLine1->setCursor(Qt::SplitHCursor);
+		measurementLine1->setFlag(QGraphicsItem::ItemIsMovable,true);
+	}
+	QGraphicsItem *measurementLine2= crossSectionScene.addLine(
+				crossSectionArea.right(),
+				crossSectionArea.y(),
+				crossSectionArea.right(),
+				crossSectionArea.bottom(),
+				measurementLinePen);
+	if(measurementLine2){
+		measurementLine2->setCursor(Qt::SplitHCursor);
+		measurementLine2->setFlag(QGraphicsItem::ItemIsMovable,true);
+	}
+
 	crossSectionScene.setSceneRect(crossSectionScene.itemsBoundingRect());
+
+	qreal scaleX= (maxX-minX)/crossSectionArea.width();
+	QList<QGraphicsItem*> measurementLines;
+	measurementLines<<measurementLine1<<measurementLine2;
+	crossSectionScene.updateSceneData(measurementLines,crossSectionArea,scaleX);
+
+	measurementLinePos1= minX, measurementLinePos2= maxX;
+	updateMeasurementLinesLabel();
+}
+
+
+void CrossSectionWindow::updateMeasurementLinesLabel(){
+	qreal height1= crossSection.getHeight(measurementLinePos1), height2= crossSection.getHeight(measurementLinePos2);
+	qreal deltaHeight= height1-height2;
+	QString measurementLineStr= QString(tr("x1= %1 m\nh1= %2 m\nx2= %3 m\nh2= %4 m\nHeight difference= %5 m"))
+			.arg(measurementLinePos1)
+			.arg(height1)
+			.arg(measurementLinePos2)
+			.arg(height2)
+			.arg(deltaHeight);
+	ui->heightMeasurementLabel->setText(measurementLineStr);
 }
 
 qreal CrossSectionWindow::getOptimalGridStep(qreal min, qreal max) const{
@@ -200,4 +247,55 @@ qreal CrossSectionWindow::getOptimalGridStep(qreal min, qreal max) const{
 	else if(step_2_count<max_step_count)
 		return step_2;
 	else return step_5;
+}
+
+void CrossSectionWindow::measurementLineDragged(qreal x, int id){
+	switch(id){
+	case 0:
+		measurementLinePos1= x;
+		break;
+	case 1:
+		measurementLinePos2= x;
+		break;
+	}
+	updateMeasurementLinesLabel();
+}
+
+/*
+ * CybervisionCrosssectionScene code
+ */
+CybervisionCrosssectionScene::CybervisionCrosssectionScene(QObject * parent):QGraphicsScene(parent){
+	scaleX= 1;
+}
+CybervisionCrosssectionScene::CybervisionCrosssectionScene(const QRectF &sceneRect, QObject *parent):QGraphicsScene(sceneRect,parent){
+	scaleX= 1;
+}
+CybervisionCrosssectionScene::CybervisionCrosssectionScene(qreal x, qreal y, qreal width, qreal height, QObject *parent):QGraphicsScene(x,y,width,height,parent){
+	scaleX= 1;
+}
+
+void CybervisionCrosssectionScene::mousePressEvent(QGraphicsSceneMouseEvent *event){
+	clickPos= event->scenePos();
+	QGraphicsScene::mousePressEvent(event);
+}
+
+void CybervisionCrosssectionScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event){
+	if(measurementLines.contains(mouseGrabberItem())){
+		if(event->type()==QEvent::GraphicsSceneMouseMove){
+			QPointF newPos(event->scenePos().x(),clickPos.y());
+			if(newPos.x()<crossSectionArea.left())
+				newPos.setX(crossSectionArea.left());
+			if(newPos.x()>crossSectionArea.right())
+				newPos.setX(crossSectionArea.right());
+			event->setScenePos(newPos);
+			emit measurementLineDragged(scaleX*(newPos.x()-crossSectionArea.x()),measurementLines.indexOf(mouseGrabberItem()));
+		}
+	}
+	QGraphicsScene::mouseMoveEvent(event);
+}
+
+void CybervisionCrosssectionScene::updateSceneData(QList<QGraphicsItem*> measurementLines, const QRect &crossSectionArea,qreal scaleX){
+	this->measurementLines= measurementLines;
+	this->crossSectionArea= crossSectionArea;
+	this->scaleX= scaleX;
 }
