@@ -629,7 +629,7 @@ Median depth: %3 m</source>
     <message>
         <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="337"/>
         <source>OpenCL Warning: Out of Resources! Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3x%4.</source>
-        <translation>Предупреждение OpenCL: Недостаточно ресурсов! Заданный Размер Группы:%1. Максимальный поддерживаемый ядром размер группы: %2. Будет использоваться размер группs %3x%4.</translation>
+        <translation>Предупреждение OpenCL: Недостаточно ресурсов! Заданный Размер Группы:%1. Максимальный поддерживаемый ядром размер группы: %2. Будет использоваться размер группы %3x%4.</translation>
     </message>
     <message>
         <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="358"/>
