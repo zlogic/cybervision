@@ -212,7 +212,7 @@ void CrossSectionWindow::renderCrossSection(){
 		measurementLine2->setFlag(QGraphicsItem::ItemIsMovable,true);
 	}
 
-	crossSectionScene.setSceneRect(crossSectionScene.itemsBoundingRect());
+	crossSectionScene.setSceneRect(ui->crosssectionViewport->viewport()->contentsRect());
 
 	QList<QGraphicsItem*> measurementLines;
 	measurementLines<<measurementLine1<<measurementLine2;
