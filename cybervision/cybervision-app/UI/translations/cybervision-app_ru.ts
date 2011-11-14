@@ -20,7 +20,7 @@
         <translation>Измерение глубины</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="54"/>
+        <location filename="../crosssectionwindow.cpp" line="57"/>
         <source>Ra= %1 m
 Rz= %2 m
 Rmax= %3 m</source>
@@ -29,7 +29,7 @@ Rz= %2 м
 Rmax= %3 м</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="58"/>
+        <location filename="../crosssectionwindow.cpp" line="61"/>
         <source>S= %1 m
 Sm= %2 m
 tp= %3</source>
@@ -38,7 +38,7 @@ Sm= %2 м
 tp= %3</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="220"/>
+        <location filename="../crosssectionwindow.cpp" line="229"/>
         <source>x1= %1 m
 h1= %2 m
 x2= %3 m

@@ -3,11 +3,27 @@
 
 #include <QDialog>
 #include <QGraphicsScene>
+#include <QGraphicsView>
 #include <Reconstruction/crosssection.h>
 
 namespace Ui {
     class CrossSectionWindow;
 }
+
+
+/*
+ * Modified QGraphicsView which emits "resize" events
+ */
+class CybervisionCrosssectionGraphicsView : public QGraphicsView{
+	Q_OBJECT
+public:
+	CybervisionCrosssectionGraphicsView(QWidget *parent = 0);
+	CybervisionCrosssectionGraphicsView(QGraphicsScene *scene, QWidget *parent = 0);
+protected:
+	void resizeEvent(QResizeEvent *event);
+signals:
+	void resized();
+};
 
 /*
  * Modified QGraphicsScene with customized mouse interaction
@@ -18,12 +34,11 @@ public:
 	CybervisionCrosssectionScene(QObject *parent = 0);
 	CybervisionCrosssectionScene(const QRectF &sceneRect, QObject *parent = 0);
 	CybervisionCrosssectionScene(qreal x, qreal y, qreal width, qreal height, QObject *parent = 0);
-	void updateSceneData(QList<QGraphicsItem*> measurementLines,const QRect &crossSectionArea,qreal scaleX);
+	void updateSceneData(QList<QGraphicsItem*> measurementLines,const QRect &crossSectionArea);
 protected:
 	QPointF clickPos;
 	QList<QGraphicsItem*> measurementLines;
 	QRect crossSectionArea;
-	qreal scaleX;
 	void mouseMoveEvent(QGraphicsSceneMouseEvent *event);
 	void mousePressEvent(QGraphicsSceneMouseEvent *event);
 signals:
@@ -49,10 +64,10 @@ public:
 	void updateSurfaceStats();
 protected:
 	qreal measurementLinePos1,measurementLinePos2;
+	qreal sceneScaleX;
 
 	//Sends signal on close
 	void closeEvent(QCloseEvent *event);
-	void resizeEvent(QResizeEvent *);
 
 	//Updates widgets enabled/disabled/visible status
 	void updateWidgetStatus();
@@ -74,6 +89,7 @@ private:
 signals:
 	void closed();
 private slots:
+	void viewportResized();
 	void on_roughnessPSpinBox_valueChanged(int arg1);
 	void measurementLineDragged(qreal x,int id);
 };

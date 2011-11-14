@@ -19,7 +19,7 @@
   </property>
   <layout class="QGridLayout" name="gridLayout">
    <item row="1" column="0" colspan="2">
-    <widget class="QGraphicsView" name="crosssectionViewport">
+    <widget class="CybervisionCrosssectionGraphicsView" name="crosssectionViewport">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -109,6 +109,13 @@
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>CybervisionCrosssectionGraphicsView</class>
+   <extends>QGraphicsView</extends>
+   <header>UI/crosssectionwindow.h</header>
+  </customwidget>
+ </customwidgets>
  <resources>
   <include location="../ReconstructionResources.qrc"/>
  </resources>
