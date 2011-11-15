@@ -22,7 +22,7 @@ protected:
 	QVector3D vpRotation,vpTranslation;
 	QPoint lastMousePos,clickMousePos;
 	MouseMode mouseMode;
-	bool drawingCrossSectionLine;
+	int drawingCrossSectionLine;
 	TextureMode textureMode;
 	bool showGrid;
 
@@ -43,12 +43,12 @@ protected:
 	//Point selection stuff
 	//Selected point
 	QVector3D clickLocation;
-	QPair<QVector3D,QVector3D> crossSectionLine;
+	QList<QPair<QVector3D,QVector3D> > crossSectionLines;
 	//Click detection
 	QVector3D getClickLocation(const QPointF&);
 	void drawPoint(const QVector3D&)const;
 	//Cross-section line
-	void drawLine(const QVector3D& start,const QVector3D& end)const;
+	void drawLine(const QVector3D& start,const QVector3D& end,bool lineSelected=false)const;
 public:
 	CybervisionViewer(QWidget *parent);
 
@@ -57,11 +57,11 @@ public:
 	void setMouseMode(MouseMode mouseMode);
 	void setTextureMode(TextureMode textureMode);
 	void setShowGrid(bool show);
-	void setDrawCrossSectionLine(bool enable);
+	void setDrawCrossSectionLine(int lineId=-1);
 	const cybervision::Surface& getSurface3D()const;
 	QMutex& getSurfaceMutex();
 	QVector3D getSelectedPoint() const;
-	QPair<QVector3D,QVector3D> getCrossSectionLine()const;
+	QPair<QVector3D,QVector3D> getCrossSectionLine(int lineId)const;
 protected:
 	//Inherited opengl stuff
 	void initializeGL();
@@ -75,7 +75,7 @@ protected:
 	void mouseMoveEvent(QMouseEvent *event);
 signals:
 	void selectedPointUpdated(QVector3D);
-	void crossSectionLineChanged(QVector3D,QVector3D);
+	void crossSectionLineChanged(QVector3D,QVector3D,int lineId);
 };
 
 #endif // CYBERVISIONVIEWER_H

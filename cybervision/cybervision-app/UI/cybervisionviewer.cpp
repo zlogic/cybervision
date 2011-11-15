@@ -20,21 +20,27 @@ CybervisionViewer::CybervisionViewer(QWidget *parent): QGLWidget(parent){
 	this->mouseMode= MOUSE_ROTATION;
 	this->textureMode= TEXTURE_1;
 	this->showGrid= false;
-	this->drawingCrossSectionLine= false;
+	this->drawingCrossSectionLine= -1;
 	glFarPlane= 1000000;
 	glNearPlane= 1;
 	glAspectRatio= 1;
 	glFOV= 90;
 	clickLocation= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
-	crossSectionLine.first= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
-	crossSectionLine.second= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+	for(int i=0;i<2;i++){
+		QPair<QVector3D,QVector3D> crossSectionLine;
+		crossSectionLine.first= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+		crossSectionLine.second= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+		crossSectionLines<<crossSectionLine;
+	}
 }
 
 
 void CybervisionViewer::setSurface3D(const cybervision::Surface& surface){
 	clickLocation= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
-	crossSectionLine.first= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
-	crossSectionLine.second= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+	for(QList<QPair<QVector3D,QVector3D> >::iterator it=crossSectionLines.begin();it!=crossSectionLines.end();it++){
+		it->first= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+		it->second= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+	}
 	emit selectedPointUpdated(clickLocation);
 	{
 		QMutexLocker lock(&surfaceMutex);
@@ -66,8 +72,8 @@ void CybervisionViewer::setShowGrid(bool show){
 	updateGL();
 }
 
-void CybervisionViewer::setDrawCrossSectionLine(bool enable){
-	drawingCrossSectionLine= enable;
+void CybervisionViewer::setDrawCrossSectionLine(int lineId){
+	drawingCrossSectionLine= lineId;
 }
 
 const cybervision::Surface& CybervisionViewer::getSurface3D()const{
@@ -82,10 +88,17 @@ QVector3D CybervisionViewer::getSelectedPoint() const{
 	return clickLocation;
 }
 
-QPair<QVector3D,QVector3D> CybervisionViewer::getCrossSectionLine() const{
+QPair<QVector3D,QVector3D> CybervisionViewer::getCrossSectionLine(int lineId) const{
+	if(lineId<0 || lineId>=crossSectionLines.size()){
+		QPair<QVector3D,QVector3D> result(
+					QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity()),
+					QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity())
+					);
+		return result;
+	}
 	QPair<QVector3D,QVector3D> result(
-				QVector3D(crossSectionLine.first.x()/surface.getScale(),crossSectionLine.first.y()/surface.getScale(),0),
-				QVector3D(crossSectionLine.second.x()/surface.getScale(),crossSectionLine.second.y()/surface.getScale(),0)
+				QVector3D(crossSectionLines[lineId].first.x()/surface.getScale(),crossSectionLines[lineId].first.y()/surface.getScale(),0),
+				QVector3D(crossSectionLines[lineId].second.x()/surface.getScale(),crossSectionLines[lineId].second.y()/surface.getScale(),0)
 				);
 	return result;
 }
@@ -168,7 +181,8 @@ void CybervisionViewer::paintGL(){
 		drawPoint(clickLocation);
 
 		//Draw cross-section line
-		drawLine(crossSectionLine.first,crossSectionLine.second);
+		for(int i=0;i<crossSectionLines.size();i++)
+			drawLine(crossSectionLines[i].first,crossSectionLines[i].second,i==drawingCrossSectionLine);
 	}
 }
 void CybervisionViewer::drawPoint(const QVector3D& point)const{
@@ -195,14 +209,14 @@ void CybervisionViewer::drawPoint(const QVector3D& point)const{
 	glEnable(GL_LIGHTING);
 }
 
-void CybervisionViewer::drawLine(const QVector3D& start,const QVector3D& end)const{
+void CybervisionViewer::drawLine(const QVector3D& start,const QVector3D& end,bool lineSelected)const{
 	if(start.x()==std::numeric_limits<qreal>::infinity() || start.y()==std::numeric_limits<qreal>::infinity() || start.z()==std::numeric_limits<qreal>::infinity())
 		return;
 	if(end.x()==std::numeric_limits<qreal>::infinity() || end.y()==std::numeric_limits<qreal>::infinity() || end.z()==std::numeric_limits<qreal>::infinity())
 		return;
 	//glDisable(GL_DEPTH_TEST);
 	glDisable(GL_LIGHTING);
-	if(drawingCrossSectionLine)
+	if(lineSelected)
 		glColor3f(0xff/255.0,0x99/255.0,.0);
 	else
 		glColor3f(0xff/255.0,0x99/255.0,.0);
@@ -451,9 +465,10 @@ float CybervisionViewer::normalizeAngle(float angle) const{
 void CybervisionViewer::mousePressEvent(QMouseEvent *event){
 	lastMousePos= event->pos();
 	clickMousePos= event->pos();
-	if(drawingCrossSectionLine){
-		crossSectionLine.first= getClickLocation(event->pos());
-		crossSectionLine.first.setZ(0);
+	if(drawingCrossSectionLine>=0 && drawingCrossSectionLine<crossSectionLines.size()){
+		QVector3D startLocation= getClickLocation(event->pos());
+		startLocation.setZ(0);
+		crossSectionLines[drawingCrossSectionLine].first= startLocation;
 	}
 }
 
@@ -461,19 +476,21 @@ void CybervisionViewer::mouseReleaseEvent(QMouseEvent *event){
 	//Detect click location
 	if((clickMousePos-event->pos()).manhattanLength()<=3){
 		clickLocation= getClickLocation(event->pos());
-		if(drawingCrossSectionLine){
-			crossSectionLine.first= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
-			crossSectionLine.second= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+		if(drawingCrossSectionLine>=0 && drawingCrossSectionLine<crossSectionLines.size()){
+			QVector3D infinityLocation(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+			QPair<QVector3D,QVector3D> currentCrossSectionLine(infinityLocation,infinityLocation);
+			crossSectionLines[drawingCrossSectionLine]= currentCrossSectionLine;
 		}
-	}else if(drawingCrossSectionLine){
-		crossSectionLine.second= getClickLocation(event->pos());
-		crossSectionLine.second.setZ(0);
+	}else if(drawingCrossSectionLine>=0 && drawingCrossSectionLine<crossSectionLines.size()){
+		QVector3D endLocation= getClickLocation(event->pos());
+		endLocation.setZ(0);
+		crossSectionLines[drawingCrossSectionLine].second= endLocation;
 	}
 
-	if(drawingCrossSectionLine){
-		QPair<QVector3D,QVector3D> result= getCrossSectionLine();
-		emit crossSectionLineChanged(result.first,result.second);
-		drawingCrossSectionLine= false;
+	if(drawingCrossSectionLine>=0 && drawingCrossSectionLine<crossSectionLines.size()){
+		QPair<QVector3D,QVector3D> result= getCrossSectionLine(drawingCrossSectionLine);
+		emit crossSectionLineChanged(result.first,result.second,drawingCrossSectionLine);
+		drawingCrossSectionLine= -1;
 	}
 	{
 		QMutexLocker lock(&surfaceMutex);
@@ -515,10 +532,11 @@ QVector3D CybervisionViewer::getClickLocation(const QPointF& location){
 void CybervisionViewer::mouseMoveEvent(QMouseEvent *event){
 	int dx= event->pos().x()-lastMousePos.x(), dy=event->pos().y()-lastMousePos.y();
 
-	if(drawingCrossSectionLine){
+	if(drawingCrossSectionLine>=0 && drawingCrossSectionLine<crossSectionLines.size()){
 		//Draw line
-		crossSectionLine.second= getClickLocation(event->pos());
-		crossSectionLine.second.setZ(0);
+		QVector3D endLocation= getClickLocation(event->pos());
+		endLocation.setZ(0);
+		crossSectionLines[drawingCrossSectionLine].second= endLocation;
 		updateGL();
 	}else if(mouseMode==MOUSE_ROTATION){
 		//Rotation

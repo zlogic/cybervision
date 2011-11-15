@@ -20,58 +20,90 @@ CrossSectionWindow::CrossSectionWindow(QWidget *parent) :
 	ui->crosssectionViewport->setUpdatesEnabled(true);
 	ui->crosssectionViewport->setScene(&crossSectionScene);
 
-	connect(&crossSectionScene,SIGNAL(measurementLineDragged(qreal,int)),this,SLOT(measurementLineDragged(qreal,int)),Qt::AutoConnection);
+	for(int i=0;i<2;i++)
+		crossSections<<cybervision::CrossSection();
+
+	connect(&crossSectionScene,SIGNAL(measurementLineMoved(qreal,int)),this,SLOT(measurementLineMoved(qreal,int)),Qt::AutoConnection);
+	connect(&crossSectionScene,SIGNAL(crossSectionMoved(qreal)),this,SLOT(crossSectionMoved(qreal)),Qt::AutoConnection);
 	connect(ui->crosssectionViewport,SIGNAL(resized()),this,SLOT(viewportResized()),Qt::AutoConnection);
 
-	updateSurfaceStats();
+	movableCrossSectionPos= 0;
+
+	updateCrosssectionStats();
 }
 
 CrossSectionWindow::~CrossSectionWindow(){
 	delete ui;
 }
 
-void CrossSectionWindow::updateCrossSection(const cybervision::CrossSection& crossSection){
-	this->crossSection= crossSection;
+void CrossSectionWindow::updateCrossSection(const cybervision::CrossSection& crossSection,int crossSectionId){
+	if(crossSectionId>=0 && crossSectionId<crossSections.size())
+		crossSections[crossSectionId]= crossSection;
 	measurementLinePos1= std::numeric_limits<qreal>::quiet_NaN();
 	measurementLinePos2= std::numeric_limits<qreal>::quiet_NaN();
-	updateSurfaceStats();
+	movableCrossSectionPos= 0;
+
+	nonMovableCrosssection= crossSections.end();
+
+	updateWidgetStatus();
+	updateCrosssectionStats();
 }
 
 
 void CrossSectionWindow::updateWidgetStatus(){
-	ui->roughnessGroupBox->setVisible(crossSection.isOk());
-	ui->heightGroupBox->setVisible(crossSection.isOk());
+	bool crossSectionsOk= false;
+	for(QList<cybervision::CrossSection>::iterator it=crossSections.begin();it!=crossSections.end();it++)
+		crossSectionsOk|= it->isOk();
+	ui->roughnessGroupBox->setVisible(crossSectionsOk);
+	ui->heightGroupBox->setVisible(crossSectionsOk);
+	ui->roughnessPSpinBoxPrimary->setVisible(crossSections[0].isOk());
+	ui->roughnessPSpinBoxSecondary->setVisible(crossSections[1].isOk());
 }
 
 
-void CrossSectionWindow::updateSurfaceStats(){
-	crossSection.computeParams(ui->roughnessPSpinBox->value());
+void CrossSectionWindow::updateCrosssectionStats(){
+	bool crossSectionsOk= false;
+	for(QList<cybervision::CrossSection>::iterator it=crossSections.begin();it!=crossSections.end();it++){
+		crossSectionsOk|= it->isOk();
+		if(it==crossSections.begin())
+			it->computeParams(ui->roughnessPSpinBoxPrimary->value());
+		else if(it==(crossSections.begin()+1))
+			it->computeParams(ui->roughnessPSpinBoxSecondary->value());
+	}
 
 	//Render the image
 	crossSectionScene.clear();
-	renderCrossSection();
+	renderCrossSections();
 
 	//Set the roughness parameters
-	QString heightParamsString,stepParamsString;
-	if(crossSection.isOk()){
-		heightParamsString= QString(tr("Ra= %1 m\nRz= %2 m\nRmax= %3 m"))
-				.arg(crossSection.getRoughnessRa())
-				.arg(crossSection.getRoughnessRz())
-				.arg(crossSection.getRoughnessRmax());
-		stepParamsString= QString(tr("S= %1 m\nSm= %2 m\ntp= %3"))
-				.arg(crossSection.getRoughnessS())
-				.arg(crossSection.getRoughnessSm())
-				.arg(crossSection.getRoughnessTp());
+	QList<QString> heightParamsString,stepParamsString;
 
-	}else{
-		heightParamsString= "";
-		stepParamsString= "";
+	for(QList<cybervision::CrossSection>::iterator it=crossSections.begin();it!=crossSections.end();it++){
+		int crossSectionId= it-crossSections.begin()+1;
+		if(it->isOk()){
+			heightParamsString<< QString(tr("Cross-section %1\nRa= %2 m\nRz= %3 m\nRmax= %4 m"))
+								 .arg(crossSectionId)
+								 .arg(it->getRoughnessRa())
+								 .arg(it->getRoughnessRz())
+								 .arg(it->getRoughnessRmax());
+			stepParamsString<< QString(tr("Cross-section %1\nS= %2 m\nSm= %3 m\ntp= %4"))
+							   .arg(crossSectionId)
+							   .arg(it->getRoughnessS())
+							   .arg(it->getRoughnessSm())
+							   .arg(it->getRoughnessTp());
+
+		}else{
+			heightParamsString<< QString(tr("Cross-section %1 not available")).arg(crossSectionId);
+			stepParamsString<< QString(tr("Cross-section %1 not available")).arg(crossSectionId);
+		}
 	}
 
-	ui->roughnessGroupBox->setVisible(crossSection.isOk());
-	ui->heightGroupBox->setVisible(crossSection.isOk());
-	ui->roughnessHeightStatsLabel->setText(heightParamsString);
-	ui->roughnessStepStatsLabel->setText(stepParamsString);
+	ui->roughnessGroupBox->setVisible(crossSectionsOk);
+	ui->heightGroupBox->setVisible(crossSectionsOk);
+	ui->roughnessHeightStatsLabelPrimary->setText(heightParamsString[0]);
+	ui->roughnessHeightStatsLabelSecondary->setText(heightParamsString[1]);
+	ui->roughnessStepStatsLabelPrimary->setText(stepParamsString[0]);
+	ui->roughnessStepStatsLabelSecondary->setText(stepParamsString[1]);
 }
 
 void CrossSectionWindow::closeEvent(QCloseEvent *event){
@@ -80,26 +112,45 @@ void CrossSectionWindow::closeEvent(QCloseEvent *event){
 }
 
 void CrossSectionWindow::viewportResized(){
-	updateSurfaceStats();
+	updateCrosssectionStats();
 }
 
-void CrossSectionWindow::on_roughnessPSpinBox_valueChanged(int arg1){
-	updateSurfaceStats();
+void CrossSectionWindow::on_roughnessPSpinBoxPrimary_valueChanged(int arg1){
+	updateCrosssectionStats();
 }
 
-void CrossSectionWindow::renderCrossSection(){
+void CrossSectionWindow::on_roughnessPSpinBoxSecondary_valueChanged(int arg1){
+	updateCrosssectionStats();
+}
+
+void CrossSectionWindow::renderCrossSections(){
 	QSize imageSize(ui->crosssectionViewport->viewport()->contentsRect().width(),ui->crosssectionViewport->viewport()->contentsRect().height());
-	QList<QPointF> crossSectionPoints= crossSection.getCrossSection();
 	//Prepare data
 	qreal minX= std::numeric_limits<qreal>::infinity(),
 			minY= std::numeric_limits<qreal>::infinity(),
 			maxX= -std::numeric_limits<qreal>::infinity(),
 			maxY= -std::numeric_limits<qreal>::infinity();
-	for(QList<QPointF>::const_iterator it=crossSectionPoints.begin();it!=crossSectionPoints.end();it++){
-		minX= qMin(minX,it->x());
-		minY= qMin(minY,it->y());
-		maxX= qMax(maxX,it->x());
-		maxY= qMax(maxY,it->y());
+	nonMovableCrosssection= crossSections.end();
+	for(QList<cybervision::CrossSection>::const_iterator it=crossSections.begin();it!=crossSections.end();it++){
+		if(!it->isOk())
+			continue;
+		qreal currentMinX= std::numeric_limits<qreal>::infinity(),
+				currentMinY= std::numeric_limits<qreal>::infinity(),
+				currentMaxX= -std::numeric_limits<qreal>::infinity(),
+				currentMaxY= -std::numeric_limits<qreal>::infinity();
+		QList<QPointF> crossSectionPoints= it->getCrossSection();
+		for(QList<QPointF>::const_iterator jt=crossSectionPoints.begin();jt!=crossSectionPoints.end();jt++){
+			currentMinX= qMin(currentMinX,jt->x());
+			currentMinY= qMin(currentMinY,jt->y());
+			currentMaxX= qMax(currentMaxX,jt->x());
+			currentMaxY= qMax(currentMaxY,jt->y());
+		}
+		if((currentMaxX-currentMinX)>(maxX-minX))
+			nonMovableCrosssection= it;
+		minX= qMin(currentMinX,minX);
+		minY= qMin(currentMinY,minY);
+		maxX= qMax(currentMaxX,maxX);
+		maxY= qMax(currentMaxY,maxY);
 	}
 	QRect crossSectionArea(50,20,imageSize.width()-50,imageSize.height()-20);
 
@@ -141,49 +192,68 @@ void CrossSectionWindow::renderCrossSection(){
 	}
 
 	//Draw lines
-	QPainterPath crossSectionPath;
-	for(QList<QPointF>::const_iterator it=crossSectionPoints.begin();it!=crossSectionPoints.end();it++){
-		QPointF point1(
-					crossSectionArea.width()*(it->x()-minX)/(maxX-minX)+crossSectionArea.x(),
-					crossSectionArea.height()*(maxY-it->y())/(maxY-minY)+crossSectionArea.y()
-		);
-		point1.setX(qMax(point1.x(),(qreal)crossSectionArea.left()));
-		point1.setY(qMax(point1.y(),(qreal)crossSectionArea.top()));
-		point1.setX(qMin(point1.x(),crossSectionArea.right()-1.0));
-		point1.setY(qMin(point1.y(),crossSectionArea.bottom()-1.0));
-
-		if((it)==crossSectionPoints.begin()){
-			crossSectionPath.moveTo(point1);
+	QGraphicsItem *movableCrossSection= NULL;
+	for(QList<cybervision::CrossSection>::const_iterator it=crossSections.begin();it!=crossSections.end();it++){
+		if(!it->isOk())
 			continue;
+		QList<QPointF> crossSectionPoints= it->getCrossSection();
+		QPainterPath crossSectionPath;
+		//Draw the cross-section
+		for(QList<QPointF>::const_iterator jt=crossSectionPoints.begin();jt!=crossSectionPoints.end();jt++){
+			QPointF point1(
+						crossSectionArea.width()*(jt->x()-minX)/(maxX-minX),
+						crossSectionArea.height()*(maxY-jt->y())/(maxY-minY)
+			);
+			point1.setX(qMax(point1.x(),(qreal)0));
+			point1.setY(qMax(point1.y(),(qreal)0));
+			point1.setX(qMin(point1.x(),crossSectionArea.width()-1.0));
+			point1.setY(qMin(point1.y(),crossSectionArea.height()-1.0));
+
+			if((jt)==crossSectionPoints.begin()){
+				crossSectionPath.moveTo(point1);
+				continue;
+			}
+
+			crossSectionPath.lineTo(point1);
+		}
+		QPen penCrosssection(QColor(0xff,0x99,0x00));
+		QGraphicsItem * crossSectionGraphicsPath= crossSectionScene.addPath(crossSectionPath,penCrosssection);
+		if(crossSectionGraphicsPath)
+			crossSectionGraphicsPath->setPos(crossSectionArea.x(),crossSectionArea.y());
+		if(crossSectionGraphicsPath && it!=nonMovableCrosssection && !movableCrossSection){
+			crossSectionGraphicsPath->setPos(crossSectionArea.x()+movableCrossSectionPos/sceneScaleX,crossSectionArea.y());
+			crossSectionGraphicsPath->setCursor(Qt::SizeAllCursor);
+			crossSectionGraphicsPath->setFlag(QGraphicsItem::ItemIsMovable,true);
+			movableCrossSection= crossSectionGraphicsPath;
 		}
 
-		crossSectionPath.lineTo(point1);
+		//Draw the m-line
+		QPen penMline(QColor(0,0,0),3);
+		QGraphicsItem *mLine= crossSectionScene.addLine(
+					crossSectionArea.width()*(it->getMLine().x1()-minX)/(maxX-minX),
+					crossSectionArea.height()*(maxY-it->getMLine().y1())/(maxY-minY),
+					crossSectionArea.width()*(it->getMLine().x2()-minX)/(maxX-minX),
+					crossSectionArea.height()*(maxY-it->getMLine().y2())/(maxY-minY),
+					penMline
+		);
+		if(mLine)
+			mLine->setParentItem(crossSectionGraphicsPath);
+
+		//Draw the t-level
+		QPen penTline(QColor(0,0,0),1,Qt::DashDotDotLine);
+		QGraphicsItem *tLine= crossSectionScene.addLine(
+					crossSectionArea.width()*(it->getPLine().x1()-minX)/(maxX-minX),
+					crossSectionArea.height()*(maxY-it->getPLine().y1())/(maxY-minY),
+					crossSectionArea.width()*(it->getPLine().x2()-minX)/(maxX-minX),
+					crossSectionArea.height()*(maxY-it->getPLine().y2())/(maxY-minY),
+					penTline
+		);
+		if(tLine)
+			tLine->setParentItem(crossSectionGraphicsPath);
 	}
-	QPen penCrosssection(QColor(0xff,0x99,0x00));
-	crossSectionScene.addPath(crossSectionPath,penCrosssection);
-
-	//Draw the m-line
-	QPen penMline(QColor(0,0,0),3);
-	crossSectionScene.addLine(
-				crossSectionArea.width()*(crossSection.getMLine().x1()-minX)/(maxX-minX)+crossSectionArea.x(),
-				crossSectionArea.height()*(maxY-crossSection.getMLine().y1())/(maxY-minY)+crossSectionArea.y(),
-				crossSectionArea.width()*(crossSection.getMLine().x2()-minX)/(maxX-minX)+crossSectionArea.x(),
-				crossSectionArea.height()*(maxY-crossSection.getMLine().y2())/(maxY-minY)+crossSectionArea.y(),
-				penMline
-	);
-
-	//Draw the t-level
-	QPen penTline(QColor(0,0,0),1,Qt::DashDotDotLine);
-	crossSectionScene.addLine(
-				crossSectionArea.width()*(crossSection.getPLine().x1()-minX)/(maxX-minX)+crossSectionArea.x(),
-				crossSectionArea.height()*(maxY-crossSection.getPLine().y1())/(maxY-minY)+crossSectionArea.y(),
-				crossSectionArea.width()*(crossSection.getPLine().x2()-minX)/(maxX-minX)+crossSectionArea.x(),
-				crossSectionArea.height()*(maxY-crossSection.getPLine().y2())/(maxY-minY)+crossSectionArea.y(),
-				penTline
-	);
 
 	//Draw the level measurement lines
-	QPen measurementLinePen(QColor(0,0,0x66),1,Qt::SolidLine);
+	QPen measurementLinePen(QColor(0,0,0x66),3,Qt::SolidLine);
 
 	if(std::isnan(measurementLinePos1))
 		measurementLinePos1= minX;
@@ -216,22 +286,33 @@ void CrossSectionWindow::renderCrossSection(){
 
 	QList<QGraphicsItem*> measurementLines;
 	measurementLines<<measurementLine1<<measurementLine2;
-	crossSectionScene.updateSceneData(measurementLines,crossSectionArea);
+	crossSectionScene.updateSceneData(measurementLines,movableCrossSection,crossSectionArea);
 
 	updateMeasurementLinesLabel();
 }
 
 
 void CrossSectionWindow::updateMeasurementLinesLabel(){
-	qreal height1= crossSection.getHeight(measurementLinePos1), height2= crossSection.getHeight(measurementLinePos2);
-	qreal deltaHeight= height1-height2;
-	QString measurementLineStr= QString(tr("x1= %1 m\nh1= %2 m\nx2= %3 m\nh2= %4 m\nHeight difference= %5 m"))
-			.arg(measurementLinePos1)
-			.arg(height1)
-			.arg(measurementLinePos2)
-			.arg(height2)
-			.arg(deltaHeight);
-	ui->heightMeasurementLabel->setText(measurementLineStr);
+	QList<QString> measurementLineStr;
+	for(QList<cybervision::CrossSection>::iterator it=crossSections.begin();it!=crossSections.end();it++){
+		qreal deltaX= 0;
+		if(it!=nonMovableCrosssection)
+			deltaX= -movableCrossSectionPos;
+		qreal height1= it->getHeight(measurementLinePos1+deltaX), height2= it->getHeight(measurementLinePos2+deltaX);
+		qreal deltaHeight= height1-height2;
+		measurementLineStr<< QString(tr("Cross-section %1\nx1= %2 m\nh1= %3 m\nx2= %4 m\nh2= %5 m\nHeight difference= %6 m"))
+				.arg(it-crossSections.begin()+1)
+				.arg(measurementLinePos1+deltaX)
+				.arg(height1)
+				.arg(measurementLinePos2+deltaX)
+				.arg(height2)
+				.arg(deltaHeight);
+	}
+
+	if(crossSections[0].isOk())
+		ui->heightMeasurementLabelPrimary->setText(measurementLineStr[0]);
+	if(crossSections[1].isOk())
+		ui->heightMeasurementLabelSecondary->setText(measurementLineStr[1]);
 }
 
 qreal CrossSectionWindow::getOptimalGridStep(qreal min, qreal max) const{
@@ -257,7 +338,7 @@ qreal CrossSectionWindow::getOptimalGridStep(qreal min, qreal max) const{
 	else return step_5;
 }
 
-void CrossSectionWindow::measurementLineDragged(qreal x, int id){
+void CrossSectionWindow::measurementLineMoved(qreal x, int id){
 	switch(id){
 	case 0:
 		measurementLinePos1= x*sceneScaleX;
@@ -269,6 +350,12 @@ void CrossSectionWindow::measurementLineDragged(qreal x, int id){
 	updateMeasurementLinesLabel();
 }
 
+void CrossSectionWindow::crossSectionMoved(qreal x){
+	movableCrossSectionPos= x*sceneScaleX;
+	updateMeasurementLinesLabel();
+}
+
+
 /*
  * CybervisionCrosssectionScene code
  */
@@ -279,6 +366,8 @@ CybervisionCrosssectionScene::CybervisionCrosssectionScene(qreal x, qreal y, qre
 void CybervisionCrosssectionScene::mousePressEvent(QGraphicsSceneMouseEvent *event){
 	clickPos= event->scenePos();
 	QGraphicsScene::mousePressEvent(event);
+	if(mouseGrabberItem())
+		itemPos= mouseGrabberItem()->scenePos();
 }
 
 void CybervisionCrosssectionScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event){
@@ -290,14 +379,25 @@ void CybervisionCrosssectionScene::mouseMoveEvent(QGraphicsSceneMouseEvent *even
 			if(newPos.x()>crossSectionArea.right())
 				newPos.setX(crossSectionArea.right());
 			event->setScenePos(newPos);
-			emit measurementLineDragged(newPos.x()-crossSectionArea.x(),measurementLines.indexOf(mouseGrabberItem()));
+			emit measurementLineMoved(newPos.x()-crossSectionArea.x(),measurementLines.indexOf(mouseGrabberItem()));
+		}
+	}else if(movableCrossSection && movableCrossSection==mouseGrabberItem()){
+		if(event->type()==QEvent::GraphicsSceneMouseMove){
+			QPointF newPos(event->scenePos().x(),clickPos.y());
+			if(newPos.x()<crossSectionArea.left()-(itemPos.x()-clickPos.x()))
+				newPos.setX(crossSectionArea.left()-(itemPos.x()-clickPos.x()));
+			if(newPos.x()>crossSectionArea.right()-mouseGrabberItem()->boundingRect().width()-(itemPos.x()-clickPos.x()))
+				newPos.setX(crossSectionArea.right()-mouseGrabberItem()->boundingRect().width()-(itemPos.x()-clickPos.x()));
+			event->setScenePos(newPos);
+			emit crossSectionMoved(mouseGrabberItem()->scenePos().x()-crossSectionArea.left());
 		}
 	}
 	QGraphicsScene::mouseMoveEvent(event);
 }
 
-void CybervisionCrosssectionScene::updateSceneData(QList<QGraphicsItem*> measurementLines, const QRect &crossSectionArea){
+void CybervisionCrosssectionScene::updateSceneData(const QList<QGraphicsItem*>& measurementLines,QGraphicsItem *movableCrossSection, const QRect &crossSectionArea){
 	this->measurementLines= measurementLines;
+	this->movableCrossSection= movableCrossSection;
 	this->crossSectionArea= crossSectionArea;
 }
 

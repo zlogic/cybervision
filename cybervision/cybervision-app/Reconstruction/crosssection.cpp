@@ -19,6 +19,9 @@ CrossSection::CrossSection(QObject *parent):QObject(parent) {
 	ok= false;
 }
 
+CrossSection::CrossSection(const CrossSection &crossSection,QObject *parent):QObject(parent){
+	(*this)= crossSection;
+}
 
 void CrossSection::operator =(const CrossSection &crossSection){
 	mA= crossSection.mA, mB= crossSection.mB, mL= crossSection.mL;

@@ -556,17 +556,40 @@
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="crosssectionButton">
-       <property name="text">
-        <string>Draw cross-section plane</string>
+      <widget class="QGroupBox" name="crosssectionGroupBox">
+       <property name="title">
+        <string>Cross-section</string>
        </property>
-       <property name="icon">
-        <iconset resource="../ReconstructionResources.qrc">
-         <normaloff>:/icons/UI/icons/pencil-ruler.png</normaloff>:/icons/UI/icons/pencil-ruler.png</iconset>
-       </property>
-       <property name="checkable">
-        <bool>true</bool>
-       </property>
+       <layout class="QGridLayout" name="gridLayout_4">
+        <item row="0" column="0">
+         <widget class="QPushButton" name="crosssectionButtonPrimary">
+          <property name="text">
+           <string>Draw cross-section plane 1</string>
+          </property>
+          <property name="icon">
+           <iconset resource="../ReconstructionResources.qrc">
+            <normaloff>:/icons/UI/icons/pencil-ruler.png</normaloff>:/icons/UI/icons/pencil-ruler.png</iconset>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QPushButton" name="crosssectionButtonSecondary">
+          <property name="text">
+           <string>Draw cross-section plane 2</string>
+          </property>
+          <property name="icon">
+           <iconset resource="../ReconstructionResources.qrc">
+            <normaloff>:/icons/UI/icons/pencil-ruler.png</normaloff>:/icons/UI/icons/pencil-ruler.png</iconset>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </widget>
      </item>
      <item>

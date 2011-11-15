@@ -28,6 +28,7 @@ protected:
 
 public:
 	CrossSection(QObject *parent = 0);
+	CrossSection(const CrossSection&,QObject *parent=0);
 	void operator=(const CrossSection& crossSection);
 
 	//Compute cross-section with line

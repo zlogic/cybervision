@@ -14,7 +14,7 @@ MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWi
 	loadDebugPreferences();
 
 	QObject::connect(ui->openGLViewport, SIGNAL(selectedPointUpdated(QVector3D)),this, SLOT(viewerSelectedPointUpdated(QVector3D)),Qt::AutoConnection);
-	QObject::connect(ui->openGLViewport, SIGNAL(crossSectionLineChanged(QVector3D,QVector3D)),this, SLOT(viewerCrosssectionLineChanged(QVector3D,QVector3D)),Qt::AutoConnection);
+	QObject::connect(ui->openGLViewport, SIGNAL(crossSectionLineChanged(QVector3D,QVector3D,int)),this, SLOT(viewerCrosssectionLineChanged(QVector3D,QVector3D,int)),Qt::AutoConnection);
 	QObject::connect(&crossSectionWindow, SIGNAL(closed()),this, SLOT(crosssectionClosed()),Qt::AutoConnection);
 }
 
@@ -43,7 +43,8 @@ void MainWindow::updateWidgetStatus(){
 
 	ui->deleteImageButton->setEnabled(!ui->imageList->selectedItems().empty());
 	ui->saveButton->setEnabled(surfaceIsOK);
-	ui->crosssectionButton->setEnabled(surfaceIsOK);
+	ui->crosssectionButtonPrimary->setEnabled(surfaceIsOK);
+	ui->crosssectionButtonSecondary->setEnabled(surfaceIsOK);
 
 	scaleXYValidator.setBottom(0.0);
 	scaleZValidator.setBottom(0.0);
@@ -58,7 +59,7 @@ void MainWindow::updateWidgetStatus(){
 }
 
 
-void MainWindow::updateSurfaceStats(){
+void MainWindow::updateSurfaceStats(int lineId){
 	QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
 	qreal minDepth= ui->openGLViewport->getSurface3D().getMinDepth();
 	qreal maxDepth= ui->openGLViewport->getSurface3D().getMaxDepth();
@@ -69,16 +70,16 @@ void MainWindow::updateSurfaceStats(){
 	else
 		ui->statisticsLabel->setText(tr("No surface available"));
 
-	QPair<QVector3D,QVector3D> crossSectionLine= ui->openGLViewport->getCrossSectionLine();
+	QPair<QVector3D,QVector3D> crossSectionLine= ui->openGLViewport->getCrossSectionLine(lineId);
+	if(lineId<0)
+		return;
 
 	//Compute surface roughness, if possible
 	cybervision::CrossSection crossSection;
 	crossSection.computeCrossSection(ui->openGLViewport->getSurface3D(),crossSectionLine.first,crossSectionLine.second);
-	crossSectionWindow.updateCrossSection(crossSection);
-	if(crossSection.isOk()){
+	crossSectionWindow.updateCrossSection(crossSection,lineId);
+	if(crossSection.isOk())
 		crossSectionWindow.show();
-		crossSectionWindow.updateSurfaceStats();
-	}
 }
 
 
@@ -168,9 +169,12 @@ void MainWindow::viewerSelectedPointUpdated(QVector3D point){
 		ui->pointCoordinatesLabel->setText(QString("x: %1\ny: %2\nz:%3").arg(point.x()).arg(point.y()).arg(point.z()));
 }
 
-void MainWindow::viewerCrosssectionLineChanged(QVector3D start, QVector3D end){
-	ui->crosssectionButton->setChecked(false);
-	updateSurfaceStats();
+void MainWindow::viewerCrosssectionLineChanged(QVector3D start, QVector3D end,int lineId){
+	if(lineId==0)
+		ui->crosssectionButtonPrimary->setChecked(false);
+	else if(lineId==1)
+		ui->crosssectionButtonSecondary->setChecked(false);
+	updateSurfaceStats(lineId);
 }
 
 
@@ -335,15 +339,30 @@ void MainWindow::on_textureNoneToolButton_clicked(){
 	ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_NONE);
 }
 
-void MainWindow::on_crosssectionButton_clicked(bool checked){
+void MainWindow::on_crosssectionButtonPrimary_clicked(bool checked){
 	if(checked){
+		ui->crosssectionButtonSecondary->setChecked(false);
 		QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
 		if(ui->openGLViewport->getSurface3D().isOk())
-			ui->openGLViewport->setDrawCrossSectionLine(checked);
+			ui->openGLViewport->setDrawCrossSectionLine(checked?0:-1);
 		else{
-			ui->crosssectionButton->setChecked(false);
-			ui->crosssectionButton->setEnabled(false);
+			ui->crosssectionButtonPrimary->setChecked(false);
+			ui->crosssectionButtonPrimary->setEnabled(false);
 		}
 	}else
-		ui->openGLViewport->setDrawCrossSectionLine(checked);
+		ui->openGLViewport->setDrawCrossSectionLine(checked?0:-1);
+}
+
+void MainWindow::on_crosssectionButtonSecondary_clicked(bool checked){
+	if(checked){
+		ui->crosssectionButtonPrimary->setChecked(false);
+		QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
+		if(ui->openGLViewport->getSurface3D().isOk())
+			ui->openGLViewport->setDrawCrossSectionLine(checked?1:-1);
+		else{
+			ui->crosssectionButtonSecondary->setChecked(false);
+			ui->crosssectionButtonSecondary->setEnabled(false);
+		}
+	}else
+		ui->openGLViewport->setDrawCrossSectionLine(checked?1:-1);
 }

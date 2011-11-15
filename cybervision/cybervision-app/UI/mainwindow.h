@@ -39,7 +39,7 @@ private:
 	void loadDebugPreferences();
 
 	//Updates the surface stats
-	void updateSurfaceStats();
+	void updateSurfaceStats(int lineId=-1);
 private slots:
 	//Slots for receiving messages from process thread
 	void processStarted();
@@ -48,7 +48,7 @@ private slots:
 
 	//Slots for receiving messages from OpenGL viewport
 	void viewerSelectedPointUpdated(QVector3D);
-	void viewerCrosssectionLineChanged(QVector3D start,QVector3D end);
+	void viewerCrosssectionLineChanged(QVector3D start,QVector3D end,int lineId);
 
 	//Slots for receiving messages from cross-section viewer
 	void crosssectionClosed();
@@ -71,7 +71,8 @@ private slots:
 	void on_texture1ToolButton_clicked();
 	void on_texture2ToolButton_clicked();
 	void on_textureNoneToolButton_clicked();
-	void on_crosssectionButton_clicked(bool checked);
+	void on_crosssectionButtonPrimary_clicked(bool checked);
+	void on_crosssectionButtonSecondary_clicked(bool checked);
 };
 
 #endif // MAINWINDOW_H

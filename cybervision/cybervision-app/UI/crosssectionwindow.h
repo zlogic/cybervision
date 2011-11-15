@@ -34,15 +34,17 @@ public:
 	CybervisionCrosssectionScene(QObject *parent = 0);
 	CybervisionCrosssectionScene(const QRectF &sceneRect, QObject *parent = 0);
 	CybervisionCrosssectionScene(qreal x, qreal y, qreal width, qreal height, QObject *parent = 0);
-	void updateSceneData(QList<QGraphicsItem*> measurementLines,const QRect &crossSectionArea);
+	void updateSceneData(const QList<QGraphicsItem*>&,QGraphicsItem *movableCrossSection,const QRect &crossSectionArea);
 protected:
-	QPointF clickPos;
+	QPointF clickPos,itemPos;
 	QList<QGraphicsItem*> measurementLines;
+	QGraphicsItem *movableCrossSection;
 	QRect crossSectionArea;
 	void mouseMoveEvent(QGraphicsSceneMouseEvent *event);
 	void mousePressEvent(QGraphicsSceneMouseEvent *event);
 signals:
-	void measurementLineDragged(qreal x,int id);
+	void measurementLineMoved(qreal x,int id);
+	void crossSectionMoved(qreal x);
 };
 
 
@@ -58,12 +60,20 @@ public:
 	~CrossSectionWindow();
 
 	//Updates the displayed cross-section
-	void updateCrossSection(const cybervision::CrossSection&);
+	void updateCrossSection(const cybervision::CrossSection&,int crossSectionId);
 
 	//Updates the cross-section image and stats labels
-	void updateSurfaceStats();
+	void updateCrosssectionStats();
+private:
+	Ui::CrossSectionWindow *ui;
 protected:
+	QList<cybervision::CrossSection> crossSections;
+	QList<cybervision::CrossSection>::const_iterator nonMovableCrosssection;
+
+	CybervisionCrosssectionScene crossSectionScene;
+
 	qreal measurementLinePos1,measurementLinePos2;
+	qreal movableCrossSectionPos;
 	qreal sceneScaleX;
 
 	//Sends signal on close
@@ -73,25 +83,21 @@ protected:
 	void updateWidgetStatus();
 
 	//Re-draws the cross-section
-	void renderCrossSection();
+	void renderCrossSections();
 
 	//Updates the measurement lines label with the latest height information
 	void updateMeasurementLinesLabel();
 
 	//Returns the optimal scale step for the min/max value pair. Imported from CybervisionViewer.
 	qreal getOptimalGridStep(qreal min,qreal max) const;
-private:
-	Ui::CrossSectionWindow *ui;
-
-	cybervision::CrossSection crossSection;
-
-	CybervisionCrosssectionScene crossSectionScene;
 signals:
 	void closed();
 private slots:
 	void viewportResized();
-	void on_roughnessPSpinBox_valueChanged(int arg1);
-	void measurementLineDragged(qreal x,int id);
+	void on_roughnessPSpinBoxPrimary_valueChanged(int arg1);
+	void on_roughnessPSpinBoxSecondary_valueChanged(int arg1);
+	void measurementLineMoved(qreal x,int id);
+	void crossSectionMoved(qreal x);
 };
 
 #endif // CROSSSECTIONWINDOW_H
