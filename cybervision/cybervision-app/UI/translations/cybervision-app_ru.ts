@@ -20,7 +20,7 @@
         <translation>Измерение глубины</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="84"/>
+        <location filename="../crosssectionwindow.cpp" line="88"/>
         <source>Cross-section %1
 Ra= %2 m
 Rz= %3 m
@@ -31,7 +31,7 @@ Rz= %3 м
 Rmax= %4 м</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="89"/>
+        <location filename="../crosssectionwindow.cpp" line="93"/>
         <source>Cross-section %1
 S= %2 m
 Sm= %3 m
@@ -42,13 +42,13 @@ Sm= %3 м
 tp= %4</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="96"/>
-        <location filename="../crosssectionwindow.cpp" line="97"/>
+        <location filename="../crosssectionwindow.cpp" line="100"/>
+        <location filename="../crosssectionwindow.cpp" line="101"/>
         <source>Cross-section %1 not available</source>
         <translation>Профиль поверхности %1 не доступен</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="304"/>
+        <location filename="../crosssectionwindow.cpp" line="307"/>
         <source>Cross-section %1
 x1= %2 m
 h1= %3 m
@@ -227,7 +227,7 @@ h2= %5 м
         <translation>При возможности использовать масштаб из метаданных</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="69"/>
+        <location filename="../mainwindow.cpp" line="84"/>
         <source>Depth range: %1 m
 Base depth: %2 m
 Median depth: %3 m</source>
@@ -236,84 +236,127 @@ Median depth: %3 m</source>
 Медиана глубины: %3 м</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="71"/>
+        <location filename="../mainwindow.cpp" line="86"/>
         <source>No surface available</source>
         <translation>Поверхность не доступна</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="167"/>
+        <location filename="../mainwindow.cpp" line="104"/>
+        <source>Demo version warning</source>
+        <translation>Предупреждение об использовании демо-версии</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="105"/>
+        <source>This is a functionally limited demo version of Cybervision.</source>
+        <translation>Это функционально ограниченная демо-версия программы Cybervision.</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="108"/>
+        <source>Upgrade to the full version to gain access to the following features:
+- Saving the reconstruction result
+- Reconstructing multiple surface without restarting
+- Resizing or maximizing windows for a high resolution view
+- Using the application for more than %1 minutes</source>
+        <translation>Обновитесь до полной версии, чтобы получить доступ к следующим функциям:
+- Сохранение результата реконструкции
+- Реконструкция нескольких поверхностей без перезапуска
+- Увеличение размера окон для просмотра результата в высоком разрешении
+- Использование приложения более %1 минут</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="200"/>
         <source>No point selected</source>
         <translation>Точка не выбрана</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="204"/>
+        <location filename="../mainwindow.cpp" line="233"/>
+        <source>Please restart the application to reconstruct another surface.</source>
+        <translation>Пожалуйста, перезапустите программу для реконструкции следующей поверхности.</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="243"/>
         <source>Surface points</source>
         <translation>Точки поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="205"/>
+        <location filename="../mainwindow.cpp" line="244"/>
         <source>Surface polygons</source>
         <translation>Полигоны поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="206"/>
+        <location filename="../mainwindow.cpp" line="245"/>
         <source>PNG image</source>
         <translation>Изображение PNG</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="207"/>
+        <location filename="../mainwindow.cpp" line="246"/>
         <source>SceneJS model</source>
         <translation>Модель SceneJS</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="208"/>
+        <location filename="../mainwindow.cpp" line="247"/>
         <source>COLLADA model</source>
         <translation>Модель COLLADA</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="209"/>
-        <location filename="../mainwindow.cpp" line="253"/>
+        <location filename="../mainwindow.cpp" line="248"/>
+        <location filename="../mainwindow.cpp" line="296"/>
         <source>Cybervision surface</source>
         <translation>Поверхность Cybervision</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="214"/>
+        <location filename="../mainwindow.cpp" line="253"/>
         <source>Save the surface</source>
         <translation>Сохранить поверхность</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="245"/>
+        <location filename="../mainwindow.cpp" line="255"/>
+        <source>Save functionality is disabled.</source>
+        <translation>Функция сохранения отключена.</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="287"/>
         <source>Bad save format selected</source>
         <translation>Выбран неправильный формат для записи</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="246"/>
+        <location filename="../mainwindow.cpp" line="288"/>
         <source>&lt;b&gt;Bad save format selected:&lt;/b&gt; %1</source>
         <translation>&lt;b&gt;Выбран неправильный формат для записи:&lt;/b&gt; %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="254"/>
+        <location filename="../mainwindow.cpp" line="297"/>
         <source>Select surface to load</source>
         <translation>Выберите поверхность, которую нужно загрузить</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="258"/>
+        <location filename="../mainwindow.cpp" line="301"/>
         <source>Error loading surface from %1</source>
         <translation>Ошибка при загрузке поверхности %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="288"/>
+        <location filename="../mainwindow.cpp" line="331"/>
         <source>Images</source>
         <translation>Изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="253"/>
-        <location filename="../mainwindow.cpp" line="288"/>
+        <location filename="../mainwindow.cpp" line="414"/>
+        <source>The demo has run for %1 minutes and will now quit.</source>
+        <translation>Демо-версия работала %1 минут и будет закрыта.</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="296"/>
+        <location filename="../mainwindow.cpp" line="331"/>
         <source>All files</source>
         <translation>Все файлы</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="289"/>
+        <location filename="../mainwindow.cpp" line="28"/>
+        <source>Cybervision (Demo version)</source>
+        <translation>Программа Cybervision (Демонстрационная версия)</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="332"/>
         <source>Select images to add</source>
         <translation>Выберите изображения, которые нужно добавить</translation>
     </message>
@@ -579,6 +622,11 @@ Median depth: %3 m</source>
         <translation>Ошибка OpenCL: clGetKernelWorkGroupInfo не выполнено, код ошибки=%1</translation>
     </message>
     <message>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="337"/>
+        <source>OpenCL information: Reducing group size to fit hardware limits. Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3x%4.</source>
+        <translation>Информация OpenCL: Уменьшение размера группы для соответствия аппаратным ограничениям. Заданный Размер Группы:%1. Максимальный поддерживаемый ядром размер группы: %2. Будет использоваться размер группы %3x%4.</translation>
+    </message>
+    <message>
         <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="365"/>
         <source>OpenCL Error: clWaitForEvents (0) failed, code=%1</source>
         <translation>Ошибка OpenCL: clWaitForEvents (0), код ошибки=%1</translation>
@@ -647,11 +695,6 @@ Median depth: %3 m</source>
         <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="286"/>
         <source>OpenCL Error: In clReleaseMemObject (input2Buffer) code=%1</source>
         <translation>Ошибка OpenCL: В clReleaseMemObject (input2Buffer) код ошибки=%1</translation>
-    </message>
-    <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="337"/>
-        <source>OpenCL Warning: Out of Resources! Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3x%4.</source>
-        <translation>Предупреждение OpenCL: Недостаточно ресурсов! Заданный Размер Группы:%1. Максимальный поддерживаемый ядром размер группы: %2. Будет использоваться размер группы %3x%4.</translation>
     </message>
     <message>
         <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="358"/>

@@ -3,6 +3,10 @@
 
 #include <QFileDialog>
 
+#ifdef CYBERVISION_DEMO
+#include <QMessageBox>
+#endif
+
 #include <limits>
 
 #include <Reconstruction/crosssection.h>
@@ -16,6 +20,17 @@ MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWi
 	QObject::connect(ui->openGLViewport, SIGNAL(selectedPointUpdated(QVector3D)),this, SLOT(viewerSelectedPointUpdated(QVector3D)),Qt::AutoConnection);
 	QObject::connect(ui->openGLViewport, SIGNAL(crossSectionLineChanged(QVector3D,QVector3D,int)),this, SLOT(viewerCrosssectionLineChanged(QVector3D,QVector3D,int)),Qt::AutoConnection);
 	QObject::connect(&crossSectionWindow, SIGNAL(closed()),this, SLOT(crosssectionClosed()),Qt::AutoConnection);
+#ifdef CYBERVISION_DEMO
+	demoTimerMinutes= 20;
+	demoReconstructionAllowed= true;
+
+	showDemoWarning();
+	setWindowTitle(tr("Cybervision (Demo version)"));
+	setMaximumSize(1000,400);
+	demoTimer.setSingleShot(true);
+	demoTimer.start(1000*60*demoTimerMinutes);
+	QObject::connect(&demoTimer,SIGNAL(timeout()),this,SLOT(demoTimerExpired()),Qt::AutoConnection);
+#endif
 }
 
 MainWindow::~MainWindow(){
@@ -82,6 +97,24 @@ void MainWindow::updateSurfaceStats(int lineId){
 		crossSectionWindow.show();
 }
 
+#ifdef CYBERVISION_DEMO
+void MainWindow::showDemoWarning(QString specificWarning)const{
+	QMessageBox msgBox;
+	msgBox.setModal(true);
+	msgBox.setWindowTitle(tr("Demo version warning"));
+	msgBox.setText(tr("This is a functionally limited demo version of Cybervision.")
+				   +((specificWarning.isNull()||specificWarning.isEmpty())?"":(QString("\n")+specificWarning)));
+	msgBox.setIcon((specificWarning.isNull()||specificWarning.isEmpty())?QMessageBox::Warning:QMessageBox::Critical);
+	msgBox.setInformativeText(QString(tr("Upgrade to the full version to gain access to the following features:\n"
+										 "- Saving the reconstruction result\n"
+										 "- Reconstructing multiple surface without restarting\n"
+										 "- Resizing or maximizing windows for a high resolution view\n"
+										 "- Using the application for more than %1 minutes")).arg(demoTimerMinutes));
+	msgBox.setStandardButtons(QMessageBox::Ok);
+	msgBox.setDefaultButton(QMessageBox::Ok);
+	msgBox.exec();
+}
+#endif
 
 void MainWindow::loadDebugPreferences(){
 	QStringList arguments= qApp->arguments();
@@ -195,7 +228,13 @@ void MainWindow::on_startProcessButton_clicked(){
 		if(*i)
 			filenames<<(*i)->data(32).toString();
 	}
-
+#ifdef CYBERVISION_DEMO
+	if(!demoReconstructionAllowed){
+		showDemoWarning(tr("Please restart the application to reconstruct another surface."));
+		return;
+	}
+	demoReconstructionAllowed= false;
+#endif
 	thread.reconstruct3DShape(filenames,scaleXY,scaleZ,angle,ui->actionPrefer_scale_from_metadata->isChecked());
 }
 
@@ -212,6 +251,9 @@ void MainWindow::on_saveButton_clicked(){
 		filter.append(*it+";;");
 	QString selectedFilter;
 	QString fileName = QFileDialog::getSaveFileName(this,tr("Save the surface"),startPath,filter,&selectedFilter,0);
+#ifdef CYBERVISION_DEMO
+	showDemoWarning(tr("Save functionality is disabled."));
+#else
 	if(!fileName.isNull()){
 		QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
 
@@ -247,6 +289,7 @@ void MainWindow::on_saveButton_clicked(){
 		}
 		startPath= fileInfo.canonicalPath();
 	}
+#endif
 }
 
 void MainWindow::on_loadSurfaceButton_clicked(){
@@ -366,3 +409,9 @@ void MainWindow::on_crosssectionButtonSecondary_clicked(bool checked){
 	}else
 		ui->openGLViewport->setDrawCrossSectionLine(checked?1:-1);
 }
+#ifdef CYBERVISION_DEMO
+void MainWindow::demoTimerExpired() const{
+	showDemoWarning(QString(tr("The demo has run for %1 minutes and will now quit.")).arg(demoTimerMinutes));
+	exit(0);
+}
+#endif

@@ -1,8 +1,7 @@
-# -------------------------------------------------
-# Project created by QtCreator 2009-10-25T19:45:46
-# -------------------------------------------------
+include( ../cybervision-options.pri )
+
 QT += core gui opengl
-TARGET = cybervision
+TARGET = cybervision$${CYBERVISION_SUFFIX}
 TEMPLATE = app
 SOURCES += main.cpp \
 	UI/mainwindow.cpp \
@@ -101,8 +100,6 @@ OTHER_FILES += \
 TRANSLATIONS = UI/translations/cybervision-app_ru.ts
 CODECFORTR = UTF-8
 
-include( ../cybervision-options.pri )
-
 INCLUDEPATH += $$PWD/../libsiftfast
 DEPENDPATH += $$PWD/../libsiftfast
 
@@ -112,6 +109,10 @@ DEPENDPATH += $$PWD/../libsiftfast
 
 equals(CYBERVISION_OPENCL, true){
     DEFINES += CYBERVISION_OPENCL
+}
+
+equals(CYBERVISION_DEMO, true){
+	DEFINES += CYBERVISION_DEMO
 }
 
 win32 {
@@ -153,11 +154,11 @@ unix {
     }
 }
 
-win32-msvc*:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/release -lsiftfast
-else:win32-msvc*:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -lsiftfast
-else:win32-g++:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/release -dynamic -lsiftfast
-else:win32-g++:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -dynamic -lsiftfast
-else:win32:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/release -lsiftfast
-else:win32:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -lsiftfast
-else:symbian: LIBS += -lsiftfast
-else:unix: LIBS += -L$$OUT_PWD/../libsiftfast -dynamic -lsiftfast
+win32-msvc*:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/release -lsiftfast$${CYBERVISION_SUFFIX}
+else:win32-msvc*:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -lsiftfast$${CYBERVISION_SUFFIX}
+else:win32-g++:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/release -dynamic -lsiftfast$${CYBERVISION_SUFFIX}
+else:win32-g++:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -dynamic -lsiftfast$${CYBERVISION_SUFFIX}
+else:win32:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/release -lsiftfast$${CYBERVISION_SUFFIX}
+else:win32:CONFIG(debug, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/debug -lsiftfast$${CYBERVISION_SUFFIX}
+else:symbian: LIBS += -lsiftfast$${CYBERVISION_SUFFIX}
+else:unix: LIBS += -L$$OUT_PWD/../libsiftfast -dynamic -lsiftfast$${CYBERVISION_SUFFIX}

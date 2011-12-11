@@ -5,6 +5,10 @@
 #include <QTextStream>
 #include <QDoubleValidator>
 
+#ifdef CYBERVISION_DEMO
+#include <QTimer>
+#endif
+
 #include <UI/processthread.h>
 #include <UI/crosssectionwindow.h>
 
@@ -32,6 +36,15 @@ private:
 
 	QString startPath;
 
+#ifdef CYBERVISION_DEMO
+	//True if user is running reconstruction for the first time
+	bool demoReconstructionAllowed;
+	//Timer to quit after a timeout
+	QTimer demoTimer;
+	//Timer minutes
+	int demoTimerMinutes;
+#endif
+
 	//Updates widgets enabled/disabled/visible status
 	void updateWidgetStatus();
 
@@ -40,6 +53,11 @@ private:
 
 	//Updates the surface stats
 	void updateSurfaceStats(int lineId=-1);
+
+#ifdef CYBERVISION_DEMO
+	//Shows the "Demo" warning
+	void showDemoWarning(QString specificWarning=QString()) const;
+#endif
 private slots:
 	//Slots for receiving messages from process thread
 	void processStarted();
@@ -52,6 +70,11 @@ private slots:
 
 	//Slots for receiving messages from cross-section viewer
 	void crosssectionClosed();
+
+#ifdef CYBERVISION_DEMO
+	//Timer expired in demo version, application should quit
+	void demoTimerExpired() const;
+#endif
 
 	//UI slots
 	void on_addImageButton_clicked();

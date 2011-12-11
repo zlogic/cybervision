@@ -1,4 +1,6 @@
-TARGET = siftfast
+include( ../cybervision-options.pri )
+
+TARGET = siftfast$${CYBERVISION_SUFFIX}
 
 TEMPLATE = lib
 
@@ -12,9 +14,6 @@ HEADERS += \
 SOURCES += \
     SIFT/siftgateway.cpp \
     SIFT/libsiftfast.cpp
-
-include( ../cybervision-options.pri )
-
 
 #CONFIG(release, debug|release): DESTDIR = ../release
 #CONFIG(debug, debug|release): DESTDIR = ../debug

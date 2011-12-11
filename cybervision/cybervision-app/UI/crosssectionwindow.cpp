@@ -20,6 +20,10 @@ CrossSectionWindow::CrossSectionWindow(QWidget *parent) :
 	ui->crosssectionViewport->setUpdatesEnabled(true);
 	ui->crosssectionViewport->setScene(&crossSectionScene);
 
+#ifdef CYBERVISION_DEMO
+	setMaximumSize(530,480);
+#endif
+
 	for(int i=0;i<2;i++)
 		crossSections<<cybervision::CrossSection();
 
