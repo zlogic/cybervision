@@ -126,7 +126,7 @@ win32-g++ {
             -lgomp -lpthread
 
     equals(CYBERVISION_OPENCL, true){
-        LIBS += -lOpenCL -laticalrt -laticalcl
+		LIBS += -lOpenCL
     }
 
     #QMAKE_CXXFLAGS += -U_WIN32
