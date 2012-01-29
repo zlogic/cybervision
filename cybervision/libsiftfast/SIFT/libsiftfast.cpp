@@ -328,18 +328,18 @@ Keypoint GetKeypointsInternal(Image porgimage)
 
 		if( s_params.InitSigma > fnewscale ) {
 			GaussianBlur(pimage, pimage, sqrtf(s_params.InitSigma*s_params.InitSigma - fnewscale*fnewscale));
-			//            {
-			//                FILE* f = fopen("test.txt","w");
-			//                int rows = pimage->rows, cols = pimage->cols, stride = pimage->stride;
-			//                float *_pdst = pimage->pixels;
-			//                for(int j = 0; j < rows; ++j, _pdst += stride ) {
-			//                    for(int k = 0; k < cols; ++k) {
-			//                        fprintf(f,"%f ",_pdst[k]);
-			//                    }
-			//                    fprintf(f,"\n");
-			//                }
-			//                fclose(f);
-			//            }
+//            {
+//                FILE* f = fopen("test.txt","w");
+//                int rows = pimage->rows, cols = pimage->cols, stride = pimage->stride;
+//                float *_pdst = pimage->pixels;
+//                for(int j = 0; j < rows; ++j, _pdst += stride ) {
+//                    for(int k = 0; k < cols; ++k) {
+//                        fprintf(f,"%f ",_pdst[k]);
+//                    }
+//                    fprintf(f,"\n");
+//                }
+//                fclose(f);
+//            }
 		}
 
 		// create the images
@@ -558,7 +558,7 @@ void OctaveKeypointDescriptors(Image pimage, Image* phalfimage, float fscale, li
 #else
 		GradOriImages(s_imgaus[index],s_imgrad,s_imorient);
 #endif
-#pragma omp parallel for schedule(dynamic,8)
+		#pragma omp parallel for schedule(dynamic,8)
 		for(int ikey = 0; ikey < (int)vframes.size(); ++ikey) {
 			float fSize = vframes[ikey]->scale*fiscale;
 			float frowstart = vframes[ikey]->row*fiscale;
@@ -574,7 +574,7 @@ void SubtractImage(Image imgdst, Image img0, Image img1)
 	int rows = imgdst->rows, cols = imgdst->cols, stride = imgdst->stride;
 	float* _pixels0 = img0->pixels, *_pixels1 = img1->pixels, *_pdst = imgdst->pixels;
 #ifdef __SSE__
-#pragma omp parallel for schedule(dynamic,32)
+	#pragma omp parallel for schedule(dynamic,32)
 	for(int j = 0; j < rows; ++j ) {
 		float* pixels0 = _pixels0+j*stride;
 		float* pixels1 = _pixels1+j*stride;
@@ -768,14 +768,14 @@ void ConvHorizontalFast(Image imgdst, Image image, float* kernel, int ksize)
 	memset(pconvbuf+cols+ksize+1,0,32);
 #endif
 
-#pragma omp parallel for schedule(dynamic,16)
+	#pragma omp parallel for schedule(dynamic,16)
 	for(int i = 0; i < rows; i++) {
 
 #ifdef _OPENMP
 		float* pconvbuf;
 
 		// need to get a free buffer
-#pragma omp critical
+		#pragma omp critical
 		{
 			if( s_listconvbuf.size() == 0 ) {
 				// for some reason, crashes if this is ever executed....
@@ -870,7 +870,7 @@ void ConvHorizontalFast(Image imgdst, Image image, float* kernel, int ksize)
 		}
 
 #ifdef _OPENMP
-#pragma omp critical
+		#pragma omp critical
 		{
 			s_listconvbuf.push_back(pconvbuf);
 		}
@@ -913,7 +913,7 @@ void ConvVerticalFast(Image image, float* kernel, int ksize)
 	int width = (ksize >= 0 ? ksize : ksize-1)>>1;
 	float* _pixels = image->pixels;
 
-#pragma omp parallel for
+	#pragma omp parallel for
 	for(int j = 0; j < stride; j += 4) {
 
 		float* pixels = _pixels+j;
@@ -925,7 +925,7 @@ void ConvVerticalFast(Image image, float* kernel, int ksize)
 		float* pconvbuf;
 
 		// need to get a free buffer
-#pragma omp critical
+		#pragma omp critical
 		{
 			if( s_listconvbuf.size() == 0 ) {
 				pconvbuf = (float*)sift_aligned_malloc(convsize,16);
@@ -1017,7 +1017,7 @@ void ConvVerticalFast(Image image, float* kernel, int ksize)
 		}
 
 #ifdef _OPENMP
-#pragma omp critical
+		#pragma omp critical
 		{
 			s_listconvbuf.push_back(pconvbuf);
 		}
@@ -1044,25 +1044,25 @@ Keypoint FindMaxMin(Image* imdiff, Image* imgaus, float fscale, Keypoint keypts)
 		assert( imdiff[index]->stride == stride );
 		float* _diffpixels = imdiff[index]->pixels;
 
-		//        for(int i = 0; i < rows; ++i) {
-		//            for(int j = 0; j < cols; ++j) {
-		//                if( isnan(imgaus[index]->pixels[i*cols+j]) ) {
-		//                    fprintf(stderr, "gaus: %d %d %d %d %d %f %f\n", index,i,j,rows,cols,s_imgrad->pixels[i*cols+j],s_imorient->pixels[i*cols+j]);
-		//                    //exit(0);
-		//                }
-		////                if( isnan(s_imorient->pixels[i*cols+j]) ) {
-		////                    //GradOriImagesFast(imgaus[index],s_imgrad,s_imorient);
-		////                    fprintf(stderr,"rc %d %d\n",rows,cols);
-		////                    fprintf(stderr,"wtf %d %d %f %f %f %f\n",i,j, s_imgrad->pixels[i*cols+j], imgaus[index]->pixels[i*cols+j], imgaus[index]->pixels[i*cols+j-1], imgaus[index]->pixels[i*cols+j+1]);
-		////                    fprintf(stderr,"%f %f\n",imgaus[index]->pixels[(i-1)*cols+j], imgaus[index]->pixels[(i+1)*cols+j]);
-		////                    exit(0);
-		////                }
-		//            }
-		//        }
+//        for(int i = 0; i < rows; ++i) {
+//            for(int j = 0; j < cols; ++j) {
+//                if( isnan(imgaus[index]->pixels[i*cols+j]) ) {
+//                    fprintf(stderr, "gaus: %d %d %d %d %d %f %f\n", index,i,j,rows,cols,s_imgrad->pixels[i*cols+j],s_imorient->pixels[i*cols+j]);
+//                    //exit(0);
+//                }
+////                if( isnan(s_imorient->pixels[i*cols+j]) ) {
+////                    //GradOriImagesFast(imgaus[index],s_imgrad,s_imorient);
+////                    fprintf(stderr,"rc %d %d\n",rows,cols);
+////                    fprintf(stderr,"wtf %d %d %f %f %f %f\n",i,j, s_imgrad->pixels[i*cols+j], imgaus[index]->pixels[i*cols+j], imgaus[index]->pixels[i*cols+j-1], imgaus[index]->pixels[i*cols+j+1]);
+////                    fprintf(stderr,"%f %f\n",imgaus[index]->pixels[(i-1)*cols+j], imgaus[index]->pixels[(i+1)*cols+j]);
+////                    exit(0);
+////                }
+//            }
+//        }
 
-#if defined(__SSE__)
+		//#if defined(__SSE__) || !defined(__MINGW32__)// Dmitry Zolotukhin <zlogic@gmail.com>: patch for not corrupting data when SSE is disabled
 		#pragma omp parallel for schedule(dynamic,8)
-#endif
+		//#endif
 		for( int rowstart = 5; rowstart < rows-5; ++rowstart ) {
 			Keypoint newkeypts = NULL;
 			float* diffpixels = _diffpixels + rowstart*stride;
@@ -1071,9 +1071,9 @@ Keypoint FindMaxMin(Image* imdiff, Image* imgaus, float fscale, Keypoint keypts)
 				float fval = diffpixels[colstart];
 				if( fabsf(fval) > s_params.PeakThresh*0.8f ) {
 					if( LocalMaxMin(fval, imdiff[index],rowstart,colstart) &&
-							LocalMaxMin(fval, imdiff[index-1],rowstart,colstart) &&
-							LocalMaxMin(fval, imdiff[index+1],rowstart,colstart) &&
-							NotOnEdge(imdiff[index],rowstart,colstart) ) {
+						LocalMaxMin(fval, imdiff[index-1],rowstart,colstart) &&
+						LocalMaxMin(fval, imdiff[index+1],rowstart,colstart) &&
+						NotOnEdge(imdiff[index],rowstart,colstart) ) {
 						newkeypts = InterpKeyPoint(imdiff,index,rowstart,colstart,s_imgrad,s_imorient,s_MaxMinArray,fscale,newkeypts,5);
 					}
 				}
@@ -1084,9 +1084,9 @@ Keypoint FindMaxMin(Image* imdiff, Image* imgaus, float fscale, Keypoint keypts)
 				Keypoint lastkeypt = newkeypts;
 				while(lastkeypt->next)
 					lastkeypt = lastkeypt->next;;
-#if defined(__SSE__)
-#pragma omp critical
-#endif
+				//#if defined(__SSE__) || !defined(__MINGW32__)// Dmitry Zolotukhin <zlogic@gmail.com>: patch for not corrupting data when SSE is disabled
+				#pragma omp critical
+				//#endif
 				{
 					lastkeypt->next = keypts;
 					keypts = newkeypts;
@@ -1105,8 +1105,10 @@ void GradOriImages(Image image, Image imgrad, Image imorient)
 	int rows = image->rows, cols = image->cols, stride = image->stride;
 	float* _pixels = image->pixels, *_pfgrad = imgrad->pixels, *_pforient = imorient->pixels;
 	float fdiffc, fdiffr;
-
-#pragma omp parallel for schedule(dynamic,16) // might crash Matlab mex files
+	
+	#if defined(__SSE__) || !defined(__MINGW32__)// Dmitry Zolotukhin <zlogic@gmail.com>: patch for not corrupting data when SSE is disabled
+	#pragma omp parallel for schedule(dynamic,16) // might crash Matlab mex files
+	#endif
 	for(int i = 0; i < rows; ++i) {
 		float* pixels = _pixels + i*stride;
 		float* pfgrad = _pfgrad + i*stride;
@@ -1182,7 +1184,7 @@ void GradOriImagesFast(Image image, Image imgrad, Image imorient)
 		}
 	}
 
-#pragma omp parallel for schedule(dynamic,16) // might crash Matlab mex files
+	#pragma omp parallel for schedule(dynamic,16) // might crash Matlab mex files
 	for(int i = 1; i < rows-1; ++i) {
 
 		float fdiffc, fdiffr;
@@ -1329,7 +1331,7 @@ Keypoint InterpKeyPoint(Image* imdiff, int index, int rowstart, int colstart,
 
 		char* pmaxmin = pMaxMinArray + rowstart*imgrad->cols+colstart;
 		bool bgetkeypts = false;
-#pragma omp critical
+		#pragma omp critical
 		{
 			if( !pmaxmin[0] ) {
 				bgetkeypts = true;
@@ -1453,7 +1455,7 @@ Keypoint AssignOriHist(Image imgrad, Image imorient, float fscale, float fSize,i
 					// there is a bug in pforient where it could be 2*PI sometimes
 					if( binindex > 36 ) {
 						//if( binindex != 54 )
-						fprintf(stderr,"bin %d\n",binindex);
+							fprintf(stderr,"bin %d\n",binindex);
 						binindex = 0;
 					}
 
@@ -1553,7 +1555,7 @@ Keypoint MakeKeypoint(Image imgrad, Image imorient, float fscale, float fSize,
 					  float frowstart,float fcolstart,float forient, Keypoint keypts)
 {
 	Keypoint pnewkeypt;
-#pragma omp critical
+	#pragma omp critical
 	{
 		if( s_listKeypoints.size() > 0 ) {
 			pnewkeypt = s_listKeypoints.back();
@@ -1630,21 +1632,21 @@ void MakeKeypointSample(Keypoint pkeypt, Image imgrad, Image imorient,
 	}
 
 	// converting to unsigned char
-	//    float flength = 512.0f/sqrtf(flength2);
-	//    maccum0 = _mm_load1_ps(&flength);
-	//    unsigned char* pkeydesc = pkeypt->descrip;
-	//
-	//    for(int i = 0; i < 128; i += 16 ) {
-	//        __m128 m0 = _mm_load_ps(fdesc+i);
-	//        __m128 m1 = _mm_load_ps(fdesc+i+4);
-	//        __m128 m2 = _mm_load_ps(fdesc+i+8);
-	//        __m128 m3 = _mm_load_ps(fdesc+i+12);
-	//        __m128i mi0 = _mm_cvttps_epi32(_mm_mul_ps(m0,maccum0));
-	//        __m128i mi1 = _mm_cvttps_epi32(_mm_mul_ps(m1,maccum0));
-	//        __m128i mi2 = _mm_cvttps_epi32(_mm_mul_ps(m2,maccum0));
-	//        __m128i mi3 = _mm_cvttps_epi32(_mm_mul_ps(m3,maccum0));
-	//        _mm_store_si128((__m128i*)(pkeydesc+i), _mm_packus_epi16(_mm_packs_epi32(mi0,mi1),_mm_packs_epi32(mi2,mi3)));
-	//    }
+//    float flength = 512.0f/sqrtf(flength2);
+//    maccum0 = _mm_load1_ps(&flength);
+//    unsigned char* pkeydesc = pkeypt->descrip;
+//
+//    for(int i = 0; i < 128; i += 16 ) {
+//        __m128 m0 = _mm_load_ps(fdesc+i);
+//        __m128 m1 = _mm_load_ps(fdesc+i+4);
+//        __m128 m2 = _mm_load_ps(fdesc+i+8);
+//        __m128 m3 = _mm_load_ps(fdesc+i+12);
+//        __m128i mi0 = _mm_cvttps_epi32(_mm_mul_ps(m0,maccum0));
+//        __m128i mi1 = _mm_cvttps_epi32(_mm_mul_ps(m1,maccum0));
+//        __m128i mi2 = _mm_cvttps_epi32(_mm_mul_ps(m2,maccum0));
+//        __m128i mi3 = _mm_cvttps_epi32(_mm_mul_ps(m3,maccum0));
+//        _mm_store_si128((__m128i*)(pkeydesc+i), _mm_packus_epi16(_mm_packs_epi32(mi0,mi1),_mm_packs_epi32(mi2,mi3)));
+//    }
 #else
 	NormalizeVec(fdesc,128);
 
@@ -1687,12 +1689,12 @@ void KeySample(float* fdesc, Keypoint pkeypt, Image imgrad, Image imorient,
 	float fsr = sinang*firealsize, fcr = cosang*firealsize, fdrr = -fdrow*firealsize, fdcr = -fdcol*firealsize;
 
 	for(int row = -windowsize; row <= windowsize; ++row) {
-		//#ifdef _OPENMP
-		//        float SIFT_ALIGNED16(fnewdesc[128]) = {0};
-		//        bool badd = false;
-		//#else
+//#ifdef _OPENMP
+//        float SIFT_ALIGNED16(fnewdesc[128]) = {0};
+//        bool badd = false;
+//#else
 		float* fnewdesc = fdesc;
-		//#endif
+//#endif
 
 		float frow = (float)row;
 		float fcol = -(float)windowsize;
@@ -1704,30 +1706,30 @@ void KeySample(float* fdesc, Keypoint pkeypt, Image imgrad, Image imorient,
 
 			if( rx > -0.9999f && rx < 3.9999f && cx > -0.9999f && cx < 3.9999f ) {
 				AddSample(fnewdesc, pkeypt, imgrad, imorient, rowstart+row, colstart+col, rpos, cpos, rx, cx);
-				//#ifdef _OPENMP
-				//                badd = true;
-				//#endif
+//#ifdef _OPENMP
+//                badd = true;
+//#endif
 			}
 		}
 
-		//#ifdef _OPENMP
-		//        if( badd ) {
-		//            #pragma omp critical
-		//            {
-		//#ifdef __SSE__
-		//                for(int j = 0; j < 128; j += 16) {
-		//                    _mm_store_ps(&fdesc[j], _mm_add_ps(_mm_load_ps(&fdesc[j]), _mm_load_ps(&fnewdesc[j])));
-		//                    _mm_store_ps(&fdesc[j+4], _mm_add_ps(_mm_load_ps(&fdesc[j+4]), _mm_load_ps(&fnewdesc[j+4])));
-		//                    _mm_store_ps(&fdesc[j+8], _mm_add_ps(_mm_load_ps(&fdesc[j+8]), _mm_load_ps(&fnewdesc[j+8])));
-		//                    _mm_store_ps(&fdesc[j+12], _mm_add_ps(_mm_load_ps(&fdesc[j+12]), _mm_load_ps(&fnewdesc[j+12])));
-		//                }
-		//#else
-		//                for(int j = 0; j < 128; ++j)
-		//                    fdesc[j] += fnewdesc[j];
-		//#endif
-		//            }
-		//        }
-		//#endif
+//#ifdef _OPENMP
+//        if( badd ) {
+//            #pragma omp critical
+//            {
+//#ifdef __SSE__
+//                for(int j = 0; j < 128; j += 16) {
+//                    _mm_store_ps(&fdesc[j], _mm_add_ps(_mm_load_ps(&fdesc[j]), _mm_load_ps(&fnewdesc[j])));
+//                    _mm_store_ps(&fdesc[j+4], _mm_add_ps(_mm_load_ps(&fdesc[j+4]), _mm_load_ps(&fnewdesc[j+4])));
+//                    _mm_store_ps(&fdesc[j+8], _mm_add_ps(_mm_load_ps(&fdesc[j+8]), _mm_load_ps(&fnewdesc[j+8])));
+//                    _mm_store_ps(&fdesc[j+12], _mm_add_ps(_mm_load_ps(&fdesc[j+12]), _mm_load_ps(&fnewdesc[j+12])));
+//                }
+//#else
+//                for(int j = 0; j < 128; ++j)
+//                    fdesc[j] += fnewdesc[j];
+//#endif
+//            }
+//        }
+//#endif
 	}
 }
 
@@ -1745,8 +1747,8 @@ void AddSample(float* fdesc, Keypoint pkeypt, Image imgrad, Image imorient, int 
 	while( forient < 0 )
 		forient += 2*PI;
 
-	//    if( isnan(forient) )
-	//        fprintf(stderr,"%f %f (%d,%d,%d,%d)\n", imorient->pixels[r*stride+c],pkeypt->ori,r,c,rows,cols);
+//    if( isnan(forient) )
+//        fprintf(stderr,"%f %f (%d,%d,%d,%d)\n", imorient->pixels[r*stride+c],pkeypt->ori,r,c,rows,cols);
 
 	PlaceInIndex(fdesc, fgrad, forient, rx, cx);
 }
@@ -1893,74 +1895,74 @@ DEF_CONST(CF4_PIO4F,    0.7853981633974483096f)
 DEF_CONST(CF4_PIF,      3.14159265358979323846f)
 
 inline vec_int4  __attribute__((__always_inline__))
-_signf4( vec_float4 x ){
-	vec_int4 a = CI4_SIGN;
-	VEC_AND(a, x);
-	return a;
+	  _signf4( vec_float4 x ){
+	  vec_int4 a = CI4_SIGN;
+	  VEC_AND(a, x);
+	  return a;
 }
 
 inline vec_float4 __attribute__((__always_inline__))
-_atanf4( vec_float4 x ){
-	vec_float4 y, z,z1,z2;
-	vec_int4 a1, a2, a3;
-	/* make argument positive and save the sign */
-	vec_int4 sign = _signf4( x );
-	VEC_XOR(x, sign);
+			_atanf4( vec_float4 x ){
+	  vec_float4 y, z,z1,z2;
+	  vec_int4 a1, a2, a3;
+	  /* make argument positive and save the sign */
+	  vec_int4 sign = _signf4( x );
+	  VEC_XOR(x, sign);
 
-	/* range reduction */
-	a1 = (vec_int4)VEC_GT (x , CF4_2414213562373095 );
-	a2 = (vec_int4)VEC_GT (x , CF4_04142135623730950 );
-	a3 = ~a2;
-	a2 ^= a1;
+	  /* range reduction */
+	  a1 = (vec_int4)VEC_GT (x , CF4_2414213562373095 );
+	  a2 = (vec_int4)VEC_GT (x , CF4_04142135623730950 );
+	  a3 = ~a2;
+	  a2 ^= a1;
 
-	z1 = CF4__1 / (x+CF4_SMALL);
-	z2 = (x-CF4_1)/(x+CF4_1);
-	VEC_AND(z1, a1);
-	VEC_AND(z2, a2);
-	VEC_AND(x, a3);
-	VEC_OR(x, z1);
-	VEC_OR(x, z2);
+	  z1 = CF4__1 / (x+CF4_SMALL);
+	  z2 = (x-CF4_1)/(x+CF4_1);
+	  VEC_AND(z1, a1);
+	  VEC_AND(z2, a2);
+	  VEC_AND(x, a3);
+	  VEC_OR(x, z1);
+	  VEC_OR(x, z2);
 
-	y = CF4_PIO2F;
-	z1 = CF4_PIO4F;
-	VEC_AND(y, a1);
-	VEC_AND(z1, a2);
-	VEC_OR(y, z1);
+	  y = CF4_PIO2F;
+	  z1 = CF4_PIO4F;
+	  VEC_AND(y, a1);
+	  VEC_AND(z1, a2);
+	  VEC_OR(y, z1);
 
-	z = x * x;
-	y +=
+	  z = x * x;
+	  y +=
 			((( CF4_805374449538e_2 * z
-				- CF4_138776856032E_1) * z
-			  + CF4_199777106478E_1) * z
-			 - CF4_333329491539E_1) * z * x
+			- CF4_138776856032E_1) * z
+			+ CF4_199777106478E_1) * z
+			- CF4_333329491539E_1) * z * x
 			+ x;
 
-	VEC_XOR(y, sign);
-	return y;
+	  VEC_XOR(y, sign);
+	  return y;
 }
 
 inline vec_float4  __attribute__((__always_inline__))
-atan2f4( vec_float4 y, vec_float4 x ){
-	vec_float4 z, w;
-	vec_float4 x_neg_PI    = CF4_PIF;
-	VEC_AND(x_neg_PI, VEC_GT( CF4_0, x ));
-	vec_float4 y_negativ_2 = CF4_2;
-	VEC_AND(y_negativ_2, VEC_GT( CF4_0, y ));
+	  atan2f4( vec_float4 y, vec_float4 x ){
+	  vec_float4 z, w;
+	  vec_float4 x_neg_PI    = CF4_PIF;
+	  VEC_AND(x_neg_PI, VEC_GT( CF4_0, x ));
+	  vec_float4 y_negativ_2 = CF4_2;
+	  VEC_AND(y_negativ_2, VEC_GT( CF4_0, y ));
 
-	vec_int4 i_x_zero  = (vec_int4)VEC_EQ ( CF4_0, x );
-	vec_int4 i_y_zero  = (vec_int4)VEC_EQ ( CF4_0, y );
-	vec_float4 x_zero_PIO2 = CF4_PIO2F;
-	VEC_AND(x_zero_PIO2, i_x_zero);
-	vec_float4 y_zero    = CF4_1;
-	VEC_AND(y_zero, i_y_zero);
+	  vec_int4 i_x_zero  = (vec_int4)VEC_EQ ( CF4_0, x );
+	  vec_int4 i_y_zero  = (vec_int4)VEC_EQ ( CF4_0, y );
+	  vec_float4 x_zero_PIO2 = CF4_PIO2F;
+	  VEC_AND(x_zero_PIO2, i_x_zero);
+	  vec_float4 y_zero    = CF4_1;
+	  VEC_AND(y_zero, i_y_zero);
 
 
-	w = x_neg_PI *  ( CF4_1  - y_negativ_2 );
+	  w = x_neg_PI *  ( CF4_1  - y_negativ_2 );
 
-	z = _atanf4( y / (x+x_zero_PIO2));
-	VEC_AND(z, ~(i_x_zero|i_y_zero));
+	  z = _atanf4( y / (x+x_zero_PIO2));
+	  VEC_AND(z, ~(i_x_zero|i_y_zero));
 
-	return w + z + x_zero_PIO2 * ( CF4_1 - y_zero - y_negativ_2 );
+	  return w + z + x_zero_PIO2 * ( CF4_1 - y_zero - y_negativ_2 );
 }
 
 #endif
