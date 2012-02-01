@@ -4,7 +4,6 @@
 #include <QList>
 #include <QVector3D>
 #include <QVector2D>
-#include <QPolygonF>
 #include <Reconstruction/surface.h>
 
 namespace cybervision{
