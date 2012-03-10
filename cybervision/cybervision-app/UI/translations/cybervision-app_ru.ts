@@ -20,47 +20,82 @@
         <translation>Измерение глубины</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="88"/>
+        <location filename="../crosssectionwindow.cpp" line="90"/>
         <source>Cross-section %1
-Ra= %2 m
-Rz= %3 m
-Rmax= %4 m</source>
+Ra= %2 µm
+Rz= %3 µm
+Rmax= %4 µm</source>
         <translation>Профиль поверхности %1
-Ra= %2 м
-Rz= %3 м
-Rmax= %4 м</translation>
+Ra= %2 µм
+Rz= %3 µм
+Rmax= %4 µм</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="93"/>
+        <location filename="../crosssectionwindow.cpp" line="95"/>
         <source>Cross-section %1
-S= %2 m
-Sm= %3 m
+S= %2 µm
+Sm= %3 µm
 tp= %4</source>
         <translation>Профиль поверхности %1
-S= %2 м
-Sm= %3 м
+S= %2 µм
+Sm= %3 µм
 tp= %4</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="100"/>
-        <location filename="../crosssectionwindow.cpp" line="101"/>
+        <location filename="../crosssectionwindow.cpp" line="102"/>
+        <location filename="../crosssectionwindow.cpp" line="103"/>
         <source>Cross-section %1 not available</source>
         <translation>Профиль поверхности %1 не доступен</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="307"/>
+        <location filename="../crosssectionwindow.cpp" line="186"/>
+        <source>%1 µm  </source>
+        <translation>%1 µм  </translation>
+    </message>
+    <message>
+        <location filename="../crosssectionwindow.cpp" line="198"/>
+        <source>%1 µm</source>
+        <translation>%1 µм  </translation>
+    </message>
+    <message>
+        <location filename="../crosssectionwindow.cpp" line="312"/>
         <source>Cross-section %1
-x1= %2 m
-h1= %3 m
-x2= %4 m
-h2= %5 m
-Height difference= %6 m</source>
+x1= %2 µm
+h1= %3 µm
+x2= %4 µm
+h2= %5 µm
+Height difference= %6 µm</source>
         <translation>Профиль поверхности %1
-x1= %2 м
-h1= %3 м
-x2= %4 м
-h2= %5 м
-Перепад высот= %6 м</translation>
+x1= %2 µм
+h1= %3 µм
+x2= %4 µм
+h2= %5 µм
+Перепад высот= %6 µм</translation>
+    </message>
+</context>
+<context>
+    <name>CybervisionViewer</name>
+    <message>
+        <location filename="../cybervisionviewer.cpp" line="275"/>
+        <source>x</source>
+        <translation>x</translation>
+    </message>
+    <message>
+        <location filename="../cybervisionviewer.cpp" line="276"/>
+        <source>y</source>
+        <translation>y</translation>
+    </message>
+    <message>
+        <location filename="../cybervisionviewer.cpp" line="277"/>
+        <source>z</source>
+        <translation>z</translation>
+    </message>
+    <message>
+        <location filename="../cybervisionviewer.cpp" line="440"/>
+        <location filename="../cybervisionviewer.cpp" line="457"/>
+        <location filename="../cybervisionviewer.cpp" line="474"/>
+        <source>%1 µm</source>
+        <translation>%1 µм  </translation>
     </message>
 </context>
 <context>
@@ -81,6 +116,11 @@ h2= %5 м
         <translation>Добавить изображения</translation>
     </message>
     <message>
+        <location filename="../mainwindow.ui" line="80"/>
+        <source>&lt;span style=&quot; font-size:8pt; font-weight:600;&quot;&gt;Select exactly two images from the list&lt;/span&gt;</source>
+        <translation>&lt;span style=&quot; font-size:8pt; font-weight:600;&quot;&gt;Выберите ровно два изображения из списка&lt;/span&gt;</translation>
+    </message>
+    <message>
         <location filename="../mainwindow.ui" line="111"/>
         <source>Reconstruct</source>
         <translation>Реконструировать</translation>
@@ -89,11 +129,6 @@ h2= %5 м
         <location filename="../mainwindow.ui" line="125"/>
         <source>Save result</source>
         <translation>Сохранить результат</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.ui" line="80"/>
-        <source>Select exactly two images from the list</source>
-        <translation>Выберите ровно два изображения из списка</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="94"/>
@@ -121,137 +156,133 @@ h2= %5 м
         <translation>Убрать изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="207"/>
+        <location filename="../mainwindow.ui" line="214"/>
         <source>3D image</source>
         <translation>Трехмерное изображение</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="237"/>
-        <location filename="../mainwindow.ui" line="240"/>
+        <location filename="../mainwindow.ui" line="244"/>
+        <location filename="../mainwindow.ui" line="247"/>
         <source>Rotate object</source>
         <translation>Повернуть объект</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="263"/>
-        <location filename="../mainwindow.ui" line="266"/>
+        <location filename="../mainwindow.ui" line="270"/>
+        <location filename="../mainwindow.ui" line="273"/>
         <source>Move object</source>
         <translation>Передвинуть объект</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="298"/>
-        <location filename="../mainwindow.ui" line="301"/>
+        <location filename="../mainwindow.ui" line="305"/>
+        <location filename="../mainwindow.ui" line="308"/>
         <source>Texture from first image</source>
         <translation>Текстура с первого изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="324"/>
-        <location filename="../mainwindow.ui" line="327"/>
+        <location filename="../mainwindow.ui" line="331"/>
+        <location filename="../mainwindow.ui" line="334"/>
         <source>Disable texture</source>
         <translation>Отключить текстуру</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="347"/>
-        <location filename="../mainwindow.ui" line="350"/>
+        <location filename="../mainwindow.ui" line="354"/>
+        <location filename="../mainwindow.ui" line="357"/>
         <source>Texture from second image</source>
         <translation>Текстура со второго изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="373"/>
-        <location filename="../mainwindow.ui" line="376"/>
+        <location filename="../mainwindow.ui" line="380"/>
+        <location filename="../mainwindow.ui" line="383"/>
         <source>Show grid</source>
         <translation>Показать сетку</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="435"/>
+        <location filename="../mainwindow.ui" line="442"/>
         <source>Log</source>
         <translation>Журнал</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="493"/>
+        <location filename="../mainwindow.ui" line="500"/>
         <source>Options</source>
         <translation>Настройки</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="513"/>
+        <location filename="../mainwindow.ui" line="520"/>
         <source>Inspector</source>
         <translation>Инспектор</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="523"/>
+        <location filename="../mainwindow.ui" line="530"/>
         <source>Selected point coordinates</source>
         <translation>Координаты выбранной точки</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="542"/>
+        <location filename="../mainwindow.ui" line="549"/>
         <source>Statistics</source>
         <translation>Статистика</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="561"/>
+        <location filename="../mainwindow.ui" line="568"/>
         <source>Cross-section</source>
         <translation>Профиль поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="567"/>
+        <location filename="../mainwindow.ui" line="574"/>
         <source>Draw cross-section plane 1</source>
         <translation>Провести плоскость среза 1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="581"/>
+        <location filename="../mainwindow.ui" line="588"/>
         <source>Draw cross-section plane 2</source>
         <translation>Провести плоскость среза 2</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="646"/>
+        <location filename="../mainwindow.ui" line="653"/>
         <source>Show cross-section window</source>
         <translation>Показать окно профиля поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="638"/>
+        <location filename="../mainwindow.ui" line="645"/>
         <source>Show inspector</source>
         <translation>Показать инспектор</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="616"/>
+        <location filename="../mainwindow.ui" line="191"/>
+        <source>&lt;span style=&quot; font-size:8pt; font-weight:600;&quot;&gt;Enter a non-zero angle value&lt;/span&gt;</source>
+        <translation>&lt;span style=&quot; font-size:8pt; font-weight:600;&quot;&gt;Введите ненулевое значение угла&lt;/span&gt;</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="623"/>
         <source>Show log</source>
         <translation>Показать журнал</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="619"/>
+        <location filename="../mainwindow.ui" line="626"/>
         <source>Show the log</source>
         <translation>Показать журнал</translation>
     </message>
     <message>
-        <location filename="../mainwindow.ui" line="630"/>
+        <location filename="../mainwindow.ui" line="637"/>
         <source>Prefer scale from metadata</source>
         <translation>При возможности использовать масштаб из метаданных</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="84"/>
-        <source>Depth range: %1 m
-Base depth: %2 m
-Median depth: %3 m</source>
-        <translation>Диапазон глубины: %1 м
-Базовая глубина: %2 м
-Медиана глубины: %3 м</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="86"/>
+        <location filename="../mainwindow.cpp" line="95"/>
         <source>No surface available</source>
         <translation>Поверхность не доступна</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="104"/>
+        <location filename="../mainwindow.cpp" line="113"/>
         <source>Demo version warning</source>
         <translation>Предупреждение об использовании демо-версии</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="105"/>
+        <location filename="../mainwindow.cpp" line="114"/>
         <source>This is a functionally limited demo version of Cybervision.</source>
         <translation>Это функционально ограниченная демо-версия программы Cybervision.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="108"/>
+        <location filename="../mainwindow.cpp" line="117"/>
         <source>Upgrade to the full version to gain access to the following features:
 - Saving the reconstruction result
 - Reconstructing multiple surface without restarting
@@ -264,99 +295,117 @@ Median depth: %3 m</source>
 - Использование приложения более %1 минут</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="200"/>
+        <location filename="../mainwindow.cpp" line="210"/>
         <source>No point selected</source>
         <translation>Точка не выбрана</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="233"/>
+        <location filename="../mainwindow.cpp" line="90"/>
+        <source>Depth range: %1 µm
+Base depth: %2 µm
+Median depth: %3 µm</source>
+        <translation>Диапазон глубины: %1 µм
+Базовая глубина: %2 µм
+Медиана глубины: %3 µм</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="212"/>
+        <source>x: %1 µm
+y: %2 µm
+z: %3 µm</source>
+        <translation>x: %1 µм
+y: %2 µм
+z: %3 µм</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="246"/>
         <source>Please restart the application to reconstruct another surface.</source>
         <translation>Пожалуйста, перезапустите программу для реконструкции следующей поверхности.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="243"/>
+        <location filename="../mainwindow.cpp" line="256"/>
         <source>Surface points</source>
         <translation>Точки поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="244"/>
+        <location filename="../mainwindow.cpp" line="257"/>
         <source>Surface polygons</source>
         <translation>Полигоны поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="245"/>
+        <location filename="../mainwindow.cpp" line="258"/>
         <source>PNG image</source>
         <translation>Изображение PNG</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="246"/>
+        <location filename="../mainwindow.cpp" line="259"/>
         <source>SceneJS model</source>
         <translation>Модель SceneJS</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="247"/>
+        <location filename="../mainwindow.cpp" line="260"/>
         <source>COLLADA model</source>
         <translation>Модель COLLADA</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="248"/>
-        <location filename="../mainwindow.cpp" line="296"/>
+        <location filename="../mainwindow.cpp" line="261"/>
+        <location filename="../mainwindow.cpp" line="309"/>
         <source>Cybervision surface</source>
         <translation>Поверхность Cybervision</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="253"/>
+        <location filename="../mainwindow.cpp" line="266"/>
         <source>Save the surface</source>
         <translation>Сохранить поверхность</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="255"/>
+        <location filename="../mainwindow.cpp" line="268"/>
         <source>Save functionality is disabled.</source>
         <translation>Функция сохранения отключена.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="287"/>
+        <location filename="../mainwindow.cpp" line="300"/>
         <source>Bad save format selected</source>
         <translation>Выбран неправильный формат для записи</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="288"/>
+        <location filename="../mainwindow.cpp" line="301"/>
         <source>&lt;b&gt;Bad save format selected:&lt;/b&gt; %1</source>
         <translation>&lt;b&gt;Выбран неправильный формат для записи:&lt;/b&gt; %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="297"/>
+        <location filename="../mainwindow.cpp" line="310"/>
         <source>Select surface to load</source>
         <translation>Выберите поверхность, которую нужно загрузить</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="301"/>
+        <location filename="../mainwindow.cpp" line="314"/>
         <source>Error loading surface from %1</source>
         <translation>Ошибка при загрузке поверхности %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="331"/>
+        <location filename="../mainwindow.cpp" line="344"/>
         <source>Images</source>
         <translation>Изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="414"/>
+        <location filename="../mainwindow.cpp" line="431"/>
         <source>The demo has run for %1 minutes and will now quit.</source>
         <translation>Демо-версия работала %1 минут и будет закрыта.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="296"/>
-        <location filename="../mainwindow.cpp" line="331"/>
+        <location filename="../mainwindow.cpp" line="309"/>
+        <location filename="../mainwindow.cpp" line="344"/>
         <source>All files</source>
         <translation>Все файлы</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="28"/>
+        <location filename="../mainwindow.cpp" line="29"/>
         <source>Cybervision (Demo version)</source>
         <translation>Программа Cybervision (Демонстрационная версия)</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="332"/>
+        <location filename="../mainwindow.cpp" line="345"/>
         <source>Select images to add</source>
         <translation>Выберите изображения, которые нужно добавить</translation>
     </message>
@@ -758,6 +807,11 @@ Median depth: %3 m</source>
 </context>
 <context>
     <name>cybervision::Reconstructor</name>
+    <message>
+        <location filename="../../Reconstruction/reconstructor.cpp" line="33"/>
+        <source>No matches found</source>
+        <translation>Не найдены пары соответствия</translation>
+    </message>
     <message>
         <location filename="../../Reconstruction/reconstructor.cpp" line="38"/>
         <source>Not enough matches (%1), need at least %2</source>

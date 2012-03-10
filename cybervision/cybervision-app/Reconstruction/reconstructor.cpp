@@ -30,7 +30,7 @@ bool Reconstructor::run(const QString& filename1,const QString& filename2,qreal 
 		image2= matcher.getImage2();
 		scaleMetadata= matcher.getScaleMetadata();
 		if(!ok || matches.isEmpty()){
-			errorString= "No matches found";
+			errorString= tr("No matches found");
 			return false;
 		}
 	}

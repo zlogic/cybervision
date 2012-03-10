@@ -144,24 +144,27 @@ void CybervisionViewer::initializeGL(){
 
 void CybervisionViewer::resizeGL(int w, int h){
 	// setup viewport, projection etc.:
-	glAspectRatio= (float)w/(float)h;
-	glViewport(0, 0, w, h);
-
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	gluPerspective(glFOV,glAspectRatio,glNearPlane,glFarPlane);
-	glMatrixMode(GL_MODELVIEW);
+	glViewportWidth= w, glViewportHeight= h;
+	glAspectRatio= glViewportWidth/glViewportHeight;
 }
 
 void CybervisionViewer::paintGL(){
-	// draw the scene:
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	//Prepare projection matrices
+	glViewport(0, 0, glViewportWidth, glViewportHeight);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluPerspective(glFOV,glAspectRatio,glNearPlane,glFarPlane);
+
+	//Prepare model matrices
+	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 	glTranslatef(vpTranslation.x(), vpTranslation.y(), vpTranslation.z());
 	glRotatef(vpRotation.x(), 1.0, 0.0, 0.0);
 	glRotatef(vpRotation.y(), 0.0, 1.0, 0.0);
 	glRotatef(vpRotation.z(), 0.0, 0.0, 1.0);
 
+	// draw the scene
 	{
 		QMutexLocker lock(&surfaceMutex);
 		if(textureMode!=TEXTURE_NONE)
@@ -184,6 +187,9 @@ void CybervisionViewer::paintGL(){
 		for(int i=0;i<crossSectionLines.size();i++)
 			drawLine(crossSectionLines[i].first,crossSectionLines[i].second,i==drawingCrossSectionLine);
 	}
+
+	//Draw the axes widget
+	drawAxesWidget();
 }
 void CybervisionViewer::drawPoint(const QVector3D& point)const{
 	if(point.x()==std::numeric_limits<qreal>::infinity() || point.y()==std::numeric_limits<qreal>::infinity() || point.z()==std::numeric_limits<qreal>::infinity())
@@ -226,6 +232,63 @@ void CybervisionViewer::drawLine(const QVector3D& start,const QVector3D& end,boo
 	glEnd();
 	//glEnable(GL_DEPTH_TEST);
 	glEnable(GL_LIGHTING);
+}
+
+void CybervisionViewer::drawAxesWidget(){
+	//Prepare projection matrices
+	glViewport(0, 0, 100, 100);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluPerspective(glFOV,0,5.0,10.0);
+
+	//Prepare model matrices
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+	glRotatef(vpRotation.x(), 1.0, 0.0, 0.0);
+	glRotatef(vpRotation.y(), 0.0, 1.0, 0.0);
+	glRotatef(vpRotation.z(), 0.0, 0.0, 1.0);
+
+	//Prepare for drawing lines
+	glDisable(GL_LIGHTING);
+	glColor3f(.0,.0,.0);
+	glDisable(GL_DEPTH_TEST);
+
+	GLfloat axesLength= 0.7;
+
+	//Draw the axes
+	glBegin(GL_LINES);
+	glVertex3f(0,0,0);
+	glVertex3f(axesLength,0,0);
+	glVertex3f(0,0,0);
+	glVertex3f(0,axesLength,0);
+	glVertex3f(0,0,0);
+	glVertex3f(0,0,axesLength);
+	glEnd();
+
+
+	//Restore configuration
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_LIGHTING);
+
+	QFont font("Arial",8);
+	qglColor(QColor(0,0,0,255));
+	renderText(axesLength*1.1,0,0,trUtf8("x"),font);
+	renderText(0,axesLength*1.1,0,trUtf8("y"),font);
+	renderText(0,0,axesLength*1.1,trUtf8("z"),font);
+
+	//Restore projection matrices (for cross-section functions)
+	glViewport(0, 0, glViewportWidth, glViewportHeight);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluPerspective(glFOV,glAspectRatio,glNearPlane,glFarPlane);
+
+	//Restore model matrices (for cross-section functions)
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+	glTranslatef(vpTranslation.x(), vpTranslation.y(), vpTranslation.z());
+	glRotatef(vpRotation.x(), 1.0, 0.0, 0.0);
+	glRotatef(vpRotation.y(), 0.0, 1.0, 0.0);
+	glRotatef(vpRotation.z(), 0.0, 0.0, 1.0);
 }
 
 void CybervisionViewer::drawGrid(){
@@ -385,9 +448,10 @@ void CybervisionViewer::drawGrid(){
 		qreal x= step_x*i*surface.getScale();
 		QString str;
 		QTextStream stream(&str);
-		stream.setRealNumberPrecision(1);
-		stream.setRealNumberNotation(QTextStream::ScientificNotation);
-		stream<<i*step_x;
+		//stream.setRealNumberPrecision(1);
+		//stream.setRealNumberNotation(QTextStream::ScientificNotation);
+		stream<<i*step_x*cybervision::Options::TextUnitScale;
+		str= QString(trUtf8("%1 \xC2\xB5m")).arg(str);
 		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_XyZ))
 			renderText(x,min_y*step_y*surface.getScale()-1,max_z*step_z*surface.getScale()+1,str,font);
 		if((selected_corner == CORNER_xYZ) || (selected_corner == CORNER_XYZ))
@@ -401,9 +465,10 @@ void CybervisionViewer::drawGrid(){
 		qreal y= step_y*i*surface.getScale();
 		QString str;
 		QTextStream stream(&str);
-		stream.setRealNumberPrecision(1);
-		stream.setRealNumberNotation(QTextStream::ScientificNotation);
-		stream<<i*step_y;
+		//stream.setRealNumberPrecision(1);
+		//stream.setRealNumberNotation(QTextStream::ScientificNotation);
+		stream<<i*step_y*cybervision::Options::TextUnitScale;
+		str= QString(trUtf8("%1 \xC2\xB5m")).arg(str);
 		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_xYZ))
 			renderText(max_x*step_x*surface.getScale()+1,y,max_z*step_z*surface.getScale()+1,str,font);
 		if((selected_corner == CORNER_XyZ) || (selected_corner == CORNER_XYZ))
@@ -417,9 +482,10 @@ void CybervisionViewer::drawGrid(){
 		qreal z= step_z*i*surface.getScale();
 		QString str;
 		QTextStream stream(&str);
-		stream.setRealNumberPrecision(1);
-		stream.setRealNumberNotation(QTextStream::ScientificNotation);
-		stream<<i*step_z;
+		//stream.setRealNumberPrecision(1);
+		//stream.setRealNumberNotation(QTextStream::ScientificNotation);
+		stream<<i*step_z*cybervision::Options::TextUnitScale;
+		str= QString(trUtf8("%1 \xC2\xB5m")).arg(str);
 		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_xyz))
 			renderText(min_x*step_x*surface.getScale()-1,min_y*step_y*surface.getScale()-1,z,str,font);
 		if((selected_corner == CORNER_xYZ) || (selected_corner == CORNER_xYz))

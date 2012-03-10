@@ -80,6 +80,7 @@ private slots:
 	void on_addImageButton_clicked();
 	void on_deleteImageButton_clicked();
 	void on_imageList_itemSelectionChanged();
+	void on_angleEdit_textChanged(const QString &arg1);
 	void on_actionShow_log_triggered(bool checked);
 	void on_logDockWidget_visibilityChanged(bool visible);
 	void on_actionShow_statistics_triggered(bool checked);

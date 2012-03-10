@@ -296,7 +296,7 @@ void CrossSection::computeParams(int p){
 		if(tpCount<1)
 			tp= std::numeric_limits<qreal>::quiet_NaN();
 		else
-			tp/= (qreal)tpCount;
+			tp/= pLine.length()*(qreal)tpCount;
 	}
 }
 

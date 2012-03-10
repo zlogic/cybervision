@@ -11,6 +11,8 @@
 #include <QTextStream>
 #include <QGraphicsTextItem>
 
+#include <Reconstruction/options.h>
+
 CrossSectionWindow::CrossSectionWindow(QWidget *parent) :
     QDialog(parent),
 	ui(new Ui::CrossSectionWindow),
@@ -85,15 +87,15 @@ void CrossSectionWindow::updateCrosssectionStats(){
 	for(QList<cybervision::CrossSection>::iterator it=crossSections.begin();it!=crossSections.end();it++){
 		int crossSectionId= it-crossSections.begin()+1;
 		if(it->isOk()){
-			heightParamsString<< QString(tr("Cross-section %1\nRa= %2 m\nRz= %3 m\nRmax= %4 m"))
+			heightParamsString<< QString(trUtf8("Cross-section %1\nRa= %2 \xC2\xB5m\nRz= %3 \xC2\xB5m\nRmax= %4 \xC2\xB5m"))
 								 .arg(crossSectionId)
-								 .arg(it->getRoughnessRa())
-								 .arg(it->getRoughnessRz())
-								 .arg(it->getRoughnessRmax());
-			stepParamsString<< QString(tr("Cross-section %1\nS= %2 m\nSm= %3 m\ntp= %4"))
+								 .arg(it->getRoughnessRa()*cybervision::Options::TextUnitScale)
+								 .arg(it->getRoughnessRz()*cybervision::Options::TextUnitScale)
+								 .arg(it->getRoughnessRmax()*cybervision::Options::TextUnitScale);
+			stepParamsString<< QString(trUtf8("Cross-section %1\nS= %2 \xC2\xB5m\nSm= %3 \xC2\xB5m\ntp= %4"))
 							   .arg(crossSectionId)
-							   .arg(it->getRoughnessS())
-							   .arg(it->getRoughnessSm())
+							   .arg(it->getRoughnessS()*cybervision::Options::TextUnitScale)
+							   .arg(it->getRoughnessSm()*cybervision::Options::TextUnitScale)
 							   .arg(it->getRoughnessTp());
 
 		}else{
@@ -170,6 +172,7 @@ void CrossSectionWindow::renderCrossSections(){
 		minX= gridMinX*stepX, maxX= gridMaxX*stepX, minY= gridMinY*stepY, maxY= gridMaxY*stepY;
 
 		QFont font("Arial",7);
+		font.setHintingPreference(QFont::PreferFullHinting);
 		QFontMetrics fontMetrics(font);
 		for(int i=gridMinX;i<=gridMaxX;i++){
 			qreal x= crossSectionArea.width()*(stepX*i-minX)/(maxX-minX)+crossSectionArea.x();
@@ -177,9 +180,10 @@ void CrossSectionWindow::renderCrossSections(){
 
 			QString str;
 			QTextStream stream(&str);
-			stream.setRealNumberPrecision(1);
-			stream.setRealNumberNotation(QTextStream::ScientificNotation);
-			stream<<stepX*i<<"  ";
+			//stream.setRealNumberPrecision(1);
+			//stream.setRealNumberNotation(QTextStream::ScientificNotation);
+			stream<<stepX*i*cybervision::Options::TextUnitScale;
+			str= QString(trUtf8("%1 \xC2\xB5m  ")).arg(str);
 			crossSectionScene.addText(str,font)->setPos(x-fontMetrics.width(str),0);
 		}
 		for(int i=gridMinY;i<=gridMaxY;i++){
@@ -188,9 +192,10 @@ void CrossSectionWindow::renderCrossSections(){
 
 			QString str;
 			QTextStream stream(&str);
-			stream.setRealNumberPrecision(1);
-			stream.setRealNumberNotation(QTextStream::ScientificNotation);
-			stream<<stepY*i;
+			//stream.setRealNumberPrecision(1);
+			//stream.setRealNumberNotation(QTextStream::ScientificNotation);
+			stream<<stepY*i*cybervision::Options::TextUnitScale;
+			str= QString(trUtf8("%1 \xC2\xB5m")).arg(str);
 			crossSectionScene.addText(str,font)->setPos(1,y-2);
 		}
 	}
@@ -304,13 +309,13 @@ void CrossSectionWindow::updateMeasurementLinesLabel(){
 			deltaX= -movableCrossSectionPos;
 		qreal height1= it->getHeight(measurementLinePos1+deltaX), height2= it->getHeight(measurementLinePos2+deltaX);
 		qreal deltaHeight= height1-height2;
-		measurementLineStr<< QString(tr("Cross-section %1\nx1= %2 m\nh1= %3 m\nx2= %4 m\nh2= %5 m\nHeight difference= %6 m"))
+		measurementLineStr<< QString(trUtf8("Cross-section %1\nx1= %2 \xC2\xB5m\nh1= %3 \xC2\xB5m\nx2= %4 \xC2\xB5m\nh2= %5 \xC2\xB5m\nHeight difference= %6 \xC2\xB5m"))
 				.arg(it-crossSections.begin()+1)
-				.arg(measurementLinePos1+deltaX)
-				.arg(height1)
-				.arg(measurementLinePos2+deltaX)
-				.arg(height2)
-				.arg(deltaHeight);
+				.arg((measurementLinePos1+deltaX)*cybervision::Options::TextUnitScale)
+				.arg(height1*cybervision::Options::TextUnitScale)
+				.arg((measurementLinePos2+deltaX)*cybervision::Options::TextUnitScale)
+				.arg(height2*cybervision::Options::TextUnitScale)
+				.arg(deltaHeight*cybervision::Options::TextUnitScale);
 	}
 
 	if(crossSections[0].isOk())
@@ -352,11 +357,15 @@ void CrossSectionWindow::measurementLineMoved(qreal x, int id){
 		break;
 	}
 	updateMeasurementLinesLabel();
+
+	ui->crosssectionViewport->viewport()->update();// Fix for Qt <= 4.8 ugly line re-rendering
 }
 
 void CrossSectionWindow::crossSectionMoved(qreal x){
 	movableCrossSectionPos= x*sceneScaleX;
 	updateMeasurementLinesLabel();
+
+	ui->crosssectionViewport->viewport()->update();// Fix for Qt <= 4.8 ugly line re-rendering
 }
 
 

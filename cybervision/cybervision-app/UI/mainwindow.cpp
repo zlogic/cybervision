@@ -10,6 +10,7 @@
 #include <limits>
 
 #include <Reconstruction/crosssection.h>
+#include <Reconstruction/options.h>
 
 MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWindow), crossSectionWindow(this){
 	ui->setupUi(this);
@@ -44,16 +45,21 @@ void MainWindow::updateWidgetStatus(){
 		surfaceIsOK= ui->openGLViewport->getSurface3D().isOk();
 	}
 
+	bool angleIsOk= false;
+	angleIsOk= ui->angleEdit->text().toDouble(&angleIsOk)!=0.0 && angleIsOk;
 	if(ui->imageList->count()==0){
 		ui->selectionHintLabel->setVisible(false);
+		ui->angleHintLabel->setVisible(!angleIsOk);
 		ui->deleteImageButton->setEnabled(false);
 		ui->startProcessButton->setEnabled(false);
 	}else if(ui->imageList->count()>1 && ui->imageList->selectedItems().count()!=2){
+		ui->angleHintLabel->setVisible(!angleIsOk);
 		ui->selectionHintLabel->setVisible(true);
 		ui->startProcessButton->setEnabled(false);
-	}else {
+	}else{
+		ui->angleHintLabel->setVisible(!angleIsOk);
+		ui->startProcessButton->setEnabled(angleIsOk);
 		ui->selectionHintLabel->setVisible(false);
-		ui->startProcessButton->setEnabled(true);
 	}
 
 	ui->deleteImageButton->setEnabled(!ui->imageList->selectedItems().empty());
@@ -81,7 +87,10 @@ void MainWindow::updateSurfaceStats(int lineId){
 	qreal medianDepth= ui->openGLViewport->getSurface3D().getMedianDepth();
 	qreal baseDepth= ui->openGLViewport->getSurface3D().getBaseDepth();
 	if(ui->openGLViewport->getSurface3D().isOk())
-		ui->statisticsLabel->setText(QString(tr("Depth range: %1 m\nBase depth: %2 m\nMedian depth: %3 m")).arg(maxDepth-minDepth).arg(baseDepth).arg(medianDepth));
+		ui->statisticsLabel->setText(QString(trUtf8("Depth range: %1 \xC2\xB5m\nBase depth: %2 \xC2\xB5m\nMedian depth: %3 \xC2\xB5m"))
+									 .arg((maxDepth-minDepth)*cybervision::Options::TextUnitScale)
+									 .arg(baseDepth*cybervision::Options::TextUnitScale)
+									 .arg(medianDepth*cybervision::Options::TextUnitScale));
 	else
 		ui->statisticsLabel->setText(tr("No surface available"));
 
@@ -160,6 +169,7 @@ void MainWindow::loadDebugPreferences(){
 			}
 		}
 		debugFile.close();
+		updateWidgetStatus();
 	}
 }
 
@@ -199,7 +209,10 @@ void MainWindow::viewerSelectedPointUpdated(QVector3D point){
 	if(point.x()==std::numeric_limits<qreal>::infinity() || point.y()==std::numeric_limits<qreal>::infinity() || point.z()==std::numeric_limits<qreal>::infinity())
 		ui->pointCoordinatesLabel->setText(tr("No point selected"));
 	else
-		ui->pointCoordinatesLabel->setText(QString("x: %1\ny: %2\nz:%3").arg(point.x()).arg(point.y()).arg(point.z()));
+		ui->pointCoordinatesLabel->setText(QString(trUtf8("x: %1 \xC2\xB5m\ny: %2 \xC2\xB5m\nz: %3 \xC2\xB5m"))
+										   .arg(point.x()*cybervision::Options::TextUnitScale)
+										   .arg(point.y()*cybervision::Options::TextUnitScale)
+										   .arg(point.z()*cybervision::Options::TextUnitScale));
 }
 
 void MainWindow::viewerCrosssectionLineChanged(QVector3D start, QVector3D end,int lineId){
@@ -353,10 +366,14 @@ void MainWindow::on_deleteImageButton_clicked(){
 		}
 	}
 }
+
 void MainWindow::on_imageList_itemSelectionChanged(){
 	updateWidgetStatus();
 }
 
+void MainWindow::on_angleEdit_textChanged(const QString &){
+	updateWidgetStatus();
+}
 
 void MainWindow::on_moveToolButton_toggled(bool checked){
 	ui->openGLViewport->setMouseMode(checked?CybervisionViewer::MOUSE_PANNING:CybervisionViewer::MOUSE_ROTATION);
@@ -415,3 +432,4 @@ void MainWindow::demoTimerExpired() const{
 	exit(0);
 }
 #endif
+

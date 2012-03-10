@@ -57,6 +57,7 @@ public:
 	enum PointDrawingMode {POINT_DRAW_AS_POINT,POINT_DRAW_AS_3DCIRCLE}; //Draw points as a simple point or as a small circle (with 3D scaling)
 	static const PointDrawingMode pointDrawingMode;
 	static const float PointDiameter;//Point diameter for OpenGL
+	static const float TextUnitScale;//Unit scale for outputting text (e.g. display all numbers in micrometers)
 };
 
 }

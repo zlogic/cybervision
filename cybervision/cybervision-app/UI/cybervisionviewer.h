@@ -27,7 +27,7 @@ protected:
 	bool showGrid;
 
 	//Opengl constants
-	float glFarPlane,glNearPlane,glAspectRatio,glFOV;
+	float glFarPlane,glNearPlane,glAspectRatio,glFOV,glViewportWidth,glViewportHeight;
 
 	//Corners. Uppercase letter means max, lowercase means min => x= min_x, X=max_x etc.
 	enum Corner{ CORNER_NONE,CORNER_xyz,CORNER_xyZ,CORNER_xYz,CORNER_xYZ,CORNER_Xyz,CORNER_XyZ,CORNER_XYz,CORNER_XYZ };
@@ -49,6 +49,10 @@ protected:
 	void drawPoint(const QVector3D&)const;
 	//Cross-section line
 	void drawLine(const QVector3D& start,const QVector3D& end,bool lineSelected=false)const;
+
+	//Axes direction widget
+	//Draw the axes
+	void drawAxesWidget();
 public:
 	CybervisionViewer(QWidget *parent);
 
