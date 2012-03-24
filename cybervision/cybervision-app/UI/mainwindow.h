@@ -11,6 +11,7 @@
 
 #include <UI/processthread.h>
 #include <UI/crosssectionwindow.h>
+#include <UI/aboutwindow.h>
 
 namespace Ui
 {
@@ -29,12 +30,15 @@ public:
 private:
 	Ui::MainWindow *ui;
 	CrossSectionWindow crossSectionWindow;
+	AboutWindow aboutWindow;
 
 	ProcessThread thread;
 
 	QDoubleValidator scaleXYValidator,scaleZValidator,angleValidator;
 
-	QString startPath;
+	QString startPath,image1Path,image2Path;
+
+	QString inputImageFilter;
 
 #ifdef CYBERVISION_DEMO
 	//True if user is running reconstruction for the first time
@@ -77,18 +81,23 @@ private slots:
 #endif
 
 	//UI slots
+	void on_openImage1_clicked();
+	void on_openImage2_clicked();
 	void on_addImageButton_clicked();
 	void on_deleteImageButton_clicked();
+	void on_useForImage1Button_clicked();
+	void on_useForImage2Button_clicked();
 	void on_imageList_itemSelectionChanged();
 	void on_angleEdit_textChanged(const QString &arg1);
 	void on_actionShow_log_triggered(bool checked);
-	void on_logDockWidget_visibilityChanged(bool visible);
-	void on_actionShow_statistics_triggered(bool checked);
-	void on_inspectorDockWidget_visibilityChanged(bool visible);
+	void on_actionShow_controls_triggered(bool checked);
 	void on_actionShow_cross_section_window_triggered(bool checked);
+	void on_actionAbout_triggered();
+	void on_logDockWidget_visibilityChanged(bool visible);
+	void on_controlsDockWidget_visibilityChanged(bool visible);
+	void on_startProcessButton_clicked();
 	void on_saveButton_clicked();
 	void on_loadSurfaceButton_clicked();
-	void on_startProcessButton_clicked();
 	void on_moveToolButton_toggled(bool checked);
 	void on_rotateToolButton_toggled(bool checked);
 	void on_gridToolButton_toggled(bool checked);

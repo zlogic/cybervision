@@ -17,6 +17,9 @@
    <iconset resource="../ReconstructionResources.qrc">
     <normaloff>:/icons/UI/icons/pencil-ruler.png</normaloff>:/icons/UI/icons/pencil-ruler.png</iconset>
   </property>
+  <property name="locale">
+   <locale language="English" country="UnitedStates"/>
+  </property>
   <layout class="QGridLayout" name="gridLayout">
    <item row="1" column="0" colspan="2">
     <widget class="CybervisionCrosssectionGraphicsView" name="crosssectionViewport">
@@ -25,6 +28,9 @@
        <width>0</width>
        <height>200</height>
       </size>
+     </property>
+     <property name="locale">
+      <locale language="English" country="UnitedStates"/>
      </property>
      <property name="interactive">
       <bool>true</bool>
@@ -36,25 +42,18 @@
    </item>
    <item row="2" column="0" colspan="2">
     <widget class="QGroupBox" name="roughnessGroupBox">
+     <property name="locale">
+      <locale language="English" country="UnitedStates"/>
+     </property>
      <property name="title">
       <string>Roughness paramenters</string>
      </property>
      <layout class="QGridLayout" name="gridLayout_2">
-      <item row="0" column="0">
-       <widget class="QLabel" name="roughnessHeightStatsLabelPrimary">
-        <property name="text">
-         <string/>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
-        </property>
-        <property name="textInteractionFlags">
-         <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByMouse</set>
-        </property>
-       </widget>
-      </item>
       <item row="0" column="2">
        <widget class="QLabel" name="roughnessStepStatsLabelPrimary">
+        <property name="locale">
+         <locale language="English" country="UnitedStates"/>
+        </property>
         <property name="text">
          <string/>
         </property>
@@ -68,6 +67,9 @@
       </item>
       <item row="1" column="2">
        <widget class="QSpinBox" name="roughnessPSpinBoxPrimary">
+        <property name="locale">
+         <locale language="English" country="UnitedStates"/>
+        </property>
         <property name="suffix">
          <string notr="true">%</string>
         </property>
@@ -90,6 +92,9 @@
       </item>
       <item row="0" column="4">
        <widget class="QLabel" name="roughnessStepStatsLabelSecondary">
+        <property name="locale">
+         <locale language="English" country="UnitedStates"/>
+        </property>
         <property name="text">
          <string/>
         </property>
@@ -103,6 +108,9 @@
       </item>
       <item row="1" column="4">
        <widget class="QSpinBox" name="roughnessPSpinBoxSecondary">
+        <property name="locale">
+         <locale language="English" country="UnitedStates"/>
+        </property>
         <property name="suffix">
          <string notr="true">%</string>
         </property>
@@ -125,6 +133,25 @@
       </item>
       <item row="0" column="1">
        <widget class="QLabel" name="roughnessHeightStatsLabelSecondary">
+        <property name="locale">
+         <locale language="English" country="UnitedStates"/>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+        </property>
+        <property name="textInteractionFlags">
+         <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByMouse</set>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0">
+       <widget class="QLabel" name="roughnessHeightStatsLabelPrimary">
+        <property name="locale">
+         <locale language="English" country="UnitedStates"/>
+        </property>
         <property name="text">
          <string/>
         </property>
@@ -141,12 +168,18 @@
    </item>
    <item row="4" column="0" colspan="2">
     <widget class="QGroupBox" name="heightGroupBox">
+     <property name="locale">
+      <locale language="English" country="UnitedStates"/>
+     </property>
      <property name="title">
       <string>Height measurement</string>
      </property>
      <layout class="QGridLayout" name="gridLayout_3">
       <item row="0" column="0">
        <widget class="QLabel" name="heightMeasurementLabelPrimary">
+        <property name="locale">
+         <locale language="English" country="UnitedStates"/>
+        </property>
         <property name="text">
          <string/>
         </property>
@@ -154,6 +187,9 @@
       </item>
       <item row="0" column="1">
        <widget class="QLabel" name="heightMeasurementLabelSecondary">
+        <property name="locale">
+         <locale language="English" country="UnitedStates"/>
+        </property>
         <property name="text">
          <string/>
         </property>

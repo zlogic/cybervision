@@ -21,13 +21,15 @@ MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWi
 	QObject::connect(ui->openGLViewport, SIGNAL(selectedPointUpdated(QVector3D)),this, SLOT(viewerSelectedPointUpdated(QVector3D)),Qt::AutoConnection);
 	QObject::connect(ui->openGLViewport, SIGNAL(crossSectionLineChanged(QVector3D,QVector3D,int)),this, SLOT(viewerCrosssectionLineChanged(QVector3D,QVector3D,int)),Qt::AutoConnection);
 	QObject::connect(&crossSectionWindow, SIGNAL(closed()),this, SLOT(crosssectionClosed()),Qt::AutoConnection);
+
+	inputImageFilter= tr("Images") + "(*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;"+tr("All files")+"(*.*)";
 #ifdef CYBERVISION_DEMO
 	demoTimerMinutes= 20;
 	demoReconstructionAllowed= true;
 
 	showDemoWarning();
 	setWindowTitle(tr("Cybervision (Demo version)"));
-	setMaximumSize(1000,400);
+	setMaximumSize(1000,600);
 	demoTimer.setSingleShot(true);
 	demoTimer.start(1000*60*demoTimerMinutes);
 	QObject::connect(&demoTimer,SIGNAL(timeout()),this,SLOT(demoTimerExpired()),Qt::AutoConnection);
@@ -45,24 +47,34 @@ void MainWindow::updateWidgetStatus(){
 		surfaceIsOK= ui->openGLViewport->getSurface3D().isOk();
 	}
 
-	bool angleIsOk= false;
-	angleIsOk= ui->angleEdit->text().toDouble(&angleIsOk)!=0.0 && angleIsOk;
-	if(ui->imageList->count()==0){
-		ui->selectionHintLabel->setVisible(false);
-		ui->angleHintLabel->setVisible(!angleIsOk);
-		ui->deleteImageButton->setEnabled(false);
-		ui->startProcessButton->setEnabled(false);
-	}else if(ui->imageList->count()>1 && ui->imageList->selectedItems().count()!=2){
-		ui->angleHintLabel->setVisible(!angleIsOk);
-		ui->selectionHintLabel->setVisible(true);
-		ui->startProcessButton->setEnabled(false);
+	//Image loading buttons
+	if(image1Path.isEmpty() || image1Path.isNull()){
+		ui->image1NameLabel->setText(tr("<b>No image selected</b>"));
+		ui->image1NameLabel->setToolTip("");
 	}else{
-		ui->angleHintLabel->setVisible(!angleIsOk);
-		ui->startProcessButton->setEnabled(angleIsOk);
-		ui->selectionHintLabel->setVisible(false);
+		ui->image1NameLabel->setText(QFileInfo(image1Path).fileName());
+		ui->image1NameLabel->setToolTip(image1Path);
+	}
+	if(image2Path.isEmpty() || image2Path.isNull()){
+		ui->image2NameLabel->setText(tr("<b>No image selected</b>"));
+		ui->image2NameLabel->setToolTip("");
+	}else{
+		ui->image2NameLabel->setText(QFileInfo(image2Path).fileName());
+		ui->image2NameLabel->setToolTip(image2Path);
 	}
 
+	//Angle error message
+	bool angleIsOk= false;
+	angleIsOk= ui->angleEdit->text().toDouble(&angleIsOk)!=0.0 && angleIsOk;
+	ui->angleHintLabel->setVisible(!angleIsOk);
+
+	//Start process
+	if(!image1Path.isEmpty() && !image1Path.isNull() && !image2Path.isEmpty() && !image2Path.isNull())
+		ui->startProcessButton->setEnabled(angleIsOk);
+
 	ui->deleteImageButton->setEnabled(!ui->imageList->selectedItems().empty());
+	ui->useForImage1Button->setEnabled(!ui->imageList->selectedItems().empty());
+	ui->useForImage2Button->setEnabled(!ui->imageList->selectedItems().empty());
 	ui->saveButton->setEnabled(surfaceIsOK);
 	ui->crosssectionButtonPrimary->setEnabled(surfaceIsOK);
 	ui->crosssectionButtonSecondary->setEnabled(surfaceIsOK);
@@ -236,11 +248,7 @@ void MainWindow::on_startProcessButton_clicked(){
 	double scaleZ= ui->scaleZEdit->text().toDouble();
 	double angle= ui->angleEdit->text().toDouble();
 
-	QList<QListWidgetItem*> selectedItems= ui->imageList->selectedItems();
-	for(QList<QListWidgetItem*>::const_iterator i=selectedItems.begin();i!=selectedItems.end();i++){
-		if(*i)
-			filenames<<(*i)->data(32).toString();
-	}
+	filenames<<image1Path<<image2Path;
 #ifdef CYBERVISION_DEMO
 	if(!demoReconstructionAllowed){
 		showDemoWarning(tr("Please restart the application to reconstruct another surface."));
@@ -248,7 +256,7 @@ void MainWindow::on_startProcessButton_clicked(){
 	}
 	demoReconstructionAllowed= false;
 #endif
-	thread.reconstruct3DShape(filenames,scaleXY,scaleZ,angle,ui->actionPrefer_scale_from_metadata->isChecked());
+	thread.reconstruct3DShape(filenames,scaleXY,scaleZ,angle,ui->preferScaleFromMetadata->isChecked());
 }
 
 void MainWindow::on_saveButton_clicked(){
@@ -328,21 +336,60 @@ void MainWindow::on_actionShow_log_triggered(bool checked){
 	ui->logDockWidget->setVisible(checked);
 }
 
-void MainWindow::on_inspectorDockWidget_visibilityChanged(bool visible){
-	ui->actionShow_statistics->setChecked(visible);
+void MainWindow::on_controlsDockWidget_visibilityChanged(bool visible){
+	ui->actionShow_controls->setChecked(visible);
 }
 
-void MainWindow::on_actionShow_statistics_triggered(bool checked){
-	ui->inspectorDockWidget->setVisible(checked);
+void MainWindow::on_actionShow_controls_triggered(bool checked){
+	ui->controlsDockWidget->setVisible(checked);
 }
 
 void MainWindow::on_actionShow_cross_section_window_triggered(bool checked){
 	crossSectionWindow.setVisible(checked);
 }
 
+void MainWindow::on_actionAbout_triggered(){
+	aboutWindow.setVisible(true);
+}
+
+void MainWindow::on_openImage1_clicked(){
+	QString filename = QFileDialog::getOpenFileName(this,tr("Select image 1"),startPath,inputImageFilter,0,0);
+	if(filename.isNull()){
+		image1Path= "";
+	}else{
+		filename= QDir::convertSeparators(filename);
+		image1Path= filename;
+		startPath= QFileInfo(filename).canonicalPath();
+
+		if(ui->imageList->findItems(QFileInfo(filename).fileName(),Qt::MatchExactly).empty()){
+			QListWidgetItem* newItem= new QListWidgetItem(QFileInfo(filename).fileName());
+			newItem->setData(32,QDir::convertSeparators(filename));
+			ui->imageList->addItem(newItem);
+		}
+	}
+	updateWidgetStatus();
+}
+
+void MainWindow::on_openImage2_clicked(){
+	QString filename = QFileDialog::getOpenFileName(this,tr("Select image 2"),startPath,inputImageFilter,0,0);
+	if(filename.isNull()){
+		image2Path= "";
+	}else{
+		filename= QDir::convertSeparators(filename);
+		image2Path= filename;
+		startPath= QFileInfo(filename).canonicalPath();
+
+		if(ui->imageList->findItems(QFileInfo(filename).fileName(),Qt::MatchExactly).empty()){
+			QListWidgetItem* newItem= new QListWidgetItem(QFileInfo(filename).fileName());
+			newItem->setData(32,QDir::convertSeparators(filename));
+			ui->imageList->addItem(newItem);
+		}
+	}
+	updateWidgetStatus();
+}
+
 void MainWindow::on_addImageButton_clicked(){
-	QString filter= tr("Images") + "(*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;"+tr("All files")+"(*.*)";
-	QStringList filenames = QFileDialog::getOpenFileNames(this,tr("Select images to add"),startPath,filter,0,0);
+	QStringList filenames = QFileDialog::getOpenFileNames(this,tr("Select images to add"),startPath,inputImageFilter,0,0);
 	for(QStringList::const_iterator it=filenames.begin();it!=filenames.end();it++){
 		QString name= QFileInfo(*it).fileName();
 		QListWidgetItem* newItem= new QListWidgetItem(name);
@@ -365,6 +412,20 @@ void MainWindow::on_deleteImageButton_clicked(){
 				delete deletedItem;
 		}
 	}
+}
+
+void MainWindow::on_useForImage1Button_clicked(){
+	QList<QListWidgetItem*> selectedItems= ui->imageList->selectedItems();
+	if(selectedItems.size()>0)
+		image1Path= selectedItems.first()->data(32).toString();
+	updateWidgetStatus();
+}
+
+void MainWindow::on_useForImage2Button_clicked(){
+	QList<QListWidgetItem*> selectedItems= ui->imageList->selectedItems();
+	if(selectedItems.size()>0)
+		image2Path= selectedItems.first()->data(32).toString();
+	updateWidgetStatus();
 }
 
 void MainWindow::on_imageList_itemSelectionChanged(){
@@ -432,4 +493,3 @@ void MainWindow::demoTimerExpired() const{
 	exit(0);
 }
 #endif
-

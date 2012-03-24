@@ -19,7 +19,8 @@ SOURCES += main.cpp \
 	KDTree/kdtreegateway.cpp \
 	UI/processthread.cpp \
 	UI/cybervisionviewer.cpp \
-	UI/crosssectionwindow.cpp
+	UI/crosssectionwindow.cpp \
+    UI/aboutwindow.cpp
 
 HEADERS += \
 	Reconstruction/pointmatcher.h \
@@ -68,10 +69,12 @@ HEADERS += \
 	UI/mainwindow.h \
 	UI/processthread.h \
 	UI/cybervisionviewer.h \
-	UI/crosssectionwindow.h
+	UI/crosssectionwindow.h \
+    UI/aboutwindow.h
 
 FORMS += UI/mainwindow.ui \
-    UI/crosssectionwindow.ui
+    UI/crosssectionwindow.ui \
+    UI/aboutwindow.ui
 
 RESOURCES += \
 	ReconstructionResources.qrc
@@ -95,7 +98,12 @@ OTHER_FILES += \
     UI/icons/cybervision.ico \
     UI/icons/border-draw.png \
     UI/icons/arrow-move.png \
-    UI/icons/arrow-circle.png
+    UI/icons/arrow-circle.png \
+    UI/icons/application-task.png \
+    UI/icons/cybervision-large.png \
+    UI/icons/pictures-stack.png \
+    UI/icons/magnifier--pencil.png \
+	UI/icons/information.png
 
 TRANSLATIONS = UI/translations/cybervision-app_ru.ts
 CODECFORTR = UTF-8

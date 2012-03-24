@@ -16,6 +16,11 @@
         <file>UI/icons/document-import.png</file>
         <file>UI/icons/border-draw.png</file>
         <file>UI/icons/pencil-ruler.png</file>
+        <file>UI/icons/application-task.png</file>
+        <file>UI/icons/magnifier--pencil.png</file>
+        <file>UI/icons/pictures-stack.png</file>
+        <file>UI/icons/cybervision-large.png</file>
+        <file>UI/icons/information.png</file>
     </qresource>
     <qresource prefix="/opencl">
         <file alias="PointMatcherKernel.cl">Reconstruction/PointMatcherKernel.cl</file>
