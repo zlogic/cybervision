@@ -2,14 +2,6 @@
 <ui version="4.0">
  <class>AboutWindow</class>
  <widget class="QDialog" name="AboutWindow">
-  <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>436</width>
-    <height>261</height>
-   </rect>
-  </property>
   <property name="windowTitle">
    <string>About Cybervision</string>
   </property>
@@ -37,14 +29,14 @@
         </property>
        </widget>
       </item>
-      <item row="0" column="1">
+      <item row="0" column="2">
        <widget class="QLabel" name="titleLabel">
         <property name="text">
          <string>&lt;b&gt;Cybervision&lt;/b&gt;&lt;br /&gt;3D reconstruction software for SEM images</string>
         </property>
        </widget>
       </item>
-      <item row="2" column="0" colspan="2">
+      <item row="2" column="0" colspan="3">
        <spacer name="verticalSpacer">
         <property name="orientation">
          <enum>Qt::Vertical</enum>
@@ -57,22 +49,23 @@
         </property>
        </spacer>
       </item>
-      <item row="1" column="0" colspan="3">
+      <item row="1" column="0" colspan="4">
        <widget class="QLabel" name="copyrightLabel">
         <property name="text">
-         <string>© 2009-2012&lt;br /&gt;
+         <string>&amp;copy; 2009-2012&lt;br /&gt;
 Dmitry Zolotukhin &lt;a href=&quot;mailto:dmitri.zolotukhin@gmail.com&quot;&gt;dmitri.zolotukhin@gmail.com&lt;/a&gt;&lt;br /&gt;
 National nuclear research university MePHI&lt;br /&gt;
 &lt;br /&gt;
-&lt;br /&gt;
-Portions of code from &lt;a href=&quot;http://eigen.tuxfamily.org&quot;&gt;Eigen&lt;/a&gt;.&lt;br /&gt;
-Portions of code from &lt;a href=&quot;https://sourceforge.net/projects/libsift/&quot;&gt;Fast SIFT Image Features Library&lt;/a&gt;.&lt;br /&gt;
-Some icons by &lt;a href=&quot;http://p.yusukekamiyamane.com/&quot;&gt;Yusuke Kamiyamane&lt;/a&gt;.
+Includes third-party components, sources available upon request:&lt;br /&gt;
+Contains a dynamically linked version of &lt;a href=&quot;http://qt.nokia.com/&quot;&gt;Qt&lt;/a&gt; library, licensed with LGPL 2.1.&lt;br /&gt;
+Contains &lt;a href=&quot;http://eigen.tuxfamily.org/&quot;&gt;Eigen&lt;/a&gt; library, licensed with LGPL3+.&lt;br /&gt;
+Contains a dynamically linked version of &lt;a href=&quot;https://sourceforge.net/projects/libsift/&quot;&gt;Fast SIFT Image Features Library&lt;/a&gt;, licensed with LGPL.&lt;br /&gt;
+Some icons by &lt;a href=&quot;http://p.yusukekamiyamane.com/&quot;&gt;Yusuke Kamiyamane&lt;/a&gt;, licensed by Creative Commons Attribution 3.0 License.
 </string>
         </property>
        </widget>
       </item>
-      <item row="0" column="2">
+      <item row="0" column="1">
        <spacer name="horizontalSpacer_2">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>

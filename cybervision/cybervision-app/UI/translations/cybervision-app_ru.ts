@@ -5,39 +5,41 @@
 <context>
     <name>AboutWindow</name>
     <message>
-        <location filename="../aboutwindow.ui" line="14"/>
+        <location filename="../aboutwindow.ui" line="6"/>
         <source>About Cybervision</source>
         <translation>О программе Cybervision
 </translation>
     </message>
     <message>
-        <location filename="../aboutwindow.ui" line="43"/>
+        <location filename="../aboutwindow.ui" line="35"/>
         <source>&lt;b&gt;Cybervision&lt;/b&gt;&lt;br /&gt;3D reconstruction software for SEM images</source>
         <translation>&lt;b&gt;Cybervision&lt;/b&gt;&lt;br /&gt;Программа трехмерной реконструкции для изображений с РЭМ</translation>
     </message>
     <message>
-        <location filename="../aboutwindow.ui" line="63"/>
-        <source>© 2009-2012&lt;br /&gt;
+        <location filename="../aboutwindow.ui" line="55"/>
+        <source>&amp;copy; 2009-2012&lt;br /&gt;
 Dmitry Zolotukhin &lt;a href=&quot;mailto:dmitri.zolotukhin@gmail.com&quot;&gt;dmitri.zolotukhin@gmail.com&lt;/a&gt;&lt;br /&gt;
 National nuclear research university MePHI&lt;br /&gt;
 &lt;br /&gt;
-&lt;br /&gt;
-Portions of code from &lt;a href=&quot;http://eigen.tuxfamily.org&quot;&gt;Eigen&lt;/a&gt;.&lt;br /&gt;
-Portions of code from &lt;a href=&quot;https://sourceforge.net/projects/libsift/&quot;&gt;Fast SIFT Image Features Library&lt;/a&gt;.&lt;br /&gt;
-Some icons by &lt;a href=&quot;http://p.yusukekamiyamane.com/&quot;&gt;Yusuke Kamiyamane&lt;/a&gt;.
+Includes third-party components, sources available upon request:&lt;br /&gt;
+Contains a dynamically linked version of &lt;a href=&quot;http://qt.nokia.com/&quot;&gt;Qt&lt;/a&gt; library, licensed with LGPL 2.1.&lt;br /&gt;
+Contains &lt;a href=&quot;http://eigen.tuxfamily.org/&quot;&gt;Eigen&lt;/a&gt; library, licensed with LGPL3+.&lt;br /&gt;
+Contains a dynamically linked version of &lt;a href=&quot;https://sourceforge.net/projects/libsift/&quot;&gt;Fast SIFT Image Features Library&lt;/a&gt;, licensed with LGPL.&lt;br /&gt;
+Some icons by &lt;a href=&quot;http://p.yusukekamiyamane.com/&quot;&gt;Yusuke Kamiyamane&lt;/a&gt;, licensed by Creative Commons Attribution 3.0 License.
 </source>
-        <translation>© 2009-2012&lt;br /&gt;
+        <translation>&amp;copy; 2009-2012&lt;br /&gt;
 Дмитрий Золотухин &lt;a href=&quot;mailto:dmitri.zolotukhin@gmail.com&quot;&gt;dmitri.zolotukhin@gmail.com&lt;/a&gt;&lt;br /&gt;
 Национальный ядерный университет МИФИ&lt;br /&gt;
 &lt;br /&gt;
-&lt;br /&gt;
-Использованы фрагменты кода &lt;a href=&quot;http://eigen.tuxfamily.org&quot;&gt;Eigen&lt;/a&gt;.&lt;br /&gt;
-Использованы фрагменты кода &lt;a href=&quot;https://sourceforge.net/projects/libsift/&quot;&gt;Fast SIFT Image Features Library&lt;/a&gt;.&lt;br /&gt;
-Некоторые иконки &lt;a href=&quot;http://p.yusukekamiyamane.com/&quot;&gt;Yusuke Kamiyamane&lt;/a&gt;.
+Содержит сторонние компоненты, исходные коды доступны по запросу:&lt;br /&gt;
+Содержит динамически связанную библиотеку &lt;a href=&quot;http://qt.nokia.com/&quot;&gt;Qt&lt;/a&gt; по лицензии LGPL 2.1.&lt;br /&gt;
+Содержит библиотеку &lt;a href=&quot;http://eigen.tuxfamily.org/&quot;&gt;Eigen&lt;/a&gt; по лицензии LGPL3+.&lt;br /&gt;
+Содержит динамически связанную библиотеку &lt;a href=&quot;https://sourceforge.net/projects/libsift/&quot;&gt;Fast SIFT Image Features Library&lt;/a&gt; по лицензии LGPL.&lt;br /&gt;
+Некоторые иконки &lt;a href=&quot;http://p.yusukekamiyamane.com/&quot;&gt;Yusuke Kamiyamane&lt;/a&gt; по лицензии Creative Commons Attribution 3.0 License.
 </translation>
     </message>
     <message>
-        <location filename="../aboutwindow.ui" line="94"/>
+        <location filename="../aboutwindow.ui" line="87"/>
         <source>Close</source>
         <translation>Закрыть</translation>
     </message>
