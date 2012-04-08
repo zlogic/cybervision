@@ -5,7 +5,7 @@
 #include <QFileInfo>
 #include <Reconstruction/pointmatch.h>
 
-#define EIGEN_NO_EXCEPTIONS
+#include <Reconstruction/config.h>
 #include <Eigen/Dense>
 
 namespace cybervision{
@@ -14,6 +14,8 @@ namespace cybervision{
  */
 class FundamentalMatrix : public QObject {
 	Q_OBJECT
+public:
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 protected:
 	//Results
 	Eigen::Matrix3d F,T1,T2;
@@ -21,22 +23,22 @@ protected:
 
 	//Internal procedures
 	//Converts QPointF to Eigen::Vector3d
-	inline Eigen::Vector3d point2vector(const QPointF&)const;
+	inline ALIGN_EIGEN_FUNCTION Eigen::Vector3d point2vector(const QPointF&)const;
 	//Converts Eigen::Vector3d to QPointF
 	inline QPointF vector2point(const Eigen::Vector3d&)const;
 
 	//Computes the fundamental matrix from N points
-	Eigen::Matrix3d computeFundamentalMatrix(const KeypointMatches&);
+	ALIGN_EIGEN_FUNCTION Eigen::Matrix3d computeFundamentalMatrix(const KeypointMatches&);
 	//Computes a keypoint match's error when used with the fundamental matrix F
-	double computeFundamentalMatrixError(const Eigen::Matrix3d&F, const KeypointMatch&) const;
+	ALIGN_EIGEN_FUNCTION double computeFundamentalMatrixError(const Eigen::Matrix3d&F, const KeypointMatch&) const;
 
 	//Computes the fundamental matrix with RANSAC, removing any outliers
-	Eigen::Matrix3d computeFundamentalMatrix();
+	ALIGN_EIGEN_FUNCTION Eigen::Matrix3d computeFundamentalMatrix();
 public:
 	explicit FundamentalMatrix(QObject *parent = 0);
 
 	//Computes the fundamental matrix with RANSAC, removing any outliers. Uses normalization to reduce errors.
-	bool computeFundamentalMatrix(const SortedKeypointMatches& matches);
+	ALIGN_EIGEN_FUNCTION bool computeFundamentalMatrix(const SortedKeypointMatches& matches);
 
 	//Getters
 	SortedKeypointMatches getAcceptedMatches()const;

@@ -6,6 +6,8 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 
+#include <Reconstruction/config.h>
+
 #include <Reconstruction/options.h>
 #include <Reconstruction/surface.h>
 #include "sculptor.h"

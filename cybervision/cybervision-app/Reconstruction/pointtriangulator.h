@@ -6,7 +6,7 @@
 #include <QList>
 #include <Reconstruction/pointmatch.h>
 
-#define EIGEN_NO_EXCEPTIONS
+#include <Reconstruction/config.h>
 #include <Eigen/Dense>
 
 namespace cybervision{
@@ -16,6 +16,8 @@ namespace cybervision{
  */
 class PointTriangulator : public QObject {
 	Q_OBJECT
+public:
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 public:
 	//Operation result
 	enum TriangulationResult{RESULT_OK=0,RESULT_POSE_UNDETERMINED,RESULT_TRIANGULATION_ERROR};
@@ -39,19 +41,19 @@ protected:
 	QList<PointTriangulator::StereopairPosition> computePose(const Eigen::Matrix3d& F);
 
 	//Returns the camera calibration matrix
-	Eigen::Matrix3d computeCameraMatrix(const QSize&)const;
+	ALIGN_EIGEN_FUNCTION Eigen::Matrix3d computeCameraMatrix(const QSize&)const;
 	//Computes possible R and T matrices from essential matrix
-	QList<StereopairPosition> computeRT(Eigen::Matrix3d Essential_matrix) const;
+	ALIGN_EIGEN_FUNCTION QList<StereopairPosition> computeRT(Eigen::Matrix3d Essential_matrix) const;
 	//Helper function to construct Rz matrix for computeRT
-	Eigen::Matrix3d computeRT_rzfunc(double angle)const;
+	ALIGN_EIGEN_FUNCTION Eigen::Matrix3d computeRT_rzfunc(double angle)const;
 	//Computes Kronecker product
-	Eigen::MatrixXd kronecker(const Eigen::MatrixXd A,const Eigen::MatrixXd& B)const;
+	ALIGN_EIGEN_FUNCTION Eigen::MatrixXd kronecker(const Eigen::MatrixXd A,const Eigen::MatrixXd& B)const;
 	//Performs a least-squares solving of A*x=B equation system
-	Eigen::MatrixXd leastSquares(const Eigen::MatrixXd A,const Eigen::MatrixXd& B)const;
+	ALIGN_EIGEN_FUNCTION Eigen::MatrixXd leastSquares(const Eigen::MatrixXd A,const Eigen::MatrixXd& B)const;
 
 	//Triangulates a point in 3D space
 	QList<QVector3D> compute3DPoints(const SortedKeypointMatches&matches,const QList<StereopairPosition>& RTList);
-	QList<QVector3D> computeTriangulatedPoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d&R,const Eigen::Vector3d& T,bool normalizeCameras);
+	ALIGN_EIGEN_FUNCTION QList<QVector3D> computeTriangulatedPoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d&R,const Eigen::Vector3d& T,bool normalizeCameras);
 
 	//Filters out peaks from a 3D point cloud; returns indexes of discarded points. Designed for "grid" interpolation with parallel projection.
 	QSet<int> findPeaks(const QList<QVector3D>& points)const;
@@ -59,9 +61,9 @@ public:
 	explicit PointTriangulator(QObject *parent = 0);
 
 	//Performs a complete triangulation with pose estimation (for perspective projection)
-	bool triangulatePoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d& F,const QSize& imageSize);
+	ALIGN_EIGEN_FUNCTION bool triangulatePoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d& F,const QSize& imageSize);
 	//Performs a triangulation without pose estimation (for parallel projection), no peak filtering
-	bool triangulatePoints(const QList<cybervision::KeypointMatch>&matches,qreal angle);
+	ALIGN_EIGEN_FUNCTION bool triangulatePoints(const QList<cybervision::KeypointMatch>&matches,qreal angle);
 	//Performs a triangulation without pose estimation (for parallel projection), with configurable peak filtering
 	bool triangulatePoints(const SortedKeypointMatches&matches,qreal angle,bool filterPeaks);
 

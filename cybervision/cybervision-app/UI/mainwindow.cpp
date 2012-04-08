@@ -71,6 +71,8 @@ void MainWindow::updateWidgetStatus(){
 	//Start process
 	if(!image1Path.isEmpty() && !image1Path.isNull() && !image2Path.isEmpty() && !image2Path.isNull())
 		ui->startProcessButton->setEnabled(angleIsOk);
+	else
+		ui->startProcessButton->setEnabled(false);
 
 	ui->deleteImageButton->setEnabled(!ui->imageList->selectedItems().empty());
 	ui->useForImage1Button->setEnabled(!ui->imageList->selectedItems().empty());

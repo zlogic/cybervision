@@ -10,9 +10,7 @@
 #include <QSize>
 #include <QImage>
 
-#define EIGEN_NO_EXCEPTIONS
-#include <Eigen/Dense>
-
+#include <Reconstruction/config.h>
 #include <Reconstruction/options.h>
 #include <Reconstruction/pointmatch.h>
 
@@ -34,7 +32,7 @@ protected:
 public:
 	explicit Reconstructor(QObject *parent);
 
-	bool run(const QString& filename1,const QString& filename2,qreal angle);
+	ALIGN_EIGEN_FUNCTION bool run(const QString& filename1,const QString& filename2,qreal angle);
 
 	//Getters
 	bool isOk()const;

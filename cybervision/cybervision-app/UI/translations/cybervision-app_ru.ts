@@ -62,7 +62,7 @@ Some icons by &lt;a href=&quot;http://p.yusukekamiyamane.com/&quot;&gt;Yusuke Ka
         <translation>Измерение глубины</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="90"/>
+        <location filename="../crosssectionwindow.cpp" line="92"/>
         <source>Cross-section %1
 Ra= %2 µm
 Rz= %3 µm
@@ -73,7 +73,7 @@ Rz= %3 µм
 Rmax= %4 µм</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="95"/>
+        <location filename="../crosssectionwindow.cpp" line="97"/>
         <source>Cross-section %1
 S= %2 µm
 Sm= %3 µm
@@ -84,23 +84,23 @@ Sm= %3 µм
 tp= %4</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="102"/>
-        <location filename="../crosssectionwindow.cpp" line="103"/>
+        <location filename="../crosssectionwindow.cpp" line="104"/>
+        <location filename="../crosssectionwindow.cpp" line="105"/>
         <source>Cross-section %1 not available</source>
         <translation>Профиль поверхности %1 не доступен</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="186"/>
+        <location filename="../crosssectionwindow.cpp" line="188"/>
         <source>%1 µm  </source>
         <translation>%1 µм  </translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="198"/>
+        <location filename="../crosssectionwindow.cpp" line="200"/>
         <source>%1 µm</source>
         <translation>%1 µм  </translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="312"/>
+        <location filename="../crosssectionwindow.cpp" line="314"/>
         <source>Cross-section %1
 x1= %2 µm
 h1= %3 µm
@@ -118,24 +118,24 @@ h2= %5 µм
 <context>
     <name>CybervisionViewer</name>
     <message>
-        <location filename="../cybervisionviewer.cpp" line="275"/>
+        <location filename="../cybervisionviewer.cpp" line="276"/>
         <source>x</source>
         <translation>x</translation>
     </message>
     <message>
-        <location filename="../cybervisionviewer.cpp" line="276"/>
+        <location filename="../cybervisionviewer.cpp" line="277"/>
         <source>y</source>
         <translation>y</translation>
     </message>
     <message>
-        <location filename="../cybervisionviewer.cpp" line="277"/>
+        <location filename="../cybervisionviewer.cpp" line="278"/>
         <source>z</source>
         <translation>z</translation>
     </message>
     <message>
-        <location filename="../cybervisionviewer.cpp" line="454"/>
-        <location filename="../cybervisionviewer.cpp" line="471"/>
-        <location filename="../cybervisionviewer.cpp" line="488"/>
+        <location filename="../cybervisionviewer.cpp" line="455"/>
+        <location filename="../cybervisionviewer.cpp" line="472"/>
+        <location filename="../cybervisionviewer.cpp" line="489"/>
         <source>%1 µm</source>
         <translation>%1 µм  </translation>
     </message>
@@ -359,22 +359,22 @@ h2= %5 µм
         <translation>При возможности использовать масштаб из метаданных</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="107"/>
+        <location filename="../mainwindow.cpp" line="109"/>
         <source>No surface available</source>
         <translation>Поверхность не доступна</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="125"/>
+        <location filename="../mainwindow.cpp" line="127"/>
         <source>Demo version warning</source>
         <translation>Предупреждение об использовании демо-версии</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="126"/>
+        <location filename="../mainwindow.cpp" line="128"/>
         <source>This is a functionally limited demo version of Cybervision.</source>
         <translation>Это функционально ограниченная демо-версия программы Cybervision.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="129"/>
+        <location filename="../mainwindow.cpp" line="131"/>
         <source>Upgrade to the full version to gain access to the following features:
 - Saving the reconstruction result
 - Reconstructing multiple surface without restarting
@@ -387,12 +387,12 @@ h2= %5 µм
 - Использование приложения более %1 минут</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="222"/>
+        <location filename="../mainwindow.cpp" line="224"/>
         <source>No point selected</source>
         <translation>Точка не выбрана</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="102"/>
+        <location filename="../mainwindow.cpp" line="104"/>
         <source>Depth range: %1 µm
 Base depth: %2 µm
 Median depth: %3 µm</source>
@@ -407,7 +407,7 @@ Median depth: %3 µm</source>
         <translation>&lt;b&gt;Изображение не выбрано&lt;/b&gt;</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="224"/>
+        <location filename="../mainwindow.cpp" line="226"/>
         <source>x: %1 µm
 y: %2 µm
 z: %3 µm</source>
@@ -416,68 +416,68 @@ y: %2 µм
 z: %3 µм</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="254"/>
+        <location filename="../mainwindow.cpp" line="256"/>
         <source>Please restart the application to reconstruct another surface.</source>
         <translation>Пожалуйста, перезапустите программу для реконструкции следующей поверхности.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="264"/>
+        <location filename="../mainwindow.cpp" line="266"/>
         <source>Surface points</source>
         <translation>Точки поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="265"/>
+        <location filename="../mainwindow.cpp" line="267"/>
         <source>Surface polygons</source>
         <translation>Полигоны поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="266"/>
+        <location filename="../mainwindow.cpp" line="268"/>
         <source>PNG image</source>
         <translation>Изображение PNG</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="267"/>
+        <location filename="../mainwindow.cpp" line="269"/>
         <source>SceneJS model</source>
         <translation>Модель SceneJS</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="268"/>
+        <location filename="../mainwindow.cpp" line="270"/>
         <source>COLLADA model</source>
         <translation>Модель COLLADA</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="269"/>
-        <location filename="../mainwindow.cpp" line="317"/>
+        <location filename="../mainwindow.cpp" line="271"/>
+        <location filename="../mainwindow.cpp" line="319"/>
         <source>Cybervision surface</source>
         <translation>Поверхность Cybervision</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="274"/>
+        <location filename="../mainwindow.cpp" line="276"/>
         <source>Save the surface</source>
         <translation>Сохранить поверхность</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="276"/>
+        <location filename="../mainwindow.cpp" line="278"/>
         <source>Save functionality is disabled.</source>
         <translation>Функция сохранения отключена.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="308"/>
+        <location filename="../mainwindow.cpp" line="310"/>
         <source>Bad save format selected</source>
         <translation>Выбран неправильный формат для записи</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="309"/>
+        <location filename="../mainwindow.cpp" line="311"/>
         <source>&lt;b&gt;Bad save format selected:&lt;/b&gt; %1</source>
         <translation>&lt;b&gt;Выбран неправильный формат для записи:&lt;/b&gt; %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="318"/>
+        <location filename="../mainwindow.cpp" line="320"/>
         <source>Select surface to load</source>
         <translation>Выберите поверхность, которую нужно загрузить</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="322"/>
+        <location filename="../mainwindow.cpp" line="324"/>
         <source>Error loading surface from %1</source>
         <translation>Ошибка при загрузке поверхности %1</translation>
     </message>
@@ -487,13 +487,13 @@ z: %3 µм</translation>
         <translation>Изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="492"/>
+        <location filename="../mainwindow.cpp" line="494"/>
         <source>The demo has run for %1 minutes and will now quit.</source>
         <translation>Демо-версия работала %1 минут и будет закрыта.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="25"/>
-        <location filename="../mainwindow.cpp" line="317"/>
+        <location filename="../mainwindow.cpp" line="319"/>
         <source>All files</source>
         <translation>Все файлы</translation>
     </message>
@@ -503,17 +503,17 @@ z: %3 µм</translation>
         <translation>Программа Cybervision (Демонстрационная версия)</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="356"/>
+        <location filename="../mainwindow.cpp" line="358"/>
         <source>Select image 1</source>
         <translation>Выбрать изображение 1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="374"/>
+        <location filename="../mainwindow.cpp" line="376"/>
         <source>Select image 2</source>
         <translation>Выбрать изображение 2</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="392"/>
+        <location filename="../mainwindow.cpp" line="394"/>
         <source>Select images to add</source>
         <translation>Выберите изображения, которые нужно добавить</translation>
     </message>
@@ -554,27 +554,27 @@ z: %3 µм</translation>
         <translation>Оценочное вычисление фундаментальной матрицы...</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/fundamentalmatrix.cpp" line="104"/>
+        <location filename="../../Reconstruction/fundamentalmatrix.cpp" line="107"/>
         <source>RANSAC %1% complete</source>
         <translation>RANSAC %1% выполнено</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/fundamentalmatrix.cpp" line="179"/>
+        <location filename="../../Reconstruction/fundamentalmatrix.cpp" line="188"/>
         <source>No RANSAC consensus found</source>
         <translation>Не найдено общее решение RANSAC</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/fundamentalmatrix.cpp" line="183"/>
+        <location filename="../../Reconstruction/fundamentalmatrix.cpp" line="192"/>
         <source>RANSAC consensus found, error=%1, size=%2</source>
         <translation>Найдено общее решение RANSAC, ошибка=%1, размер=%2</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/fundamentalmatrix.cpp" line="265"/>
+        <location filename="../../Reconstruction/fundamentalmatrix.cpp" line="274"/>
         <source>Saved RANSAC-filtered matches to %1</source>
         <translation>Отфильтрованные RANSAC пары соответствия сохранены в %1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/fundamentalmatrix.cpp" line="267"/>
+        <location filename="../../Reconstruction/fundamentalmatrix.cpp" line="276"/>
         <source>Error when saving RANSAC-filtered matches to file %1</source>
         <translation>Ошибка при сохранении отфильтрованных RANSAC пар соответствия в файл %1</translation>
     </message>
@@ -916,39 +916,50 @@ z: %3 µм</translation>
 <context>
     <name>cybervision::Reconstructor</name>
     <message>
-        <location filename="../../Reconstruction/reconstructor.cpp" line="33"/>
+        <location filename="../../Reconstruction/reconstructor.cpp" line="34"/>
         <source>No matches found</source>
         <translation>Не найдены пары соответствия</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/reconstructor.cpp" line="38"/>
+        <location filename="../../Reconstruction/reconstructor.cpp" line="39"/>
         <source>Not enough matches (%1), need at least %2</source>
         <translation>Найдено недостаточное количество пар соответствия (%1), необходимо хотя бы %2 для проведения реконструкции</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/reconstructor.cpp" line="53"/>
+        <location filename="../../Reconstruction/reconstructor.cpp" line="54"/>
         <source>Error when computing fundamental matrix</source>
         <translation>Ошибка при вычислении фундаментальной матрицы</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/reconstructor.cpp" line="80"/>
+        <location filename="../../Reconstruction/reconstructor.cpp" line="81"/>
         <source>Error when estimating pose</source>
         <translation>Ошибка при вычислении взаимного расположения</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/reconstructor.cpp" line="83"/>
+        <location filename="../../Reconstruction/reconstructor.cpp" line="84"/>
         <source>Error during 3D triangulation</source>
         <translation>Ошибка во время проведения трехмерной триангуляции</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/reconstructor.cpp" line="86"/>
+        <location filename="../../Reconstruction/reconstructor.cpp" line="87"/>
         <source>Internal logic error: triangulation failed, but result is OK</source>
         <translation>Ошибка внутренней логики: триангуляция не проведена, но операция завершилась успешно</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/reconstructor.cpp" line="89"/>
+        <location filename="../../Reconstruction/reconstructor.cpp" line="90"/>
+        <location filename="../../Reconstruction/reconstructor.cpp" line="115"/>
         <source>Unknown error</source>
         <translation>Неизвестная ошибка</translation>
+    </message>
+    <message>
+        <location filename="../../Reconstruction/reconstructor.cpp" line="109"/>
+        <source>Critical error: out of memory</source>
+        <translation>Критическая ошибка: недостаточно свободной памяти</translation>
+    </message>
+    <message>
+        <location filename="../../Reconstruction/reconstructor.cpp" line="112"/>
+        <source>Critical error: %1</source>
+        <translation>Критическая ошибка: %1</translation>
     </message>
 </context>
 </TS>

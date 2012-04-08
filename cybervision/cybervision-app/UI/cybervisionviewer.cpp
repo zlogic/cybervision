@@ -1,3 +1,6 @@
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include "cybervisionviewer.h"
 
 #include <Reconstruction/options.h>
@@ -6,8 +9,6 @@
 #include <QMouseEvent>
 #include <QThread>
 
-#define _USE_MATH_DEFINES
-#include <cmath>
 #include <limits>
 
 #include <QMatrix4x4>

@@ -3,6 +3,9 @@ include( ../cybervision-options.pri )
 QT += core gui opengl
 TARGET = cybervision$${CYBERVISION_SUFFIX}
 TEMPLATE = app
+
+CONFIG += exceptions
+
 SOURCES += main.cpp \
 	UI/mainwindow.cpp \
 	Reconstruction/pointmatcher.cpp \
@@ -34,6 +37,7 @@ HEADERS += \
 	Reconstruction/imageloader.h \
 	Reconstruction/pointmatcheropencl.h \
 	Reconstruction/crosssection.h \
+	Reconstruction/config.h \
 	KDTree/region.hpp \
 	KDTree/node.hpp \
 	KDTree/kdtreegateway.h \
@@ -70,7 +74,7 @@ HEADERS += \
 	UI/processthread.h \
 	UI/cybervisionviewer.h \
 	UI/crosssectionwindow.h \
-    UI/aboutwindow.h
+	UI/aboutwindow.h
 
 FORMS += UI/mainwindow.ui \
     UI/crosssectionwindow.ui \
@@ -127,11 +131,12 @@ win32 {
     RC_FILE = UI/cybervision.rc
 }
 win32-g++ {
-    QMAKE_CXXFLAGS += -fopenmp
-    equals(CYBERVISION_SSE, true): QMAKE_CXXFLAGS += -msse3
-    LIBS += \
-            -static -lgcc_eh \
-            -lgomp -lpthread
+	equals(CYBERVISION_OPENMP,true){
+		QMAKE_CXXFLAGS += -fopenmp
+		LIBS += -lgomp -lpthread
+	}
+
+	equals(CYBERVISION_SSE, true): QMAKE_CXXFLAGS += -msse3
 
     equals(CYBERVISION_OPENCL, true){
 		LIBS += -lOpenCL
@@ -144,10 +149,10 @@ win32-g++ {
 win32-msvc* {
     INCLUDEPATH += $$quote(C:/QtSDK/MSVC-Libs/include)
 
-    QMAKE_CXXFLAGS_RELEASE += /O2
-    QMAKE_CXXFLAGS += /openmp
+	QMAKE_CXXFLAGS_RELEASE += /O2
+	equals(CYBERVISION_OPENMP,true): QMAKE_CXXFLAGS += /openmp
 
-    equals(CYBERVISION_SSE, true): QMAKE_CXXFLAGS += /arch:SSE2
+	equals(CYBERVISION_SSE, true): QMAKE_CXXFLAGS += /arch:SSE2
 
     equals(CYBERVISION_OPENCL, true){
         QMAKE_LIBDIR += $$quote(C:/QtSDK/MSVC-Libs/lib/x86)
@@ -155,7 +160,13 @@ win32-msvc* {
     }
 }
 unix {
-    QMAKE_CXXFLAGS += -fopenmp -msse3
+	equals(CYBERVISION_OPENMP,true){
+		QMAKE_CXXFLAGS += -fopenmp
+		LIBS += -lgomp -lpthread
+	}
+
+	equals(CYBERVISION_SSE, true): QMAKE_CXXFLAGS += -msse3
+
     equals(CYBERVISION_OPENCL, true){
 		INCLUDEPATH += /opt/AMDAPP/include
         LIBS += -L/opt/AMDAPP/lib/x86_64 -lOpenCL

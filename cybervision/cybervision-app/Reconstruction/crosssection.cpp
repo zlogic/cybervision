@@ -8,6 +8,8 @@
 #include <limits>
 #include <cmath>
 
+#include <Reconstruction/config.h>
+
 namespace cybervision{
 
 CrossSection::CrossSection(QObject *parent):QObject(parent) {

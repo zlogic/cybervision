@@ -8,6 +8,8 @@
 #include <cmath>
 #include <limits>
 
+#include <Reconstruction/config.h>
+
 #include <QTextStream>
 #include <QGraphicsTextItem>
 

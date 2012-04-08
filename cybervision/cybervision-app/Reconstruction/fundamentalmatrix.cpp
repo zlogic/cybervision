@@ -5,7 +5,7 @@
 #include <QFile>
 #include <QTextStream>
 
-#define EIGEN_NO_EXCEPTIONS
+#include <Reconstruction/config.h>
 #include <Eigen/Dense>
 #include <Eigen/SVD>
 
@@ -13,7 +13,7 @@ namespace cybervision{
 
 FundamentalMatrix::FundamentalMatrix(QObject *parent) : QObject(parent){ }
 
-Eigen::Vector3d FundamentalMatrix::point2vector(const QPointF&p)const{
+ALIGN_EIGEN_FUNCTION Eigen::Vector3d FundamentalMatrix::point2vector(const QPointF&p)const{
 	Eigen::Vector3d vector;
 	vector(0,0)=p.x(),vector(1,0)=p.y(),vector(2,0)=1;
 	return vector;
@@ -28,7 +28,7 @@ Eigen::Matrix3d FundamentalMatrix::getFundamentalMatrix()const{ return F; }
 Eigen::Matrix3d FundamentalMatrix::getT1()const{ return T1; }
 Eigen::Matrix3d FundamentalMatrix::getT2()const{ return T2; }
 
-Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(const KeypointMatches& matches){
+ALIGN_EIGEN_FUNCTION Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(const KeypointMatches& matches){
 	if(matches.size()!=8){
 		emit sgnLogMessage(QString(tr("Wrong consensus set size (%1), should be %2")).arg(matches.size()).arg(8));
 		//TODO:fail here
@@ -59,7 +59,7 @@ Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(const KeypointMatche
 	return F;
 }
 
-double FundamentalMatrix::computeFundamentalMatrixError(const Eigen::Matrix3d&F, const KeypointMatch& match) const{
+ALIGN_EIGEN_FUNCTION double FundamentalMatrix::computeFundamentalMatrixError(const Eigen::Matrix3d&F, const KeypointMatch& match) const{
 	Eigen::Vector3d x1; x1(0,0)=match.a.x(), x1(1,0)=match.a.y(), x1(2,0)=1;
 	Eigen::Vector3d x2; x2(0,0)=match.b.x(), x2(1,0)=match.b.y(), x2(2,0)=1;
 
@@ -77,7 +77,7 @@ double FundamentalMatrix::computeFundamentalMatrixError(const Eigen::Matrix3d&F,
 	*/
 }
 
-Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(){
+ALIGN_EIGEN_FUNCTION Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(){
 	emit sgnStatusMessage(tr("Estimating fundamental matrix..."));
 
 	//Increase speed with precomputed lists
@@ -96,84 +96,93 @@ Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(){
 	double best_error= std::numeric_limits<float>::infinity();
 	Eigen::Matrix3d best_F;
 
+	QString errorString;
+
 	#pragma omp parallel
-	for(int i=0;i<Options::RANSAC_k;i++){
+	for(int i=0;i<Options::RANSAC_k && (errorString.isNull() || errorString.isEmpty());i++){
 		#pragma omp single nowait
 		{
-			if(i%(Options::RANSAC_k/10)==0)
-				emit sgnLogMessage(QString(tr("RANSAC %1% complete")).arg((i*100)/Options::RANSAC_k));
+			try{
+				if(i%(Options::RANSAC_k/10)==0)
+					emit sgnLogMessage(QString(tr("RANSAC %1% complete")).arg((i*100)/Options::RANSAC_k));
 
-			//Extract RANSAC_n random values
-			KeypointMatches consensus_set,consensus_set_normalized;
-			SortedKeypointMatches master_consensus_set;
+				//Extract RANSAC_n random values
+				KeypointMatches consensus_set,consensus_set_normalized;
+				SortedKeypointMatches master_consensus_set;
 
-			while(consensus_set.size()<Options::RANSAC_n){
-				//Generate random distance
-				int rand_number= (matches_keys_max_i*(long long)rand())/RAND_MAX;
-				float random_distance= matches_keys.at(std::min(rand_number,matches_keys.size()-1));
-				//Find points at generated distance
-				QList<KeypointMatch> it1_values= matches.values(random_distance);
-				//Find a match on a random position
-				int random_pos= (it1_values.size()*(long long)rand())/RAND_MAX;
-				QPair<float,KeypointMatch> new_match(
-							random_distance,
-							it1_values.at(std::min(it1_values.size()-1,random_pos))
-							);
-				if(!master_consensus_set.contains(new_match.first,new_match.second)){
-					master_consensus_set.insert(new_match.first,new_match.second);
-					consensus_set.push_back(new_match);
+				while(consensus_set.size()<Options::RANSAC_n){
+					//Generate random distance
+					int rand_number= (matches_keys_max_i*(long long)rand())/RAND_MAX;
+					float random_distance= matches_keys.at(std::min(rand_number,matches_keys.size()-1));
+					//Find points at generated distance
+					QList<KeypointMatch> it1_values= matches.values(random_distance);
+					//Find a match on a random position
+					int random_pos= (it1_values.size()*(long long)rand())/RAND_MAX;
+					QPair<float,KeypointMatch> new_match(
+								random_distance,
+								it1_values.at(std::min(it1_values.size()-1,random_pos))
+								);
+					if(!master_consensus_set.contains(new_match.first,new_match.second)){
+						master_consensus_set.insert(new_match.first,new_match.second);
+						consensus_set.push_back(new_match);
 
-					//Create normalized point
-					QPointF x1=	vector2point(T1*point2vector(new_match.second.a));
-					QPointF x2=	vector2point(T2*point2vector(new_match.second.b));
-					KeypointMatch new_match_normalized_points;
-					new_match_normalized_points.a=x1, new_match_normalized_points.b=x2;
-					QPair<float,KeypointMatch> new_match_normalized(random_distance,new_match_normalized_points);
-					consensus_set_normalized.push_back(new_match_normalized);
-				}
-			}
-
-			double error=0;
-			//Compute E from the random values
-			Eigen::Matrix3d F_normalized=computeFundamentalMatrix(consensus_set_normalized);
-
-			//Expand consensus set
-			for(SortedKeypointMatches::const_iterator it1= matches.begin();it1!=matches.end();it1++){
-				//Normalize point for error computation
-
-				QPointF x1=	vector2point(T1*point2vector(it1.value().a));
-				QPointF x2=	vector2point(T2*point2vector(it1.value().b));
-				KeypointMatch match_normalized; match_normalized.a=x1, match_normalized.b=x2;
-				//Check error
-				double current_error= computeFundamentalMatrixError(F_normalized,match_normalized);
-
-				//Check if match exists in master consensus set
-				if(master_consensus_set.contains(it1.key(),it1.value())){
-					//Add to global error
-					error+= current_error;
-					continue;//Match was found in master consensus set, ignore
-				}
-				if(current_error<Options::RANSAC_t){
-					//Add to global error
-					error+= current_error;
-					consensus_set.push_back(QPair<float,KeypointMatch>(it1.key(),it1.value()));
-				}
-			}
-
-			#pragma omp critical
-			{
-				if(consensus_set.size()>Options::RANSAC_d){
-					//Error was already computed, normalize it
-					error/= consensus_set.size();
-					if(consensus_set.size()>best_consensus_set.size() || (consensus_set.size()==best_consensus_set.size() && error<best_error)){
-						best_consensus_set= consensus_set;
-						best_error= error;
-						best_F= F_normalized;
+						//Create normalized point
+						QPointF x1=	vector2point(T1*point2vector(new_match.second.a));
+						QPointF x2=	vector2point(T2*point2vector(new_match.second.b));
+						KeypointMatch new_match_normalized_points;
+						new_match_normalized_points.a=x1, new_match_normalized_points.b=x2;
+						QPair<float,KeypointMatch> new_match_normalized(random_distance,new_match_normalized_points);
+						consensus_set_normalized.push_back(new_match_normalized);
 					}
 				}
+
+				double error=0;
+				//Compute E from the random values
+				Eigen::Matrix3d F_normalized=computeFundamentalMatrix(consensus_set_normalized);
+
+				//Expand consensus set
+				for(SortedKeypointMatches::const_iterator it1= matches.begin();it1!=matches.end();it1++){
+					//Normalize point for error computation
+
+					QPointF x1=	vector2point(T1*point2vector(it1.value().a));
+					QPointF x2=	vector2point(T2*point2vector(it1.value().b));
+					KeypointMatch match_normalized; match_normalized.a=x1, match_normalized.b=x2;
+					//Check error
+					double current_error= computeFundamentalMatrixError(F_normalized,match_normalized);
+
+					//Check if match exists in master consensus set
+					if(master_consensus_set.contains(it1.key(),it1.value())){
+						//Add to global error
+						error+= current_error;
+						continue;//Match was found in master consensus set, ignore
+					}
+					if(current_error<Options::RANSAC_t){
+						//Add to global error
+						error+= current_error;
+						consensus_set.push_back(QPair<float,KeypointMatch>(it1.key(),it1.value()));
+					}
+				}
+
+				#pragma omp critical
+				{
+					if(consensus_set.size()>Options::RANSAC_d){
+						//Error was already computed, normalize it
+						error/= consensus_set.size();
+						if(consensus_set.size()>best_consensus_set.size() || (consensus_set.size()==best_consensus_set.size() && error<best_error)){
+							best_consensus_set= consensus_set;
+							best_error= error;
+							best_F= F_normalized;
+						}
+					}
+				}
+			}catch(const std::runtime_error& error){
+				errorString= error.what();
 			}
 		}
 	}
+
+	if(!errorString.isNull() && !errorString.isEmpty())
+		throw std::runtime_error(errorString.toStdString());
 
 	if(best_consensus_set.empty()){
 		emit sgnLogMessage(tr("No RANSAC consensus found"));
@@ -191,7 +200,7 @@ Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(){
 	return best_F;
 }
 
-bool FundamentalMatrix::computeFundamentalMatrix(const SortedKeypointMatches&matches){
+ALIGN_EIGEN_FUNCTION bool FundamentalMatrix::computeFundamentalMatrix(const SortedKeypointMatches&matches){
 	this->matches= matches;
 	//Compute centroid and scaling factor (normalise2dpts)
 	{

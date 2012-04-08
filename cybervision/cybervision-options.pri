@@ -32,3 +32,10 @@ contains(CYBERVISION_BUILD_OPTIONS,"noSSE"){
     #message("SSE enabled in qmake")
 	CYBERVISION_SSE = true
 }
+
+contains(CYBERVISION_BUILD_OPTIONS,"noOpenMP"){
+	#message("OpenMP disabled in qmake")
+}else{
+	#message("OpenMP enabled in qmake")
+	CYBERVISION_OPENMP = true
+}
