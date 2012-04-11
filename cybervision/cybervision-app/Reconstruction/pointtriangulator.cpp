@@ -87,7 +87,6 @@ ALIGN_EIGEN_FUNCTION Eigen::MatrixXd PointTriangulator::leastSquares(const Eigen
 	return result;
 }
 
-
 ALIGN_EIGEN_FUNCTION Eigen::Matrix3d PointTriangulator::computeCameraMatrix(const QSize& imageSize)const{
 	Eigen::Matrix3d K;
 	K.fill(0.0);
@@ -373,19 +372,52 @@ ALIGN_EIGEN_FUNCTION bool PointTriangulator::triangulatePoints(const QList<cyber
 	M= M*Q;
 	X= (Q.inverse()*(X.transpose())).transpose();
 
+	//Compute rotation axis position
+	qreal axis_angle= 0;
+	qreal axis_displacement=0;
+	Eigen::MatrixXd rotation(2,2);
+	{
+		qreal deltaX=0,deltaY=0;
+		for(Eigen::MatrixXd::Index i=0;i<W.cols();i++){
+			deltaX+= W(0,i)-W(2,i);
+			deltaY+= W(1,i)-W(3,i);
+		}
+		axis_angle= atan2(deltaY,deltaX);
+
+		//Polynomial approximation
+		Eigen::MatrixXd Ax(W.cols(),3);
+		Eigen::MatrixXd b(W.cols(),1);
+		rotation<<cos(-axis_angle),-sin(-axis_angle),sin(-axis_angle),cos(-axis_angle);
+		for(Eigen::MatrixXd::Index i=0;i<W.cols();i++){
+			Eigen::MatrixXd P1= rotation*W.block(0,i,2,1);
+			Eigen::MatrixXd P2= rotation*W.block(2,i,2,1);
+			Ax(i,0)= 1;
+			Ax(i,1)= P1(0,0)-P2(0,0);
+			Ax(i,2)= Ax(i,1)*Ax(i,1);
+			b(i,0)= (P1(0,0)+P2(0,0))/2;
+		}
+		Eigen::MatrixXd coeffs= leastSquares(Ax,b);
+		axis_displacement= -coeffs(1,0)/(2*coeffs(2,0));
+	}
+
+
 	//Compute image-wide scale
 	qreal scale=0;
 	{
 		Eigen::VectorXd Z_multiplier(3);
-		Z_multiplier<< 0,0,tan(angle*M_PI/180);
+		Z_multiplier<< 0,0,-sin(angle*M_PI/180);
 		Eigen::MatrixXd Z_curr= X*Z_multiplier;
 		Eigen::MatrixXd Z_disp(Z_curr.rows(),Z_curr.cols());
 
-		Eigen::MatrixXd deltaX= W.block(0,0,1,W.cols())-W.block(2,0,1,W.cols());
-		Eigen::MatrixXd deltaY= W.block(1,0,1,W.cols())-W.block(3,0,1,W.cols());
+		Eigen::VectorXd displacementVector(2);
+		displacementVector<<0,-axis_displacement;
 
-		for(Eigen::MatrixXd::Index i=0;i<W.cols();i++)
-			Z_disp(i)= sqrt(deltaX(0,i)*deltaX(0,i)+deltaY(0,i)*deltaY(0,i));
+		for(Eigen::MatrixXd::Index i=0;i<W.cols();i++){
+			Eigen::MatrixXd P1= rotation*(W.block(0,i,2,1)+displacementVector);
+			Eigen::MatrixXd P2= rotation*(W.block(2,i,2,1)+displacementVector);
+
+			Z_disp(i)= -qAbs(P2(0,0)-P1(0,0)*cos(angle*M_PI/180));
+		}
 		Eigen::MatrixXd scale_matrix= leastSquares(Z_curr,Z_disp);
 		scale= scale_matrix(0,0);
 	}
