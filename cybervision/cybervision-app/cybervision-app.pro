@@ -169,7 +169,7 @@ unix {
 
     equals(CYBERVISION_OPENCL, true){
 		INCLUDEPATH += /opt/AMDAPP/include
-        LIBS += -L/opt/AMDAPP/lib/x86_64 -lOpenCL
+        LIBS += -L/opt/AMDAPP/lib/x86_64 -lOpenCL -lGLU
     }
 }
 
