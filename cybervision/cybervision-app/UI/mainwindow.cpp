@@ -84,6 +84,9 @@ void MainWindow::updateWidgetStatus(){
 	scaleXYValidator.setBottom(0.0);
 	scaleZValidator.setBottom(0.0);
 	angleValidator.setRange(-360.0,360.0,1000);
+	scaleXYValidator.setLocale(QLocale::C);
+	scaleZValidator.setLocale(QLocale::C);
+	angleValidator.setLocale(QLocale::C);
 	ui->scaleXYEdit->setValidator(&scaleXYValidator);
 	ui->scaleZEdit->setValidator(&scaleZValidator);
 	ui->angleEdit->setValidator(&angleValidator);
@@ -169,7 +172,7 @@ void MainWindow::loadDebugPreferences(){
 					QString fileName= fileRegexp.capturedTexts().at(1);
 					QString name= QFileInfo(fileName).fileName();
 					QListWidgetItem* newItem= new QListWidgetItem(name);
-					newItem->setData(32,QDir::convertSeparators(fileName));
+					newItem->setData(32,QDir::toNativeSeparators(fileName));
 					ui->imageList->addItem(newItem);
 
 					startPath= QFileInfo(fileName).canonicalPath();
@@ -321,7 +324,7 @@ void MainWindow::on_loadSurfaceButton_clicked(){
 	if(!filename.isNull()){
 		cybervision::Surface surface= cybervision::Surface::fromFile(filename);
 		if(!surface.isOk())
-			ui->logTextEdit->appendHtml("<b>"+QString(tr("Error loading surface from %1")).arg(QDir::convertSeparators(filename))+"</b>");
+			ui->logTextEdit->appendHtml("<b>"+QString(tr("Error loading surface from %1")).arg(QDir::toNativeSeparators(filename))+"</b>");
 
 		ui->openGLViewport->setSurface3D(surface);
 		updateWidgetStatus();
@@ -359,13 +362,13 @@ void MainWindow::on_openImage1_clicked(){
 	if(filename.isNull()){
 		image1Path= "";
 	}else{
-		filename= QDir::convertSeparators(filename);
+		filename= QDir::toNativeSeparators(filename);
 		image1Path= filename;
 		startPath= QFileInfo(filename).canonicalPath();
 
 		if(ui->imageList->findItems(QFileInfo(filename).fileName(),Qt::MatchExactly).empty()){
 			QListWidgetItem* newItem= new QListWidgetItem(QFileInfo(filename).fileName());
-			newItem->setData(32,QDir::convertSeparators(filename));
+			newItem->setData(32,QDir::toNativeSeparators(filename));
 			ui->imageList->addItem(newItem);
 		}
 	}
@@ -377,13 +380,13 @@ void MainWindow::on_openImage2_clicked(){
 	if(filename.isNull()){
 		image2Path= "";
 	}else{
-		filename= QDir::convertSeparators(filename);
+		filename= QDir::toNativeSeparators(filename);
 		image2Path= filename;
 		startPath= QFileInfo(filename).canonicalPath();
 
 		if(ui->imageList->findItems(QFileInfo(filename).fileName(),Qt::MatchExactly).empty()){
 			QListWidgetItem* newItem= new QListWidgetItem(QFileInfo(filename).fileName());
-			newItem->setData(32,QDir::convertSeparators(filename));
+			newItem->setData(32,QDir::toNativeSeparators(filename));
 			ui->imageList->addItem(newItem);
 		}
 	}
@@ -395,7 +398,7 @@ void MainWindow::on_addImageButton_clicked(){
 	for(QStringList::const_iterator it=filenames.begin();it!=filenames.end();it++){
 		QString name= QFileInfo(*it).fileName();
 		QListWidgetItem* newItem= new QListWidgetItem(name);
-		newItem->setData(32,QDir::convertSeparators(*it));
+		newItem->setData(32,QDir::toNativeSeparators(*it));
 		ui->imageList->addItem(newItem);
 
 		startPath= QFileInfo(*it).canonicalPath();

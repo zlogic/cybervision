@@ -124,20 +124,6 @@ inline vec_float4 atan2f4( vec_float4 y, vec_float4 x );
 
 #endif
 
-inline u64 GetMicroTime()
-{
-#ifdef _WIN32
-	LARGE_INTEGER count, freq;
-	QueryPerformanceCounter(&count);
-	QueryPerformanceFrequency(&freq);
-	return (count.QuadPart * 1000000) / freq.QuadPart;
-#else
-	struct timeval t;
-	gettimeofday(&t, NULL);
-	return (u64)t.tv_sec*1000000+t.tv_usec;
-#endif
-}
-
 // aligned malloc and free
 inline void* sift_aligned_malloc(size_t size, size_t align)
 {

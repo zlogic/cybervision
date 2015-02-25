@@ -503,10 +503,10 @@ QSet<int> PointTriangulator::findPeaks(const QList<QVector3D> &points) const{
 	{
 		qreal minX= points.begin()->x(), minY= points.begin()->y(), maxX= points.begin()->x(), maxY= points.begin()->y();
 		for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
-			minX= qMin(minX,it->x());
-			minY= qMin(minY,it->y());
-			maxX= qMax(maxX,it->x());
-			maxY= qMax(maxY,it->y());
+			minX= qMin(minX,(qreal)it->x());
+			minY= qMin(minY,(qreal)it->y());
+			maxX= qMax(maxX,(qreal)it->x());
+			maxY= qMax(maxY,(qreal)it->y());
 		}
 		values_x<<minX<<maxX;
 		values_y<<minY<<maxY;

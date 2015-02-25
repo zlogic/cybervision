@@ -182,7 +182,7 @@ QString ImageLoader::extractTagStringTIFF(const QString& filename) const{
 
 
 			if(tag_short==TIFFTAG_META_PHENOM || tag_short== TIFFTAG_META_QUANTA)
-				result= QString::fromAscii(data.data(),data.size());
+				result= QString::fromLatin1(data.data(),data.size());
 
 			file.seek(fp);
 		}

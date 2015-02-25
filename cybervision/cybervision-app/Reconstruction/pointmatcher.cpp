@@ -32,7 +32,7 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 		precomputed_file_info= QFileInfo(file1.absoluteDir(),precomputed_filename);
 		QFile precomputed_file(precomputed_file_info.absoluteFilePath());
 		if(precomputed_file.exists()){
-			emit sgnLogMessage(tr("Loading precomputed SIFT matches from %1").arg(QDir::convertSeparators(precomputed_file.fileName())));
+			emit sgnLogMessage(tr("Loading precomputed SIFT matches from %1").arg(QDir::toNativeSeparators(precomputed_file.fileName())));
 			precomputed_file.open(QFile::ReadOnly);
 			QTextStream in_stream(&precomputed_file);
 
@@ -209,7 +209,7 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 	emit sgnLogMessage(QString(tr("Found %1 keypoint matches")).arg(matches.size()));
 
 	if(Options::UsePrecomputedKeypointData){
-		emit sgnLogMessage(QString(tr("Saving computed SIFT matches to %1")).arg(QDir::convertSeparators(precomputed_file_info.fileName())));
+		emit sgnLogMessage(QString(tr("Saving computed SIFT matches to %1")).arg(QDir::toNativeSeparators(precomputed_file_info.fileName())));
 		QFile precomputed_file(precomputed_file_info.absoluteFilePath());
 		precomputed_file.open(QFile::WriteOnly);
 		QTextStream out_stream(&precomputed_file);

@@ -1,6 +1,6 @@
 include( ../cybervision-options.pri )
 
-QT += core gui opengl
+QT += core gui widgets opengl
 TARGET = cybervision$${CYBERVISION_SUFFIX}
 TEMPLATE = app
 
@@ -23,7 +23,7 @@ SOURCES += main.cpp \
 	UI/processthread.cpp \
 	UI/cybervisionviewer.cpp \
 	UI/crosssectionwindow.cpp \
-    UI/aboutwindow.cpp
+	UI/aboutwindow.cpp
 
 HEADERS += \
 	Reconstruction/pointmatcher.h \
@@ -77,8 +77,8 @@ HEADERS += \
 	UI/aboutwindow.h
 
 FORMS += UI/mainwindow.ui \
-    UI/crosssectionwindow.ui \
-    UI/aboutwindow.ui
+	UI/crosssectionwindow.ui \
+	UI/aboutwindow.ui
 
 RESOURCES += \
 	ReconstructionResources.qrc
@@ -89,24 +89,24 @@ OTHER_FILES += \
 	Reconstruction/SceneJSTemplate.js \
 	UI/cybervision.rc \
 	UI/translations/cybervision-app_ru.ts \
-    UI/icons/texture-right.png \
-    UI/icons/texture-left.png \
-    UI/icons/texture-empty.png \
-    UI/icons/plus.png \
-    UI/icons/pencil-ruler.png \
-    UI/icons/minus.png \
-    UI/icons/grid.png \
-    UI/icons/document-import.png \
-    UI/icons/disk.png \
-    UI/icons/cybervision.png \
-    UI/icons/cybervision.ico \
-    UI/icons/border-draw.png \
-    UI/icons/arrow-move.png \
-    UI/icons/arrow-circle.png \
-    UI/icons/application-task.png \
-    UI/icons/cybervision-large.png \
-    UI/icons/pictures-stack.png \
-    UI/icons/magnifier--pencil.png \
+	UI/icons/texture-right.png \
+	UI/icons/texture-left.png \
+	UI/icons/texture-empty.png \
+	UI/icons/plus.png \
+	UI/icons/pencil-ruler.png \
+	UI/icons/minus.png \
+	UI/icons/grid.png \
+	UI/icons/document-import.png \
+	UI/icons/disk.png \
+	UI/icons/cybervision.png \
+	UI/icons/cybervision.ico \
+	UI/icons/border-draw.png \
+	UI/icons/arrow-move.png \
+	UI/icons/arrow-circle.png \
+	UI/icons/application-task.png \
+	UI/icons/cybervision-large.png \
+	UI/icons/pictures-stack.png \
+	UI/icons/magnifier--pencil.png \
 	UI/icons/information.png
 
 TRANSLATIONS = UI/translations/cybervision-app_ru.ts
@@ -120,7 +120,7 @@ DEPENDPATH += $$PWD/../libsiftfast
 #CONFIG(debug, debug|release): DESTDIR = ../debug
 
 equals(CYBERVISION_OPENCL, true){
-    DEFINES += CYBERVISION_OPENCL
+	DEFINES += CYBERVISION_OPENCL
 }
 
 equals(CYBERVISION_DEMO, true){
@@ -138,26 +138,23 @@ win32-g++ {
 
 	equals(CYBERVISION_SSE, true): QMAKE_CXXFLAGS += -msse3
 
-    equals(CYBERVISION_OPENCL, true){
+	equals(CYBERVISION_OPENCL, true){
 		LIBS += -lOpenCL
-    }
-
-    #QMAKE_CXXFLAGS += -U_WIN32
-    #QMAKE_CFLAGS += -U_WIN32
+	}
 }
 
 win32-msvc* {
-    INCLUDEPATH += $$quote(C:/QtSDK/MSVC-Libs/include)
+	INCLUDEPATH += $$quote(C:/QtSDK/MSVC-Libs/include)
 
 	QMAKE_CXXFLAGS_RELEASE += /O2
 	equals(CYBERVISION_OPENMP,true): QMAKE_CXXFLAGS += /openmp
 
 	equals(CYBERVISION_SSE, true): QMAKE_CXXFLAGS += /arch:SSE2
 
-    equals(CYBERVISION_OPENCL, true){
-        QMAKE_LIBDIR += $$quote(C:/QtSDK/MSVC-Libs/lib/x86)
-        LIBS += -lOpenCL
-    }
+	equals(CYBERVISION_OPENCL, true){
+		QMAKE_LIBDIR += $$quote(C:/QtSDK/MSVC-Libs/lib/x86)
+		LIBS += -lOpenCL
+	}
 }
 unix {
 	equals(CYBERVISION_OPENMP,true){
@@ -167,10 +164,10 @@ unix {
 
 	equals(CYBERVISION_SSE, true): QMAKE_CXXFLAGS += -msse3
 
-    equals(CYBERVISION_OPENCL, true){
+	equals(CYBERVISION_OPENCL, true){
 		INCLUDEPATH += /opt/AMDAPP/include
-        LIBS += -L/opt/AMDAPP/lib/x86_64 -lOpenCL -lGLU
-    }
+		LIBS += -L/opt/AMDAPP/lib/x86_64 -lOpenCL -lGLU
+	}
 }
 
 win32-msvc*:CONFIG(release, debug|release): LIBS += -L$$OUT_PWD/../libsiftfast/release -lsiftfast$${CYBERVISION_SUFFIX}

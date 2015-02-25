@@ -60,8 +60,8 @@ QList<QVector3D> Sculptor::filterPoints(const QList<QVector3D>& points){
 	//These values are unwanted
 	qreal max_z=points.begin()->z(), min_z=points.begin()->z();
 	for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
-		max_z= qMax(max_z,it->z());
-		min_z= qMin(min_z,it->z());
+		max_z= qMax(max_z,(qreal)it->z());
+		min_z= qMin(min_z,(qreal)it->z());
 	}
 
 	for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
@@ -185,8 +185,8 @@ bool Sculptor::filterTriangles(QList<QVector3D>& points,const QList<Surface::Tri
 	//Renormalize z-coordinate
 	qreal zMin= std::numeric_limits<qreal>::infinity(), zMax= -std::numeric_limits<qreal>::infinity();
 	for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
-		zMin= qMin(zMin,it->z());
-		zMax= qMax(zMax,it->z());
+		zMin= qMin(zMin,(qreal)it->z());
+		zMax= qMax(zMax,(qreal)it->z());
 	}
 
 	for(QList<QVector3D>::iterator it= points.begin();it!=points.end();it++){
@@ -246,10 +246,10 @@ QList<QVector3D> Sculptor::interpolatePointsToGrid(const QList<QVector3D>& point
 	{
 		qreal minX= points.begin()->x(), minY= points.begin()->y(), maxX= points.begin()->x(), maxY= points.begin()->y();
 		for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
-			minX= qMin(minX,it->x());
-			minY= qMin(minY,it->y());
-			maxX= qMax(maxX,it->x());
-			maxY= qMax(maxY,it->y());
+			minX= qMin(minX,(qreal)it->x());
+			minY= qMin(minY,(qreal)it->y());
+			maxX= qMax(maxX,(qreal)it->x());
+			maxY= qMax(maxY,(qreal)it->y());
 		}
 		//minX= 0, minY= 0;
 		//maxX= imageSize.width(), maxY= imageSize.height();
