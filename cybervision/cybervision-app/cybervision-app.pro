@@ -115,10 +115,6 @@ CODECFORTR = UTF-8
 INCLUDEPATH += $$PWD/../libsiftfast
 DEPENDPATH += $$PWD/../libsiftfast
 
-
-#CONFIG(release, debug|release): DESTDIR = ../release
-#CONFIG(debug, debug|release): DESTDIR = ../debug
-
 equals(CYBERVISION_OPENCL, true){
 	DEFINES += CYBERVISION_OPENCL
 }
@@ -128,9 +124,10 @@ equals(CYBERVISION_DEMO, true){
 }
 
 win32 {
-    RC_FILE = UI/cybervision.rc
+	RC_FILE = UI/cybervision.rc
 }
 win32-g++ {
+	LIBS += -lglu32 -lopengl32
 	equals(CYBERVISION_OPENMP,true){
 		QMAKE_CXXFLAGS += -fopenmp
 		LIBS += -lgomp -lpthread
@@ -143,19 +140,6 @@ win32-g++ {
 	}
 }
 
-win32-msvc* {
-	INCLUDEPATH += $$quote(C:/QtSDK/MSVC-Libs/include)
-
-	QMAKE_CXXFLAGS_RELEASE += /O2
-	equals(CYBERVISION_OPENMP,true): QMAKE_CXXFLAGS += /openmp
-
-	equals(CYBERVISION_SSE, true): QMAKE_CXXFLAGS += /arch:SSE2
-
-	equals(CYBERVISION_OPENCL, true){
-		QMAKE_LIBDIR += $$quote(C:/QtSDK/MSVC-Libs/lib/x86)
-		LIBS += -lOpenCL
-	}
-}
 unix {
 	equals(CYBERVISION_OPENMP,true){
 		QMAKE_CXXFLAGS += -fopenmp

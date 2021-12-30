@@ -1,8 +1,8 @@
 # Cybervision
-Cybervision is a 3D reconstruction software for Scanning Electrin Microscope images.
+Cybervision is a 3D reconstruction software for Scanning Electron Microscope images.
 It's an abandoned project, but can be useful as a working example for many, many technologies, such as:
-* Qt (including threads, vectors, graphics and OpenGL)
-* Eigen library (http://eigen.tuxfamily.org/ )
+* Qt 5.12 (including threads, vectors, graphics and OpenGL)
+* Eigen library (http://eigen.tuxfamily.org/)
 * libsift library (https://sourceforge.net/projects/libsift/)
 * OpenCL
 

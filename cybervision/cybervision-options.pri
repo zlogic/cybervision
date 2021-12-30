@@ -27,9 +27,9 @@ contains(CYBERVISION_BUILD_OPTIONS,"noOpenCL"){
 }
 
 contains(CYBERVISION_BUILD_OPTIONS,"noSSE"){
-    #message("SSE disabled in qmake")
+	#message("SSE disabled in qmake")
 }else{
-    #message("SSE enabled in qmake")
+	#message("SSE enabled in qmake")
 	CYBERVISION_SSE = true
 }
 
