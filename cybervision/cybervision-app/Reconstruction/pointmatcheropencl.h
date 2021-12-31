@@ -33,8 +33,8 @@ protected:
 
 	//OpenCL kernel paramaters
 	cl_uint vectorSize,inputVectorsBufferSize;
-	QScopedArrayPointer<cl_float> input1,input2;
-	QScopedArrayPointer<cl_float> output;
+	cl_float *input1,*input2;
+	cl_float *output;
 
 	//OpenCL stuff
 	cl_mem input1Buffer,input2Buffer;

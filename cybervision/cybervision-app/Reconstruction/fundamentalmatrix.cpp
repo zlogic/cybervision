@@ -141,7 +141,7 @@ ALIGN_EIGEN_FUNCTION Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix
 				Eigen::Matrix3d F_normalized=computeFundamentalMatrix(consensus_set_normalized);
 
 				//Expand consensus set
-				for(SortedKeypointMatches::const_iterator it1= matches.begin();it1!=matches.end();it1++){
+				for(SortedKeypointMatches::const_iterator it1= matches.constBegin();it1!=matches.constEnd();it1++){
 					//Normalize point for error computation
 
 					QPointF x1=	vector2point(T1*point2vector(it1.value().a));
@@ -194,7 +194,7 @@ ALIGN_EIGEN_FUNCTION Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix
 
 	//Update matches
 	matches.clear();
-	for(KeypointMatches::const_iterator it=best_consensus_set.begin();it!=best_consensus_set.end();it++)
+	for(KeypointMatches::const_iterator it=best_consensus_set.constBegin();it!=best_consensus_set.constEnd();it++)
 		matches.insert(it->first,it->second);
 
 	return best_F;
@@ -207,14 +207,14 @@ ALIGN_EIGEN_FUNCTION bool FundamentalMatrix::computeFundamentalMatrix(const Sort
 		QPointF centroidA,centroidB;
 		double scalingA, scalingB;
 		double sumAX=0,sumAY=0,sumBX=0,sumBY=0;
-		for(SortedKeypointMatches::const_iterator it1= this->matches.begin();it1!=this->matches.end();it1++){
+		for(SortedKeypointMatches::const_iterator it1= this->matches.constBegin();it1!=this->matches.constEnd();it1++){
 			sumAX+= it1.value().a.x(), sumBX+= it1.value().b.x();
 			sumAY+= it1.value().a.y(), sumBY+= it1.value().b.y();
 		}
 		centroidA.setX(sumAX/this->matches.size()), centroidB.setX(sumBX/this->matches.size());
 		centroidA.setY(sumAY/this->matches.size()), centroidB.setY(sumBY/this->matches.size());
 		double distA=0,distB=0;
-		for(SortedKeypointMatches::const_iterator it1= this->matches.begin();it1!=this->matches.end();it1++){
+		for(SortedKeypointMatches::const_iterator it1= this->matches.constBegin();it1!=this->matches.constEnd();it1++){
 			double dAX= it1.value().a.x()-centroidA.x(), dAY= it1.value().a.y()-centroidA.y();
 			double dBX= it1.value().b.x()-centroidB.x(), dBY= it1.value().b.y()-centroidB.y();
 			distA+= sqrt(dAX*dAX+dAY*dAY);
@@ -267,7 +267,7 @@ void FundamentalMatrix::saveAcceptedMatches(const QFileInfo &target){
 	if (file.open(QFile::WriteOnly|QFile::Text)) {
 		QTextStream out(&file);
 
-		for(SortedKeypointMatches::const_iterator i=matches.begin();i!=matches.end();i++){
+		for(SortedKeypointMatches::const_iterator i=matches.constBegin();i!=matches.constEnd();i++){
 			out<<QString("%1\t%2\t%3\t%4\n").arg(i.value().a.x()).arg(i.value().a.y()).arg(i.value().b.x()).arg(i.value().b.y());
 		}
 		file.close();

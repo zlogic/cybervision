@@ -4,7 +4,6 @@
 #include <Reconstruction/reconstructor.h>
 #include <Reconstruction/sculptor.h>
 
-#include <QSharedPointer>
 #include <QFile>
 #include <QElapsedTimer>
 
@@ -63,7 +62,7 @@ void ProcessThread::run(){
 					.arg((int)mins,2,10,QChar('0'))
 					.arg((int)secs,2,10,QChar('0'))
 					.arg((int)msecs,3,10,QChar('0'));
-			emit sgnLogMessage(timeString);
+			emit processUpdated(timeString,QString());
 		}
 		emit processStopped(QString(),surface);
 	}else

@@ -52,11 +52,11 @@ QMap<QString,QString> ImageLoader::parseTagString(const QString& metadata)const{
 	QRegExp lineRegexp("([^ \\t=]+)\\s*=\\s*(.*)",Qt::CaseInsensitive);
 
 	QStringList lines= metadata.split(QRegExp("(\\r\\n)|(\\n)"),QString::SkipEmptyParts);
-	for(QStringList::const_iterator it=lines.begin();it!=lines.end();it++){
+	for(QStringList::const_iterator it=lines.constBegin();it!=lines.constEnd();it++){
 		QString line= *it;
-		if(rootRegExp.exactMatch(*it) && rootRegExp.capturedTexts().size()>=2)
+		if(rootRegExp.exactMatch(line) && rootRegExp.capturedTexts().size()>=2)
 			currentRoot= rootRegExp.capturedTexts().at(1);
-		else if(lineRegexp.exactMatch(*it) && lineRegexp.capturedTexts().size()>=3)
+		else if(lineRegexp.exactMatch(line) && lineRegexp.capturedTexts().size()>=3)
 			newTags.insert(currentRoot+(currentRoot.isEmpty()?"":".")+lineRegexp.capturedTexts().at(1),lineRegexp.capturedTexts().at(2));
 	}
 
@@ -200,7 +200,7 @@ QString ImageLoader::extractTagStringTIFF(const QString& filename) const{
 }
 }
 
-const double cybervision::ImageLoader::getScale() const{
+double cybervision::ImageLoader::getScale() const{
 	if(quantaTags.contains("Scan.PixelWidth")){
 		QString pixelWidthStr(quantaTags.value("Scan.PixelWidth"));
 		bool ok;

@@ -655,7 +655,7 @@ CybervisionViewer::Corner CybervisionViewer::getOptimalCorner(const QVector3D& m
 
 	qreal closestDistance= -std::numeric_limits<qreal>::infinity();
 	Corner closestCorner= CORNER_NONE;
-	for(QList<QPair<QVector3D,Corner> >::const_iterator it=corners.begin();it!=corners.end();it++){
+	for(QList<QPair<QVector3D,Corner> >::const_iterator it=corners.constBegin();it!=corners.constEnd();it++){
 		QVector3D projection= projectionMatrix*((transformationMatrix*QVector4D(it->first,1)).toVector3DAffine());
 		if(projection.z()>closestDistance){
 			closestDistance= projection.z();

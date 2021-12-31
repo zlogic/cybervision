@@ -16,9 +16,7 @@ public:
 	~AboutWindow();
 	
 private slots:
-	void on_closeButton_clicked();
-
-	void on_copyrightLabel_linkActivated(const QString &link);
+	void openLink(const QString &link);
 
 private:
 	Ui::AboutWindow *ui;

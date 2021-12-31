@@ -35,7 +35,7 @@ public:
 	const QString& getMetadataString() const;
 
 	//Returns image scale or -1 if scale cannot be extracted
-	const double getScale()const;
+	double getScale()const;
 signals:
 
 public slots:

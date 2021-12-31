@@ -50,7 +50,7 @@ void CrossSection::computeCrossSection(const Surface&surface,const QVector3D &st
 	QMultiMap<qreal,qreal> intersections;
 	QLineF intersectionLine(start.x(),start.y(),end.x(),end.y());
 
-	for(QList<Surface::Triangle>::const_iterator it= surface.triangles.begin();it!=surface.triangles.end();it++){
+	for(QList<Surface::Triangle>::const_iterator it= surface.triangles.constBegin();it!=surface.triangles.constEnd();it++){
 		QLineF lineAB(surface.points[it->a].coord.x(),surface.points[it->a].coord.y(),surface.points[it->b].coord.x(),surface.points[it->b].coord.y());
 		QLineF lineBC(surface.points[it->b].coord.x(),surface.points[it->b].coord.y(),surface.points[it->c].coord.x(),surface.points[it->c].coord.y());
 		QLineF lineCA(surface.points[it->c].coord.x(),surface.points[it->c].coord.y(),surface.points[it->a].coord.x(),surface.points[it->a].coord.y());
@@ -90,10 +90,10 @@ void CrossSection::computeCrossSection(const Surface&surface,const QVector3D &st
 	int count=0;
 	qreal lineLength= intersectionLine.length();
 
-	for(QMap<qreal,qreal>::const_iterator it=intersections.begin();it!=intersections.end();it++){
+	for(QMap<qreal,qreal>::const_iterator it=intersections.constBegin();it!=intersections.constEnd();it++){
 		sum+= it.value();
 		count++;
-		if((it+1)==intersections.end() || !qFuzzyCompare(it.key(),(it+1).key())){
+		if((it+1)==intersections.constEnd() || !qFuzzyCompare(it.key(),(it+1).key())){
 			qreal z= sum/(qreal)count;
 			QPointF point(it.key()*lineLength,z);
 			crossSection.push_back(point);
@@ -115,7 +115,7 @@ void CrossSection::computeParams(int p){
 		qreal xAverage=0,yAverage=0;
 		qreal xSquares=0,ySquares=0;
 		qreal xy=0;
-		for(QList<QPointF>::const_iterator it=crossSection.begin();it!=crossSection.end();it++){
+		for(QList<QPointF>::const_iterator it=crossSection.constBegin();it!=crossSection.constEnd();it++){
 			xAverage+= it->x();
 			yAverage+= it->y();
 			xSquares+= it->x()*it->x();
@@ -132,7 +132,7 @@ void CrossSection::computeParams(int p){
 
 		qreal minX= std::numeric_limits<qreal>::infinity(),
 				maxX= -std::numeric_limits<qreal>::infinity();
-		for(QList<QPointF>::const_iterator it=crossSection.begin();it!=crossSection.end();it++){
+		for(QList<QPointF>::const_iterator it=crossSection.constBegin();it!=crossSection.constEnd();it++){
 			minX= qMin(minX,it->x());
 			maxX= qMax(maxX,it->x());
 		}
@@ -143,11 +143,11 @@ void CrossSection::computeParams(int p){
 	}
 
 	//Project points onto m-line
-	QList<QPointF> crossSectionProjected;
+	QVector<QPointF> crossSectionProjected;
 	{
 		QMultiMap<qreal,qreal> crossSectionSorted;
 		qreal minDeltaY= std::numeric_limits<qreal>::infinity(), maxDeltaY= -std::numeric_limits<qreal>::infinity();
-		for(QList<QPointF>::const_iterator it=crossSection.begin();it!=crossSection.end();it++){
+		for(QList<QPointF>::const_iterator it=crossSection.constBegin();it!=crossSection.constEnd();it++){
 			//Create a line going through the point, parallel to m-line
 			qreal deltaY= it->y()-it->x()*mB-mA;
 			QLineF pointLine= mLine;
@@ -168,10 +168,10 @@ void CrossSection::computeParams(int p){
 
 		qreal sum=0;
 		int count=0;
-		for(QMap<qreal,qreal>::const_iterator it=crossSectionSorted.begin();it!=crossSectionSorted.end();it++){
+		for(QMap<qreal,qreal>::const_iterator it=crossSectionSorted.constBegin();it!=crossSectionSorted.constEnd();it++){
 			sum+= it.value();
 			count++;
-			if((it+1)==crossSectionSorted.end() || !qFuzzyCompare(it.key(),(it+1).key())){
+			if((it+1)==crossSectionSorted.constEnd() || !qFuzzyCompare(it.key(),(it+1).key())){
 				qreal Y= sum/(qreal)count;
 				QPointF point(it.key(),Y);
 				crossSectionProjected.push_back(point);
@@ -199,15 +199,15 @@ void CrossSection::computeParams(int p){
 		Sm= 0;
 		int SPeakCount= 0;//for S
 		int SCrossingCount= 0;//for Sm
-		for(QList<QPointF>::const_iterator it=crossSectionProjected.begin();it!=crossSectionProjected.end();it++){
+		for(QVector<QPointF>::const_iterator it=crossSectionProjected.constBegin();it!=crossSectionProjected.constEnd();it++){
 			qreal pointX=it->x(), pointY=it->y();
 
 			qreal height= pointY;
 
 			Ra+= qAbs(height);
 
-			if(it!=crossSectionProjected.begin()){
-				if(lastHeightPositive && (height<0 || (it+1)==crossSectionProjected.end())){
+			if(it!=crossSectionProjected.constBegin()){
+				if(lastHeightPositive && (height<0 || (it+1)==crossSectionProjected.constEnd())){
 					//Rz
 					maxHeights<<qAbs(peakHeight);
 					qSort(maxHeights);
@@ -228,7 +228,7 @@ void CrossSection::computeParams(int p){
 					}
 					lastCrossingX= pointX;
 				}
-				if(!lastHeightPositive && (height>0 || (it+1)==crossSectionProjected.end())){
+				if(!lastHeightPositive && (height>0 || (it+1)==crossSectionProjected.constEnd())){
 					//Rz
 					minHeights<<qAbs(peakHeight);
 					qSort(minHeights);
@@ -278,17 +278,17 @@ void CrossSection::computeParams(int p){
 		tp= 0;
 		qreal upX= std::numeric_limits<qreal>::quiet_NaN();//Crossing the p-line up (from negative to positive y)
 		int tpCount=0;
-		for(QList<QPointF>::const_iterator it=crossSectionProjected.begin();it!=crossSectionProjected.end();it++){
+		for(QVector<QPointF>::const_iterator it=crossSectionProjected.constBegin();it!=crossSectionProjected.constEnd();it++){
 			qreal pointX=it->x(), height=it->y();
-			if(it!=crossSectionProjected.begin()){
-				if(lastHeightPositive && (height<0 || (it+1)==crossSectionProjected.end())){
+			if(it!=crossSectionProjected.constBegin()){
+				if(lastHeightPositive && (height<0 || (it+1)==crossSectionProjected.constEnd())){
 					if(!std::isnan(upX)){
 						tp+= pointX-upX;
 						tpCount++;
 					}
 					upX= std::numeric_limits<qreal>::quiet_NaN();
 				}
-				if(!lastHeightPositive && (height>0 || (it+1)==crossSectionProjected.end())){
+				if(!lastHeightPositive && (height>0 || (it+1)==crossSectionProjected.constEnd())){
 					upX= pointX;
 				}
 			}
@@ -302,11 +302,11 @@ void CrossSection::computeParams(int p){
 	}
 }
 
-qreal CrossSection::getHeight(qreal x){
+qreal CrossSection::getHeight(qreal x) const{
 	qreal height= std::numeric_limits<qreal>::quiet_NaN();
 
-	for(QList<QPointF>::const_iterator it=crossSection.begin();it!=crossSection.end();it++){
-		if(it!=crossSection.begin()){
+	for(QList<QPointF>::const_iterator it=crossSection.constBegin();it!=crossSection.constEnd();it++){
+		if(it!=crossSection.constBegin()){
 			QList<QPointF>::const_iterator it_prev= it-1;
 			if(it_prev->x()<=x && it->x()>=x){
 				height= (it->y()-it_prev->y())*(x-it_prev->x())/(it->x()-it_prev->x()) + it_prev->y();

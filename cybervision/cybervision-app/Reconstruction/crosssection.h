@@ -38,7 +38,7 @@ public:
 	void computeParams(int p);
 
 	//Returns the height at a specific location (y(x))
-	qreal getHeight(qreal x);
+	qreal getHeight(qreal x)const;
 
 	//Returns the cross-section profile
 	QList<QPointF> getCrossSection()const;

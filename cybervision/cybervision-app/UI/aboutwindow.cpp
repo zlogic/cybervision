@@ -5,16 +5,15 @@
 
 AboutWindow::AboutWindow(QWidget *parent) : QDialog(parent),ui(new Ui::AboutWindow){
 	ui->setupUi(this);
+
+	connect(ui->closeButton, SIGNAL(clicked()), this, SLOT(close()));
+	connect(ui->copyrightLabel, SIGNAL(linkActivated(QString)), this, SLOT(openLink(QString)));
 }
 
 AboutWindow::~AboutWindow(){
 	delete ui;
 }
 
-void AboutWindow::on_closeButton_clicked(){
-	close();
-}
-
-void AboutWindow::on_copyrightLabel_linkActivated(const QString &link){
+void AboutWindow::openLink(const QString &link){
 	QDesktopServices::openUrl(QUrl(link));
 }

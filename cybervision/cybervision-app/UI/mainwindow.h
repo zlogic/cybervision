@@ -49,9 +49,6 @@ private:
 	int demoTimerMinutes;
 #endif
 
-	//Updates widgets enabled/disabled/visible status
-	void updateWidgetStatus();
-
 	//Loads debugging data from file
 	void loadDebugPreferences();
 
@@ -80,32 +77,25 @@ private slots:
 	void demoTimerExpired() const;
 #endif
 
+	//Updates widgets enabled/disabled/visible status
+	void updateWidgetStatus();
+
 	//UI slots
-	void on_openImage1_clicked();
-	void on_openImage2_clicked();
-	void on_addImageButton_clicked();
-	void on_deleteImageButton_clicked();
-	void on_useForImage1Button_clicked();
-	void on_useForImage2Button_clicked();
-	void on_imageList_itemSelectionChanged();
-	void on_angleEdit_textChanged(const QString &arg1);
-	void on_actionShow_log_triggered(bool checked);
-	void on_actionShow_controls_triggered(bool checked);
-	void on_actionShow_cross_section_window_triggered(bool checked);
-	void on_actionAbout_triggered();
-	void on_logDockWidget_visibilityChanged(bool visible);
-	void on_controlsDockWidget_visibilityChanged(bool visible);
-	void on_startProcessButton_clicked();
-	void on_saveButton_clicked();
-	void on_loadSurfaceButton_clicked();
-	void on_moveToolButton_toggled(bool checked);
-	void on_rotateToolButton_toggled(bool checked);
-	void on_gridToolButton_toggled(bool checked);
-	void on_texture1ToolButton_clicked();
-	void on_texture2ToolButton_clicked();
-	void on_textureNoneToolButton_clicked();
-	void on_crosssectionButtonPrimary_clicked(bool checked);
-	void on_crosssectionButtonSecondary_clicked(bool checked);
+	void selectImage1();
+	void selectImage2();
+	void addImages();
+	void deleteImage();
+	void useForImage1();
+	void useForImage2();
+	void showAboutWindow();
+	void startReconstruction();
+	void saveResult();
+	void loadSurface();
+	void updateMouseMode();
+	void setShowGrid(bool checked);
+	void updateTextureMode();
+	void primaryCrossSectionClicked(bool checked);
+	void secondaryCrossSectionClicked(bool checked);
 };
 
 #endif // MAINWINDOW_H

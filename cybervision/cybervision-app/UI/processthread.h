@@ -6,7 +6,6 @@
 #include <QImage>
 #include <QVector3D>
 #include <QList>
-#include <QSharedPointer>
 
 #include <Reconstruction/surface.h>
 

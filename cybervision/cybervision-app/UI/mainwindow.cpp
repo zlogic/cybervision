@@ -18,9 +18,34 @@ MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWi
 	updateWidgetStatus();
 	loadDebugPreferences();
 
-	QObject::connect(ui->openGLViewport, SIGNAL(selectedPointUpdated(QVector3D)),this, SLOT(viewerSelectedPointUpdated(QVector3D)),Qt::AutoConnection);
-	QObject::connect(ui->openGLViewport, SIGNAL(crossSectionLineChanged(QVector3D,QVector3D,int)),this, SLOT(viewerCrosssectionLineChanged(QVector3D,QVector3D,int)),Qt::AutoConnection);
-	QObject::connect(&crossSectionWindow, SIGNAL(closed()),this, SLOT(crosssectionClosed()),Qt::AutoConnection);
+	connect(ui->openGLViewport, SIGNAL(selectedPointUpdated(QVector3D)),this, SLOT(viewerSelectedPointUpdated(QVector3D)),Qt::AutoConnection);
+	connect(ui->openGLViewport, SIGNAL(crossSectionLineChanged(QVector3D,QVector3D,int)),this, SLOT(viewerCrosssectionLineChanged(QVector3D,QVector3D,int)),Qt::AutoConnection);
+	connect(&crossSectionWindow, SIGNAL(closed()),this, SLOT(crosssectionClosed()),Qt::AutoConnection);
+	connect(ui->openImage1, SIGNAL(clicked()),this,SLOT(selectImage1()));
+	connect(ui->openImage2, SIGNAL(clicked()),this,SLOT(selectImage2()));
+	connect(ui->addImageButton, SIGNAL(clicked()),this,SLOT(addImages()));
+	connect(ui->deleteImageButton, SIGNAL(clicked()),this,SLOT(deleteImage()));
+	connect(ui->useForImage1Button, SIGNAL(clicked()),this,SLOT(useForImage1()));
+	connect(ui->useForImage2Button, SIGNAL(clicked()),this,SLOT(useForImage2()));
+	connect(ui->imageList, SIGNAL(itemSelectionChanged()),this,SLOT(updateWidgetStatus()));
+	connect(ui->angleEdit, SIGNAL(textChanged(QString)),this,SLOT(updateWidgetStatus()));
+	connect(ui->actionShow_log, SIGNAL(triggered(bool)),ui->logDockWidget,SLOT(setVisible(bool)));
+	connect(ui->actionShow_controls, SIGNAL(triggered(bool)),ui->controlsDockWidget,SLOT(setVisible(bool)));
+	connect(ui->actionShow_cross_section_window, SIGNAL(triggered(bool)),&crossSectionWindow,SLOT(setVisible(bool)));
+	connect(ui->logDockWidget, SIGNAL(visibilityChanged(bool)),ui->actionShow_log,SLOT(setChecked(bool)));
+	connect(ui->controlsDockWidget, SIGNAL(visibilityChanged(bool)),ui->actionShow_controls,SLOT(setChecked(bool)));
+	connect(ui->actionAbout, SIGNAL(triggered(bool)),this,SLOT(showAboutWindow()));
+	connect(ui->startProcessButton, SIGNAL(clicked()),this,SLOT(startReconstruction()));
+	connect(ui->saveButton, SIGNAL(clicked()),this,SLOT(saveResult()));
+	connect(ui->loadSurfaceButton, SIGNAL(clicked()),this,SLOT(loadSurface()));
+	connect(ui->moveToolButton, SIGNAL(toggled(bool)),this,SLOT(updateMouseMode()));
+	connect(ui->rotateToolButton, SIGNAL(toggled(bool)),this,SLOT(updateMouseMode()));
+	connect(ui->gridToolButton, SIGNAL(toggled(bool)),this,SLOT(setShowGrid(bool)));
+	connect(ui->texture1ToolButton, SIGNAL(clicked()),this,SLOT(updateTextureMode()));
+	connect(ui->texture2ToolButton, SIGNAL(clicked()),this,SLOT(updateTextureMode()));
+	connect(ui->textureNoneToolButton, SIGNAL(clicked()),this,SLOT(updateTextureMode()));
+	connect(ui->crosssectionButtonPrimary, SIGNAL(clicked(bool)),this,SLOT(primaryCrossSectionClicked(bool)));
+	connect(ui->crosssectionButtonSecondary, SIGNAL(clicked(bool)),this,SLOT(secondaryCrossSectionClicked(bool)));
 
 	inputImageFilter= tr("Images") + "(*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;"+tr("All files")+"(*.*)";
 #ifdef CYBERVISION_DEMO
@@ -146,7 +171,7 @@ void MainWindow::loadDebugPreferences(){
 	QStringList arguments= qApp->arguments();
 	QString debugParam="-debugfile=";
 	QString debugFileName;
-	for(QStringList::const_iterator it= arguments.begin();it!=arguments.end();it++){
+	for(QStringList::const_iterator it= arguments.constBegin();it!=arguments.constEnd();it++){
 		if(it->startsWith(debugParam,Qt::CaseInsensitive)){
 			debugFileName= it->mid(debugParam.length());
 			break;
@@ -246,7 +271,7 @@ void MainWindow::crosssectionClosed(){
 }
 
 
-void MainWindow::on_startProcessButton_clicked(){
+void MainWindow::startReconstruction(){
 	QStringList filenames;
 
 	double scaleXY= ui->scaleXYEdit->text().toDouble();
@@ -264,7 +289,7 @@ void MainWindow::on_startProcessButton_clicked(){
 	thread.reconstruct3DShape(filenames,scaleXY,scaleZ,angle,ui->preferScaleFromMetadata->isChecked());
 }
 
-void MainWindow::on_saveButton_clicked(){
+void MainWindow::saveResult(){
 	QStringList formats;
 	formats<<tr("Surface points")+ " (*.txt)";
 	formats<<tr("Surface polygons")+ " (*.txt)";
@@ -273,7 +298,7 @@ void MainWindow::on_saveButton_clicked(){
 	formats<<tr("COLLADA model")+ " (*.dae)";
 	formats<<tr("Cybervision surface")+ " (*.cvs)";
 	QString filter;
-	for(QStringList::const_iterator it=formats.begin();it!=formats.end();it++)
+	for(QStringList::const_iterator it=formats.constBegin();it!=formats.constEnd();it++)
 		filter.append(*it+";;");
 	QString selectedFilter;
 	QString fileName = QFileDialog::getSaveFileName(this,tr("Save the surface"),startPath,filter,&selectedFilter,0);
@@ -318,7 +343,7 @@ void MainWindow::on_saveButton_clicked(){
 #endif
 }
 
-void MainWindow::on_loadSurfaceButton_clicked(){
+void MainWindow::loadSurface(){
 	QString filter= tr("Cybervision surface") + "(*.cvs);;"+tr("All files")+"(*.*)";
 	QString filename = QFileDialog::getOpenFileName(this,tr("Select surface to load"),startPath,filter,0,0);
 	if(!filename.isNull()){
@@ -333,31 +358,11 @@ void MainWindow::on_loadSurfaceButton_clicked(){
 	}
 }
 
-void MainWindow::on_logDockWidget_visibilityChanged(bool visible){
-	ui->actionShow_log->setChecked(visible);
-}
-
-void MainWindow::on_actionShow_log_triggered(bool checked){
-	ui->logDockWidget->setVisible(checked);
-}
-
-void MainWindow::on_controlsDockWidget_visibilityChanged(bool visible){
-	ui->actionShow_controls->setChecked(visible);
-}
-
-void MainWindow::on_actionShow_controls_triggered(bool checked){
-	ui->controlsDockWidget->setVisible(checked);
-}
-
-void MainWindow::on_actionShow_cross_section_window_triggered(bool checked){
-	crossSectionWindow.setVisible(checked);
-}
-
-void MainWindow::on_actionAbout_triggered(){
+void MainWindow::showAboutWindow(){
 	aboutWindow.setVisible(true);
 }
 
-void MainWindow::on_openImage1_clicked(){
+void MainWindow::selectImage1(){
 	QString filename = QFileDialog::getOpenFileName(this,tr("Select image 1"),startPath,inputImageFilter,0,0);
 	if(filename.isNull()){
 		image1Path= "";
@@ -375,7 +380,7 @@ void MainWindow::on_openImage1_clicked(){
 	updateWidgetStatus();
 }
 
-void MainWindow::on_openImage2_clicked(){
+void MainWindow::selectImage2(){
 	QString filename = QFileDialog::getOpenFileName(this,tr("Select image 2"),startPath,inputImageFilter,0,0);
 	if(filename.isNull()){
 		image2Path= "";
@@ -393,9 +398,9 @@ void MainWindow::on_openImage2_clicked(){
 	updateWidgetStatus();
 }
 
-void MainWindow::on_addImageButton_clicked(){
+void MainWindow::addImages(){
 	QStringList filenames = QFileDialog::getOpenFileNames(this,tr("Select images to add"),startPath,inputImageFilter,0,0);
-	for(QStringList::const_iterator it=filenames.begin();it!=filenames.end();it++){
+	for(QStringList::const_iterator it=filenames.constBegin();it!=filenames.constEnd();it++){
 		QString name= QFileInfo(*it).fileName();
 		QListWidgetItem* newItem= new QListWidgetItem(name);
 		newItem->setData(32,QDir::toNativeSeparators(*it));
@@ -407,9 +412,9 @@ void MainWindow::on_addImageButton_clicked(){
 	updateWidgetStatus();
 }
 
-void MainWindow::on_deleteImageButton_clicked(){
+void MainWindow::deleteImage(){
 	QList<QListWidgetItem*> selection= ui->imageList->selectedItems();
-	for(QList<QListWidgetItem*>::const_iterator i=selection.begin();i!=selection.end();i++){
+	for(QList<QListWidgetItem*>::const_iterator i=selection.constBegin();i!=selection.constEnd();i++){
 		int row= ui->imageList->row(*i);
 		if(row>=0){
 			QListWidgetItem* deletedItem= ui->imageList->takeItem(row);
@@ -419,53 +424,41 @@ void MainWindow::on_deleteImageButton_clicked(){
 	}
 }
 
-void MainWindow::on_useForImage1Button_clicked(){
+void MainWindow::useForImage1(){
 	QList<QListWidgetItem*> selectedItems= ui->imageList->selectedItems();
 	if(selectedItems.size()>0)
 		image1Path= selectedItems.first()->data(32).toString();
 	updateWidgetStatus();
 }
 
-void MainWindow::on_useForImage2Button_clicked(){
+void MainWindow::useForImage2(){
 	QList<QListWidgetItem*> selectedItems= ui->imageList->selectedItems();
 	if(selectedItems.size()>0)
 		image2Path= selectedItems.first()->data(32).toString();
 	updateWidgetStatus();
 }
 
-void MainWindow::on_imageList_itemSelectionChanged(){
-	updateWidgetStatus();
+void MainWindow::updateMouseMode(){
+	if(ui->moveToolButton->isChecked())
+		ui->openGLViewport->setMouseMode(CybervisionViewer::MOUSE_PANNING);
+	else if(ui->rotateToolButton->isChecked())
+		ui->openGLViewport->setMouseMode(CybervisionViewer::MOUSE_ROTATION);
 }
 
-void MainWindow::on_angleEdit_textChanged(const QString &){
-	updateWidgetStatus();
-}
-
-void MainWindow::on_moveToolButton_toggled(bool checked){
-	ui->openGLViewport->setMouseMode(checked?CybervisionViewer::MOUSE_PANNING:CybervisionViewer::MOUSE_ROTATION);
-}
-
-void MainWindow::on_rotateToolButton_toggled(bool checked){
-	ui->openGLViewport->setMouseMode(!checked?CybervisionViewer::MOUSE_PANNING:CybervisionViewer::MOUSE_ROTATION);
-}
-
-void MainWindow::on_gridToolButton_toggled(bool checked){
+void MainWindow::setShowGrid(bool checked){
 	ui->openGLViewport->setShowGrid(checked);
 }
 
-void MainWindow::on_texture1ToolButton_clicked(){
-	ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_1);
+void MainWindow::updateTextureMode(){
+	if(ui->texture1ToolButton->isChecked())
+		ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_1);
+	else if(ui->texture2ToolButton->isChecked())
+		ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_2);
+	else if(ui->textureNoneToolButton->isChecked())
+		ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_NONE);
 }
 
-void MainWindow::on_texture2ToolButton_clicked(){
-	ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_2);
-}
-
-void MainWindow::on_textureNoneToolButton_clicked(){
-	ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_NONE);
-}
-
-void MainWindow::on_crosssectionButtonPrimary_clicked(bool checked){
+void MainWindow::primaryCrossSectionClicked(bool checked){
 	if(checked){
 		ui->crosssectionButtonSecondary->setChecked(false);
 		QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
@@ -479,7 +472,7 @@ void MainWindow::on_crosssectionButtonPrimary_clicked(bool checked){
 		ui->openGLViewport->setDrawCrossSectionLine(checked?0:-1);
 }
 
-void MainWindow::on_crosssectionButtonSecondary_clicked(bool checked){
+void MainWindow::secondaryCrossSectionClicked(bool checked){
 	if(checked){
 		ui->crosssectionButtonPrimary->setChecked(false);
 		QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());

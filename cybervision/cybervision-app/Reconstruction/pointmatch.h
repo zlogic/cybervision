@@ -16,7 +16,7 @@ struct KeypointMatch{
 	bool operator==(const KeypointMatch&)const;
 };
 //Stores all acceptable keypoint matches
-typedef QList<QPair<float,KeypointMatch> > KeypointMatches;
+typedef QVector<QPair<float,KeypointMatch> > KeypointMatches;
 typedef QMultiMap<float,KeypointMatch> SortedKeypointMatches;
 
 }

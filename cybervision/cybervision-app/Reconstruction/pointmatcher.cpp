@@ -44,17 +44,17 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 			}
 			precomputed_file.close();
 
-			emit sgnLogMessage(QString(tr("Loading images %1 and %2 to obtain image sizes")).arg(filename1).arg(filename2));
+			emit sgnLogMessage(QString(tr("Loading images %1 and %2 to obtain image sizes")).arg(filename1,filename2));
 			ImageLoader img1Metadata(filename1),img2Metadata(filename2);
 			if(img1Metadata.getSize()!=img2Metadata.getSize()){
-				emit sgnLogMessage(QString(tr("Images %1 and %2 have different sizes!")).arg(filename1).arg(filename2));
+				emit sgnLogMessage(QString(tr("Images %1 and %2 have different sizes!")).arg(filename1,filename2));
 				return false;
 			}else
 				imageSize= img1Metadata.getSize();
 
 			double scale1= img1Metadata.getScale(), scale2= img2Metadata.getScale();
 			if(scale1!=scale2){
-				emit sgnLogMessage(QString(tr("Images %1 and %2 have different scales in metadata!")).arg(filename1).arg(filename2));
+				emit sgnLogMessage(QString(tr("Images %1 and %2 have different scales in metadata!")).arg(filename1,filename2));
 				return false;
 			}
 			else{
@@ -73,17 +73,17 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 	emit sgnStatusMessage(tr("Detecting SIFT keypoints..."));
 	{
 		emit sgnLogMessage(tr("Starting SIFT keypoint detection"));
-		emit sgnLogMessage(QString(tr("Loading images %1 and %2")).arg(filename1).arg(filename2));
+		emit sgnLogMessage(QString(tr("Loading images %1 and %2")).arg(filename1,filename2));
 		ImageLoader img1Metadata(filename1),img2Metadata(filename2);
 		if(img1Metadata.getSize()!=img1Metadata.getSize()){
-			emit sgnLogMessage(QString(tr("Images %1 and %2 have different sizes!")).arg(filename1).arg(filename2));
+			emit sgnLogMessage(QString(tr("Images %1 and %2 have different sizes!")).arg(filename1,filename2));
 			return false;
 		}else
 			imageSize= img1Metadata.getSize();
 
 		double scale1= img1Metadata.getScale(), scale2= img2Metadata.getScale();
 		if(scale1!=scale2){
-			emit sgnLogMessage(QString(tr("Images %1 and %2 have different scales in metadata!")).arg(filename1).arg(filename2));
+			emit sgnLogMessage(QString(tr("Images %1 and %2 have different scales in metadata!")).arg(filename1,filename2));
 			return false;
 		}else{
 			scaleMetadata= scale1;
@@ -118,7 +118,7 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 		QObject::connect(&clMatcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);
 
 		if(OpenCLSucceeded){
-			emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2")).arg(filename1).arg(filename2));
+			emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2")).arg(filename1,filename2));
 			//Match first image with second
 			matches= clMatcher.CalcDistances(keypoints1,keypoints2);
 			if(matches.empty())
@@ -135,15 +135,15 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 	if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_SIMPLE || !OpenCLSucceeded){
 		double MaxKeypointDistanceSquared= Options::MaxKeypointDistance*Options::MaxKeypointDistance;
 		//Simple matching
-		emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2")).arg(filename1).arg(filename2));
+		emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2")).arg(filename1,filename2));
 		//Match first image with second
 		#pragma omp parallel
-		for(QList<SIFT::Keypoint>::const_iterator it1= keypoints1.begin();it1!=keypoints1.end();it1++){
+		for(QList<SIFT::Keypoint>::const_iterator it1= keypoints1.constBegin();it1!=keypoints1.constEnd();it1++){
 			#pragma omp single nowait
 			{
 				KeypointMatch match;
 				float minDistance= std::numeric_limits<float>::infinity();
-				for(QList<SIFT::Keypoint>::const_iterator it2= keypoints2.begin();it2!=keypoints2.end();it2++){
+				for(QList<SIFT::Keypoint>::const_iterator it2= keypoints2.constBegin();it2!=keypoints2.constEnd();it2++){
 					float distance= it1->distance(*it2,MaxKeypointDistanceSquared);
 					if(distance<minDistance && distance<Options::MaxKeypointDistance){
 						minDistance= distance;
@@ -160,15 +160,15 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 				}
 			}
 		}
-		emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2")).arg(filename2).arg(filename1));
+		emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2")).arg(filename2,filename1));
 		//Match second image with first
 		#pragma omp parallel
-		for(QList<SIFT::Keypoint>::const_iterator it2= keypoints2.begin();it2!=keypoints2.end();it2++){
+		for(QList<SIFT::Keypoint>::const_iterator it2= keypoints2.constBegin();it2!=keypoints2.constEnd();it2++){
 			#pragma omp single nowait
 			{
 				KeypointMatch match;
 				float minDistance= std::numeric_limits<float>::infinity();
-				for(QList<SIFT::Keypoint>::const_iterator it1= keypoints1.begin();it1!=keypoints1.end();it1++){
+				for(QList<SIFT::Keypoint>::const_iterator it1= keypoints1.constBegin();it1!=keypoints1.constEnd();it1++){
 					float distance= it2->distance(*it1,MaxKeypointDistanceSquared);
 					if(distance<minDistance && distance<Options::MaxKeypointDistance){
 						minDistance= distance;
@@ -187,18 +187,18 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 		}
 	}else if(Options::keypointMatchingMode==Options::KEYPOINT_MATCHING_KDTREE){
 		//KD tree matching
-		emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2 with kd-tree")).arg(filename1).arg(filename2));
+		emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2 with kd-tree")).arg(filename1,filename2));
 		KDTree::KDTreeGateway kdTree(Options::MaxKeypointDistance,Options::bbf_steps);
 		cybervision::SortedKeypointMatches current_matches= kdTree.matchKeypoints(keypoints1,keypoints2);
-		for(cybervision::SortedKeypointMatches::const_iterator it=current_matches.begin();it!=current_matches.end();it++){
+		for(cybervision::SortedKeypointMatches::const_iterator it=current_matches.constBegin();it!=current_matches.constEnd();it++){
 			KeypointMatch m;
 			m.a= it.value().a, m.b= it.value().b;
 			matches.insert(it.key(),m);
 		}
 
-		emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2 with kd-tree")).arg(filename2).arg(filename1));
+		emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2 with kd-tree")).arg(filename2,filename1));
 		current_matches= kdTree.matchKeypoints(keypoints2,keypoints1);
-		for(cybervision::SortedKeypointMatches::const_iterator it=current_matches.begin();it!=current_matches.end();it++){
+		for(cybervision::SortedKeypointMatches::const_iterator it=current_matches.constBegin();it!=current_matches.constEnd();it++){
 			KeypointMatch m;
 			m.a= it.value().b, m.b= it.value().a;
 			if(!matches.contains(it.key(),m))
@@ -214,7 +214,7 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 		precomputed_file.open(QFile::WriteOnly);
 		QTextStream out_stream(&precomputed_file);
 
-		for(SortedKeypointMatches::const_iterator it=matches.begin();it!=matches.end();it++)
+		for(SortedKeypointMatches::const_iterator it=matches.constBegin();it!=matches.constEnd();it++)
 			out_stream<<it.key()<<"\t"<<it.value().a.x()<<"\t"<<it.value().a.y()<<"\t"<<it.value().b.x()<<"\t"<<it.value().b.y()<<"\n";
 		precomputed_file.close();
 	}

@@ -41,11 +41,17 @@ PointMatcherOpenCL::PointMatcherOpenCL(int vectorSize, QObject *parent) : QObjec
 	/////////////////////////////////////////////////////////////////
 	// Allocate and initialize memory used by host
 	/////////////////////////////////////////////////////////////////
-	input1.reset(new cl_float[vectorSize * inputVectorsBufferSize]);
-	input2.reset(new cl_float[vectorSize * inputVectorsBufferSize]);
-	output.reset(new cl_float[inputVectorsBufferSize*inputVectorsBufferSize]);
+	input1 = new cl_float[vectorSize * inputVectorsBufferSize];
+	input2 = new cl_float[vectorSize * inputVectorsBufferSize];
+	output = new cl_float[inputVectorsBufferSize*inputVectorsBufferSize];
 }
 PointMatcherOpenCL::~PointMatcherOpenCL(){
+	if(input1!=NULL)
+		delete[] input1;
+	if(input2!=NULL)
+		delete[] input2;
+	if(output!=NULL)
+		delete[] output;
 }
 
 bool PointMatcherOpenCL::InitCL(){
@@ -68,8 +74,7 @@ bool PointMatcherOpenCL::InitCL(){
 	size_t deviceListSize;
 
 	/*
-	 * Have a look at the available platforms and pick either
-	 * the AMD one if available or a reasonable default.
+	 * Have a look at the available platforms and pick one with the most capacity.
 	 */
 	cl_uint numPlatforms;
 	cl_platform_id platform = NULL;
@@ -79,10 +84,12 @@ bool PointMatcherOpenCL::InitCL(){
 		return false;
 	}
 
+	QString bestPlatformVendor;
+	int bestPlatformSpeed = 0;
 	if(numPlatforms > 0)
 	{
-		cl_platform_id* platforms = new cl_platform_id[numPlatforms];
-		status = clGetPlatformIDs(numPlatforms, platforms, NULL);
+		QScopedArrayPointer<cl_platform_id> platforms(new cl_platform_id[numPlatforms]);
+		status = clGetPlatformIDs(numPlatforms, platforms.data(), NULL);
 		if(status != CL_SUCCESS){
 			emit sgnLogMessage(QString(tr("OpenCL Error: Getting Platform Ids. (clGetPlatformsIDs) code=%1")).arg(status));
 			return false;
@@ -99,20 +106,74 @@ bool PointMatcherOpenCL::InitCL(){
 						NULL);
 			if(status != CL_SUCCESS){
 				emit sgnLogMessage(QString(tr("OpenCL Error: Getting Platform Info.(clGetPlatformInfo) code=%1")).arg(status));
-				return false;
+				continue;
 			}
-			platform = platforms[i];
-			if(!strcmp(pbuff, "Advanced Micro Devices, Inc."))
-			{
-				break;
+
+			/*
+			 * Find if the platform has a better device than already selected.
+			 */
+			cl_uint numDevices;
+			status = clGetDeviceIDs(
+						platforms[i],
+						CL_DEVICE_TYPE_GPU,
+						sizeof(cl_uint),
+						NULL,
+						&numDevices);
+			if(status != CL_SUCCESS){
+				emit sgnLogMessage(QString(tr("OpenCL Error: Getting Device ID.(clGetDeviceIDs) code=%1")).arg(status));
+				continue;
+			}
+			QScopedArrayPointer<cl_device_id> devices(new cl_device_id[numDevices]);
+			status = clGetDeviceIDs(
+						platforms[i],
+						CL_DEVICE_TYPE_GPU,
+						numDevices,
+						devices.data(),
+						NULL);
+			if(status != CL_SUCCESS){
+				emit sgnLogMessage(QString(tr("OpenCL Error: Getting Device IDs.(clGetDeviceIDs) code=%1")).arg(status));
+				continue;
+			}
+			for(unsigned int j=0;j<numDevices;j++){
+				cl_uint maxComputeUnits;
+				status = clGetDeviceInfo(
+							devices[j],
+							CL_DEVICE_MAX_COMPUTE_UNITS,
+							sizeof(cl_uint),
+							&maxComputeUnits,
+							NULL);
+				if(status != CL_SUCCESS){
+					emit sgnLogMessage(QString(tr("OpenCL Error: Getting Device Info.(clGetDeviceInfo CL_DEVICE_MAX_COMPUTE_UNITS) code=%1")).arg(status));
+					continue;
+				}
+
+				cl_uint maxClockFrequency;
+				status = clGetDeviceInfo(
+							devices[j],
+							CL_DEVICE_MAX_CLOCK_FREQUENCY,
+							sizeof(cl_uint),
+							&maxClockFrequency,
+							NULL);
+				if(status != CL_SUCCESS){
+					emit sgnLogMessage(QString(tr("OpenCL Error: Getting Device Info.(clGetDeviceInfo CL_DEVICE_MAX_CLOCK_FREQUENCY) code=%1")).arg(status));
+					continue;
+				}
+
+				int speed = maxComputeUnits*maxClockFrequency;
+				if(speed>bestPlatformSpeed){
+					platform = platforms[i];
+					bestPlatformVendor = QLatin1String(pbuff);
+					bestPlatformSpeed = speed;
+				}
 			}
 		}
-		delete platforms;
 	}
 
 	if(NULL == platform){
 		emit sgnLogMessage(QString(tr("OpenCL Error: NULL platform found")));
 		return false;
+	}else{
+		emit sgnLogMessage(QString(tr("OpenCL information: Selected platform: %1.")).arg(bestPlatformVendor));
 	}
 
 	/*
@@ -169,7 +230,7 @@ bool PointMatcherOpenCL::InitCL(){
 	/////////////////////////////////////////////////////////////////
 	// Create an OpenCL command queue
 	/////////////////////////////////////////////////////////////////
-	commandQueue = clCreateCommandQueue(
+	commandQueue = clCreateCommandQueueWithProperties(
 				context,
 				devices[0],
 				0,
@@ -186,13 +247,13 @@ bool PointMatcherOpenCL::InitCL(){
 				context,
 				CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
 				sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
-				input1.data(),
+				input1,
 				&status);
 	input2Buffer = clCreateBuffer(
 				context,
 				CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
 				sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
-				input2.data(),
+				input2,
 				&status);
 	if(status != CL_SUCCESS){
 		emit sgnLogMessage(QString(tr("OpenCL Error: clCreateBuffer (inputBuffer) code=%1")).arg(status));
@@ -203,7 +264,7 @@ bool PointMatcherOpenCL::InitCL(){
 				context,
 				CL_MEM_WRITE_ONLY | CL_MEM_USE_HOST_PTR,
 				sizeof(cl_float) * inputVectorsBufferSize * inputVectorsBufferSize,
-				output.data(),
+				output,
 				&status);
 	if(status != CL_SUCCESS){
 		emit sgnLogMessage(QString(tr("OpenCL Error: clCreateBuffer (outputBuffer) code=%1")).arg(status));
@@ -350,7 +411,7 @@ bool PointMatcherOpenCL::CalcDistances(){
 					CL_FALSE,
 					0,
 					sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
-					input1.data(),
+					input1,
 					0,
 					NULL,
 					&events[0]);
@@ -378,7 +439,7 @@ bool PointMatcherOpenCL::CalcDistances(){
 					CL_FALSE,
 					0,
 					sizeof(cl_float) * vectorSize * inputVectorsBufferSize,
-					input2.data(),
+					input2,
 					0,
 					NULL,
 					&events[1]);
@@ -470,7 +531,7 @@ bool PointMatcherOpenCL::CalcDistances(){
 				CL_FALSE,
 				0,
 				inputVectorsBufferSize * inputVectorsBufferSize * sizeof(cl_float),
-				output.data(),
+				output,
 				0,
 				NULL,
 				&events[3]);

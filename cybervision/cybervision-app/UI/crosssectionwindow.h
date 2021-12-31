@@ -94,8 +94,7 @@ signals:
 	void closed();
 private slots:
 	void viewportResized();
-	void on_roughnessPSpinBoxPrimary_valueChanged(int arg1);
-	void on_roughnessPSpinBoxSecondary_valueChanged(int arg1);
+	void roughnessChanged();
 	void measurementLineMoved(qreal x,int id);
 	void crossSectionMoved(qreal x);
 };

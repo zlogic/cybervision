@@ -32,7 +32,7 @@ QList<PointTriangulator::StereopairPosition> PointTriangulator::computePose(cons
 	//Output R,T matrices to log
 
 	QString RT_str;
-	for(QList<StereopairPosition>::const_iterator i= RTList.begin();i!=RTList.end();i++){
+	for(QList<StereopairPosition>::const_iterator i= RTList.constBegin();i!=RTList.constEnd();i++){
 		RT_str.append(QString("R%1T\n").arg(QString(""),40));
 		for(int j=0;j<3;j++){
 			qreal T_value_i= j==0? i->T(0,0): (j==1?i->T(1,0):i->T(2,0));//Extract i-th value from QVector3D
@@ -40,7 +40,7 @@ QList<PointTriangulator::StereopairPosition> PointTriangulator::computePose(cons
 			RT_str.append(matrix_row);
 		}
 	}
-	emit sgnLogMessage(QString(tr("Resulting camera poses\n")).append(RT_str));
+	emit sgnLogMessage(QString(tr("Resulting camera poses")).append("\n").append(RT_str));
 	return RTList;
 }
 
@@ -120,12 +120,12 @@ ALIGN_EIGEN_FUNCTION QList<PointTriangulator::StereopairPosition> PointTriangula
 	Eigen::Matrix3d U= svd.matrixU(), V=svd.matrixV();
 	//Eigen::Vector3d Sigma= svd.singularValues();
 
-	for(QList<double>::const_iterator i= pi_values.begin();i!=pi_values.end();i++){
+	for(QList<double>::const_iterator i= pi_values.constBegin();i!=pi_values.constEnd();i++){
 		double PI_R= *i;
 		Eigen::Matrix3d R= U*(computeRT_rzfunc(PI_R).transpose())*(V.transpose());
 		//if(R(0,0)*(R(1,1)*R(2,2)-R(1,2)*R(2,1))-R(0,1)*(R(1,0)*R(2,2)-R(1,2)*R(2,0))+R(0,2)*(R(1,0)*R(2,1)-R(1,1)*R(2,0))<0)
 		//	R=R*(-1.0);//Probably unnecessary
-		for(QList<double>::const_iterator j= pi_values.begin();j!=pi_values.end();j++){
+		for(QList<double>::const_iterator j= pi_values.constBegin();j!=pi_values.constEnd();j++){
 			double PI_T=*j;
 
 			Eigen::Vector3d T_unhatted;
@@ -163,7 +163,7 @@ QList<QVector3D> PointTriangulator::compute3DPoints(const SortedKeypointMatches&
 
 		//Search for maximum depth in order to evaluate and select best configuration
 		double max_depth= -std::numeric_limits<double>::infinity(), min_depth=std::numeric_limits<double>::infinity();
-		for(QList<QVector3D>::const_iterator it2=Points3d.begin();it2!=Points3d.end();it2++){
+		for(QList<QVector3D>::const_iterator it2=Points3d.constBegin();it2!=Points3d.constEnd();it2++){
 			if(it2->z()>max_depth)
 				max_depth= it2->z();
 			if(it2->z()<min_depth)
@@ -529,18 +529,18 @@ QSet<int> PointTriangulator::findPeaks(const QList<QVector3D> &points) const{
 		//Iterate through grid
 
 		#pragma omp parallel
-		for(QList<qreal>::const_iterator it=values_x.begin();it!=values_x.end()-1;it++){
+		for(QList<qreal>::const_iterator it=values_x.constBegin();it!=values_x.constEnd()-1;it++){
 			qreal min_x= *it,max_x= *(it+1);
 			#pragma omp single nowait
 			{
-				for(QList<qreal>::const_iterator jt=values_y.begin();jt!=values_y.end()-1;jt++){
+				for(QList<qreal>::const_iterator jt=values_y.constBegin();jt!=values_y.constEnd()-1;jt++){
 					qreal min_y= *jt,max_y= *(jt+1);
 					//Create filter for peaks
 					QVector2D min(min_x,min_y);
 					QVector2D max(max_x,max_y);
 					QVector2D middle= min+(max-min)/2;
 					QList<qreal> Zp;
-					for(QList<QVector3D>::const_iterator kt=points.begin();kt!=points.end();kt++){
+					for(QList<QVector3D>::const_iterator kt=points.constBegin();kt!=points.constEnd();kt++){
 						qreal distance= (QVector2D(*kt)-middle).length();
 						if(distance <= Options::gridPeakFilterRadius*(max-middle).length())
 							Zp<< kt->z();
