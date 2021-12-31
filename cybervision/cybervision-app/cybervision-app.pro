@@ -38,38 +38,7 @@ HEADERS += \
 	Reconstruction/pointmatcheropencl.h \
 	Reconstruction/crosssection.h \
 	Reconstruction/config.h \
-	KDTree/region.hpp \
-	KDTree/node.hpp \
 	KDTree/kdtreegateway.h \
-	KDTree/kdtree.hpp \
-	KDTree/iterator.hpp \
-	KDTree/function.hpp \
-	KDTree/allocator.hpp \
-	KDTree/region.hpp \
-	KDTree/node.hpp \
-	KDTree/kdtree.hpp \
-	KDTree/iterator.hpp \
-	KDTree/function.hpp \
-	KDTree/allocator.hpp \
-	Eigen/SVD \
-	Eigen/StdVector \
-	Eigen/StdList \
-	Eigen/StdDeque \
-	Eigen/Sparse \
-	Eigen/QtAlignedMalloc \
-	Eigen/QR \
-	Eigen/LU \
-	Eigen/LeastSquares \
-	Eigen/Jacobi \
-	Eigen/Householder \
-	Eigen/Geometry \
-	Eigen/Eigenvalues \
-	Eigen/Eigen2Support \
-	Eigen/Core \
-	Eigen/Cholesky \
-	Eigen/Array \
-	Eigen/Eigen \
-	Eigen/Dense \
 	UI/mainwindow.h \
 	UI/processthread.h \
 	UI/cybervisionviewer.h \

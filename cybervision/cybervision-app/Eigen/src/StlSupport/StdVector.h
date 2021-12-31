@@ -4,29 +4,14 @@
 // Copyright (C) 2009 Gael Guennebaud <gael.guennebaud@inria.fr>
 // Copyright (C) 2009 Hauke Heibel <hauke.heibel@googlemail.com>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_STDVECTOR_H
 #define EIGEN_STDVECTOR_H
 
-#include "Eigen/src/StlSupport/details.h"
+#include "details.h"
 
 /**
  * This section contains a convenience MACRO which allows an easy specialization of
@@ -51,13 +36,16 @@ namespace std \
     vector(InputIterator first, InputIterator last, const allocator_type& a = allocator_type()) : vector_base(first, last, a) {} \
     vector(const vector& c) : vector_base(c) {}  \
     explicit vector(size_type num, const value_type& val = value_type()) : vector_base(num, val) {} \
-    vector(iterator start, iterator end) : vector_base(start, end) {}  \
+    vector(iterator start_, iterator end_) : vector_base(start_, end_) {}  \
     vector& operator=(const vector& x) {  \
       vector_base::operator=(x);  \
       return *this;  \
     } \
   }; \
 }
+
+// Don't specialize if containers are implemented according to C++11
+#if !EIGEN_HAS_CXX11_CONTAINERS
 
 namespace std {
 
@@ -74,7 +62,7 @@ namespace std {
     : vector_base(first, last, a) {} \
     vector(const vector& c) : vector_base(c) {}  \
     explicit vector(size_type num, const value_type& val = value_type()) : vector_base(num, val) {} \
-    vector(iterator start, iterator end) : vector_base(start, end) {}  \
+    vector(iterator start_, iterator end_) : vector_base(start_, end_) {}  \
     vector& operator=(const vector& x) {  \
       vector_base::operator=(x);  \
       return *this;  \
@@ -137,5 +125,7 @@ namespace std {
 #endif
   };
 }
+#endif // !EIGEN_HAS_CXX11_CONTAINERS
+
 
 #endif // EIGEN_STDVECTOR_H
