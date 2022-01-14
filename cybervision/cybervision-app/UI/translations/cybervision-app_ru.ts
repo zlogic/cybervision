@@ -20,20 +20,20 @@ Dmitry Zolotukhin &lt;a href=&quot;mailto:dmitri.zolotukhin@gmail.com&quot;&gt;d
 National nuclear research university MePHI&lt;br /&gt;
 &lt;br /&gt;
 Includes third-party components, sources available upon request:&lt;br /&gt;
-Contains a dynamically linked version of &lt;a href=&quot;http://qt.nokia.com/&quot;&gt;Qt&lt;/a&gt; library, licensed with LGPL 2.1.&lt;br /&gt;
-Contains &lt;a href=&quot;http://eigen.tuxfamily.org/&quot;&gt;Eigen&lt;/a&gt; library, licensed with LGPL3+.&lt;br /&gt;
+Contains a dynamically linked version of &lt;a href=&quot;https://www.qt.io/&quot;&gt;Qt&lt;/a&gt; library, licensed with LGPLv3.&lt;br /&gt;
+Contains &lt;a href=&quot;https://eigen.tuxfamily.org/&quot;&gt;Eigen&lt;/a&gt; library, licensed with LGPL3+.&lt;br /&gt;
 Contains a dynamically linked version of &lt;a href=&quot;https://sourceforge.net/projects/libsift/&quot;&gt;Fast SIFT Image Features Library&lt;/a&gt;, licensed with LGPL.&lt;br /&gt;
-Some icons by &lt;a href=&quot;http://p.yusukekamiyamane.com/&quot;&gt;Yusuke Kamiyamane&lt;/a&gt;, licensed by Creative Commons Attribution 3.0 License.
+Some icons by &lt;a href=&quot;https://p.yusukekamiyamane.com/&quot;&gt;Yusuke Kamiyamane&lt;/a&gt;, licensed by Creative Commons Attribution 3.0 License.
 </source>
         <translation>&amp;copy; 2009-2012&lt;br /&gt;
 Дмитрий Золотухин &lt;a href=&quot;mailto:dmitri.zolotukhin@gmail.com&quot;&gt;dmitri.zolotukhin@gmail.com&lt;/a&gt;&lt;br /&gt;
 Национальный ядерный университет МИФИ&lt;br /&gt;
 &lt;br /&gt;
 Содержит сторонние компоненты, исходные коды доступны по запросу:&lt;br /&gt;
-Содержит динамически связанную библиотеку &lt;a href=&quot;http://qt.nokia.com/&quot;&gt;Qt&lt;/a&gt; по лицензии LGPL 2.1.&lt;br /&gt;
-Содержит библиотеку &lt;a href=&quot;http://eigen.tuxfamily.org/&quot;&gt;Eigen&lt;/a&gt; по лицензии LGPL3+.&lt;br /&gt;
+Содержит динамически связанную библиотеку &lt;a href=&quot;https://www.qt.io/&quot;&gt;Qt&lt;/a&gt; по лицензии LGPLv3.&lt;br /&gt;
+Содержит библиотеку &lt;a href=&quot;https://eigen.tuxfamily.org/&quot;&gt;Eigen&lt;/a&gt; по лицензии LGPL3+.&lt;br /&gt;
 Содержит динамически связанную библиотеку &lt;a href=&quot;https://sourceforge.net/projects/libsift/&quot;&gt;Fast SIFT Image Features Library&lt;/a&gt; по лицензии LGPL.&lt;br /&gt;
-Некоторые иконки &lt;a href=&quot;http://p.yusukekamiyamane.com/&quot;&gt;Yusuke Kamiyamane&lt;/a&gt; по лицензии Creative Commons Attribution 3.0 License.
+Некоторые иконки &lt;a href=&quot;https://p.yusukekamiyamane.com/&quot;&gt;Yusuke Kamiyamane&lt;/a&gt; по лицензии Creative Commons Attribution 3.0 License.
 </translation>
     </message>
     <message>
@@ -60,7 +60,7 @@ Some icons by &lt;a href=&quot;http://p.yusukekamiyamane.com/&quot;&gt;Yusuke Ka
         <translation>Измерение глубины</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="92"/>
+        <location filename="../crosssectionwindow.cpp" line="94"/>
         <source>Cross-section %1
 Ra= %2 µm
 Rz= %3 µm
@@ -71,7 +71,7 @@ Rz= %3 µм
 Rmax= %4 µм</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="97"/>
+        <location filename="../crosssectionwindow.cpp" line="99"/>
         <source>Cross-section %1
 S= %2 µm
 Sm= %3 µm
@@ -82,23 +82,23 @@ Sm= %3 µм
 tp= %4</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="104"/>
-        <location filename="../crosssectionwindow.cpp" line="105"/>
+        <location filename="../crosssectionwindow.cpp" line="106"/>
+        <location filename="../crosssectionwindow.cpp" line="107"/>
         <source>Cross-section %1 not available</source>
         <translation>Профиль поверхности %1 не доступен</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="188"/>
+        <location filename="../crosssectionwindow.cpp" line="186"/>
         <source>%1 µm  </source>
         <translation>%1 µм  </translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="200"/>
+        <location filename="../crosssectionwindow.cpp" line="198"/>
         <source>%1 µm</source>
         <translation>%1 µм</translation>
     </message>
     <message>
-        <location filename="../crosssectionwindow.cpp" line="314"/>
+        <location filename="../crosssectionwindow.cpp" line="312"/>
         <source>Cross-section %1
 x1= %2 µm
 h1= %3 µm
@@ -116,24 +116,24 @@ h2= %5 µм
 <context>
     <name>CybervisionViewer</name>
     <message>
-        <location filename="../cybervisionviewer.cpp" line="276"/>
+        <location filename="../cybervisionviewer.cpp" line="317"/>
         <source>x</source>
         <translation>x</translation>
     </message>
     <message>
-        <location filename="../cybervisionviewer.cpp" line="277"/>
+        <location filename="../cybervisionviewer.cpp" line="318"/>
         <source>y</source>
         <translation>y</translation>
     </message>
     <message>
-        <location filename="../cybervisionviewer.cpp" line="278"/>
+        <location filename="../cybervisionviewer.cpp" line="319"/>
         <source>z</source>
         <translation>z</translation>
     </message>
     <message>
-        <location filename="../cybervisionviewer.cpp" line="455"/>
-        <location filename="../cybervisionviewer.cpp" line="472"/>
-        <location filename="../cybervisionviewer.cpp" line="489"/>
+        <location filename="../cybervisionviewer.cpp" line="590"/>
+        <location filename="../cybervisionviewer.cpp" line="616"/>
+        <location filename="../cybervisionviewer.cpp" line="642"/>
         <source>%1 µm</source>
         <translation>%1 µм</translation>
     </message>
@@ -357,22 +357,22 @@ h2= %5 µм
         <translation>При возможности использовать масштаб из метаданных</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="112"/>
+        <location filename="../mainwindow.cpp" line="145"/>
         <source>No surface available</source>
         <translation>Поверхность не доступна</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="130"/>
+        <location filename="../mainwindow.cpp" line="163"/>
         <source>Demo version warning</source>
         <translation>Предупреждение об использовании демо-версии</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="131"/>
+        <location filename="../mainwindow.cpp" line="164"/>
         <source>This is a functionally limited demo version of Cybervision.</source>
         <translation>Это функционально ограниченная демо-версия программы Cybervision.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="134"/>
+        <location filename="../mainwindow.cpp" line="167"/>
         <source>Upgrade to the full version to gain access to the following features:
 - Saving the reconstruction result
 - Reconstructing multiple surface without restarting
@@ -385,12 +385,12 @@ h2= %5 µм
 - Использование приложения более %1 минут</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="227"/>
+        <location filename="../mainwindow.cpp" line="260"/>
         <source>No point selected</source>
         <translation>Точка не выбрана</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="107"/>
+        <location filename="../mainwindow.cpp" line="140"/>
         <source>Depth range: %1 µm
 Base depth: %2 µm
 Median depth: %3 µm</source>
@@ -399,13 +399,13 @@ Median depth: %3 µm</source>
 Медиана глубины: %3 µм</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="52"/>
-        <location filename="../mainwindow.cpp" line="59"/>
+        <location filename="../mainwindow.cpp" line="85"/>
+        <location filename="../mainwindow.cpp" line="92"/>
         <source>&lt;b&gt;No image selected&lt;/b&gt;</source>
         <translation>&lt;b&gt;Изображение не выбрано&lt;/b&gt;</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="229"/>
+        <location filename="../mainwindow.cpp" line="262"/>
         <source>x: %1 µm
 y: %2 µm
 z: %3 µm</source>
@@ -414,104 +414,104 @@ y: %2 µм
 z: %3 µм</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="259"/>
+        <location filename="../mainwindow.cpp" line="292"/>
         <source>Please restart the application to reconstruct another surface.</source>
         <translation>Пожалуйста, перезапустите программу для реконструкции следующей поверхности.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="269"/>
+        <location filename="../mainwindow.cpp" line="302"/>
         <source>Surface points</source>
         <translation>Точки поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="270"/>
+        <location filename="../mainwindow.cpp" line="303"/>
         <source>Surface polygons</source>
         <translation>Полигоны поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="271"/>
+        <location filename="../mainwindow.cpp" line="304"/>
         <source>PNG image</source>
         <translation>Изображение PNG</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="272"/>
+        <location filename="../mainwindow.cpp" line="305"/>
         <source>SceneJS model</source>
         <translation>Модель SceneJS</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="273"/>
+        <location filename="../mainwindow.cpp" line="306"/>
         <source>COLLADA model</source>
         <translation>Модель COLLADA</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="274"/>
-        <location filename="../mainwindow.cpp" line="322"/>
+        <location filename="../mainwindow.cpp" line="307"/>
+        <location filename="../mainwindow.cpp" line="355"/>
         <source>Cybervision surface</source>
         <translation>Поверхность Cybervision</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="279"/>
+        <location filename="../mainwindow.cpp" line="312"/>
         <source>Save the surface</source>
         <translation>Сохранить поверхность</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="281"/>
+        <location filename="../mainwindow.cpp" line="314"/>
         <source>Save functionality is disabled.</source>
         <translation>Функция сохранения отключена.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="313"/>
+        <location filename="../mainwindow.cpp" line="346"/>
         <source>Bad save format selected</source>
         <translation>Выбран неправильный формат для записи</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="314"/>
+        <location filename="../mainwindow.cpp" line="347"/>
         <source>&lt;b&gt;Bad save format selected:&lt;/b&gt; %1</source>
         <translation>&lt;b&gt;Выбран неправильный формат для записи:&lt;/b&gt; %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="323"/>
+        <location filename="../mainwindow.cpp" line="356"/>
         <source>Select surface to load</source>
         <translation>Выберите поверхность, которую нужно загрузить</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="327"/>
+        <location filename="../mainwindow.cpp" line="360"/>
         <source>Error loading surface from %1</source>
         <translation>Ошибка при загрузке поверхности %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="25"/>
+        <location filename="../mainwindow.cpp" line="51"/>
         <source>Images</source>
         <translation>Изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="497"/>
+        <location filename="../mainwindow.cpp" line="498"/>
         <source>The demo has run for %1 minutes and will now quit.</source>
         <translation>Демо-версия работала %1 минут и будет закрыта.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="25"/>
-        <location filename="../mainwindow.cpp" line="322"/>
+        <location filename="../mainwindow.cpp" line="51"/>
+        <location filename="../mainwindow.cpp" line="355"/>
         <source>All files</source>
         <translation>Все файлы</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="31"/>
+        <location filename="../mainwindow.cpp" line="57"/>
         <source>Cybervision (Demo version)</source>
         <translation>Программа Cybervision (Демонстрационная версия)</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="361"/>
+        <location filename="../mainwindow.cpp" line="374"/>
         <source>Select image 1</source>
         <translation>Выбрать изображение 1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="379"/>
+        <location filename="../mainwindow.cpp" line="392"/>
         <source>Select image 2</source>
         <translation>Выбрать изображение 2</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="397"/>
+        <location filename="../mainwindow.cpp" line="410"/>
         <source>Select images to add</source>
         <translation>Выберите изображения, которые нужно добавить</translation>
     </message>
@@ -672,232 +672,232 @@ z: %3 µм</translation>
 <context>
     <name>cybervision::PointMatcherOpenCL</name>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="63"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="69"/>
         <source>OpenCL Error: Failed to allocate output memory on host</source>
         <translation>Ошибка OpenCL: Не получилось выделить выходную память на хосте</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="77"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="83"/>
         <source>OpenCL Error: Getting Platforms. (clGetPlatformsIDs) code=%1</source>
         <translation>Ошибка OpenCL: Получение Платформ (clGetPlatformsIDs) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="88"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="94"/>
         <source>OpenCL Error: Getting Platform Ids. (clGetPlatformsIDs) code=%1</source>
         <translation>Ошибка OpenCL: Получение Идентификаторов Платформ (clGetPlatformsIDs) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="102"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="108"/>
         <source>OpenCL Error: Getting Platform Info.(clGetPlatformInfo) code=%1</source>
         <translation>Ошибка OpenCL: Получение Информации о Платформах (clGetPlatformInfo) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="117"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="123"/>
         <source>OpenCL Error: Getting Device ID.(clGetDeviceIDs) code=%1</source>
         <translation>Ошибка OpenCL: Получение Идентификатора Устройства.(clGetDeviceIDs) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="128"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="134"/>
         <source>OpenCL Error: Getting Device IDs.(clGetDeviceIDs) code=%1</source>
         <translation>Ошибка OpenCL: Получение Идентификаторов Устройств.(clGetDeviceIDs) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="140"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="146"/>
         <source>OpenCL Error: Getting Device Info.(clGetDeviceInfo CL_DEVICE_MAX_COMPUTE_UNITS) code=%1</source>
         <translation>Ошибка OpenCL: Получение Данных об Устройстве.(clGetDeviceInfo CL_DEVICE_MAX_COMPUTE_UNITS) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="152"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="158"/>
         <source>OpenCL Error: Getting Device Info.(clGetDeviceInfo CL_DEVICE_MAX_CLOCK_FREQUENCY) code=%1</source>
         <translation>Ошибка OpenCL: Получение Данных об Устройстве.(clGetDeviceInfo CL_DEVICE_MAX_CLOCK_FREQUENCY) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="167"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="173"/>
         <source>OpenCL Error: NULL platform found</source>
         <translation>Ошибка OpenCL: найденная платформа - NULL</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="170"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="176"/>
         <source>OpenCL information: Selected platform: %1.</source>
         <translation>Информация OpenCL: Выбранная платформа: %1.</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="188"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="194"/>
         <source>OpenCL Error: Creating Context. (clCreateContextFromType) code=%1</source>
         <translation>Ошибка OpenCL: Создание Контекста. (clCreateContextFromType) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="199"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="205"/>
         <source>OpenCL Error: Getting Context Info (device list size, clGetContextInfo) code=%1</source>
         <translation>Ошибка OpenCL: Получение Информации о Контекстах (размер списка устройств, clGetContextInfo) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="208"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="214"/>
         <source>OpenCL Error: No devices found.</source>
         <translation>Ошибка OpenCL: Не найдены устройства.</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="220"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="226"/>
         <source>OpenCL Error: Getting Context Info (device list, clGetContextInfo) code=%1</source>
         <translation>Ошибка OpenCL: Получение Информации о Контекстах (список устройств, clGetContextInfo) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="233"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="239"/>
         <source>OpenCL Error: Creating Command Queue. (clCreateCommandQueue) code=%1</source>
         <translation>Ошибка OpenCL: Получение Очереди Команд (clCreateCommandQueue) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="253"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="259"/>
         <source>OpenCL Error: clCreateBuffer (inputBuffer) code=%1</source>
         <translation>Ошибка OpenCL: clCreateBuffer (inputBuffer) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="264"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="270"/>
         <source>OpenCL Error: clCreateBuffer (outputBuffer) code=%1</source>
         <translation>Ошибка OpenCL: clCreateBuffer (outputBuffer) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="283"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="289"/>
         <source>OpenCL Error: Loading Binary into cl_program (clCreateProgramWithSource) code=%1</source>
         <translation>Ошибка OpenCL: Загрузка Бинарного Кода в cl_program (clCreateProgramWithSource) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="302"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="308"/>
         <source>OpenCL Error: Building Program (clBuildProgram) code=%1, build log: &apos;%2&apos;</source>
         <translation>Ошибка OpenCL: Сборка Программы (clBuildProgram) код ошибки=%1, журнал сборки: &apos;%2&apos;</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="309"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="315"/>
         <source>OpenCL Error: Creating Kernel from program. (clCreateKernel) code=%1</source>
         <translation>Ошибка OpenCL: СозданиеЯдра из программы (clCreateKernel) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="326"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="332"/>
         <source>OpenCL Error: In clReleaseKernel code=%1</source>
         <translation>Ошибка OpenCL: В clReleaseKernel код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="331"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="337"/>
         <source>OpenCL Error: In clReleaseProgram code=%1</source>
         <translation>Ошибка OpenCL: В clReleaseProgram код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="346"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="352"/>
         <source>OpenCL Error: In clReleaseMemObject (outputBuffer) code=%1</source>
         <translation>Ошибка OpenCL: В clReleaseMemObject (outputBuffer) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="351"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="357"/>
         <source>OpenCL Error: In clReleaseCommandQueue code=%1</source>
         <translation>Ошибка OpenCL: В clReleaseCommandQueue код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="356"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="362"/>
         <source>OpenCL Error: In clReleaseContext code=%1</source>
         <translation>Ошибка OpenCL: В clReleaseContext код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="384"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="390"/>
         <source>OpenCL Error: clGetKernelWorkGroupInfo failed, code=%1</source>
         <translation>Ошибка OpenCL: clGetKernelWorkGroupInfo не выполнено, код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="392"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="398"/>
         <source>OpenCL information: Reducing group size to fit hardware limits. Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3x%4.</source>
         <translation>Информация OpenCL: Уменьшение размера группы для соответствия аппаратным ограничениям. Заданный Размер Группы:%1. Максимальный поддерживаемый ядром размер группы: %2. Будет использоваться размер группы %3x%4.</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="420"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="426"/>
         <source>OpenCL Error: clWaitForEvents (0) failed, code=%1</source>
         <translation>Ошибка OpenCL: clWaitForEvents (0), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="425"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="431"/>
         <source>OpenCL Error: clReleaseEvents (0) failed, code=%1</source>
         <translation>Ошибка OpenCL: clReleaseEvents (0), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="448"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="454"/>
         <source>OpenCL Error: clWaitForEvents (1) failed, code=%1</source>
         <translation>Ошибка OpenCL: clWaitForEvents (1), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="453"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="459"/>
         <source>OpenCL Error: clReleaseEvents (1) failed, code=%1</source>
         <translation>Ошибка OpenCL: clReleaseEvents (1), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="464"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="470"/>
         <source>OpenCL Error: clSetKernelArg failed. (outputBuffer), code=%1</source>
         <translation>Ошибка OpenCL: clSetKernelArg не выполнено. (outputBuffer), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="503"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="509"/>
         <source>OpenCL Error: clEnqueueNDRangeKernel failed, code=%1</source>
         <translation>Ошибка OpenCL: clEnqueueNDRangeKernel не выполнено, код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="511"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="517"/>
         <source>OpenCL Error: clWaitForEvents (2) failed, code=%1</source>
         <translation>Ошибка OpenCL: clWaitForEvents (2), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="533"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="539"/>
         <source>OpenCL Error: clEnqueueReadBuffer failed, code=%1</source>
         <translation>Ошибка OpenCL: clEnqueueReadBuffer не выполнено, код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="540"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="546"/>
         <source>OpenCL Error: clWaitForEvents (3) failed, code=%1</source>
         <translation>Ошибка OpenCL: clWaitForEvents (3), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="517"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="523"/>
         <source>OpenCL Error: clReleaseEvents (2) failed, code=%1</source>
         <translation>Ошибка OpenCL: clReleaseEvents (2), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="55"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="61"/>
         <source>OpenCL Error: Failed to allocate input1 memory on host</source>
         <translation>Ошибка OpenCL: Не получилось выделить входную память для первого изображения на хосте</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="59"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="65"/>
         <source>OpenCL Error: Failed to allocate input2 memory on host</source>
         <translation>Ошибка OpenCL: Не получилось выделить входную память для второго изображения на хосте</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="336"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="342"/>
         <source>OpenCL Error: In clReleaseMemObject (input1Buffer) code=%1</source>
         <translation>Ошибка OpenCL: В clReleaseMemObject (input1Buffer) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="341"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="347"/>
         <source>OpenCL Error: In clReleaseMemObject (input2Buffer) code=%1</source>
         <translation>Ошибка OpenCL: В clReleaseMemObject (input2Buffer) код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="413"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="419"/>
         <source>OpenCL Error: clEnqueueWriteBuffer (input1Buffer) failed, code=%1</source>
         <translation>Ошибка OpenCL: clEnqueueWriteBuffer (input1Buffer) не выполнено, код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="441"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="447"/>
         <source>OpenCL Error: clEnqueueWriteBuffer (input2Buffer) failed, code=%1</source>
         <translation>Ошибка OpenCL: clEnqueueWriteBuffer (input2Buffer) не выполнено, код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="474"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="480"/>
         <source>OpenCL Error: clSetKernelArg failed. (input1Buffer), code=%1</source>
         <translation>Ошибка OpenCL: clSetKernelArg не выполнено. (input1Buffer), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="484"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="490"/>
         <source>OpenCL Error: clSetKernelArg failed. (input2Buffer), code=%1</source>
         <translation>Ошибка OpenCL: clSetKernelArg не выполнено. (input2Buffer), код ошибки=%1</translation>
     </message>
     <message>
-        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="546"/>
+        <location filename="../../Reconstruction/pointmatcheropencl.cpp" line="552"/>
         <source>OpenCL Error: clReleaseEvents (3) failed, code=%1</source>
         <translation>Ошибка OpenCL: clReleaseEvents (3), код ошибки=%1</translation>
     </message>
