@@ -13,7 +13,7 @@ namespace cybervision{
 
 FundamentalMatrix::FundamentalMatrix(QObject *parent) : QObject(parent){ }
 
-ALIGN_EIGEN_FUNCTION Eigen::Vector3d FundamentalMatrix::point2vector(const QPointF&p)const{
+Eigen::Vector3d FundamentalMatrix::point2vector(const QPointF&p)const{
 	Eigen::Vector3d vector;
 	vector(0,0)=p.x(),vector(1,0)=p.y(),vector(2,0)=1;
 	return vector;
@@ -28,7 +28,7 @@ Eigen::Matrix3d FundamentalMatrix::getFundamentalMatrix()const{ return F; }
 Eigen::Matrix3d FundamentalMatrix::getT1()const{ return T1; }
 Eigen::Matrix3d FundamentalMatrix::getT2()const{ return T2; }
 
-ALIGN_EIGEN_FUNCTION Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(const KeypointMatches& matches){
+Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(const KeypointMatches& matches){
 	if(matches.size()!=8){
 		emit sgnLogMessage(QString(tr("Wrong consensus set size (%1), should be %2")).arg(matches.size()).arg(8));
 		//TODO:fail here
@@ -59,7 +59,7 @@ ALIGN_EIGEN_FUNCTION Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix
 	return F;
 }
 
-ALIGN_EIGEN_FUNCTION double FundamentalMatrix::computeFundamentalMatrixError(const Eigen::Matrix3d&F, const KeypointMatch& match) const{
+double FundamentalMatrix::computeFundamentalMatrixError(const Eigen::Matrix3d&F, const KeypointMatch& match) const{
 	Eigen::Vector3d x1; x1(0,0)=match.a.x(), x1(1,0)=match.a.y(), x1(2,0)=1;
 	Eigen::Vector3d x2; x2(0,0)=match.b.x(), x2(1,0)=match.b.y(), x2(2,0)=1;
 
@@ -77,7 +77,7 @@ ALIGN_EIGEN_FUNCTION double FundamentalMatrix::computeFundamentalMatrixError(con
 	*/
 }
 
-ALIGN_EIGEN_FUNCTION Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(){
+Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(){
 	emit sgnStatusMessage(tr("Estimating fundamental matrix..."));
 
 	//Increase speed with precomputed lists
@@ -200,7 +200,7 @@ ALIGN_EIGEN_FUNCTION Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix
 	return best_F;
 }
 
-ALIGN_EIGEN_FUNCTION bool FundamentalMatrix::computeFundamentalMatrix(const SortedKeypointMatches&matches){
+bool FundamentalMatrix::computeFundamentalMatrix(const SortedKeypointMatches&matches){
 	this->matches= matches;
 	//Compute centroid and scaling factor (normalise2dpts)
 	{

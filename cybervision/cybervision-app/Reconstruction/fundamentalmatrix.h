@@ -23,22 +23,22 @@ protected:
 
 	//Internal procedures
 	//Converts QPointF to Eigen::Vector3d
-	inline ALIGN_EIGEN_FUNCTION Eigen::Vector3d point2vector(const QPointF&)const;
+	inline Eigen::Vector3d point2vector(const QPointF&)const;
 	//Converts Eigen::Vector3d to QPointF
 	inline QPointF vector2point(const Eigen::Vector3d&)const;
 
 	//Computes the fundamental matrix from N points
-	ALIGN_EIGEN_FUNCTION Eigen::Matrix3d computeFundamentalMatrix(const KeypointMatches&);
+	Eigen::Matrix3d computeFundamentalMatrix(const KeypointMatches&);
 	//Computes a keypoint match's error when used with the fundamental matrix F
-	ALIGN_EIGEN_FUNCTION double computeFundamentalMatrixError(const Eigen::Matrix3d&F, const KeypointMatch&) const;
+	double computeFundamentalMatrixError(const Eigen::Matrix3d&F, const KeypointMatch&) const;
 
 	//Computes the fundamental matrix with RANSAC, removing any outliers
-	ALIGN_EIGEN_FUNCTION Eigen::Matrix3d computeFundamentalMatrix();
+	Eigen::Matrix3d computeFundamentalMatrix();
 public:
 	explicit FundamentalMatrix(QObject *parent = 0);
 
 	//Computes the fundamental matrix with RANSAC, removing any outliers. Uses normalization to reduce errors.
-	ALIGN_EIGEN_FUNCTION bool computeFundamentalMatrix(const SortedKeypointMatches& matches);
+	bool computeFundamentalMatrix(const SortedKeypointMatches& matches);
 
 	//Getters
 	SortedKeypointMatches getAcceptedMatches()const;

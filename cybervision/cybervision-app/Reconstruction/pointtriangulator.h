@@ -41,19 +41,19 @@ protected:
 	QList<PointTriangulator::StereopairPosition> computePose(const Eigen::Matrix3d& F);
 
 	//Returns the camera calibration matrix
-	ALIGN_EIGEN_FUNCTION Eigen::Matrix3d computeCameraMatrix(const QSize&)const;
+	Eigen::Matrix3d computeCameraMatrix(const QSize&)const;
 	//Computes possible R and T matrices from essential matrix
-	ALIGN_EIGEN_FUNCTION QList<StereopairPosition> computeRT(Eigen::Matrix3d Essential_matrix) const;
+	QList<StereopairPosition> computeRT(Eigen::Matrix3d Essential_matrix) const;
 	//Helper function to construct Rz matrix for computeRT
-	ALIGN_EIGEN_FUNCTION Eigen::Matrix3d computeRT_rzfunc(double angle)const;
+	Eigen::Matrix3d computeRT_rzfunc(double angle)const;
 	//Computes Kronecker product
-	ALIGN_EIGEN_FUNCTION Eigen::MatrixXd kronecker(const Eigen::MatrixXd A,const Eigen::MatrixXd& B)const;
+	Eigen::MatrixXd kronecker(const Eigen::MatrixXd A,const Eigen::MatrixXd& B)const;
 	//Performs a least-squares solving of A*x=B equation system
-	ALIGN_EIGEN_FUNCTION Eigen::MatrixXd leastSquares(const Eigen::MatrixXd A,const Eigen::MatrixXd& B)const;
+	Eigen::MatrixXd leastSquares(const Eigen::MatrixXd A,const Eigen::MatrixXd& B)const;
 
 	//Triangulates a point in 3D space
 	QList<QVector3D> compute3DPoints(const SortedKeypointMatches&matches,const QList<StereopairPosition>& RTList);
-	ALIGN_EIGEN_FUNCTION QList<QVector3D> computeTriangulatedPoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d&R,const Eigen::Vector3d& T,bool normalizeCameras);
+	QList<QVector3D> computeTriangulatedPoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d&R,const Eigen::Vector3d& T,bool normalizeCameras);
 
 	//Filters out peaks from a 3D point cloud; returns indexes of discarded points. Designed for "grid" interpolation with parallel projection.
 	QSet<int> findPeaks(const QList<QVector3D>& points)const;
@@ -61,9 +61,9 @@ public:
 	explicit PointTriangulator(QObject *parent = 0);
 
 	//Performs a complete triangulation with pose estimation (for perspective projection)
-	ALIGN_EIGEN_FUNCTION bool triangulatePoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d& F,const QSize& imageSize);
+	bool triangulatePoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d& F,const QSize& imageSize);
 	//Performs a triangulation without pose estimation (for parallel projection), no peak filtering
-	ALIGN_EIGEN_FUNCTION bool triangulatePoints(const QList<cybervision::KeypointMatch>&matches,qreal angle);
+	bool triangulatePoints(const QList<cybervision::KeypointMatch>&matches,qreal angle);
 	//Performs a triangulation without pose estimation (for parallel projection), with configurable peak filtering
 	bool triangulatePoints(const SortedKeypointMatches&matches,qreal angle,bool filterPeaks);
 

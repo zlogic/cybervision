@@ -8,7 +8,7 @@
 
 namespace cybervision{
 /*
- * Class for storing a single patch between two points on different images
+ * Class for storing a single match between two points on different images
  */
 struct KeypointMatch{
 	QPointF a;//Coordinates on the first image

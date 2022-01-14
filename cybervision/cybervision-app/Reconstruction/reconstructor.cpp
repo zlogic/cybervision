@@ -13,7 +13,7 @@ Reconstructor::Reconstructor(QObject *parent) : QObject(parent){
 	srand(time(NULL));
 }
 
-ALIGN_EIGEN_FUNCTION bool Reconstructor::run(const QString& filename1,const QString& filename2,qreal angle){
+bool Reconstructor::run(const QString& filename1,const QString& filename2,qreal angle){
 	Points3D.clear();
 	try{
 		//Extract and sort matches by distance

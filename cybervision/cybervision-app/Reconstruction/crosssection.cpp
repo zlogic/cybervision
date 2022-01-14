@@ -55,7 +55,7 @@ void CrossSection::computeCrossSection(const Surface&surface,const QVector3D &st
 		QLineF lineBC(surface.points[it->b].coord.x(),surface.points[it->b].coord.y(),surface.points[it->c].coord.x(),surface.points[it->c].coord.y());
 		QLineF lineCA(surface.points[it->c].coord.x(),surface.points[it->c].coord.y(),surface.points[it->a].coord.x(),surface.points[it->a].coord.y());
 		QPointF intersectionPoint;
-		if(lineAB.intersect(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
+		if(lineAB.intersects(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
 			qreal tLine= qAbs(intersectionLine.dx())>qAbs(intersectionLine.dy())?
 						(intersectionPoint.x()-intersectionLine.x1())/(intersectionLine.x2()-intersectionLine.x1()):
 						(intersectionPoint.y()-intersectionLine.y1())/(intersectionLine.y2()-intersectionLine.y1());
@@ -65,7 +65,7 @@ void CrossSection::computeCrossSection(const Surface&surface,const QVector3D &st
 			qreal z= surface.points[it->a].coord.z()*(1-tPolygon)+surface.points[it->b].coord.z()*tPolygon;
 			intersections.insert(tLine,z);
 		}
-		if(lineBC.intersect(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
+		if(lineBC.intersects(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
 			qreal tLine= qAbs(intersectionLine.dx())>qAbs(intersectionLine.dy())?
 						(intersectionPoint.x()-intersectionLine.x1())/(intersectionLine.x2()-intersectionLine.x1()):
 						(intersectionPoint.y()-intersectionLine.y1())/(intersectionLine.y2()-intersectionLine.y1());
@@ -75,7 +75,7 @@ void CrossSection::computeCrossSection(const Surface&surface,const QVector3D &st
 			qreal z= surface.points[it->b].coord.z()*(1-tPolygon)+surface.points[it->a].coord.z()*tPolygon;
 			intersections.insert(tLine,z);
 		}
-		if(lineCA.intersect(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
+		if(lineCA.intersects(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
 			qreal tLine= qAbs(intersectionLine.dx())>qAbs(intersectionLine.dy())?
 						(intersectionPoint.x()-intersectionLine.x1())/(intersectionLine.x2()-intersectionLine.x1()):
 						(intersectionPoint.y()-intersectionLine.y1())/(intersectionLine.y2()-intersectionLine.y1());
@@ -154,7 +154,7 @@ void CrossSection::computeParams(int p){
 			pointLine.translate(0,deltaY);
 			//Intersect the line normal with the parallel line
 			QPointF intersectionPoint;
-			mLineNormal.intersect(pointLine,&intersectionPoint);
+			mLineNormal.intersects(pointLine,&intersectionPoint);
 			QLineF lineY(mLineNormal.p1(),intersectionPoint),lineX(intersectionPoint,*it);
 			qreal pointY= lineY.length()*(qAbs(lineY.angleTo(mLineNormal))<90?1:-1);
 			qreal pointX= lineX.length()*(qAbs(lineX.angleTo(pointLine))<90?1:-1);

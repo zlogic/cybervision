@@ -45,7 +45,7 @@ QList<PointTriangulator::StereopairPosition> PointTriangulator::computePose(cons
 }
 
 
-ALIGN_EIGEN_FUNCTION Eigen::Matrix3d PointTriangulator::computeRT_rzfunc(double angle) const{
+Eigen::Matrix3d PointTriangulator::computeRT_rzfunc(double angle) const{
 	Eigen::Matrix3d result;
 	result.fill(0.0);
 	result(0,1)= angle>=0?1.0:(-1.0);
@@ -54,7 +54,7 @@ ALIGN_EIGEN_FUNCTION Eigen::Matrix3d PointTriangulator::computeRT_rzfunc(double 
 	return result;
 }
 
-ALIGN_EIGEN_FUNCTION Eigen::MatrixXd PointTriangulator::kronecker(const Eigen::MatrixXd A, const Eigen::MatrixXd &B) const{
+Eigen::MatrixXd PointTriangulator::kronecker(const Eigen::MatrixXd A, const Eigen::MatrixXd &B) const{
 	Eigen::MatrixXd result(A.rows()*B.rows(),A.cols()*B.cols());
 
 	// http://mathworld.wolfram.com/KroneckerProduct.html
@@ -67,12 +67,12 @@ ALIGN_EIGEN_FUNCTION Eigen::MatrixXd PointTriangulator::kronecker(const Eigen::M
 	return result;
 }
 
-ALIGN_EIGEN_FUNCTION Eigen::MatrixXd PointTriangulator::leastSquares(const Eigen::MatrixXd A, const Eigen::MatrixXd &B) const{
+Eigen::MatrixXd PointTriangulator::leastSquares(const Eigen::MatrixXd A, const Eigen::MatrixXd &B) const{
 	Eigen::JacobiSVD<Eigen::MatrixXd,Eigen::FullPivHouseholderQRPreconditioner> svd(A, Eigen::ComputeFullV|Eigen::ComputeFullU);
 
-	Eigen::MatrixXd V= svd.matrixV();
-	Eigen::MatrixXd U= svd.matrixU();
-	Eigen::VectorXd S= svd.singularValues();
+	const Eigen::MatrixXd& V= svd.matrixV();
+	const Eigen::MatrixXd& U= svd.matrixU();
+	const Eigen::VectorXd& S= svd.singularValues();
 	Eigen::MatrixXd Sd(A.cols(),A.rows());
 	for(Eigen::MatrixXd::Index i=0;i<Sd.rows();i++){
 		for(Eigen::MatrixXd::Index j=0;j<Sd.cols();j++){
@@ -87,7 +87,7 @@ ALIGN_EIGEN_FUNCTION Eigen::MatrixXd PointTriangulator::leastSquares(const Eigen
 	return result;
 }
 
-ALIGN_EIGEN_FUNCTION Eigen::Matrix3d PointTriangulator::computeCameraMatrix(const QSize& imageSize)const{
+Eigen::Matrix3d PointTriangulator::computeCameraMatrix(const QSize& imageSize)const{
 	Eigen::Matrix3d K;
 	K.fill(0.0);
 	K(0,0)= Options::scaleFocalDistance;//Focal distance X
@@ -98,7 +98,7 @@ ALIGN_EIGEN_FUNCTION Eigen::Matrix3d PointTriangulator::computeCameraMatrix(cons
 	return K;
 }
 
-ALIGN_EIGEN_FUNCTION QList<PointTriangulator::StereopairPosition> PointTriangulator::computeRT(Eigen::Matrix3d Essential_matrix) const{
+QList<PointTriangulator::StereopairPosition> PointTriangulator::computeRT(Eigen::Matrix3d Essential_matrix) const{
 	QList<PointTriangulator::StereopairPosition> RTList;
 	QList<double> pi_values;
 	pi_values<<M_PI_2<<-M_PI_2;
@@ -188,7 +188,7 @@ QList<QVector3D> PointTriangulator::compute3DPoints(const SortedKeypointMatches&
 	return computeTriangulatedPoints(matches,bestPosition.R,bestPosition.T,true);
 }
 
-ALIGN_EIGEN_FUNCTION QList<QVector3D> PointTriangulator::computeTriangulatedPoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d&R,const Eigen::Vector3d& T,bool normalizeCameras){
+QList<QVector3D> PointTriangulator::computeTriangulatedPoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d&R,const Eigen::Vector3d& T,bool normalizeCameras){
 	Eigen::Matrix<double,3,4> P1,P2;
 	P1.fill(0.0);
 	for(int i=0;i<3;i++)
@@ -236,8 +236,8 @@ ALIGN_EIGEN_FUNCTION QList<QVector3D> PointTriangulator::computeTriangulatedPoin
 
 
 		Eigen::JacobiSVD<Eigen::Matrix4d,Eigen::FullPivHouseholderQRPreconditioner> svd(A, Eigen::ComputeFullV);
-		Eigen::Matrix4d  V=svd.matrixV();
-		Eigen::Vector4d Sigma= svd.singularValues();
+		const Eigen::Matrix4d&  V=svd.matrixV();
+		const Eigen::Vector4d& Sigma= svd.singularValues();
 		//Search for min column
 		size_t Sigma_min_index=0;
 		for(size_t i=1;i<4;i++)
@@ -258,7 +258,7 @@ ALIGN_EIGEN_FUNCTION QList<QVector3D> PointTriangulator::computeTriangulatedPoin
 }
 
 
-ALIGN_EIGEN_FUNCTION bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d& F,const QSize& imageSize){
+bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d& F,const QSize& imageSize){
 	Points3D.clear();
 	result= RESULT_OK;
 
@@ -281,7 +281,7 @@ ALIGN_EIGEN_FUNCTION bool PointTriangulator::triangulatePoints(const SortedKeypo
 	return true;
 }
 
-ALIGN_EIGEN_FUNCTION bool PointTriangulator::triangulatePoints(const QList<cybervision::KeypointMatch>&matches,qreal angle){
+bool PointTriangulator::triangulatePoints(const QList<cybervision::KeypointMatch>&matches,qreal angle){
 	Points3D.clear();
 	result= RESULT_OK;
 	camera_K= Eigen::Matrix3d();
@@ -315,11 +315,10 @@ ALIGN_EIGEN_FUNCTION bool PointTriangulator::triangulatePoints(const QList<cyber
 	{
 		Eigen::JacobiSVD<Eigen::MatrixXd,Eigen::FullPivHouseholderQRPreconditioner> svd(W, Eigen::ComputeFullV|Eigen::ComputeFullU);
 
-		Eigen::MatrixXd V= svd.matrixV();
-		Eigen::MatrixXd U= svd.matrixU();
-		Eigen::MatrixXd Sigma= svd.singularValues().asDiagonal();
+		const Eigen::MatrixXd& V= svd.matrixV();
+		const Eigen::MatrixXd& U= svd.matrixU();
+		Eigen::MatrixXd Sigma= svd.singularValues().head(3).asDiagonal();
 
-		Sigma= Sigma.block(0,0,3,3).eval();
 		for(int i=0;i<3;i++)
 			Sigma(i,i)= sqrt(Sigma(i,i));
 

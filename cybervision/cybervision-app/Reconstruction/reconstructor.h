@@ -32,7 +32,7 @@ protected:
 public:
 	explicit Reconstructor(QObject *parent);
 
-	ALIGN_EIGEN_FUNCTION bool run(const QString& filename1,const QString& filename2,qreal angle);
+	bool run(const QString& filename1,const QString& filename2,qreal angle);
 
 	//Getters
 	bool isOk()const;

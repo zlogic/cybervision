@@ -21,7 +21,6 @@ win32-g++ {
 		LIBS += -lgomp -lpthread
 	}
 	equals(CYBERVISION_SSE, true): QMAKE_CXXFLAGS += -msse3
-	QMAKE_CXXFLAGS += -mstackrealign
 }
 
 unix {
