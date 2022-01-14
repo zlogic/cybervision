@@ -12,6 +12,7 @@
 #include <UI/processthread.h>
 #include <UI/crosssectionwindow.h>
 #include <UI/aboutwindow.h>
+#include <UI/cybervisionviewer.h>
 
 namespace Ui
 {
@@ -29,6 +30,7 @@ public:
 
 private:
 	Ui::MainWindow *ui;
+	CybervisionViewer surfaceViewport;
 	CrossSectionWindow crossSectionWindow;
 	AboutWindow aboutWindow;
 
@@ -49,6 +51,9 @@ private:
 	int demoTimerMinutes;
 #endif
 
+	//Initialized the 3D viewport
+	void initViewport();
+
 	//Loads debugging data from file
 	void loadDebugPreferences();
 
@@ -65,7 +70,7 @@ private slots:
 	void processUpdated(QString logMessage,QString statusBarText=QString());
 	void processStopped(QString resultText,cybervision::Surface);
 
-	//Slots for receiving messages from OpenGL viewport
+	//Slots for receiving messages from 3D viewer viewport
 	void viewerSelectedPointUpdated(QVector3D);
 	void viewerCrosssectionLineChanged(QVector3D start,QVector3D end,int lineId);
 

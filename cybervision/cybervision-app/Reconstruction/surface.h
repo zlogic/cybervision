@@ -7,6 +7,12 @@
 #include <QRectF>
 #include <QImage>
 
+namespace Qt3DCore{
+
+class QEntity;
+
+}
+
 namespace cybervision{
 /*
  * Class for storing a reconstructed surface along with its other data. Also contains exporting code.
@@ -48,8 +54,6 @@ public:
 	Surface();
 	Surface(const Surface&);
 	void operator =(const Surface&);
-	//Draws the surface with OpenGL, should be called from paintGL
-	void glDraw()const;
 
 	//Returns true if surface contains valid data instead of an empty set
 	bool isOk() const;
@@ -72,6 +76,9 @@ public:
 
 	//Sets the textures
 	void setTextures(const QImage& image1,const QImage& image2);
+
+	//Creates and returns a QEntity that can be rendered by Qt3D
+	Qt3DCore::QEntity* create3DEntity(Qt3DCore::QEntity* parent)const;
 
 	//Functions for saving image
 	void savePoints(QString fileName)const;

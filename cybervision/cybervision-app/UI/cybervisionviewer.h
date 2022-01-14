@@ -1,14 +1,32 @@
 #ifndef CYBERVISIONVIEWER_H
 #define CYBERVISIONVIEWER_H
 
-#include <QGLWidget>
 #include <QList>
 #include <QVector3D>
 #include <QMutex>
+#include <QPainter>
+
+#include <Qt3DCore/QNode>
+#include <Qt3DCore/QEntity>
+#include <Qt3DCore/QTransform>
+#include <Qt3DRender/QPaintedTextureImage>
+#include <Qt3DRender/QGeometry>
+#include <Qt3DRender/QBuffer>
+#include <Qt3DRender/QScreenRayCaster>
+#include <Qt3DExtras/Qt3DWindow>
 
 #include <Reconstruction/surface.h>
 
-class CybervisionViewer : public QGLWidget{
+class SurfaceTexture: public Qt3DRender::QPaintedTextureImage {
+protected:
+	QImage texture;
+public:
+	SurfaceTexture(Qt3DCore::QNode *parent = nullptr);
+	void setImage(const QImage& image);
+	void paint(QPainter *painter);
+};
+
+class CybervisionViewer: public Qt3DExtras::Qt3DWindow{
 	Q_OBJECT
 public:
 	enum MouseMode{MOUSE_ROTATION,MOUSE_PANNING};
@@ -16,25 +34,34 @@ public:
 protected:
 	QMutex surfaceMutex;
 	cybervision::Surface surface;
-	GLuint textures[2];
+	Qt3DCore::QEntity *rootEntity,*surfaceEntity;
+	SurfaceTexture *surfaceTexture;
+	Qt3DCore::QTransform *axesTransform;
+	Qt3DRender::QScreenRayCaster *clickDetector;
 
 	//Viewport configuration
-	QVector3D vpRotation,vpTranslation;
+	bool mousePressed;
 	QPoint lastMousePos,clickMousePos;
 	MouseMode mouseMode;
 	int drawingCrossSectionLine;
 	TextureMode textureMode;
 	bool showGrid;
 
-	//Opengl constants
-	float glFarPlane,glNearPlane,glAspectRatio,glFOV,glViewportWidth,glViewportHeight;
-
 	//Corners. Uppercase letter means max, lowercase means min => x= min_x, X=max_x etc.
 	enum Corner{ CORNER_NONE,CORNER_xyz,CORNER_xyZ,CORNER_xYz,CORNER_xYZ,CORNER_Xyz,CORNER_XyZ,CORNER_XYz,CORNER_XYZ };
 
+	//Surface functions
+	void addSurfaceMaterial();
+	void addSelectedPoint();
+	void addCrossSectionLines();
+
+	//Grid configuration
+	Corner currentCorner;
+	Qt3DCore::QEntity *gridEntity;
+
 	//Grid functions
-	//Draw the grid
-	void drawGrid();
+	//Generate, update or remove the grid
+	void updateGrid();
 	//Returns the optimal scale step for the min/max value pair
 	qreal getOptimalGridStep(qreal min,qreal max) const;
 	//Returns the best visible corner
@@ -43,18 +70,20 @@ protected:
 	//Point selection stuff
 	//Selected point
 	QVector3D clickLocation;
+	Qt3DCore::QEntity *selectedPointEntity;
+	Qt3DCore::QTransform *selectedPointTransform;
+	QList<Qt3DRender::QBuffer*> crossSectionLineEntities;
 	QList<QPair<QVector3D,QVector3D> > crossSectionLines;
 	//Click detection
 	QVector3D getClickLocation(const QPointF&);
 	void drawPoint(const QVector3D&)const;
-	//Cross-section line
-	void drawLine(const QVector3D& start,const QVector3D& end,bool lineSelected=false)const;
+	//Cross-section line updates
+	void updateCrossSectionLines();
 
-	//Axes direction widget
-	//Draw the axes
-	void drawAxesWidget();
 public:
-	CybervisionViewer(QWidget *parent);
+	CybervisionViewer();
+
+	QPixmap getScreenshot()const;
 
 	//Getters/setters
 	void setSurface3D(const cybervision::Surface&);
@@ -67,19 +96,23 @@ public:
 	QVector3D getSelectedPoint() const;
 	QPair<QVector3D,QVector3D> getCrossSectionLine(int lineId)const;
 protected:
-	//Inherited opengl stuff
-	void initializeGL();
-	void resizeGL(int w, int h);
-	void paintGL();
+	//3D Scene initialization stuff
+	void initializeScene();
+	void initializeAxesWidget();
+
+	Qt3DRender::QGeometry* createLines(const QVector<QVector3D>& lines,Qt3DCore::QNode* parent=nullptr);
 
 	//Rotation/movement with mouse
-	float normalizeAngle(float angle)const;
 	void mousePressEvent(QMouseEvent *event);
 	void mouseReleaseEvent(QMouseEvent *event);
 	void mouseMoveEvent(QMouseEvent *event);
 signals:
 	void selectedPointUpdated(QVector3D);
 	void crossSectionLineChanged(QVector3D,QVector3D,int lineId);
+
+private slots:
+	void cameraUpdated();
+	void hitsChanged(const Qt3DRender::QAbstractRayCaster::Hits &hits);
 };
 
 #endif // CYBERVISIONVIEWER_H

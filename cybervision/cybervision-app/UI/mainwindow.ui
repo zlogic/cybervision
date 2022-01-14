@@ -46,7 +46,7 @@
        <property name="title">
         <string>3D image</string>
        </property>
-       <layout class="QVBoxLayout" name="verticalLayout_2">
+       <layout class="QVBoxLayout" name="viewportLayout">
         <property name="spacing">
          <number>0</number>
         </property>
@@ -271,7 +271,7 @@
          </widget>
         </item>
         <item>
-         <widget class="CybervisionViewer" name="openGLViewport" native="true">
+         <widget class="QFrame" name="viewportPlaceholder">
           <property name="sizePolicy">
            <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
             <horstretch>0</horstretch>
@@ -936,14 +936,6 @@
   </action>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
- <customwidgets>
-  <customwidget>
-   <class>CybervisionViewer</class>
-   <extends>QWidget</extends>
-   <header>UI/cybervisionviewer.h</header>
-   <container>1</container>
-  </customwidget>
- </customwidgets>
  <tabstops>
   <tabstop>openImage1</tabstop>
   <tabstop>openImage2</tabstop>

@@ -1,6 +1,6 @@
 include( ../cybervision-options.pri )
 
-QT += core gui widgets opengl
+QT += core gui widgets 3dcore 3drender 3dextras
 TARGET = cybervision$${CYBERVISION_SUFFIX}
 TEMPLATE = app
 
@@ -96,7 +96,6 @@ win32 {
 	RC_FILE = UI/cybervision.rc
 }
 win32-g++ {
-	LIBS += -lglu32 -lopengl32
 	equals(CYBERVISION_OPENMP,true){
 		QMAKE_CXXFLAGS += -fopenmp
 		LIBS += -lgomp -lpthread

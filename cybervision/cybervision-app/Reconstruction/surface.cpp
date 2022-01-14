@@ -1,4 +1,9 @@
-#include <QGLWidget>
+#include <Qt3DCore/QEntity>
+#include <Qt3DCore/QTransform>
+#include <Qt3DRender/QGeometryRenderer>
+#include <Qt3DRender/QAttribute>
+#include <Qt3DRender/QBuffer>
+#include <QPainter>
 #include <QTextStream>
 #include <QLineF>
 
@@ -30,77 +35,102 @@ void Surface::operator =(const Surface&sc){
 	this->image2= sc.image2;
 }
 
-void Surface::glDraw() const{
+Qt3DCore::QEntity* Surface::create3DEntity(Qt3DCore::QEntity* parent) const{
+	const uint nVerts = 3 * triangles.size();
+	const quint32 elementSize = 3 + 3 + 2;
+	const quint32 stride = elementSize * sizeof(float);
+	QByteArray vertexBytes;
+	vertexBytes.resize(stride * nVerts);
+	float* vertices = reinterpret_cast<float*>(vertexBytes.data());
 
-	GLfloat backup_mat_specular[4];
-	GLfloat backup_mat_shininess[1];
-
-	if(cybervision::Options::renderShiny){
-		glGetMaterialfv(GL_FRONT, GL_SPECULAR, backup_mat_specular);
-		glGetMaterialfv(GL_FRONT, GL_SHININESS, backup_mat_shininess);
-		static GLfloat mat_specular[] = { 1.0, 1.0, 1.0, 1.0 };
-		static GLfloat mat_shininess[] = { 50.0 };
-		glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
-		glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);
-	}
-
-	for(QList<Surface::Triangle>::const_iterator it= triangles.begin();it!=triangles.end();it++){
+	for(QList<Surface::Triangle>::const_iterator it= triangles.constBegin();it!=triangles.constEnd();it++){
 		const Point& pa=points[it->a];
 		const Point& pb=points[it->b];
 		const Point& pc=points[it->c];
 
-		glBegin(GL_TRIANGLES);
-		glColor3f(1.0f, 1.0f, 1.0f);
-
 		if(Options::renderNormalsMode== Options::RENDER_NORMALS_TRIANGLE){
 			//Use triangle normals
 			//Front side
-			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-			glTexCoord2d(pa.uv.x(),pa.uv.y());
-			glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
-			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-			glTexCoord2d(pb.uv.x(),pb.uv.y());
-			glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
-			glNormal3f(it->normal.x(),it->normal.y(),it->normal.z());
-			glTexCoord2d(pc.uv.x(),pc.uv.y());
-			glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
+			*vertices++= pa.coord.x(); *vertices++= pa.coord.y(); *vertices++= pa.coord.z();
+			*vertices++= it->normal.x(); *vertices++= it->normal.y(); *vertices++= it->normal.z();
+			*vertices++= pa.uv.x(); *vertices++= pa.uv.y();
+
+			*vertices++= pb.coord.x(); *vertices++= pb.coord.y(); *vertices++= pb.coord.z();
+			*vertices++= it->normal.x(); *vertices++= it->normal.y(); *vertices++= it->normal.z();
+			*vertices++= pb.uv.x(); *vertices++= pb.uv.y();
+
+			*vertices++= pc.coord.x(); *vertices++= pc.coord.y(); *vertices++= pc.coord.z();
+			*vertices++= it->normal.x(); *vertices++= it->normal.y(); *vertices++= it->normal.z();
+			*vertices++= pc.uv.x(); *vertices++= pc.uv.y();
 		}else if(Options::renderNormalsMode== Options::RENDER_NORMALS_POINT){
 			//Use point normals
 			//Front side
-			glNormal3f(pa.normal.x(),pa.normal.y(),pa.normal.z());
-			glTexCoord2d(pa.uv.x(),pa.uv.y());
-			glVertex3f(pa.coord.x()*scale,pa.coord.y()*scale,pa.coord.z()*scale);
-			glNormal3f(pb.normal.x(),pb.normal.y(),pb.normal.z());
-			glTexCoord2d(pb.uv.x(),pb.uv.y());
-			glVertex3f(pb.coord.x()*scale,pb.coord.y()*scale,pb.coord.z()*scale);
-			glNormal3f(pc.normal.x(),pc.normal.y(),pc.normal.z());
-			glTexCoord2d(pc.uv.x(),pc.uv.y());
-			glVertex3f(pc.coord.x()*scale,pc.coord.y()*scale,pc.coord.z()*scale);
-		}
-		//glBegin(GL_POINTS);
-		//glColor3f(0.0f, 0.0f, 0.0f);
-		//glVertex3f(it->a.x(),it->a.y(),it->a.z());
-		//glVertex3f(it->a.x(),it->a.y(),it->a.z()+1);
-		glEnd();
-	}
-	/*
-	//Draw point cloud
-	double radius=.08;
-	int num_segments=36;
-	for(QList<QVector3D>::const_iterator it= points.begin();it!=points.end();it++){
-		glBegin(GL_POLYGON);
-		for(int i =0;i<num_segments;i++){
-			double angle = i*M_PI*2/(double)num_segments;
-			glVertex3f(it->x()*scale+cos(angle)*radius,it->y()*scale+sin(angle)*radius,it->z()*scale);
-		}
-		glEnd();
-	}
-	*/
+			*vertices++= pa.coord.x(); *vertices++= pa.coord.y(); *vertices++= pa.coord.z();
+			*vertices++= pa.normal.x(); *vertices++= pa.normal.y(); *vertices++= pa.normal.z();
+			*vertices++= pa.uv.x(); *vertices++= pa.uv.y();
 
-	if(cybervision::Options::renderShiny){
-		glMaterialfv(GL_FRONT, GL_SPECULAR, backup_mat_specular);
-		glMaterialfv(GL_FRONT, GL_SHININESS, backup_mat_shininess);
+			*vertices++= pb.coord.x(); *vertices++= pb.coord.y(); *vertices++= pb.coord.z();
+			*vertices++= pb.normal.x(); *vertices++= pb.normal.y(); *vertices++= pb.normal.z();
+			*vertices++= pb.uv.x(); *vertices++= pb.uv.y();
+
+			*vertices++= pc.coord.x(); *vertices++= pc.coord.y(); *vertices++= pc.coord.z();
+			*vertices++= pc.normal.x(); *vertices++= pc.normal.y(); *vertices++= pc.normal.z();
+			*vertices++= pc.uv.x(); *vertices++= pc.uv.y();
+		}
 	}
+
+	Qt3DCore::QEntity* entity = new Qt3DCore::QEntity(parent);
+	Qt3DRender::QGeometryRenderer* renderer = new Qt3DRender::QGeometryRenderer(entity);
+	Qt3DRender::QGeometry* geometry = new Qt3DRender::QGeometry(renderer);
+
+	Qt3DRender::QBuffer* vertexBuffer = new Qt3DRender::QBuffer(geometry);
+	vertexBuffer->setData(vertexBytes);
+
+	Qt3DRender::QAttribute* positionAttribute = new Qt3DRender::QAttribute(geometry);
+	positionAttribute->setAttributeType(Qt3DRender::QAttribute::VertexAttribute);
+	positionAttribute->setBuffer(vertexBuffer);
+	positionAttribute->setVertexBaseType(Qt3DRender::QAttribute::Float);
+	positionAttribute->setVertexSize(3);
+	positionAttribute->setByteOffset(0);
+	positionAttribute->setByteStride(stride);
+	positionAttribute->setCount(nVerts);
+	positionAttribute->setName(Qt3DRender::QAttribute::defaultPositionAttributeName());
+
+	Qt3DRender::QAttribute* normalAttribute = new Qt3DRender::QAttribute(geometry);
+	normalAttribute->setAttributeType(Qt3DRender::QAttribute::VertexAttribute);
+	normalAttribute->setBuffer(vertexBuffer);
+	normalAttribute->setVertexBaseType(Qt3DRender::QAttribute::Float);
+	normalAttribute->setVertexSize(3);
+	normalAttribute->setByteOffset(3 * sizeof(float));
+	normalAttribute->setByteStride(stride);
+	normalAttribute->setCount(nVerts);
+	normalAttribute->setName(Qt3DRender::QAttribute::defaultNormalAttributeName());
+
+	Qt3DRender::QAttribute* texCoordAttribute = new Qt3DRender::QAttribute(geometry);
+	texCoordAttribute->setAttributeType(Qt3DRender::QAttribute::VertexAttribute);
+	texCoordAttribute->setBuffer(vertexBuffer);
+	texCoordAttribute->setVertexBaseType(Qt3DRender::QAttribute::Float);
+	texCoordAttribute->setVertexSize(2);
+	texCoordAttribute->setByteOffset((3 + 3) * sizeof(float));
+	texCoordAttribute->setByteStride(stride);
+	texCoordAttribute->setCount(nVerts);
+	texCoordAttribute->setName(Qt3DRender::QAttribute::defaultTextureCoordinateAttributeName());
+
+	geometry->addAttribute(positionAttribute);
+	geometry->addAttribute(normalAttribute);
+	geometry->addAttribute(texCoordAttribute);
+
+	renderer->setGeometry(geometry);
+	renderer->setInstanceCount(1);
+	renderer->setPrimitiveType(Qt3DRender::QGeometryRenderer::Triangles);
+	renderer->setVertexCount(nVerts);
+	entity->addComponent(renderer);
+
+	Qt3DCore::QTransform *surfaceTransform = new Qt3DCore::QTransform(entity);
+	surfaceTransform->setScale(scale);
+	entity->addComponent(surfaceTransform);
+
+	return entity;
 }
 
 bool Surface::isOk()const{ return !triangles.empty() && !points.empty() && scale>0.0; }

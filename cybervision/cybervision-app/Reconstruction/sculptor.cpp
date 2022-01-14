@@ -1,4 +1,3 @@
-#include <QGLWidget>
 #include <QMap>
 #include <QMatrix4x4>
 #include <limits>

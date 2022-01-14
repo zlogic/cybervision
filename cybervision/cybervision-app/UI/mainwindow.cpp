@@ -12,14 +12,15 @@
 #include <Reconstruction/crosssection.h>
 #include <Reconstruction/options.h>
 
-MainWindow::MainWindow(QWidget *parent)	: QMainWindow(parent), ui(new Ui::MainWindow), crossSectionWindow(this){
+MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ui(new Ui::MainWindow), crossSectionWindow(this){
 	ui->setupUi(this);
 	thread.setUi(this);
 	updateWidgetStatus();
 	loadDebugPreferences();
+	initViewport();
 
-	connect(ui->openGLViewport, SIGNAL(selectedPointUpdated(QVector3D)),this, SLOT(viewerSelectedPointUpdated(QVector3D)),Qt::AutoConnection);
-	connect(ui->openGLViewport, SIGNAL(crossSectionLineChanged(QVector3D,QVector3D,int)),this, SLOT(viewerCrosssectionLineChanged(QVector3D,QVector3D,int)),Qt::AutoConnection);
+	connect(&surfaceViewport, SIGNAL(selectedPointUpdated(QVector3D)),this, SLOT(viewerSelectedPointUpdated(QVector3D)),Qt::AutoConnection);
+	connect(&surfaceViewport, SIGNAL(crossSectionLineChanged(QVector3D,QVector3D,int)),this, SLOT(viewerCrosssectionLineChanged(QVector3D,QVector3D,int)),Qt::AutoConnection);
 	connect(&crossSectionWindow, SIGNAL(closed()),this, SLOT(crosssectionClosed()),Qt::AutoConnection);
 	connect(ui->openImage1, SIGNAL(clicked()),this,SLOT(selectImage1()));
 	connect(ui->openImage2, SIGNAL(clicked()),this,SLOT(selectImage2()));
@@ -65,11 +66,18 @@ MainWindow::~MainWindow(){
 	delete ui;
 }
 
+void MainWindow::initViewport(){
+	surfaceViewport.setFlags(Qt::Widget);
+	QWidget *viewportContainer= QWidget::createWindowContainer(&surfaceViewport, this);
+	ui->viewportLayout->replaceWidget(ui->viewportPlaceholder,viewportContainer);
+	viewportContainer->setSizePolicy(QSizePolicy::MinimumExpanding,QSizePolicy::MinimumExpanding);
+}
+
 void MainWindow::updateWidgetStatus(){
 	bool surfaceIsOK;
 	{
-		QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
-		surfaceIsOK= ui->openGLViewport->getSurface3D().isOk();
+		QMutexLocker lock(&surfaceViewport.getSurfaceMutex());
+		surfaceIsOK= surfaceViewport.getSurface3D().isOk();
 	}
 
 	//Image loading buttons
@@ -116,19 +124,19 @@ void MainWindow::updateWidgetStatus(){
 	ui->scaleZEdit->setValidator(&scaleZValidator);
 	ui->angleEdit->setValidator(&angleValidator);
 
-	viewerSelectedPointUpdated(ui->openGLViewport->getSelectedPoint());
+	viewerSelectedPointUpdated(surfaceViewport.getSelectedPoint());
 
 	updateSurfaceStats();
 }
 
 
 void MainWindow::updateSurfaceStats(int lineId){
-	QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
-	qreal minDepth= ui->openGLViewport->getSurface3D().getMinDepth();
-	qreal maxDepth= ui->openGLViewport->getSurface3D().getMaxDepth();
-	qreal medianDepth= ui->openGLViewport->getSurface3D().getMedianDepth();
-	qreal baseDepth= ui->openGLViewport->getSurface3D().getBaseDepth();
-	if(ui->openGLViewport->getSurface3D().isOk())
+	QMutexLocker lock(&surfaceViewport.getSurfaceMutex());
+	qreal minDepth= surfaceViewport.getSurface3D().getMinDepth();
+	qreal maxDepth= surfaceViewport.getSurface3D().getMaxDepth();
+	qreal medianDepth= surfaceViewport.getSurface3D().getMedianDepth();
+	qreal baseDepth= surfaceViewport.getSurface3D().getBaseDepth();
+	if(surfaceViewport.getSurface3D().isOk())
 		ui->statisticsLabel->setText(QString(trUtf8("Depth range: %1 \xC2\xB5m\nBase depth: %2 \xC2\xB5m\nMedian depth: %3 \xC2\xB5m"))
 									 .arg((maxDepth-minDepth)*cybervision::Options::TextUnitScale)
 									 .arg(baseDepth*cybervision::Options::TextUnitScale)
@@ -136,13 +144,13 @@ void MainWindow::updateSurfaceStats(int lineId){
 	else
 		ui->statisticsLabel->setText(tr("No surface available"));
 
-	QPair<QVector3D,QVector3D> crossSectionLine= ui->openGLViewport->getCrossSectionLine(lineId);
+	QPair<QVector3D,QVector3D> crossSectionLine= surfaceViewport.getCrossSectionLine(lineId);
 	if(lineId<0)
 		return;
 
 	//Compute surface roughness, if possible
 	cybervision::CrossSection crossSection;
-	crossSection.computeCrossSection(ui->openGLViewport->getSurface3D(),crossSectionLine.first,crossSectionLine.second);
+	crossSection.computeCrossSection(surfaceViewport.getSurface3D(),crossSectionLine.first,crossSectionLine.second);
 	crossSectionWindow.updateCrossSection(crossSection,lineId);
 	if(crossSection.isOk())
 		crossSectionWindow.show();
@@ -243,7 +251,7 @@ void MainWindow::processStopped(QString resultText,cybervision::Surface surface)
 	}
 	ui->loadSurfaceButton->setEnabled(true);
 
-	ui->openGLViewport->setSurface3D(surface);
+	surfaceViewport.setSurface3D(surface);
 	updateWidgetStatus();
 }
 
@@ -306,34 +314,34 @@ void MainWindow::saveResult(){
 	showDemoWarning(tr("Save functionality is disabled."));
 #else
 	if(!fileName.isNull()){
-		QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
+		QMutexLocker lock(&surfaceViewport.getSurfaceMutex());
 
 		QFileInfo fileInfo(fileName);
 		if(selectedFilter==formats[0]){
 			if(fileInfo.suffix()!="txt")
 				fileName.append(".txt");
-			ui->openGLViewport->getSurface3D().savePoints(fileName);
+			surfaceViewport.getSurface3D().savePoints(fileName);
 		}else if(selectedFilter==formats[1]){
 			if(fileInfo.suffix()!="txt")
 				fileName.append(".txt");
-			ui->openGLViewport->getSurface3D().savePolygons(fileName);
+			surfaceViewport.getSurface3D().savePolygons(fileName);
 		}else if(selectedFilter==formats[2]){
 			if(fileInfo.suffix()!="png")
 				fileName.append(".png");
-			QImage screenshot= ui->openGLViewport->grabFrameBuffer();
+			QPixmap screenshot= surfaceViewport.getScreenshot();
 			screenshot.save(fileName,"png");
 		}else if(selectedFilter==formats[3]){
 			if(fileInfo.suffix()!="js")
 				fileName.append(".js");
-			ui->openGLViewport->getSurface3D().saveSceneJS(fileName);
+			surfaceViewport.getSurface3D().saveSceneJS(fileName);
 		}else if(selectedFilter==formats[4]){
 			if(fileInfo.suffix()!="dae")
 				fileName.append(".dae");
-			ui->openGLViewport->getSurface3D().saveCollada(fileName);
+			surfaceViewport.getSurface3D().saveCollada(fileName);
 		}else if(selectedFilter==formats[5]){
 			if(fileInfo.suffix()!="cvs")
 				fileName.append(".cvs");
-			ui->openGLViewport->getSurface3D().saveCybervision(fileName);
+			surfaceViewport.getSurface3D().saveCybervision(fileName);
 		}else{
 			ui->statusBar->showMessage(tr("Bad save format selected"));
 			ui->logTextEdit->appendHtml(QString(tr("<b>Bad save format selected:</b> %1")).arg(selectedFilter));
@@ -351,7 +359,7 @@ void MainWindow::loadSurface(){
 		if(!surface.isOk())
 			ui->logTextEdit->appendHtml("<b>"+QString(tr("Error loading surface from %1")).arg(QDir::toNativeSeparators(filename))+"</b>");
 
-		ui->openGLViewport->setSurface3D(surface);
+		surfaceViewport.setSurface3D(surface);
 		updateWidgetStatus();
 
 		startPath= QFileInfo(filename).canonicalPath();
@@ -440,50 +448,50 @@ void MainWindow::useForImage2(){
 
 void MainWindow::updateMouseMode(){
 	if(ui->moveToolButton->isChecked())
-		ui->openGLViewport->setMouseMode(CybervisionViewer::MOUSE_PANNING);
+		surfaceViewport.setMouseMode(CybervisionViewer::MOUSE_PANNING);
 	else if(ui->rotateToolButton->isChecked())
-		ui->openGLViewport->setMouseMode(CybervisionViewer::MOUSE_ROTATION);
+		surfaceViewport.setMouseMode(CybervisionViewer::MOUSE_ROTATION);
 }
 
 void MainWindow::setShowGrid(bool checked){
-	ui->openGLViewport->setShowGrid(checked);
+	surfaceViewport.setShowGrid(checked);
 }
 
 void MainWindow::updateTextureMode(){
 	if(ui->texture1ToolButton->isChecked())
-		ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_1);
+		surfaceViewport.setTextureMode(CybervisionViewer::TEXTURE_1);
 	else if(ui->texture2ToolButton->isChecked())
-		ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_2);
+		surfaceViewport.setTextureMode(CybervisionViewer::TEXTURE_2);
 	else if(ui->textureNoneToolButton->isChecked())
-		ui->openGLViewport->setTextureMode(CybervisionViewer::TEXTURE_NONE);
+		surfaceViewport.setTextureMode(CybervisionViewer::TEXTURE_NONE);
 }
 
 void MainWindow::primaryCrossSectionClicked(bool checked){
 	if(checked){
 		ui->crosssectionButtonSecondary->setChecked(false);
-		QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
-		if(ui->openGLViewport->getSurface3D().isOk())
-			ui->openGLViewport->setDrawCrossSectionLine(checked?0:-1);
+		QMutexLocker lock(&surfaceViewport.getSurfaceMutex());
+		if(surfaceViewport.getSurface3D().isOk())
+			surfaceViewport.setDrawCrossSectionLine(checked?0:-1);
 		else{
 			ui->crosssectionButtonPrimary->setChecked(false);
 			ui->crosssectionButtonPrimary->setEnabled(false);
 		}
 	}else
-		ui->openGLViewport->setDrawCrossSectionLine(checked?0:-1);
+		surfaceViewport.setDrawCrossSectionLine(checked?0:-1);
 }
 
 void MainWindow::secondaryCrossSectionClicked(bool checked){
 	if(checked){
 		ui->crosssectionButtonPrimary->setChecked(false);
-		QMutexLocker lock(&ui->openGLViewport->getSurfaceMutex());
-		if(ui->openGLViewport->getSurface3D().isOk())
-			ui->openGLViewport->setDrawCrossSectionLine(checked?1:-1);
+		QMutexLocker lock(&surfaceViewport.getSurfaceMutex());
+		if(surfaceViewport.getSurface3D().isOk())
+			surfaceViewport.setDrawCrossSectionLine(checked?1:-1);
 		else{
 			ui->crosssectionButtonSecondary->setChecked(false);
 			ui->crosssectionButtonSecondary->setEnabled(false);
 		}
 	}else
-		ui->openGLViewport->setDrawCrossSectionLine(checked?1:-1);
+		surfaceViewport.setDrawCrossSectionLine(checked?1:-1);
 }
 #ifdef CYBERVISION_DEMO
 void MainWindow::demoTimerExpired() const{
