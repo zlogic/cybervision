@@ -91,12 +91,12 @@ void CrossSectionWindow::updateCrosssectionStats(){
 	for(QList<cybervision::CrossSection>::iterator it=crossSections.begin();it!=crossSections.end();it++){
 		int crossSectionId= it-crossSections.begin()+1;
 		if(it->isOk()){
-			heightParamsString<< QString(trUtf8("Cross-section %1\nRa= %2 \xC2\xB5m\nRz= %3 \xC2\xB5m\nRmax= %4 \xC2\xB5m"))
+			heightParamsString<< QString(tr("Cross-section %1\nRa= %2 \xC2\xB5m\nRz= %3 \xC2\xB5m\nRmax= %4 \xC2\xB5m"))
 								 .arg(crossSectionId)
 								 .arg(it->getRoughnessRa()*cybervision::Options::TextUnitScale)
 								 .arg(it->getRoughnessRz()*cybervision::Options::TextUnitScale)
 								 .arg(it->getRoughnessRmax()*cybervision::Options::TextUnitScale);
-			stepParamsString<< QString(trUtf8("Cross-section %1\nS= %2 \xC2\xB5m\nSm= %3 \xC2\xB5m\ntp= %4"))
+			stepParamsString<< QString(tr("Cross-section %1\nS= %2 \xC2\xB5m\nSm= %3 \xC2\xB5m\ntp= %4"))
 							   .arg(crossSectionId)
 							   .arg(it->getRoughnessS()*cybervision::Options::TextUnitScale)
 							   .arg(it->getRoughnessSm()*cybervision::Options::TextUnitScale)
@@ -146,17 +146,17 @@ void CrossSectionWindow::renderCrossSections(){
 				currentMaxY= -std::numeric_limits<qreal>::infinity();
 		QList<QPointF> crossSectionPoints= it->getCrossSection();
 		for(QList<QPointF>::const_iterator jt=crossSectionPoints.constBegin();jt!=crossSectionPoints.constEnd();jt++){
-			currentMinX= qMin(currentMinX,jt->x());
-			currentMinY= qMin(currentMinY,jt->y());
-			currentMaxX= qMax(currentMaxX,jt->x());
-			currentMaxY= qMax(currentMaxY,jt->y());
+			currentMinX= std::min(currentMinX,jt->x());
+			currentMinY= std::min(currentMinY,jt->y());
+			currentMaxX= std::max(currentMaxX,jt->x());
+			currentMaxY= std::max(currentMaxY,jt->y());
 		}
 		if((currentMaxX-currentMinX)>(maxX-minX))
 			nonMovableCrosssection= it;
-		minX= qMin(currentMinX,minX);
-		minY= qMin(currentMinY,minY);
-		maxX= qMax(currentMaxX,maxX);
-		maxY= qMax(currentMaxY,maxY);
+		minX= std::min(currentMinX,minX);
+		minY= std::min(currentMinY,minY);
+		maxX= std::max(currentMaxX,maxX);
+		maxY= std::max(currentMaxY,maxY);
 	}
 	QRect crossSectionArea(50,20,imageSize.width()-50,imageSize.height()-20);
 
@@ -183,8 +183,8 @@ void CrossSectionWindow::renderCrossSections(){
 			//stream.setRealNumberPrecision(1);
 			//stream.setRealNumberNotation(QTextStream::ScientificNotation);
 			stream<<stepX*i*cybervision::Options::TextUnitScale;
-			str= QString(trUtf8("%1 \xC2\xB5m  ")).arg(str);
-			crossSectionScene.addText(str,font)->setPos(x-fontMetrics.width(str),0);
+			str= QString(tr("%1 \xC2\xB5m  ")).arg(str);
+			crossSectionScene.addText(str,font)->setPos(x-fontMetrics.horizontalAdvance(str),0);
 		}
 		for(int i=gridMinY;i<=gridMaxY;i++){
 			qreal y= crossSectionArea.height()*(maxY-stepY*i)/(maxY-minY)+crossSectionArea.y();
@@ -195,7 +195,7 @@ void CrossSectionWindow::renderCrossSections(){
 			//stream.setRealNumberPrecision(1);
 			//stream.setRealNumberNotation(QTextStream::ScientificNotation);
 			stream<<stepY*i*cybervision::Options::TextUnitScale;
-			str= QString(trUtf8("%1 \xC2\xB5m")).arg(str);
+			str= QString(tr("%1 \xC2\xB5m")).arg(str);
 			crossSectionScene.addText(str,font)->setPos(1,y-2);
 		}
 	}
@@ -213,10 +213,10 @@ void CrossSectionWindow::renderCrossSections(){
 						crossSectionArea.width()*(jt->x()-minX)/(maxX-minX),
 						crossSectionArea.height()*(maxY-jt->y())/(maxY-minY)
 			);
-			point1.setX(qMax(point1.x(),(qreal)0));
-			point1.setY(qMax(point1.y(),(qreal)0));
-			point1.setX(qMin(point1.x(),crossSectionArea.width()-1.0));
-			point1.setY(qMin(point1.y(),crossSectionArea.height()-1.0));
+			point1.setX(std::max(point1.x(),(qreal)0));
+			point1.setY(std::max(point1.y(),(qreal)0));
+			point1.setX(std::min(point1.x(),crossSectionArea.width()-1.0));
+			point1.setY(std::min(point1.y(),crossSectionArea.height()-1.0));
 
 			if((jt)==crossSectionPoints.constBegin()){
 				crossSectionPath.moveTo(point1);
@@ -309,7 +309,7 @@ void CrossSectionWindow::updateMeasurementLinesLabel(){
 			deltaX= -movableCrossSectionPos;
 		qreal height1= it->getHeight(measurementLinePos1+deltaX), height2= it->getHeight(measurementLinePos2+deltaX);
 		qreal deltaHeight= height1-height2;
-		measurementLineStr<< QString(trUtf8("Cross-section %1\nx1= %2 \xC2\xB5m\nh1= %3 \xC2\xB5m\nx2= %4 \xC2\xB5m\nh2= %5 \xC2\xB5m\nHeight difference= %6 \xC2\xB5m"))
+		measurementLineStr<< QString(tr("Cross-section %1\nx1= %2 \xC2\xB5m\nh1= %3 \xC2\xB5m\nx2= %4 \xC2\xB5m\nh2= %5 \xC2\xB5m\nHeight difference= %6 \xC2\xB5m"))
 				.arg(it-crossSections.constBegin()+1)
 				.arg((measurementLinePos1+deltaX)*cybervision::Options::TextUnitScale)
 				.arg(height1*cybervision::Options::TextUnitScale)

@@ -92,7 +92,7 @@ QList<SIFT::Keypoint> SIFT::Extractor::extract(const QImage& sourceImg)const{
 	int scalingFactor=1;
 	//Resize if needed
 	{
-		int minDimension= qMin(img.width(),img.height());
+		int minDimension= std::min(img.width(),img.height());
 		int maxAllowedSize= 1600;
 		scalingFactor= minDimension/maxAllowedSize;
 		if(scalingFactor>0)

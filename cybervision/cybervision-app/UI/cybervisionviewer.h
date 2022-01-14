@@ -82,6 +82,7 @@ protected:
 
 public:
 	CybervisionViewer();
+	~CybervisionViewer();
 
 	QPixmap getScreenshot()const;
 

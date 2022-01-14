@@ -53,6 +53,10 @@ CybervisionViewer::CybervisionViewer(): Qt3DExtras::Qt3DWindow(){
 	initializeScene();
 }
 
+CybervisionViewer::~CybervisionViewer(){
+	delete rootEntity;
+}
+
 void CybervisionViewer::setSurface3D(const cybervision::Surface& surface){
 	QVector3D infinity(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
 	clickLocation= infinity;
@@ -115,8 +119,8 @@ void CybervisionViewer::addSelectedPoint(){
 }
 
 void CybervisionViewer::addCrossSectionLines(){
-	const quint32 elementSize = 3;
-	const quint32 stride = elementSize * sizeof(float);
+	const int elementSize = 3;
+	const int stride = elementSize * sizeof(float);
 
 	crossSectionLineEntities.clear();
 
@@ -266,8 +270,8 @@ void CybervisionViewer::initializeScene(){
 }
 
 Qt3DRender::QGeometry* CybervisionViewer::createLines(const QVector<QVector3D>& lines,Qt3DCore::QNode* parent){
-	const quint32 elementSize = 3;
-	const quint32 stride = elementSize * sizeof(float);
+	const int elementSize = 3;
+	const int stride = elementSize * sizeof(float);
 
 	Qt3DRender::QGeometry *geometry = new Qt3DRender::QGeometry(parent);
 	QByteArray bufferBytes;
@@ -385,7 +389,7 @@ void CybervisionViewer::updateGrid(){
 	qreal step_x= getOptimalGridStep(surface.getImageSize().left(),surface.getImageSize().right());
 	qreal step_y= getOptimalGridStep(surface.getImageSize().top(),surface.getImageSize().bottom());
 	qreal step_z= getOptimalGridStep(surface.getMinDepth(),surface.getMaxDepth());
-	qreal step_xy= qMax(step_x,step_y);
+	qreal step_xy= std::max(step_x,step_y);
 	step_x= step_xy, step_y= step_xy;
 	int min_x= floor(surface.getImageSize().left()/step_x);
 	int max_x= ceil(surface.getImageSize().right()/step_x);

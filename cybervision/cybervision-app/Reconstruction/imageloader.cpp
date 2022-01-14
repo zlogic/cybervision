@@ -51,7 +51,7 @@ QMap<QString,QString> ImageLoader::parseTagString(const QString& metadata)const{
 	QRegExp rootRegExp("\\[([^\\]]+)\\]",Qt::CaseInsensitive);
 	QRegExp lineRegexp("([^ \\t=]+)\\s*=\\s*(.*)",Qt::CaseInsensitive);
 
-	QStringList lines= metadata.split(QRegExp("(\\r\\n)|(\\n)"),QString::SkipEmptyParts);
+	QStringList lines= metadata.split(QRegExp("(\\r\\n)|(\\n)"),Qt::SkipEmptyParts);
 	for(QStringList::const_iterator it=lines.constBegin();it!=lines.constEnd();it++){
 		QString line= *it;
 		if(rootRegExp.exactMatch(line) && rootRegExp.capturedTexts().size()>=2)

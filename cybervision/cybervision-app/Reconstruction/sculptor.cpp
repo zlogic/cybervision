@@ -59,17 +59,17 @@ QList<QVector3D> Sculptor::filterPoints(const QList<QVector3D>& points){
 	//These values are unwanted
 	qreal max_z=points.constBegin()->z(), min_z=points.constBegin()->z();
 	for(QList<QVector3D>::const_iterator it= points.constBegin();it!=points.constEnd();it++){
-		max_z= qMax(max_z,(qreal)it->z());
-		min_z= qMin(min_z,(qreal)it->z());
+		max_z= std::max(max_z,(qreal)it->z());
+		min_z= std::min(min_z,(qreal)it->z());
 	}
 
 	for(QList<QVector3D>::const_iterator it= points.constBegin();it!=points.constEnd();it++){
-		minCoords.setX(qMin(minCoords.x(),it->x()));
-		minCoords.setY(qMin(minCoords.y(),it->y()));
-		minCoords.setZ(qMin(minCoords.z(),it->z()));
-		maxCoords.setX(qMax(maxCoords.x(),it->x()));
-		maxCoords.setY(qMax(maxCoords.y(),it->y()));
-		maxCoords.setZ(qMax(maxCoords.z(),it->z()));
+		minCoords.setX(std::min(minCoords.x(),it->x()));
+		minCoords.setY(std::min(minCoords.y(),it->y()));
+		minCoords.setZ(std::min(minCoords.z(),it->z()));
+		maxCoords.setX(std::max(maxCoords.x(),it->x()));
+		maxCoords.setY(std::max(maxCoords.y(),it->y()));
+		maxCoords.setZ(std::max(maxCoords.z(),it->z()));
 
 		centroid.setX(centroid.x()+it->x());
 		centroid.setY(centroid.y()+it->y());
@@ -90,12 +90,12 @@ QList<QVector3D> Sculptor::filterPoints(const QList<QVector3D>& points){
 		center.setY((maxCoords.y()-minCoords.y())*scaleXY/2.0);
 	}
 
-	surface.scale= Options::surfaceSize/(scaleXY*qMax(maxCoords.x()-minCoords.x(),maxCoords.y()-minCoords.y()));
+	surface.scale= Options::surfaceSize/(scaleXY*std::max(maxCoords.x()-minCoords.x(),maxCoords.y()-minCoords.y()));
 
-	QMap<QPointF,qreal> pointsMap;
+	QMultiMap<QPointF,qreal> pointsMap;
 	for(QList<QVector3D>::const_iterator it= points.constBegin();it!=points.constEnd();it++){
 		QPointF point(it->x(),it->y());
-		pointsMap.insertMulti(point,it->z());
+		pointsMap.insert(point,it->z());
 	}
 	qreal sum=0;
 	int count=0;
@@ -167,7 +167,7 @@ bool Sculptor::filterTriangles(QList<QVector3D>& points,const QList<Surface::Tri
 		}
 
 		//Compute height median
-		qSort(sorted_heights.begin(),sorted_heights.end());
+		std::sort(sorted_heights.begin(),sorted_heights.end());
 		if(sorted_heights.length()>0){
 			double median=sorted_heights.length()%2==1 ?
 						sorted_heights[(sorted_heights.length()-1)/2] :
@@ -184,8 +184,8 @@ bool Sculptor::filterTriangles(QList<QVector3D>& points,const QList<Surface::Tri
 	//Renormalize z-coordinate
 	qreal zMin= std::numeric_limits<qreal>::infinity(), zMax= -std::numeric_limits<qreal>::infinity();
 	for(QList<QVector3D>::const_iterator it= points.constBegin();it!=points.constEnd();it++){
-		zMin= qMin(zMin,(qreal)it->z());
-		zMax= qMax(zMax,(qreal)it->z());
+		zMin= std::min(zMin,(qreal)it->z());
+		zMax= std::max(zMax,(qreal)it->z());
 	}
 
 	for(QList<QVector3D>::iterator it= points.begin();it!=points.end();it++){
@@ -245,10 +245,10 @@ QList<QVector3D> Sculptor::interpolatePointsToGrid(const QList<QVector3D>& point
 	{
 		qreal minX= points.constBegin()->x(), minY= points.constBegin()->y(), maxX= points.constBegin()->x(), maxY= points.constBegin()->y();
 		for(QList<QVector3D>::const_iterator it=points.constBegin();it!=points.constEnd();it++){
-			minX= qMin(minX,(qreal)it->x());
-			minY= qMin(minY,(qreal)it->y());
-			maxX= qMax(maxX,(qreal)it->x());
-			maxY= qMax(maxY,(qreal)it->y());
+			minX= std::min(minX,(qreal)it->x());
+			minY= std::min(minY,(qreal)it->y());
+			maxX= std::max(maxX,(qreal)it->x());
+			maxY= std::max(maxY,(qreal)it->y());
 		}
 		//minX= 0, minY= 0;
 		//maxX= imageSize.width(), maxY= imageSize.height();
@@ -433,12 +433,12 @@ void Sculptor::delaunayTriangulate(const QList<QVector3D>& unfilteredPoints){
 		QVector3D minCoords( std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
 		QVector3D maxCoords(-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity());
 		for(QList<QVector3D>::const_iterator it= points.constBegin();it!=points.constEnd();it++){
-			minCoords.setX(qMin(minCoords.x(),it->x()));
-			minCoords.setY(qMin(minCoords.y(),it->y()));
-			minCoords.setZ(qMin(minCoords.z(),it->z()));
-			maxCoords.setX(qMax(maxCoords.x(),it->x()));
-			maxCoords.setY(qMax(maxCoords.y(),it->y()));
-			maxCoords.setZ(qMax(maxCoords.z(),it->z()));
+			minCoords.setX(std::min(minCoords.x(),it->x()));
+			minCoords.setY(std::min(minCoords.y(),it->y()));
+			minCoords.setZ(std::min(minCoords.z(),it->z()));
+			maxCoords.setX(std::max(maxCoords.x(),it->x()));
+			maxCoords.setY(std::max(maxCoords.y(),it->y()));
+			maxCoords.setZ(std::max(maxCoords.z(),it->z()));
 		}
 		float dx= maxCoords.x()-minCoords.x();
 		float dy= maxCoords.y()-minCoords.y();
@@ -568,7 +568,7 @@ void Sculptor::delaunayTriangulate(const QList<QVector3D>& unfilteredPoints){
 		QList<qreal> depthList;
 		for(QList<QVector3D>::const_iterator it=points.constBegin();it!=points.constEnd();it++)
 			depthList<<it->z();
-		qSort(depthList);
+		std::sort(depthList.begin(),depthList.end());
 
 		if(depthList.length()>0){
 			double median=depthList.length()%2==1 ?

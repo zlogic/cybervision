@@ -6,12 +6,7 @@
 #include <QFileInfo>
 #include <QRectF>
 #include <QImage>
-
-namespace Qt3DCore{
-
-class QEntity;
-
-}
+#include <Qt3DCore/QEntity>
 
 namespace cybervision{
 /*

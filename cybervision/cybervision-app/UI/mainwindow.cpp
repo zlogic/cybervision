@@ -137,7 +137,7 @@ void MainWindow::updateSurfaceStats(int lineId){
 	qreal medianDepth= surfaceViewport.getSurface3D().getMedianDepth();
 	qreal baseDepth= surfaceViewport.getSurface3D().getBaseDepth();
 	if(surfaceViewport.getSurface3D().isOk())
-		ui->statisticsLabel->setText(QString(trUtf8("Depth range: %1 \xC2\xB5m\nBase depth: %2 \xC2\xB5m\nMedian depth: %3 \xC2\xB5m"))
+		ui->statisticsLabel->setText(QString(tr("Depth range: %1 \xC2\xB5m\nBase depth: %2 \xC2\xB5m\nMedian depth: %3 \xC2\xB5m"))
 									 .arg((maxDepth-minDepth)*cybervision::Options::TextUnitScale)
 									 .arg(baseDepth*cybervision::Options::TextUnitScale)
 									 .arg(medianDepth*cybervision::Options::TextUnitScale));
@@ -259,7 +259,7 @@ void MainWindow::viewerSelectedPointUpdated(QVector3D point){
 	if(point.x()==std::numeric_limits<qreal>::infinity() || point.y()==std::numeric_limits<qreal>::infinity() || point.z()==std::numeric_limits<qreal>::infinity())
 		ui->pointCoordinatesLabel->setText(tr("No point selected"));
 	else
-		ui->pointCoordinatesLabel->setText(QString(trUtf8("x: %1 \xC2\xB5m\ny: %2 \xC2\xB5m\nz: %3 \xC2\xB5m"))
+		ui->pointCoordinatesLabel->setText(QString(tr("x: %1 \xC2\xB5m\ny: %2 \xC2\xB5m\nz: %3 \xC2\xB5m"))
 										   .arg(point.x()*cybervision::Options::TextUnitScale)
 										   .arg(point.y()*cybervision::Options::TextUnitScale)
 										   .arg(point.z()*cybervision::Options::TextUnitScale));
@@ -309,7 +309,7 @@ void MainWindow::saveResult(){
 	for(QStringList::const_iterator it=formats.constBegin();it!=formats.constEnd();it++)
 		filter.append(*it+";;");
 	QString selectedFilter;
-	QString fileName = QFileDialog::getSaveFileName(this,tr("Save the surface"),startPath,filter,&selectedFilter,0);
+	QString fileName = QFileDialog::getSaveFileName(this,tr("Save the surface"),startPath,filter,&selectedFilter);
 #ifdef CYBERVISION_DEMO
 	showDemoWarning(tr("Save functionality is disabled."));
 #else
@@ -353,7 +353,7 @@ void MainWindow::saveResult(){
 
 void MainWindow::loadSurface(){
 	QString filter= tr("Cybervision surface") + "(*.cvs);;"+tr("All files")+"(*.*)";
-	QString filename = QFileDialog::getOpenFileName(this,tr("Select surface to load"),startPath,filter,0,0);
+	QString filename = QFileDialog::getOpenFileName(this,tr("Select surface to load"),startPath,filter,0);
 	if(!filename.isNull()){
 		cybervision::Surface surface= cybervision::Surface::fromFile(filename);
 		if(!surface.isOk())
@@ -371,7 +371,7 @@ void MainWindow::showAboutWindow(){
 }
 
 void MainWindow::selectImage1(){
-	QString filename = QFileDialog::getOpenFileName(this,tr("Select image 1"),startPath,inputImageFilter,0,0);
+	QString filename = QFileDialog::getOpenFileName(this,tr("Select image 1"),startPath,inputImageFilter,0);
 	if(filename.isNull()){
 		image1Path= "";
 	}else{
@@ -389,7 +389,7 @@ void MainWindow::selectImage1(){
 }
 
 void MainWindow::selectImage2(){
-	QString filename = QFileDialog::getOpenFileName(this,tr("Select image 2"),startPath,inputImageFilter,0,0);
+	QString filename = QFileDialog::getOpenFileName(this,tr("Select image 2"),startPath,inputImageFilter,0);
 	if(filename.isNull()){
 		image2Path= "";
 	}else{
@@ -407,7 +407,7 @@ void MainWindow::selectImage2(){
 }
 
 void MainWindow::addImages(){
-	QStringList filenames = QFileDialog::getOpenFileNames(this,tr("Select images to add"),startPath,inputImageFilter,0,0);
+	QStringList filenames = QFileDialog::getOpenFileNames(this,tr("Select images to add"),startPath,inputImageFilter,0);
 	for(QStringList::const_iterator it=filenames.constBegin();it!=filenames.constEnd();it++){
 		QString name= QFileInfo(*it).fileName();
 		QListWidgetItem* newItem= new QListWidgetItem(name);

@@ -1,4 +1,3 @@
-#include <Qt3DCore/QEntity>
 #include <Qt3DCore/QTransform>
 #include <Qt3DRender/QGeometryRenderer>
 #include <Qt3DRender/QAttribute>
@@ -36,9 +35,9 @@ void Surface::operator =(const Surface&sc){
 }
 
 Qt3DCore::QEntity* Surface::create3DEntity(Qt3DCore::QEntity* parent) const{
-	const uint nVerts = 3 * triangles.size();
-	const quint32 elementSize = 3 + 3 + 2;
-	const quint32 stride = elementSize * sizeof(float);
+	const int nVerts = 3 * triangles.size();
+	const int elementSize = 3 + 3 + 2;
+	const int stride = elementSize * sizeof(float);
 	QByteArray vertexBytes;
 	vertexBytes.resize(stride * nVerts);
 	float* vertices = reinterpret_cast<float*>(vertexBytes.data());

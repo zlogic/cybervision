@@ -56,30 +56,30 @@ void CrossSection::computeCrossSection(const Surface&surface,const QVector3D &st
 		QLineF lineCA(surface.points[it->c].coord.x(),surface.points[it->c].coord.y(),surface.points[it->a].coord.x(),surface.points[it->a].coord.y());
 		QPointF intersectionPoint;
 		if(lineAB.intersects(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
-			qreal tLine= qAbs(intersectionLine.dx())>qAbs(intersectionLine.dy())?
+			qreal tLine= std::abs(intersectionLine.dx())>std::abs(intersectionLine.dy())?
 						(intersectionPoint.x()-intersectionLine.x1())/(intersectionLine.x2()-intersectionLine.x1()):
 						(intersectionPoint.y()-intersectionLine.y1())/(intersectionLine.y2()-intersectionLine.y1());
-			qreal tPolygon= qAbs(lineAB.dx())>qAbs(lineAB.dy())?
+			qreal tPolygon= std::abs(lineAB.dx())>std::abs(lineAB.dy())?
 						(intersectionPoint.x()-lineAB.x1())/(lineAB.x2()-(lineAB.x1())):
 						(intersectionPoint.y()-lineAB.y1())/(lineAB.y2()-(lineAB.y1()));
 			qreal z= surface.points[it->a].coord.z()*(1-tPolygon)+surface.points[it->b].coord.z()*tPolygon;
 			intersections.insert(tLine,z);
 		}
 		if(lineBC.intersects(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
-			qreal tLine= qAbs(intersectionLine.dx())>qAbs(intersectionLine.dy())?
+			qreal tLine= std::abs(intersectionLine.dx())>std::abs(intersectionLine.dy())?
 						(intersectionPoint.x()-intersectionLine.x1())/(intersectionLine.x2()-intersectionLine.x1()):
 						(intersectionPoint.y()-intersectionLine.y1())/(intersectionLine.y2()-intersectionLine.y1());
-			qreal tPolygon= qAbs(lineBC.dx())>qAbs(lineBC.dy())?
+			qreal tPolygon= std::abs(lineBC.dx())>std::abs(lineBC.dy())?
 						(intersectionPoint.x()-lineBC.x1())/(lineBC.x2()-(lineBC.x1())):
 						(intersectionPoint.y()-lineBC.y1())/(lineBC.y2()-(lineBC.y1()));
 			qreal z= surface.points[it->b].coord.z()*(1-tPolygon)+surface.points[it->a].coord.z()*tPolygon;
 			intersections.insert(tLine,z);
 		}
 		if(lineCA.intersects(intersectionLine,&intersectionPoint)==QLineF::BoundedIntersection){
-			qreal tLine= qAbs(intersectionLine.dx())>qAbs(intersectionLine.dy())?
+			qreal tLine= std::abs(intersectionLine.dx())>std::abs(intersectionLine.dy())?
 						(intersectionPoint.x()-intersectionLine.x1())/(intersectionLine.x2()-intersectionLine.x1()):
 						(intersectionPoint.y()-intersectionLine.y1())/(intersectionLine.y2()-intersectionLine.y1());
-			qreal tPolygon= qAbs(lineCA.dx())>qAbs(lineCA.dy())?
+			qreal tPolygon= std::abs(lineCA.dx())>std::abs(lineCA.dy())?
 						(intersectionPoint.x()-lineCA.x1())/(lineCA.x2()-(lineCA.x1())):
 						(intersectionPoint.y()-lineCA.y1())/(lineCA.y2()-(lineCA.y1()));
 			qreal z= surface.points[it->c].coord.z()*(1-tPolygon)+surface.points[it->a].coord.z()*tPolygon;
@@ -133,8 +133,8 @@ void CrossSection::computeParams(int p){
 		qreal minX= std::numeric_limits<qreal>::infinity(),
 				maxX= -std::numeric_limits<qreal>::infinity();
 		for(QList<QPointF>::const_iterator it=crossSection.constBegin();it!=crossSection.constEnd();it++){
-			minX= qMin(minX,it->x());
-			maxX= qMax(maxX,it->x());
+			minX= std::min(minX,it->x());
+			maxX= std::max(maxX,it->x());
 		}
 		qreal deltaX= (maxX-minX);
 		mL= sqrt(deltaX*deltaX*mB*mB+deltaX*deltaX);
@@ -156,14 +156,14 @@ void CrossSection::computeParams(int p){
 			QPointF intersectionPoint;
 			mLineNormal.intersects(pointLine,&intersectionPoint);
 			QLineF lineY(mLineNormal.p1(),intersectionPoint),lineX(intersectionPoint,*it);
-			qreal pointY= lineY.length()*(qAbs(lineY.angleTo(mLineNormal))<90?1:-1);
-			qreal pointX= lineX.length()*(qAbs(lineX.angleTo(pointLine))<90?1:-1);
+			qreal pointY= lineY.length()*(std::abs(lineY.angleTo(mLineNormal))<90?1:-1);
+			qreal pointX= lineX.length()*(std::abs(lineX.angleTo(pointLine))<90?1:-1);
 
 			crossSectionSorted.insert(pointX,pointY);
 
 			//Compute the lowest Y for p-level line
-			minDeltaY= qMin(deltaY,minDeltaY);
-			maxDeltaY= qMax(deltaY,maxDeltaY);
+			minDeltaY= std::min(deltaY,minDeltaY);
+			maxDeltaY= std::max(deltaY,maxDeltaY);
 		}
 
 		qreal sum=0;
@@ -204,13 +204,13 @@ void CrossSection::computeParams(int p){
 
 			qreal height= pointY;
 
-			Ra+= qAbs(height);
+			Ra+= std::abs(height);
 
 			if(it!=crossSectionProjected.constBegin()){
 				if(lastHeightPositive && (height<0 || (it+1)==crossSectionProjected.constEnd())){
 					//Rz
-					maxHeights<<qAbs(peakHeight);
-					qSort(maxHeights);
+					maxHeights<<std::abs(peakHeight);
+					std::sort(maxHeights.begin(),maxHeights.end());
 					if(maxHeights.size()>5)
 						maxHeights.pop_front();
 					peakHeight= 0;
@@ -230,8 +230,8 @@ void CrossSection::computeParams(int p){
 				}
 				if(!lastHeightPositive && (height>0 || (it+1)==crossSectionProjected.constEnd())){
 					//Rz
-					minHeights<<qAbs(peakHeight);
-					qSort(minHeights);
+					minHeights<<std::abs(peakHeight);
+					std::sort(minHeights.begin(),minHeights.end());
 					if(minHeights.size()>5)
 						minHeights.pop_back();
 					peakHeight= 0;
@@ -243,10 +243,10 @@ void CrossSection::computeParams(int p){
 				peakX= pointX;
 			peakX= (height>peakHeight && height>0)?pointX:peakX;
 			//Rz
-			peakHeight= qAbs(height)>qAbs(peakHeight)?height:peakHeight;
+			peakHeight= std::abs(height)>std::abs(peakHeight)?height:peakHeight;
 			//Rmax
-			maxHeight= qMax(maxHeight,height);
-			minHeight= qMin(minHeight,height);
+			maxHeight= std::max(maxHeight,height);
+			minHeight= std::min(minHeight,height);
 		}
 		//Ra
 		Ra/= (qreal)crossSectionProjected.size();
@@ -257,7 +257,7 @@ void CrossSection::computeParams(int p){
 			Rz= std::numeric_limits<qreal>::quiet_NaN();
 		else{
 			Rz= 0;
-			for(int i=0;i<qMin(maxHeights.size(),minHeights.size());i++)
+			for(int i=0;i<std::min(maxHeights.size(),minHeights.size());i++)
 				Rz+= maxHeights[i]+minHeights[i];
 			Rz/= 5.0;
 		}

@@ -392,7 +392,7 @@ bool PointMatcherOpenCL::CalcDistances(){
 		}
 
 		if((cl_uint)(localThreads[0]*localThreads[1]) > kernelWorkGroupSizeFull){
-			kernelWorkGroupSize2= qMin(kernelWorkGroupSize2,kernelWorkGroupSize2Max);
+			kernelWorkGroupSize2= std::min(kernelWorkGroupSize2,kernelWorkGroupSize2Max);
 			kernelWorkGroupSize1= kernelWorkGroupSizeFull/kernelWorkGroupSize2;
 
 			emit sgnLogMessage(QString(tr("OpenCL information: Reducing group size to fit hardware limits. Group Size specified: %1. Max Group Size supported on the kernel: %2. Changing the group size to %3x%4.")).arg(localThreads[0]).arg(kernelWorkGroupSizeFull).arg(kernelWorkGroupSize1).arg(kernelWorkGroupSize2));

@@ -415,7 +415,7 @@ bool PointTriangulator::triangulatePoints(const QList<cybervision::KeypointMatch
 			Eigen::MatrixXd P1= rotation*(W.block(0,i,2,1)+displacementVector);
 			Eigen::MatrixXd P2= rotation*(W.block(2,i,2,1)+displacementVector);
 
-			Z_disp(i)= -qAbs(P2(0,0)-P1(0,0)*cos(angle*M_PI/180));
+			Z_disp(i)= -std::abs(P2(0,0)-P1(0,0)*cos(angle*M_PI/180));
 		}
 		Eigen::MatrixXd scale_matrix= leastSquares(Z_curr,Z_disp);
 		scale= scale_matrix(0,0);
@@ -502,10 +502,10 @@ QSet<int> PointTriangulator::findPeaks(const QList<QVector3D> &points) const{
 	{
 		qreal minX= points.begin()->x(), minY= points.begin()->y(), maxX= points.begin()->x(), maxY= points.begin()->y();
 		for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
-			minX= qMin(minX,(qreal)it->x());
-			minY= qMin(minY,(qreal)it->y());
-			maxX= qMax(maxX,(qreal)it->x());
-			maxY= qMax(maxY,(qreal)it->y());
+			minX= std::min(minX,(qreal)it->x());
+			minY= std::min(minY,(qreal)it->y());
+			maxX= std::max(maxX,(qreal)it->x());
+			maxY= std::max(maxY,(qreal)it->y());
 		}
 		values_x<<minX<<maxX;
 		values_y<<minY<<maxY;
@@ -544,7 +544,7 @@ QSet<int> PointTriangulator::findPeaks(const QList<QVector3D> &points) const{
 						if(distance <= Options::gridPeakFilterRadius*(max-middle).length())
 							Zp<< kt->z();
 					}
-					qSort(Zp);
+					std::sort(Zp.begin(),Zp.end());
 					qreal median,
 							Zmax= !Zp.isEmpty()?Zp.at(Zp.size()-1):0,
 							Zmin= !Zp.isEmpty()?Zp.at(0):0;
