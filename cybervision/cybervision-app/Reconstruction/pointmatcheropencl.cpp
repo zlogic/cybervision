@@ -230,7 +230,7 @@ bool PointMatcherOpenCL::InitCL(){
 	/////////////////////////////////////////////////////////////////
 	// Create an OpenCL command queue
 	/////////////////////////////////////////////////////////////////
-	commandQueue = clCreateCommandQueueWithProperties(
+	commandQueue = clCreateCommandQueue(
 				context,
 				devices[0],
 				0,

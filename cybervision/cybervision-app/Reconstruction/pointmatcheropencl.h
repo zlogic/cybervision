@@ -16,6 +16,8 @@
 #ifdef __MINGW32__
 #define __CYGWIN__
 #endif
+#define CL_TARGET_OPENCL_VERSION 110
+#define CL_VERSION_1_1 1
 #include <CL/cl.h>
 
 namespace cybervision{
