@@ -35,47 +35,36 @@ void Surface::operator =(const Surface&sc){
 }
 
 Qt3DCore::QEntity* Surface::create3DEntity(Qt3DCore::QEntity* parent) const{
-	const int nVerts = 3 * triangles.size();
-	const int elementSize = 3 + 3 + 2;
-	const int stride = elementSize * sizeof(float);
+	const int nVerts = 2 * points.size();
+	const int vertElementSize = 3 + 3 + 2;
+	const int vertStride = vertElementSize * sizeof(float);
+
 	QByteArray vertexBytes;
-	vertexBytes.resize(stride * nVerts);
+	vertexBytes.resize(vertStride * nVerts);
 	float* vertices = reinterpret_cast<float*>(vertexBytes.data());
+	for(QList<Surface::Point>::const_iterator it= points.constBegin();it!=points.constEnd();it++){
+		//Front side
+		*vertices++= it->coord.x(); *vertices++= it->coord.y(); *vertices++= it->coord.z();
+		*vertices++= it->normal.x(); *vertices++= it->normal.y(); *vertices++= it->normal.z();
+		*vertices++= it->uv.x(); *vertices++= it->uv.y();
+		//Back side
+		*vertices++= it->coord.x(); *vertices++= it->coord.y(); *vertices++= it->coord.z();
+		*vertices++= -it->normal.x(); *vertices++= -it->normal.y(); *vertices++= -it->normal.z();
+		*vertices++= it->uv.x(); *vertices++= it->uv.y();
+	}
+
+	const int nIndexes= 3 * 2 * triangles.size();
+	const int indexStride= sizeof(uint);
+
+	QByteArray indexBytes;
+	indexBytes.resize(indexStride * nIndexes);
+	uint* indexes = reinterpret_cast<uint*>(indexBytes.data());
 
 	for(QList<Surface::Triangle>::const_iterator it= triangles.constBegin();it!=triangles.constEnd();it++){
-		const Point& pa=points[it->a];
-		const Point& pb=points[it->b];
-		const Point& pc=points[it->c];
-
-		if(Options::renderNormalsMode== Options::RENDER_NORMALS_TRIANGLE){
-			//Use triangle normals
-			//Front side
-			*vertices++= pa.coord.x(); *vertices++= pa.coord.y(); *vertices++= pa.coord.z();
-			*vertices++= it->normal.x(); *vertices++= it->normal.y(); *vertices++= it->normal.z();
-			*vertices++= pa.uv.x(); *vertices++= pa.uv.y();
-
-			*vertices++= pb.coord.x(); *vertices++= pb.coord.y(); *vertices++= pb.coord.z();
-			*vertices++= it->normal.x(); *vertices++= it->normal.y(); *vertices++= it->normal.z();
-			*vertices++= pb.uv.x(); *vertices++= pb.uv.y();
-
-			*vertices++= pc.coord.x(); *vertices++= pc.coord.y(); *vertices++= pc.coord.z();
-			*vertices++= it->normal.x(); *vertices++= it->normal.y(); *vertices++= it->normal.z();
-			*vertices++= pc.uv.x(); *vertices++= pc.uv.y();
-		}else if(Options::renderNormalsMode== Options::RENDER_NORMALS_POINT){
-			//Use point normals
-			//Front side
-			*vertices++= pa.coord.x(); *vertices++= pa.coord.y(); *vertices++= pa.coord.z();
-			*vertices++= pa.normal.x(); *vertices++= pa.normal.y(); *vertices++= pa.normal.z();
-			*vertices++= pa.uv.x(); *vertices++= pa.uv.y();
-
-			*vertices++= pb.coord.x(); *vertices++= pb.coord.y(); *vertices++= pb.coord.z();
-			*vertices++= pb.normal.x(); *vertices++= pb.normal.y(); *vertices++= pb.normal.z();
-			*vertices++= pb.uv.x(); *vertices++= pb.uv.y();
-
-			*vertices++= pc.coord.x(); *vertices++= pc.coord.y(); *vertices++= pc.coord.z();
-			*vertices++= pc.normal.x(); *vertices++= pc.normal.y(); *vertices++= pc.normal.z();
-			*vertices++= pc.uv.x(); *vertices++= pc.uv.y();
-		}
+		//Front side
+		*indexes++= it->a*2; *indexes++= it->b*2; *indexes++= it->c*2;
+		//Back side
+		*indexes++= it->c*2+1; *indexes++= it->b*2+1; *indexes++= it->a*2+1;
 	}
 
 	Qt3DCore::QEntity* entity = new Qt3DCore::QEntity(parent);
@@ -91,7 +80,7 @@ Qt3DCore::QEntity* Surface::create3DEntity(Qt3DCore::QEntity* parent) const{
 	positionAttribute->setVertexBaseType(Qt3DRender::QAttribute::Float);
 	positionAttribute->setVertexSize(3);
 	positionAttribute->setByteOffset(0);
-	positionAttribute->setByteStride(stride);
+	positionAttribute->setByteStride(vertStride);
 	positionAttribute->setCount(nVerts);
 	positionAttribute->setName(Qt3DRender::QAttribute::defaultPositionAttributeName());
 
@@ -101,7 +90,7 @@ Qt3DCore::QEntity* Surface::create3DEntity(Qt3DCore::QEntity* parent) const{
 	normalAttribute->setVertexBaseType(Qt3DRender::QAttribute::Float);
 	normalAttribute->setVertexSize(3);
 	normalAttribute->setByteOffset(3 * sizeof(float));
-	normalAttribute->setByteStride(stride);
+	normalAttribute->setByteStride(vertStride);
 	normalAttribute->setCount(nVerts);
 	normalAttribute->setName(Qt3DRender::QAttribute::defaultNormalAttributeName());
 
@@ -111,18 +100,32 @@ Qt3DCore::QEntity* Surface::create3DEntity(Qt3DCore::QEntity* parent) const{
 	texCoordAttribute->setVertexBaseType(Qt3DRender::QAttribute::Float);
 	texCoordAttribute->setVertexSize(2);
 	texCoordAttribute->setByteOffset((3 + 3) * sizeof(float));
-	texCoordAttribute->setByteStride(stride);
+	texCoordAttribute->setByteStride(vertStride);
 	texCoordAttribute->setCount(nVerts);
 	texCoordAttribute->setName(Qt3DRender::QAttribute::defaultTextureCoordinateAttributeName());
+
+
+	Qt3DRender::QBuffer* indexBuffer = new Qt3DRender::QBuffer(geometry);
+	indexBuffer->setData(indexBytes);
+
+	Qt3DRender::QAttribute* indexAttribute = new Qt3DRender::QAttribute(geometry);
+	indexAttribute->setAttributeType(Qt3DRender::QAttribute::IndexAttribute);
+	indexAttribute->setBuffer(indexBuffer);
+	indexAttribute->setVertexBaseType(Qt3DRender::QAttribute::UnsignedInt);
+	indexAttribute->setVertexSize(1);
+	indexAttribute->setByteOffset(0);
+	indexAttribute->setByteStride(indexStride);
+	indexAttribute->setCount(nIndexes);
 
 	geometry->addAttribute(positionAttribute);
 	geometry->addAttribute(normalAttribute);
 	geometry->addAttribute(texCoordAttribute);
+	geometry->addAttribute(indexAttribute);
 
 	renderer->setGeometry(geometry);
 	renderer->setInstanceCount(1);
 	renderer->setPrimitiveType(Qt3DRender::QGeometryRenderer::Triangles);
-	renderer->setVertexCount(nVerts);
+	renderer->setVertexCount(nIndexes);
 	entity->addComponent(renderer);
 
 	Qt3DCore::QTransform *surfaceTransform = new Qt3DCore::QTransform(entity);
