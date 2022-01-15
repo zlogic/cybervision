@@ -108,7 +108,7 @@ void CybervisionViewer::addSelectedPoint(){
 	Qt3DExtras::QCuboidMesh *mesh = new Qt3DExtras::QCuboidMesh(selectedPointEntity);
 
 	selectedPointTransform = new Qt3DCore::QTransform();
-	selectedPointTransform->setScale(0.25/surface.getScale());
+	selectedPointTransform->setScale(cybervision::Options::PointDiameter/surface.getScale());
 
 	Qt3DExtras::QDiffuseSpecularMaterial *material = new Qt3DExtras::QDiffuseSpecularMaterial();
 	material->setDiffuse(QColor(0xff,0x99,0x00));
