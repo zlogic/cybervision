@@ -25,6 +25,8 @@
 #include <Qt3DExtras/QForwardRenderer>
 #include <Qt3DExtras/QDiffuseSpecularMaterial>
 #include <Qt3DExtras/QExtrudedTextMesh>
+#include <Qt3DExtras/QCylinderMesh>
+#include <Qt3DExtras/QConeMesh>
 #include <Qt3DExtras/QCuboidMesh>
 
 CybervisionViewer::CybervisionViewer(): Qt3DExtras::Qt3DWindow(){
@@ -302,54 +304,78 @@ Qt3DRender::QGeometry* CybervisionViewer::createLines(const QVector<QVector3D>& 
 
 void CybervisionViewer::initializeAxesWidget(){
 	float axesLength= 0.7f;
+	float arrowLength= 0.1f;
 
 	Qt3DCore::QEntity* entity = new Qt3DCore::QEntity(rootEntity);
-	Qt3DRender::QGeometryRenderer* renderer = new Qt3DRender::QGeometryRenderer(entity);
-
-	QVector<QVector3D> axesLines;
-	axesLines<<QVector3D(.0f,.0f,.0f)<<QVector3D(axesLength,.0f,.0f);
-	axesLines<<QVector3D(.0f,.0f,.0f)<<QVector3D(.0f,axesLength,.0f);
-	axesLines<<QVector3D(.0f,.0f,.0f)<<QVector3D(.0f,.0f,axesLength);
-	Qt3DRender::QGeometry* axesGeometry= createLines(axesLines, renderer);
-
-	Qt3DExtras::QDiffuseSpecularMaterial *material = new Qt3DExtras::QDiffuseSpecularMaterial(entity);
-	material->setAmbient(QColor(0x00,0x00,0x00));
-	material->setDiffuse(QColor(0x00,0x00,0x00));
-	material->setSpecular(QColor(0x00,0x00,0x00));
-	material->setShininess(.0f);
-
-	renderer->setGeometry(axesGeometry);
-	renderer->setInstanceCount(1);
-	renderer->setPrimitiveType(Qt3DRender::QGeometryRenderer::Lines);
-	renderer->setVertexCount(axesLines.size());
-	renderer->setFirstInstance(0);
-
-	entity->addComponent(renderer);
-	entity->addComponent(material);
-
-	axesTransform = new Qt3DCore::QTransform(entity);
-	entity->addComponent(axesTransform);
-
-	QVector<QPair<QString,QVector3D> > labels;
-	labels<< QPair<QString,QVector3D>(tr("x"),QVector3D(axesLength*1.1f,.0f,.0f));
-	labels<< QPair<QString,QVector3D>(tr("y"),QVector3D(.0f,axesLength*1.1f,.0f));
-	labels<< QPair<QString,QVector3D>(tr("z"),QVector3D(.0f,.0f,axesLength*1.1f));
+	struct AxisPropeties{
+		QVector3D direction;
+		QString label;
+		QColor color;
+		AxisPropeties(QVector3D direction,QString label, QColor color): direction(direction),label(label),color(color){}
+	};
+	QVector<AxisPropeties> axes;
+	axes<<AxisPropeties(QVector3D(1.0f,.0f,.0f),tr("x"),QColor(0xff,0x00,0x00));
+	axes<<AxisPropeties(QVector3D(.0f,1.0f,.0f),tr("y"),QColor(0x00,0xff,0x00));
+	axes<<AxisPropeties(QVector3D(.0f,.0f,1.0f),tr("z"),QColor(0x00,0xff,0xff));
 
 	QFont font("Arial",8);
-	for(QVector<QPair<QString,QVector3D> >::const_iterator it=labels.constBegin();it!=labels.constEnd();it++){
+	for(QVector<AxisPropeties>::const_iterator it=axes.constBegin();it!=axes.constEnd();it++){
+		Qt3DCore::QEntity *lineEntity = new Qt3DCore::QEntity(entity);
+		Qt3DExtras::QDiffuseSpecularMaterial *material = new Qt3DExtras::QDiffuseSpecularMaterial(entity);
+		material->setAmbient(it->color);
+		material->setDiffuse(it->color);
+		material->setSpecular(it->color);
+		material->setShininess(.0f);
+
+		Qt3DExtras::QCylinderMesh *lineMesh = new Qt3DExtras::QCylinderMesh(lineEntity);
+		lineMesh->setRadius(0.03);
+		lineMesh->setLength(axesLength-arrowLength);
+		lineMesh->setRings(3);
+		lineMesh->setSlices(10);
+
+		Qt3DCore::QTransform *lineTransform = new Qt3DCore::QTransform(lineEntity);
+		QVector3D rotateAround= QVector3D::crossProduct(it->direction,QVector3D(.0f,1.0f,.0f));
+		lineTransform->setRotation(QQuaternion::fromAxisAndAngle(rotateAround, -90.0f));
+		lineTransform->setTranslation(it->direction * lineMesh->length() / 2.0f);
+
+		lineEntity->addComponent(lineMesh);
+		lineEntity->addComponent(lineTransform);
+		lineEntity->addComponent(material);
+
+		Qt3DCore::QEntity *arrowEntity = new Qt3DCore::QEntity(entity);
+		Qt3DExtras::QConeMesh *arrowMesh = new Qt3DExtras::QConeMesh(arrowEntity);
+		arrowMesh->setTopRadius(.0f);
+		arrowMesh->setBottomRadius(0.05f);
+		arrowMesh->setLength(arrowLength);
+		arrowMesh->setRings(3);
+		arrowMesh->setSlices(10);
+
+		Qt3DCore::QTransform *arrowTransform = new Qt3DCore::QTransform(arrowEntity);
+		arrowTransform->setRotation(lineTransform->rotation());
+		arrowTransform->setTranslation(it->direction * (axesLength - arrowMesh->length()/2.0f));
+
+		arrowEntity->addComponent(arrowTransform);
+		arrowEntity->addComponent(material);
+		arrowEntity->addComponent(arrowMesh);
+
 		Qt3DCore::QEntity* textEntity = new Qt3DCore::QEntity(entity);
 		Qt3DExtras::QExtrudedTextMesh *textMesh = new Qt3DExtras::QExtrudedTextMesh(textEntity);
 		textMesh->setFont(font);
 		textMesh->setDepth(0.0f);
-		textMesh->setText(it->first);
+		textMesh->setText(it->label);
 
-		Qt3DCore::QTransform *text2DTransform = new Qt3DCore::QTransform(textMesh);
-		text2DTransform->setTranslation(it->second);
-		text2DTransform->setScale(0.15);
+		Qt3DCore::QTransform *textTransform = new Qt3DCore::QTransform(textMesh);
+		textTransform->setTranslation(it->direction * axesLength * 1.2);
+		textTransform->setRotation(lineTransform->rotation());
+		textTransform->setScale(0.15);
+
 		textEntity->addComponent(textMesh);
-		textEntity->addComponent(text2DTransform);
+		textEntity->addComponent(textTransform);
 		textEntity->addComponent(material);
 	}
+
+	axesTransform = new Qt3DCore::QTransform(entity);
+	entity->addComponent(axesTransform);
 }
 
 void CybervisionViewer::updateCrossSectionLines(){
