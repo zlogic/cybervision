@@ -6,8 +6,8 @@
 AboutWindow::AboutWindow(QWidget *parent) : QDialog(parent),ui(new Ui::AboutWindow){
 	ui->setupUi(this);
 
-	connect(ui->closeButton, SIGNAL(clicked()), this, SLOT(close()));
-	connect(ui->copyrightLabel, SIGNAL(linkActivated(QString)), this, SLOT(openLink(QString)));
+	connect(ui->closeButton,&QPushButton::clicked,this,&AboutWindow::close);
+	connect(ui->copyrightLabel,&QLabel::linkActivated,this,&AboutWindow::openLink);
 }
 
 AboutWindow::~AboutWindow(){

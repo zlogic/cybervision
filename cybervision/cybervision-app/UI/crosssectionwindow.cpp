@@ -31,11 +31,11 @@ CrossSectionWindow::CrossSectionWindow(QWidget *parent) :
 	for(int i=0;i<2;i++)
 		crossSections<<cybervision::CrossSection();
 
-	connect(&crossSectionScene,SIGNAL(measurementLineMoved(qreal,int)),this,SLOT(measurementLineMoved(qreal,int)),Qt::AutoConnection);
-	connect(&crossSectionScene,SIGNAL(crossSectionMoved(qreal)),this,SLOT(crossSectionMoved(qreal)),Qt::AutoConnection);
-	connect(ui->crosssectionViewport,SIGNAL(resized()),this,SLOT(viewportResized()),Qt::AutoConnection);
-	connect(ui->roughnessPSpinBoxPrimary,SIGNAL(valueChanged(int)),this,SLOT(roughnessChanged()));
-	connect(ui->roughnessPSpinBoxSecondary,SIGNAL(valueChanged(int)),this,SLOT(roughnessChanged()));
+	connect(&crossSectionScene,&CybervisionCrosssectionScene::measurementLineMoved,this,&CrossSectionWindow::measurementLineMoved,Qt::AutoConnection);
+	connect(&crossSectionScene,&CybervisionCrosssectionScene::crossSectionMoved,this,&CrossSectionWindow::crossSectionMoved,Qt::AutoConnection);
+	connect(ui->crosssectionViewport,&CybervisionCrosssectionGraphicsView::resized,this,&CrossSectionWindow::viewportResized,Qt::AutoConnection);
+	connect(ui->roughnessPSpinBoxPrimary,&QSpinBox::textChanged,this,&CrossSectionWindow::roughnessChanged);
+	connect(ui->roughnessPSpinBoxSecondary,&QSpinBox::textChanged,this,&CrossSectionWindow::roughnessChanged);
 
 	movableCrossSectionPos= 0;
 

@@ -20,11 +20,11 @@ bool Reconstructor::run(const QString& filename1,const QString& filename2,qreal 
 		SortedKeypointMatches matches;//Point matches
 		{
 			PointMatcher matcher(this);
-			QObject::connect(&matcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);
-			QObject::connect(&matcher, SIGNAL(sgnStatusMessage(QString)),this, SIGNAL(sgnStatusMessage(QString)),Qt::DirectConnection);
+			connect(&matcher,&PointMatcher::sgnLogMessage,this,&Reconstructor::sgnLogMessage,Qt::DirectConnection);
+			connect(&matcher,&PointMatcher::sgnStatusMessage,this,&Reconstructor::sgnStatusMessage,Qt::DirectConnection);
 			bool ok= matcher.extractMatches(filename1,filename2);
-			QObject::disconnect(&matcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)));
-			QObject::disconnect(&matcher, SIGNAL(sgnStatusMessage(QString)),this, SIGNAL(sgnStatusMessage(QString)));
+			disconnect(&matcher,&PointMatcher::sgnLogMessage,this,&Reconstructor::sgnLogMessage);
+			disconnect(&matcher,&PointMatcher::sgnStatusMessage,this,&Reconstructor::sgnStatusMessage);
 			matches= matcher.getMatches();
 			imageSize= matcher.getSize();
 			image1= matcher.getImage1();
@@ -43,11 +43,11 @@ bool Reconstructor::run(const QString& filename1,const QString& filename2,qreal 
 		Eigen::Matrix3d F;
 		{
 			FundamentalMatrix fundamentalMatrix(this);
-			QObject::connect(&fundamentalMatrix, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);
-			QObject::connect(&fundamentalMatrix, SIGNAL(sgnStatusMessage(QString)),this, SIGNAL(sgnStatusMessage(QString)),Qt::DirectConnection);
+			connect(&fundamentalMatrix,&FundamentalMatrix::sgnLogMessage,this,&Reconstructor::sgnLogMessage,Qt::DirectConnection);
+			connect(&fundamentalMatrix,&FundamentalMatrix::sgnStatusMessage,this,&Reconstructor::sgnStatusMessage,Qt::DirectConnection);
 			bool ok= fundamentalMatrix.computeFundamentalMatrix(matches);
-			QObject::disconnect(&fundamentalMatrix, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)));
-			QObject::disconnect(&fundamentalMatrix, SIGNAL(sgnStatusMessage(QString)),this, SIGNAL(sgnStatusMessage(QString)));
+			disconnect(&fundamentalMatrix,&FundamentalMatrix::sgnLogMessage,this,&Reconstructor::sgnLogMessage);
+			disconnect(&fundamentalMatrix,&FundamentalMatrix::sgnStatusMessage,this,&Reconstructor::sgnStatusMessage);
 			matches= fundamentalMatrix.getAcceptedMatches();
 			F= fundamentalMatrix.getFundamentalMatrix();
 			if(!ok || matches.isEmpty()){
@@ -56,24 +56,24 @@ bool Reconstructor::run(const QString& filename1,const QString& filename2,qreal 
 			}
 			//Save matches if needed
 			if(Options::SaveFilteredMatches){
-				QObject::connect(&fundamentalMatrix, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);
+				connect(&fundamentalMatrix,&FundamentalMatrix::sgnLogMessage,this,&Reconstructor::sgnLogMessage,Qt::DirectConnection);
 				fundamentalMatrix.saveAcceptedMatches(QFileInfo(QFileInfo(filename1).absoluteDir(),QFileInfo(filename1).fileName()+" "+QFileInfo(filename1).fileName()+" filtered.txt").absoluteFilePath());
-				QObject::disconnect(&fundamentalMatrix, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)));
+				disconnect(&fundamentalMatrix,&FundamentalMatrix::sgnLogMessage,this,&Reconstructor::sgnLogMessage);
 			}
 		}
 
 		//Triangulate points
 		{
 			PointTriangulator triangulator(this);
-			QObject::connect(&triangulator, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);
-			QObject::connect(&triangulator, SIGNAL(sgnStatusMessage(QString)),this, SIGNAL(sgnStatusMessage(QString)),Qt::DirectConnection);
+			connect(&triangulator,&PointTriangulator::sgnLogMessage,this,&Reconstructor::sgnLogMessage,Qt::DirectConnection);
+			connect(&triangulator,&PointTriangulator::sgnStatusMessage,this,&Reconstructor::sgnStatusMessage,Qt::DirectConnection);
 			bool ok=false;
 			if(Options::triangulationMode==Options::TRIANGULATION_PERSPECTIVE)
 				ok= triangulator.triangulatePoints(matches,F,imageSize);
 			else if(Options::triangulationMode==Options::TRIANGULATION_PARALLEL)
 				ok= triangulator.triangulatePoints(matches,angle,Options::mapPointsToGrid);
-			QObject::disconnect(&triangulator, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)));
-			QObject::disconnect(&triangulator, SIGNAL(sgnStatusMessage(QString)),this, SIGNAL(sgnStatusMessage(QString)));
+			disconnect(&triangulator,&PointTriangulator::sgnLogMessage,this,&Reconstructor::sgnLogMessage);
+			disconnect(&triangulator,&PointTriangulator::sgnStatusMessage,this,&Reconstructor::sgnStatusMessage);
 			Points3D= triangulator.getPoints3D();
 			if(!ok || Points3D.isEmpty()){
 				switch(triangulator.getResult()){

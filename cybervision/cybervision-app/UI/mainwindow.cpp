@@ -19,34 +19,34 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ui(new Ui::MainWin
 	loadDebugPreferences();
 	initViewport();
 
-	connect(&surfaceViewport, SIGNAL(selectedPointUpdated(QVector3D)),this, SLOT(viewerSelectedPointUpdated(QVector3D)),Qt::AutoConnection);
-	connect(&surfaceViewport, SIGNAL(crossSectionLineChanged(QVector3D,QVector3D,int)),this, SLOT(viewerCrosssectionLineChanged(QVector3D,QVector3D,int)),Qt::AutoConnection);
-	connect(&crossSectionWindow, SIGNAL(closed()),this, SLOT(crosssectionClosed()),Qt::AutoConnection);
-	connect(ui->openImage1, SIGNAL(clicked()),this,SLOT(selectImage1()));
-	connect(ui->openImage2, SIGNAL(clicked()),this,SLOT(selectImage2()));
-	connect(ui->addImageButton, SIGNAL(clicked()),this,SLOT(addImages()));
-	connect(ui->deleteImageButton, SIGNAL(clicked()),this,SLOT(deleteImage()));
-	connect(ui->useForImage1Button, SIGNAL(clicked()),this,SLOT(useForImage1()));
-	connect(ui->useForImage2Button, SIGNAL(clicked()),this,SLOT(useForImage2()));
-	connect(ui->imageList, SIGNAL(itemSelectionChanged()),this,SLOT(updateWidgetStatus()));
-	connect(ui->angleEdit, SIGNAL(textChanged(QString)),this,SLOT(updateWidgetStatus()));
-	connect(ui->actionShow_log, SIGNAL(triggered(bool)),ui->logDockWidget,SLOT(setVisible(bool)));
-	connect(ui->actionShow_controls, SIGNAL(triggered(bool)),ui->controlsDockWidget,SLOT(setVisible(bool)));
-	connect(ui->actionShow_cross_section_window, SIGNAL(triggered(bool)),&crossSectionWindow,SLOT(setVisible(bool)));
-	connect(ui->logDockWidget, SIGNAL(visibilityChanged(bool)),ui->actionShow_log,SLOT(setChecked(bool)));
-	connect(ui->controlsDockWidget, SIGNAL(visibilityChanged(bool)),ui->actionShow_controls,SLOT(setChecked(bool)));
-	connect(ui->actionAbout, SIGNAL(triggered(bool)),this,SLOT(showAboutWindow()));
-	connect(ui->startProcessButton, SIGNAL(clicked()),this,SLOT(startReconstruction()));
-	connect(ui->saveButton, SIGNAL(clicked()),this,SLOT(saveResult()));
-	connect(ui->loadSurfaceButton, SIGNAL(clicked()),this,SLOT(loadSurface()));
-	connect(ui->moveToolButton, SIGNAL(toggled(bool)),this,SLOT(updateMouseMode()));
-	connect(ui->rotateToolButton, SIGNAL(toggled(bool)),this,SLOT(updateMouseMode()));
-	connect(ui->gridToolButton, SIGNAL(toggled(bool)),this,SLOT(setShowGrid(bool)));
-	connect(ui->texture1ToolButton, SIGNAL(clicked()),this,SLOT(updateTextureMode()));
-	connect(ui->texture2ToolButton, SIGNAL(clicked()),this,SLOT(updateTextureMode()));
-	connect(ui->textureNoneToolButton, SIGNAL(clicked()),this,SLOT(updateTextureMode()));
-	connect(ui->crosssectionButtonPrimary, SIGNAL(clicked(bool)),this,SLOT(primaryCrossSectionClicked(bool)));
-	connect(ui->crosssectionButtonSecondary, SIGNAL(clicked(bool)),this,SLOT(secondaryCrossSectionClicked(bool)));
+	connect(&surfaceViewport,&CybervisionViewer::selectedPointUpdated,this,&MainWindow::viewerSelectedPointUpdated,Qt::AutoConnection);
+	connect(&surfaceViewport,&CybervisionViewer::crossSectionLineChanged,this,&MainWindow::viewerCrosssectionLineChanged,Qt::AutoConnection);
+	connect(&crossSectionWindow,&CrossSectionWindow::closed,this,&MainWindow::crosssectionClosed,Qt::AutoConnection);
+	connect(ui->openImage1,&QPushButton::clicked,this,&MainWindow::selectImage1);
+	connect(ui->openImage2,&QPushButton::clicked,this,&MainWindow::selectImage2);
+	connect(ui->addImageButton,&QPushButton::clicked,this,&MainWindow::addImages);
+	connect(ui->deleteImageButton,&QPushButton::clicked,this,&MainWindow::deleteImage);
+	connect(ui->useForImage1Button,&QPushButton::clicked,this,&MainWindow::useForImage1);
+	connect(ui->useForImage2Button,&QPushButton::clicked,this,&MainWindow::useForImage2);
+	connect(ui->imageList,&QListWidget::itemSelectionChanged,this,&MainWindow::updateWidgetStatus);
+	connect(ui->angleEdit,&QLineEdit::textChanged,this,&MainWindow::updateWidgetStatus);
+	connect(ui->actionShow_log,&QAction::triggered,ui->logDockWidget,&MainWindow::setVisible);
+	connect(ui->actionShow_controls,&QAction::triggered,ui->controlsDockWidget,&QDockWidget::setVisible);
+	connect(ui->actionShow_cross_section_window,&QAction::triggered,&crossSectionWindow,&CrossSectionWindow::setVisible);
+	connect(ui->logDockWidget,&QDockWidget::visibilityChanged,ui->actionShow_log,&QAction::setChecked);
+	connect(ui->controlsDockWidget,&QDockWidget::visibilityChanged,ui->actionShow_controls,&QAction::setChecked);
+	connect(ui->actionAbout,&QAction::triggered,this,&MainWindow::showAboutWindow);
+	connect(ui->startProcessButton,&QPushButton::clicked,this,&MainWindow::startReconstruction);
+	connect(ui->saveButton,&QPushButton::clicked,this,&MainWindow::saveResult);
+	connect(ui->loadSurfaceButton,&QPushButton::clicked,this,&MainWindow::loadSurface);
+	connect(ui->moveToolButton,&QToolButton::toggled,this,&MainWindow::updateMouseMode);
+	connect(ui->rotateToolButton,&QToolButton::toggled,this,&MainWindow::updateMouseMode);
+	connect(ui->gridToolButton,&QToolButton::toggled,this,&MainWindow::setShowGrid);
+	connect(ui->texture1ToolButton,&QToolButton::clicked,this,&MainWindow::updateTextureMode);
+	connect(ui->texture2ToolButton,&QToolButton::clicked,this,&MainWindow::updateTextureMode);
+	connect(ui->textureNoneToolButton,&QToolButton::clicked,this,&MainWindow::updateTextureMode);
+	connect(ui->crosssectionButtonPrimary,&QPushButton::clicked,this,&MainWindow::primaryCrossSectionClicked);
+	connect(ui->crosssectionButtonSecondary,&QPushButton::clicked,this,&MainWindow::secondaryCrossSectionClicked);
 
 	inputImageFilter= tr("Images") + "(*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;"+tr("All files")+"(*.*)";
 #ifdef CYBERVISION_DEMO
@@ -58,7 +58,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ui(new Ui::MainWin
 	setMaximumSize(1000,600);
 	demoTimer.setSingleShot(true);
 	demoTimer.start(1000*60*demoTimerMinutes);
-	QObject::connect(&demoTimer,SIGNAL(timeout()),this,SLOT(demoTimerExpired()),Qt::AutoConnection);
+	connect(&demoTimer,&QTimer::timeout,this,&MainWindow::demoTimerExpired,Qt::AutoConnection);
 #endif
 }
 
@@ -265,7 +265,7 @@ void MainWindow::viewerSelectedPointUpdated(QVector3D point){
 										   .arg(point.z()*cybervision::Options::TextUnitScale));
 }
 
-void MainWindow::viewerCrosssectionLineChanged(QVector3D start, QVector3D end,int lineId){
+void MainWindow::viewerCrosssectionLineChanged(int lineId){
 	if(lineId==0)
 		ui->crosssectionButtonPrimary->setChecked(false);
 	else if(lineId==1)

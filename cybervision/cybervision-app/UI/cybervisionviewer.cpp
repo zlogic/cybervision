@@ -241,8 +241,8 @@ void CybervisionViewer::initializeScene(){
 
 	//Camera
 	Qt3DRender::QCamera *cameraEntity = camera();
-	connect(cameraEntity,SIGNAL(viewMatrixChanged()),this,SLOT(cameraUpdated()),Qt::AutoConnection);
-	connect(cameraEntity,SIGNAL(projectionMatrixChanged(QMatrix4x4)),this,SLOT(cameraUpdated()),Qt::AutoConnection);
+	connect(cameraEntity,&Qt3DRender::QCamera::viewMatrixChanged,this,&CybervisionViewer::cameraUpdated,Qt::AutoConnection);
+	connect(cameraEntity,&Qt3DRender::QCamera::projectionMatrixChanged,this,&CybervisionViewer::cameraUpdated,Qt::AutoConnection);
 
 	cameraEntity->lens()->setPerspectiveProjection(90.0f, 1.0f, 1.0f, 1000.0f);
 	cameraEntity->setPosition(QVector3D(.0f,.0f,15.0f));
@@ -264,7 +264,7 @@ void CybervisionViewer::initializeScene(){
 	renderSettings()->pickingSettings()->setPickMethod(Qt3DRender::QPickingSettings::TrianglePicking);
 	renderSettings()->pickingSettings()->setPickResultMode(Qt3DRender::QPickingSettings::NearestPick);
 
-	connect(clickDetector,SIGNAL(hitsChanged(Qt3DRender::QAbstractRayCaster::Hits)),this,SLOT(hitsChanged(Qt3DRender::QAbstractRayCaster::Hits)),Qt::AutoConnection);
+	connect(clickDetector,&Qt3DRender::QScreenRayCaster::hitsChanged,this,&CybervisionViewer::hitsChanged,Qt::AutoConnection);
 
 	initializeAxesWidget();
 }
@@ -730,7 +730,7 @@ void CybervisionViewer::mouseReleaseEvent(QMouseEvent *event){
 
 	if(drawingCrossSectionLine>=0 && drawingCrossSectionLine<crossSectionLines.size()){
 		QPair<QVector3D,QVector3D> result= getCrossSectionLine(drawingCrossSectionLine);
-		emit crossSectionLineChanged(result.first,result.second,drawingCrossSectionLine);
+		emit crossSectionLineChanged(drawingCrossSectionLine,result.first,result.second);
 		drawingCrossSectionLine= -1;
 	}
 	mousePressed= false;

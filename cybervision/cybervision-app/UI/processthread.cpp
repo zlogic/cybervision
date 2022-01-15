@@ -25,10 +25,10 @@ void ProcessThread::run(){
 
 	cybervision::Reconstructor reconstructor(NULL);
 
-	QObject::connect(&reconstructor, SIGNAL(sgnLogMessage(QString)),
-					 this, SLOT(sgnLogMessage(QString)),Qt::AutoConnection);
-	QObject::connect(&reconstructor, SIGNAL(sgnStatusMessage(QString)),
-					 this, SLOT(sgnStatusMessage(QString)),Qt::AutoConnection);
+	connect(&reconstructor,&cybervision::Reconstructor::sgnLogMessage,
+					 this,&ProcessThread::sgnLogMessage,Qt::AutoConnection);
+	connect(&reconstructor,&cybervision::Reconstructor::sgnStatusMessage,
+					 this,&ProcessThread::sgnStatusMessage,Qt::AutoConnection);
 
 	bool reconstructor_success= false;
 	if(image_filenames.size()==2){
@@ -71,23 +71,23 @@ void ProcessThread::run(){
 
 void ProcessThread::setUi(MainWindow* mw){
 	if(this->mw){
-		QObject::disconnect(this, SIGNAL(processStarted()),
-							this->mw, SLOT(processStarted()));
-		QObject::disconnect(this, SIGNAL(processStopped(QString,cybervision::Surface)),
-							this->mw, SLOT(processStopped(QString,cybervision::Surface)));
-		QObject::disconnect(this, SIGNAL(processUpdated(QString,QString)),
-							this->mw, SLOT(processUpdated(QString,QString)));
+		disconnect(this,&ProcessThread::processStarted,
+							this->mw,&MainWindow::processStarted);
+		disconnect(this,&ProcessThread::processStopped,
+							this->mw,&MainWindow::processStopped);
+		disconnect(this,&ProcessThread::processUpdated,
+							this->mw,&MainWindow::processUpdated);
 	}
 	this->mw=mw;
 	qRegisterMetaType< QList<QVector3D> >("QList<QVector3D>");
 	qRegisterMetaType< cybervision::Surface >("cybervision::Surface)");
 
-	QObject::connect(this, SIGNAL(processStarted()),
-					 mw, SLOT(processStarted()),Qt::AutoConnection);
-	QObject::connect(this, SIGNAL(processStopped(QString,cybervision::Surface)),
-					 mw, SLOT(processStopped(QString,cybervision::Surface)),Qt::AutoConnection);
-	QObject::connect(this, SIGNAL(processUpdated(QString,QString)),
-					 mw, SLOT(processUpdated(QString,QString)),Qt::AutoConnection);
+	connect(this,&ProcessThread::processStarted,
+					 mw,&MainWindow::processStarted,Qt::AutoConnection);
+	connect(this,&ProcessThread::processStopped,
+					 mw,&MainWindow::processStopped,Qt::AutoConnection);
+	connect(this,&ProcessThread::processUpdated,
+					 mw,&MainWindow::processUpdated,Qt::AutoConnection);
 }
 
 //Message passing to MainWindow

@@ -64,15 +64,16 @@ private:
 	//Shows the "Demo" warning
 	void showDemoWarning(QString specificWarning=QString()) const;
 #endif
-private slots:
+public slots:
 	//Slots for receiving messages from process thread
 	void processStarted();
 	void processUpdated(QString logMessage,QString statusBarText=QString());
 	void processStopped(QString resultText,cybervision::Surface);
 
+private slots:
 	//Slots for receiving messages from 3D viewer viewport
 	void viewerSelectedPointUpdated(QVector3D);
-	void viewerCrosssectionLineChanged(QVector3D start,QVector3D end,int lineId);
+	void viewerCrosssectionLineChanged(int lineId);
 
 	//Slots for receiving messages from cross-section viewer
 	void crosssectionClosed();

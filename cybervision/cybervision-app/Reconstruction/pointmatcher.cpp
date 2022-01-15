@@ -115,7 +115,7 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 #ifdef CYBERVISION_OPENCL
 		PointMatcherOpenCL clMatcher(128,this);
 
-		QObject::connect(&clMatcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)),Qt::DirectConnection);
+		connect(&clMatcher,&PointMatcherOpenCL::sgnLogMessage,this,&PointMatcher::sgnLogMessage,Qt::DirectConnection);
 
 		if(OpenCLSucceeded){
 			emit sgnLogMessage(QString(tr("Matching keypoints from %1 to %2")).arg(filename1,filename2));
@@ -127,7 +127,7 @@ bool PointMatcher::extractMatches(const QString& filename1,const QString& filena
 			OpenCLSucceeded&= clMatcher.ShutdownCL();
 		}
 
-		QObject::disconnect(&clMatcher, SIGNAL(sgnLogMessage(QString)),this, SIGNAL(sgnLogMessage(QString)));
+		disconnect(&clMatcher,&PointMatcherOpenCL::sgnLogMessage,this,&PointMatcher::sgnLogMessage);
 #else
 		OpenCLSucceeded= false;
 #endif

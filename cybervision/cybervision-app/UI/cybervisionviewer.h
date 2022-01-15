@@ -111,7 +111,7 @@ protected:
 	void mouseMoveEvent(QMouseEvent *event);
 signals:
 	void selectedPointUpdated(QVector3D);
-	void crossSectionLineChanged(QVector3D,QVector3D,int lineId);
+	void crossSectionLineChanged(int lineId,QVector3D,QVector3D);
 
 private slots:
 	void cameraUpdated();
