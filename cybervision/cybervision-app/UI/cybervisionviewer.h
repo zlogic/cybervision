@@ -56,16 +56,18 @@ protected:
 	void addCrossSectionLines();
 
 	//Grid configuration
-	Corner currentCorner;
-	Qt3DCore::QEntity *gridEntity;
+	QVector3D gridMin,gridMax;
+	QMap<Corner,Qt3DCore::QEntity*> gridEntities;
 
 	//Grid functions
-	//Generate, update or remove the grid
-	void updateGrid();
+	//Generate the grid
+	void addGrid();
 	//Returns the optimal scale step for the min/max value pair
 	qreal getOptimalGridStep(qreal min,qreal max) const;
 	//Returns the best visible corner
 	Corner getOptimalCorner(const QVector3D& min,const QVector3D& max)const;
+	//Update grid visibility
+	void updateGrid();
 
 	//Point selection stuff
 	//Selected point

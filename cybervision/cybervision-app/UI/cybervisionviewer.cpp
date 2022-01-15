@@ -32,7 +32,6 @@ CybervisionViewer::CybervisionViewer(): Qt3DExtras::Qt3DWindow(){
 	surfaceEntity= NULL;
 	surfaceTexture= NULL;
 	axesTransform= NULL;
-	gridEntity= NULL;
 	clickDetector= NULL;
 	selectedPointEntity= NULL;
 	selectedPointTransform= NULL;
@@ -71,7 +70,7 @@ void CybervisionViewer::setSurface3D(const cybervision::Surface& surface){
 
 		if(surfaceEntity!=NULL)
 			delete surfaceEntity;
-		gridEntity= NULL;
+		gridEntities.clear();
 		surfaceEntity = surface.create3DEntity(rootEntity);
 
 		addSurfaceMaterial();
@@ -108,7 +107,6 @@ void CybervisionViewer::addSelectedPoint(){
 
 	selectedPointTransform = new Qt3DCore::QTransform();
 	selectedPointTransform->setScale(0.25/surface.getScale());
-	selectedPointEntity->addComponent(selectedPointTransform);
 
 	Qt3DExtras::QDiffuseSpecularMaterial *material = new Qt3DExtras::QDiffuseSpecularMaterial();
 	material->setDiffuse(QColor(0xff,0x99,0x00));
@@ -375,15 +373,9 @@ void CybervisionViewer::updateCrossSectionLines(){
 	}
 }
 
-void CybervisionViewer::updateGrid(){
-	QMutexLocker lock(&surfaceMutex);
-	if(!surface.isOk() || !showGrid){
-		if(gridEntity!=NULL){
-			delete gridEntity;
-			gridEntity= NULL;
-		}
+void CybervisionViewer::addGrid(){
+	if(!surface.isOk() || !gridEntities.isEmpty())
 		return;
-	}
 
 	//Calculate grid steps
 	qreal step_x= getOptimalGridStep(surface.getImageSize().left(),surface.getImageSize().right());
@@ -391,152 +383,150 @@ void CybervisionViewer::updateGrid(){
 	qreal step_z= getOptimalGridStep(surface.getMinDepth(),surface.getMaxDepth());
 	qreal step_xy= std::max(step_x,step_y);
 	step_x= step_xy, step_y= step_xy;
-	int min_x= floor(surface.getImageSize().left()/step_x);
-	int max_x= ceil(surface.getImageSize().right()/step_x);
-	int min_y= floor(surface.getImageSize().top()/step_y);
-	int max_y= ceil(surface.getImageSize().bottom()/step_y);
-	int min_z= floor(surface.getMinDepth()/step_z);
-	int max_z= ceil(surface.getMaxDepth()/step_z);
+	const int min_x= floor(surface.getImageSize().left()/step_x);
+	const int max_x= ceil(surface.getImageSize().right()/step_x);
+	const int min_y= floor(surface.getImageSize().top()/step_y);
+	const int max_y= ceil(surface.getImageSize().bottom()/step_y);
+	const int min_z= floor(surface.getMinDepth()/step_z);
+	const int max_z= ceil(surface.getMaxDepth()/step_z);
 	const qreal tickSize= 1/surface.getScale();
 
-	//Get best coordinate pair
-	Corner selected_corner= getOptimalCorner(
-				QVector3D(min_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),min_z*step_z*surface.getScale()),
-				QVector3D(max_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),max_z*step_z*surface.getScale())
-				);
-
-	if(currentCorner==selected_corner && gridEntity!=NULL)
-		return;
-
-	if(gridEntity!=NULL)
-		delete gridEntity;
+	gridMin= QVector3D(min_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),min_z*step_z*surface.getScale());
+	gridMax= QVector3D(max_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
 
 	//Create grid
-	gridEntity = new Qt3DCore::QEntity(surfaceEntity);
-	Qt3DRender::QGeometryRenderer* renderer = new Qt3DRender::QGeometryRenderer(gridEntity);
-
-	QVector<QVector3D> gridLines;
-
+	QMap<Corner,QVector<QVector3D> > gridLines;
 	for(int i=min_x;i<=max_x;i++) {
 		qreal x= step_x*i;
-		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_XyZ)){
-			gridLines<<QVector3D(x,min_y*step_y,max_z*step_z);
-			gridLines<<QVector3D(x,max_y*step_y,max_z*step_z);
-			gridLines<<QVector3D(x,min_y*step_y,min_z*step_z);
-			gridLines<<QVector3D(x,min_y*step_y,max_z*step_z);
 
-			gridLines<<QVector3D(x,min_y*step_y,max_z*step_z);
-			gridLines<<QVector3D(x,min_y*step_y-tickSize,max_z*step_z+tickSize);
-		}
-		if((selected_corner == CORNER_xYZ) || (selected_corner == CORNER_XYZ)){
-			gridLines<<QVector3D(x,min_y*step_y,max_z*step_z);
-			gridLines<<QVector3D(x,max_y*step_y,max_z*step_z);
-			gridLines<<QVector3D(x,max_y*step_y,min_z*step_z);
-			gridLines<<QVector3D(x,max_y*step_y,max_z*step_z);
+		QVector<QVector3D> lines;
 
-			gridLines<<QVector3D(x,max_y*step_y,max_z*step_z);
-			gridLines<<QVector3D(x,max_y*step_y+tickSize,max_z*step_z+tickSize);
-		}
-		if((selected_corner == CORNER_xyz) || (selected_corner == CORNER_Xyz)){
-			gridLines<<QVector3D(x,min_y*step_y,min_z*step_z);
-			gridLines<<QVector3D(x,max_y*step_y,min_z*step_z);
-			gridLines<<QVector3D(x,min_y*step_y,min_z*step_z);
-			gridLines<<QVector3D(x,min_y*step_y,max_z*step_z);
+		lines<<QVector3D(x,min_y*step_y,max_z*step_z)<<QVector3D(x,max_y*step_y,max_z*step_z);
+		lines<<QVector3D(x,min_y*step_y,min_z*step_z)<<QVector3D(x,min_y*step_y,max_z*step_z);
 
-			gridLines<<QVector3D(x,min_y*step_y,min_z*step_z);
-			gridLines<<QVector3D(x,min_y*step_y-tickSize,min_z*step_z-tickSize);
-		}
-		if((selected_corner == CORNER_xYz) || (selected_corner == CORNER_XYz)){
-			gridLines<<QVector3D(x,min_y*step_y,min_z*step_z);
-			gridLines<<QVector3D(x,max_y*step_y,min_z*step_z);
-			gridLines<<QVector3D(x,max_y*step_y,min_z*step_z);
-			gridLines<<QVector3D(x,max_y*step_y,max_z*step_z);
+		lines<<QVector3D(x,min_y*step_y,max_z*step_z)<<QVector3D(x,min_y*step_y-tickSize,max_z*step_z+tickSize);
 
-			gridLines<<QVector3D(x,max_y*step_y,min_z*step_z);
-			gridLines<<QVector3D(x,max_y*step_y+tickSize,min_z*step_z-tickSize);
-		}
+		gridLines[CORNER_xyZ].append(lines);
+		gridLines[CORNER_XyZ].append(lines);
+
+		lines.clear();
+
+		lines<<QVector3D(x,min_y*step_y,max_z*step_z)<<QVector3D(x,max_y*step_y,max_z*step_z);
+		lines<<QVector3D(x,max_y*step_y,min_z*step_z)<<QVector3D(x,max_y*step_y,max_z*step_z);
+
+		lines<<QVector3D(x,max_y*step_y,max_z*step_z)<<QVector3D(x,max_y*step_y+tickSize,max_z*step_z+tickSize);
+
+		gridLines[CORNER_xYZ].append(lines);
+		gridLines[CORNER_XYZ].append(lines);
+
+		lines.clear();
+
+		lines<<QVector3D(x,min_y*step_y,min_z*step_z)<<QVector3D(x,max_y*step_y,min_z*step_z);
+		lines<<QVector3D(x,min_y*step_y,min_z*step_z)<<QVector3D(x,min_y*step_y,max_z*step_z);
+
+		lines<<QVector3D(x,min_y*step_y,min_z*step_z)<<QVector3D(x,min_y*step_y-tickSize,min_z*step_z-tickSize);
+
+		gridLines[CORNER_xyz].append(lines);
+		gridLines[CORNER_Xyz].append(lines);
+
+		lines.clear();
+
+		lines<<QVector3D(x,min_y*step_y,min_z*step_z)<<QVector3D(x,max_y*step_y,min_z*step_z);
+		lines<<QVector3D(x,max_y*step_y,min_z*step_z)<<QVector3D(x,max_y*step_y,max_z*step_z);
+
+		lines<<QVector3D(x,max_y*step_y,min_z*step_z)<<QVector3D(x,max_y*step_y+tickSize,min_z*step_z-tickSize);
+
+		gridLines[CORNER_xYz].append(lines);
+		gridLines[CORNER_XYz].append(lines);
 	}
 	for(int i=min_y;i<=max_y;i++) {
 		qreal y= step_y*i;
-		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_xYZ)){
-			gridLines<<QVector3D(min_x*step_x,y,max_z*step_z);
-			gridLines<<QVector3D(max_x*step_x,y,max_z*step_z);
-			gridLines<<QVector3D(min_x*step_x,y,min_z*step_z);
-			gridLines<<QVector3D(min_x*step_x,y,max_z*step_z);
 
-			gridLines<<QVector3D(max_x*step_x,y,max_z*step_z);
-			gridLines<<QVector3D(max_x*step_x+tickSize,y,max_z*step_z+tickSize);
-		}
-		if((selected_corner == CORNER_XyZ) || (selected_corner == CORNER_XYZ)){
-			gridLines<<QVector3D(min_x*step_x,y,max_z*step_z);
-			gridLines<<QVector3D(max_x*step_x,y,max_z*step_z);
-			gridLines<<QVector3D(max_x*step_x,y,min_z*step_z);
-			gridLines<<QVector3D(max_x*step_x,y,max_z*step_z);
+		QVector<QVector3D> lines;
 
-			gridLines<<QVector3D(min_x*step_x,y,max_z*step_z);
-			gridLines<<QVector3D(min_x*step_x-tickSize,y,max_z*step_z+tickSize);
-		}
-		if((selected_corner == CORNER_xyz) || (selected_corner == CORNER_xYz)){
-			gridLines<<QVector3D(min_x*step_x,y,min_z*step_z);
-			gridLines<<QVector3D(max_x*step_x,y,min_z*step_z);
-			gridLines<<QVector3D(min_x*step_x,y,min_z*step_z);
-			gridLines<<QVector3D(min_x*step_x,y,max_z*step_z);
+		lines<<QVector3D(min_x*step_x,y,max_z*step_z)<<QVector3D(max_x*step_x,y,max_z*step_z);
+		lines<<QVector3D(min_x*step_x,y,min_z*step_z)<<QVector3D(min_x*step_x,y,max_z*step_z);
 
-			gridLines<<QVector3D(max_x*step_x,y,min_z*step_z);
-			gridLines<<QVector3D(max_x*step_x+tickSize,y,min_z*step_z-tickSize);
-		}
-		if((selected_corner == CORNER_Xyz) || (selected_corner == CORNER_XYz)){
-			gridLines<<QVector3D(min_x*step_x,y,min_z*step_z);
-			gridLines<<QVector3D(max_x*step_x,y,min_z*step_z);
-			gridLines<<QVector3D(max_x*step_x,y,min_z*step_z);
-			gridLines<<QVector3D(max_x*step_x,y,max_z*step_z);
+		lines<<QVector3D(max_x*step_x,y,max_z*step_z)<<QVector3D(max_x*step_x+tickSize,y,max_z*step_z+tickSize);
 
-			gridLines<<QVector3D(min_x*step_x,y,min_z*step_z);
-			gridLines<<QVector3D(min_x*step_x-tickSize,y,min_z*step_z-tickSize);
-		}
+		gridLines[CORNER_xyZ].append(lines);
+		gridLines[CORNER_xYZ].append(lines);
+
+		lines.clear();
+
+		lines<<QVector3D(min_x*step_x,y,max_z*step_z)<<QVector3D(max_x*step_x,y,max_z*step_z);
+		lines<<QVector3D(max_x*step_x,y,min_z*step_z)<<QVector3D(max_x*step_x,y,max_z*step_z);
+
+		lines<<QVector3D(min_x*step_x,y,max_z*step_z)<<QVector3D(min_x*step_x-tickSize,y,max_z*step_z+tickSize);
+
+		gridLines[CORNER_XyZ].append(lines);
+		gridLines[CORNER_XYZ].append(lines);
+
+		lines.clear();
+
+		lines<<QVector3D(min_x*step_x,y,min_z*step_z)<<QVector3D(max_x*step_x,y,min_z*step_z);
+		lines<<QVector3D(min_x*step_x,y,min_z*step_z)<<QVector3D(min_x*step_x,y,max_z*step_z);
+
+		lines<<QVector3D(max_x*step_x,y,min_z*step_z)<<QVector3D(max_x*step_x+tickSize,y,min_z*step_z-tickSize);
+
+		gridLines[CORNER_xyz].append(lines);
+		gridLines[CORNER_xYz].append(lines);
+
+		lines.clear();
+
+		lines<<QVector3D(min_x*step_x,y,min_z*step_z)<<QVector3D(max_x*step_x,y,min_z*step_z);
+		lines<<QVector3D(max_x*step_x,y,min_z*step_z)<<QVector3D(max_x*step_x,y,max_z*step_z);
+
+		lines<<QVector3D(min_x*step_x,y,min_z*step_z)<<QVector3D(min_x*step_x-tickSize,y,min_z*step_z-tickSize);
+
+		gridLines[CORNER_Xyz].append(lines);
+		gridLines[CORNER_XYz].append(lines);
 	}
 	for(int i=min_z;i<=max_z;i++) {
 		qreal z= step_z*i;
-		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_xyz)){
-			gridLines<<QVector3D(min_x*step_x,min_y*step_y,z);
-			gridLines<<QVector3D(max_x*step_x,min_y*step_y,z);
-			gridLines<<QVector3D(min_x*step_x,min_y*step_y,z);
-			gridLines<<QVector3D(min_x*step_x,max_y*step_y,z);
 
-			gridLines<<QVector3D(min_x*step_x,min_y*step_y,z);
-			gridLines<<QVector3D(min_x*step_x-tickSize,min_y*step_y-tickSize,z);
-		}
-		if((selected_corner == CORNER_xYZ) || (selected_corner == CORNER_xYz)){
-			gridLines<<QVector3D(min_x*step_x,max_y*step_y,z);
-			gridLines<<QVector3D(max_x*step_x,max_y*step_y,z);
-			gridLines<<QVector3D(min_x*step_x,min_y*step_y,z);
-			gridLines<<QVector3D(min_x*step_x,max_y*step_y,z);
+		QVector<QVector3D> lines;
 
-			gridLines<<QVector3D(min_x*step_x,max_y*step_y,z);
-			gridLines<<QVector3D(min_x*step_x-tickSize,max_y*step_y+tickSize,z);
-		}
-		if((selected_corner == CORNER_XyZ) || (selected_corner == CORNER_Xyz)){
-			gridLines<<QVector3D(min_x*step_x,min_y*step_y,z);
-			gridLines<<QVector3D(max_x*step_x,min_y*step_y,z);
-			gridLines<<QVector3D(max_x*step_x,min_y*step_y,z);
-			gridLines<<QVector3D(max_x*step_x,max_y*step_y,z);
+		lines<<QVector3D(min_x*step_x,min_y*step_y,z)<<QVector3D(max_x*step_x,min_y*step_y,z);
+		lines<<QVector3D(min_x*step_x,min_y*step_y,z)<<QVector3D(min_x*step_x,max_y*step_y,z);
 
-			gridLines<<QVector3D(max_x*step_x,min_y*step_y,z);
-			gridLines<<QVector3D(max_x*step_x+tickSize,min_y*step_y-tickSize,z);
-		}
-		if((selected_corner == CORNER_XYZ) || (selected_corner == CORNER_XYz)){
-			gridLines<<QVector3D(min_x*step_x,max_y*step_y,z);
-			gridLines<<QVector3D(max_x*step_x,max_y*step_y,z);
-			gridLines<<QVector3D(max_x*step_x,min_y*step_y,z);
-			gridLines<<QVector3D(max_x*step_x,max_y*step_y,z);
+		lines<<QVector3D(min_x*step_x,min_y*step_y,z)<<QVector3D(min_x*step_x-tickSize,min_y*step_y-tickSize,z);
 
-			gridLines<<QVector3D(max_x*step_x,max_y*step_y,z);
-			gridLines<<QVector3D(max_x*step_x+tickSize,max_y*step_y+tickSize,z);
-		}
+		gridLines[CORNER_xyZ].append(lines);
+		gridLines[CORNER_xyz].append(lines);
 
+		lines.clear();
+
+		lines<<QVector3D(min_x*step_x,max_y*step_y,z)<<QVector3D(max_x*step_x,max_y*step_y,z);
+		lines<<QVector3D(min_x*step_x,min_y*step_y,z)<<QVector3D(min_x*step_x,max_y*step_y,z);
+
+		lines<<QVector3D(min_x*step_x,max_y*step_y,z)<<QVector3D(min_x*step_x-tickSize,max_y*step_y+tickSize,z);
+
+		gridLines[CORNER_xYZ].append(lines);
+		gridLines[CORNER_xYz].append(lines);
+
+		lines.clear();
+
+		lines<<QVector3D(min_x*step_x,min_y*step_y,z)<<QVector3D(max_x*step_x,min_y*step_y,z);
+		lines<<QVector3D(max_x*step_x,min_y*step_y,z)<<QVector3D(max_x*step_x,max_y*step_y,z);
+
+		lines<<QVector3D(max_x*step_x,min_y*step_y,z)<<QVector3D(max_x*step_x+tickSize,min_y*step_y-tickSize,z);
+
+		gridLines[CORNER_XyZ].append(lines);
+		gridLines[CORNER_Xyz].append(lines);
+
+		lines.clear();
+
+		lines<<QVector3D(min_x*step_x,max_y*step_y,z)<<QVector3D(max_x*step_x,max_y*step_y,z);
+		lines<<QVector3D(max_x*step_x,min_y*step_y,z)<<QVector3D(max_x*step_x,max_y*step_y,z);
+
+		lines<<QVector3D(max_x*step_x,max_y*step_y,z)<<QVector3D(max_x*step_x+tickSize,max_y*step_y+tickSize,z);
+
+		gridLines[CORNER_XYZ].append(lines);
+		gridLines[CORNER_XYz].append(lines);
 	}
 
-	Qt3DRender::QGeometry* gridGeometry= createLines(gridLines, renderer);
+	Qt3DCore::QEntity *gridEntity = new Qt3DCore::QEntity(surfaceEntity);
 
 	Qt3DExtras::QDiffuseSpecularMaterial *material = new Qt3DExtras::QDiffuseSpecularMaterial(gridEntity);
 	material->setAmbient(QColor(0x00,0x00,0x00));
@@ -544,16 +534,26 @@ void CybervisionViewer::updateGrid(){
 	material->setSpecular(QColor(0x00,0x00,0x00));
 	material->setShininess(.0f);
 
-	renderer->setGeometry(gridGeometry);
-	renderer->setInstanceCount(1);
-	renderer->setPrimitiveType(Qt3DRender::QGeometryRenderer::Lines);
-	renderer->setVertexCount(gridLines.size());
-	renderer->setFirstInstance(0);
+	for(QMap<Corner,QVector<QVector3D> >::const_iterator it=gridLines.constBegin();it!=gridLines.constEnd();it++){
+		Qt3DCore::QEntity *cornerGridEntity = new Qt3DCore::QEntity(gridEntity);
+		gridEntities.insert(it.key(), cornerGridEntity);
 
-	gridEntity->addComponent(renderer);
-	gridEntity->addComponent(material);
+		Qt3DCore::QEntity *linesEntity = new Qt3DCore::QEntity(cornerGridEntity);
 
-	QVector<QPair<QString,QVector3D> > labels;
+		Qt3DRender::QGeometryRenderer* renderer = new Qt3DRender::QGeometryRenderer(linesEntity);
+		Qt3DRender::QGeometry* gridGeometry= createLines(it.value(), renderer);
+
+		renderer->setGeometry(gridGeometry);
+		renderer->setInstanceCount(1);
+		renderer->setPrimitiveType(Qt3DRender::QGeometryRenderer::Lines);
+		renderer->setVertexCount(it.value().size());
+		renderer->setFirstInstance(0);
+
+		linesEntity->addComponent(renderer);
+		linesEntity->addComponent(material);
+	}
+
+	QMultiMap<Corner,QPair<QString,QVector3D> > labels;
 	for(int i=min_x;i<=max_x;i++) {
 		qreal x= step_x*i;
 		QString str;
@@ -562,14 +562,23 @@ void CybervisionViewer::updateGrid(){
 		//stream.setRealNumberNotation(QTextStream::ScientificNotation);
 		stream<<i*step_x*cybervision::Options::TextUnitScale;
 		str= QString(tr("%1 \xC2\xB5m")).arg(str);
-		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_XyZ))
-			labels<<QPair<QString,QVector3D>(str,QVector3D(x,min_y*step_y-tickSize,max_z*step_z+tickSize));
-		if((selected_corner == CORNER_xYZ) || (selected_corner == CORNER_XYZ))
-			labels<<QPair<QString,QVector3D>(str,QVector3D(x,max_y*step_y+tickSize,max_z*step_z+tickSize));
-		if((selected_corner == CORNER_xyz) || (selected_corner == CORNER_Xyz))
-			labels<<QPair<QString,QVector3D>(str,QVector3D(x,min_y*step_y-tickSize,min_z*step_z-tickSize));
-		if((selected_corner == CORNER_xYz) || (selected_corner == CORNER_XYz))
-			labels<<QPair<QString,QVector3D>(str,QVector3D(x,max_y*step_y+tickSize,min_z*step_z-tickSize));
+
+		QPair<QString,QVector3D> label;
+		label= QPair<QString,QVector3D>(str,QVector3D(x,min_y*step_y-tickSize,max_z*step_z+tickSize));
+		labels.insert(CORNER_xyZ, label);
+		labels.insert(CORNER_XyZ, label);
+
+		label= QPair<QString,QVector3D>(str,QVector3D(x,max_y*step_y+tickSize,max_z*step_z+tickSize));
+		labels.insert(CORNER_xYZ, label);
+		labels.insert(CORNER_XYZ, label);
+
+		label= QPair<QString,QVector3D>(str,QVector3D(x,min_y*step_y-tickSize,min_z*step_z-tickSize));
+		labels.insert(CORNER_xyz, label);
+		labels.insert(CORNER_Xyz, label);
+
+		label= QPair<QString,QVector3D>(str,QVector3D(x,max_y*step_y+tickSize,min_z*step_z-tickSize));
+		labels.insert(CORNER_xYz, label);
+		labels.insert(CORNER_XYz, label);
 	}
 	for(int i=min_y;i<=max_y;i++) {
 		qreal y= step_y*i;
@@ -579,14 +588,23 @@ void CybervisionViewer::updateGrid(){
 		//stream.setRealNumberNotation(QTextStream::ScientificNotation);
 		stream<<i*step_y*cybervision::Options::TextUnitScale;
 		str= QString(tr("%1 \xC2\xB5m")).arg(str);
-		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_xYZ))
-			labels<<QPair<QString,QVector3D>(str,QVector3D(max_x*step_x+tickSize,y,max_z*step_z+tickSize));
-		if((selected_corner == CORNER_XyZ) || (selected_corner == CORNER_XYZ))
-			labels<<QPair<QString,QVector3D>(str,QVector3D(min_x*step_x-tickSize,y,max_z*step_z+tickSize));
-		if((selected_corner == CORNER_xyz) || (selected_corner == CORNER_xYz))
-			labels<<QPair<QString,QVector3D>(str,QVector3D(max_x*step_x+tickSize,y,min_z*step_z-tickSize));
-		if((selected_corner == CORNER_Xyz) || (selected_corner == CORNER_XYz))
-			labels<<QPair<QString,QVector3D>(str,QVector3D(min_x*step_x-tickSize,y,min_z*step_z-tickSize));
+
+		QPair<QString,QVector3D> label;
+		label= QPair<QString,QVector3D>(str,QVector3D(max_x*step_x+tickSize,y,max_z*step_z+tickSize));
+		labels.insert(CORNER_xyZ, label);
+		labels.insert(CORNER_xYZ, label);
+
+		label= QPair<QString,QVector3D>(str,QVector3D(min_x*step_x-tickSize,y,max_z*step_z+tickSize));
+		labels.insert(CORNER_XyZ, label);
+		labels.insert(CORNER_XYZ, label);
+
+		label= QPair<QString,QVector3D>(str,QVector3D(max_x*step_x+tickSize,y,min_z*step_z-tickSize));
+		labels.insert(CORNER_xyz, label);
+		labels.insert(CORNER_xYz, label);
+
+		label= QPair<QString,QVector3D>(str,QVector3D(min_x*step_x-tickSize,y,min_z*step_z-tickSize));
+		labels.insert(CORNER_Xyz, label);
+		labels.insert(CORNER_XYz, label);
 	}
 	for(int i=min_z;i<=max_z;i++) {
 		qreal z= step_z*i;
@@ -596,33 +614,55 @@ void CybervisionViewer::updateGrid(){
 		//stream.setRealNumberNotation(QTextStream::ScientificNotation);
 		stream<<i*step_z*cybervision::Options::TextUnitScale;
 		str= QString(tr("%1 \xC2\xB5m")).arg(str);
-		if((selected_corner == CORNER_xyZ) || (selected_corner == CORNER_xyz))
-			labels<<QPair<QString,QVector3D>(str,QVector3D(min_x*step_x-tickSize,min_y*step_y-tickSize,z));
-		if((selected_corner == CORNER_xYZ) || (selected_corner == CORNER_xYz))
-			labels<<QPair<QString,QVector3D>(str,QVector3D(min_x*step_x-tickSize,max_y*step_y+tickSize,z));
-		if((selected_corner == CORNER_XyZ) || (selected_corner == CORNER_Xyz))
-			labels<<QPair<QString,QVector3D>(str,QVector3D(max_x*step_x+tickSize,min_y*step_y-tickSize,z));
-		if((selected_corner == CORNER_XYZ) || (selected_corner == CORNER_XYz))
-			labels<<QPair<QString,QVector3D>(str,QVector3D(max_x*step_x+tickSize,max_y*step_y+tickSize,z));
+
+		QPair<QString,QVector3D> label;
+		label= QPair<QString,QVector3D>(str,QVector3D(min_x*step_x-tickSize,min_y*step_y-tickSize,z));
+		labels.insert(CORNER_xyZ, label);
+		labels.insert(CORNER_xyz, label);
+
+		label= QPair<QString,QVector3D>(str,QVector3D(min_x*step_x-tickSize,max_y*step_y+tickSize,z));
+		labels.insert(CORNER_xYZ, label);
+		labels.insert(CORNER_xYz, label);
+
+		label= QPair<QString,QVector3D>(str,QVector3D(max_x*step_x+tickSize,min_y*step_y-tickSize,z));
+		labels.insert(CORNER_XyZ, label);
+		labels.insert(CORNER_Xyz, label);
+
+		label= QPair<QString,QVector3D>(str,QVector3D(max_x*step_x+tickSize,max_y*step_y+tickSize,z));
+		labels.insert(CORNER_XYZ, label);
+		labels.insert(CORNER_XYz, label);
 	}
 
 	QFont font("Arial",7);
-	for(QVector<QPair<QString,QVector3D> >::const_iterator it=labels.constBegin();it!=labels.constEnd();it++){
-		Qt3DCore::QEntity* textEntity = new Qt3DCore::QEntity(gridEntity);
+	for(QMultiMap<Corner,QPair<QString,QVector3D> >::const_iterator it=labels.constBegin();it!=labels.constEnd();it++){
+		Qt3DCore::QEntity* textEntity = new Qt3DCore::QEntity(gridEntities[it.key()]);
 		Qt3DExtras::QExtrudedTextMesh *textMesh = new Qt3DExtras::QExtrudedTextMesh(textEntity);
 		textMesh->setFont(font);
 		textMesh->setDepth(0.0f);
-		textMesh->setText(it->first);
+		textMesh->setText(it.value().first);
 
 		Qt3DCore::QTransform *text2DTransform = new Qt3DCore::QTransform(textMesh);
-		text2DTransform->setTranslation(it->second);
+		text2DTransform->setTranslation(it.value().second);
 		text2DTransform->setScale(0.25f/surface.getScale());
+
 		textEntity->addComponent(textMesh);
 		textEntity->addComponent(text2DTransform);
 		textEntity->addComponent(material);
 	}
+}
 
-	currentCorner= selected_corner;
+void CybervisionViewer::updateGrid(){
+	QMutexLocker lock(&surfaceMutex);
+
+	//Workaround: postpone creating grid until it's enabled, otherwise Qt doesn't properly update the QTransform
+	if(showGrid && gridEntities.isEmpty())
+		addGrid();
+
+	//Get best coordinate pair
+	Corner selected_corner= getOptimalCorner(gridMin, gridMax);
+
+	for(QMap<Corner,Qt3DCore::QEntity*>::const_iterator it= gridEntities.constBegin();it!=gridEntities.constEnd();it++)
+		it.value()->setEnabled(showGrid && it.key() == selected_corner);
 }
 
 qreal CybervisionViewer::getOptimalGridStep(qreal min, qreal max) const{
@@ -736,6 +776,9 @@ void CybervisionViewer::hitsChanged(const Qt3DRender::QAbstractRayCaster::Hits &
 }
 
 CybervisionViewer::Corner CybervisionViewer::getOptimalCorner(const QVector3D& min,const QVector3D& max) const{
+	if(!showGrid)
+		return CORNER_NONE;
+
 	const QMatrix4x4 &transformationMatrix= camera()->viewMatrix();
 	const QMatrix4x4 &projectionMatrix= camera()->projectionMatrix();
 
