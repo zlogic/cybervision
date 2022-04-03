@@ -21,11 +21,14 @@
      <layout class="QGridLayout" name="gridLayout_2">
       <item row="0" column="0">
        <widget class="QLabel" name="icon">
-        <property name="text">
-         <string notr="true"/>
+        <property name="minimumSize">
+         <size>
+          <width>250</width>
+          <height>100</height>
+         </size>
         </property>
-        <property name="pixmap">
-         <pixmap resource="../ReconstructionResources.qrc">:/icons/UI/icons/cybervision-large.png</pixmap>
+        <property name="styleSheet">
+         <string notr="true">image: url(:/icons/UI/icons/cybervision-large.svg);width:100%;</string>
         </property>
        </widget>
       </item>
@@ -52,7 +55,7 @@
       <item row="1" column="0" colspan="4">
        <widget class="QLabel" name="copyrightLabel">
         <property name="text">
-         <string>&amp;copy; 2009-2012&lt;br /&gt;
+         <string>&amp;copy; 2009-2022&lt;br /&gt;
 Dmitry Zolotukhin &lt;a href=&quot;mailto:dmitri.zolotukhin@gmail.com&quot;&gt;dmitri.zolotukhin@gmail.com&lt;/a&gt;&lt;br /&gt;
 National nuclear research university MePHI&lt;br /&gt;
 &lt;br /&gt;
@@ -60,7 +63,7 @@ Includes third-party components, sources available upon request:&lt;br /&gt;
 Contains a dynamically linked version of &lt;a href=&quot;https://www.qt.io/&quot;&gt;Qt&lt;/a&gt; library, licensed with LGPLv3.&lt;br /&gt;
 Contains &lt;a href=&quot;https://eigen.tuxfamily.org/&quot;&gt;Eigen&lt;/a&gt; library, licensed with LGPL3+.&lt;br /&gt;
 Contains a dynamically linked version of &lt;a href=&quot;https://sourceforge.net/projects/libsift/&quot;&gt;Fast SIFT Image Features Library&lt;/a&gt;, licensed with LGPL.&lt;br /&gt;
-Some icons by &lt;a href=&quot;https://p.yusukekamiyamane.com/&quot;&gt;Yusuke Kamiyamane&lt;/a&gt;, licensed by Creative Commons Attribution 3.0 License.
+Some icons from &lt;a href=&quot;https://icons.getbootstrap.com/&quot;&gt;Bootstrap&lt;/a&gt;, licensed with MIT License.
 </string>
         </property>
        </widget>
@@ -70,9 +73,12 @@ Some icons by &lt;a href=&quot;https://p.yusukekamiyamane.com/&quot;&gt;Yusuke K
         <property name="orientation">
          <enum>Qt::Horizontal</enum>
         </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Fixed</enum>
+        </property>
         <property name="sizeHint" stdset="0">
          <size>
-          <width>40</width>
+          <width>20</width>
           <height>20</height>
          </size>
         </property>

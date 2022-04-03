@@ -15,7 +15,7 @@
   </property>
   <property name="windowIcon">
    <iconset resource="../ReconstructionResources.qrc">
-    <normaloff>:/icons/UI/icons/pencil-ruler.png</normaloff>:/icons/UI/icons/pencil-ruler.png</iconset>
+    <normaloff>:/icons/UI/icons/rulers.svg</normaloff>:/icons/UI/icons/rulers.svg</iconset>
   </property>
   <property name="locale">
    <locale language="English" country="UnitedStates"/>

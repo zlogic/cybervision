@@ -90,7 +90,7 @@
                 </property>
                 <property name="icon">
                  <iconset resource="../ReconstructionResources.qrc">
-                  <normaloff>:/icons/UI/icons/arrow-circle.png</normaloff>:/icons/UI/icons/arrow-circle.png</iconset>
+                  <normaloff>:/icons/UI/icons/arrow-repeat.svg</normaloff>:/icons/UI/icons/arrow-repeat.svg</iconset>
                 </property>
                 <property name="checkable">
                  <bool>true</bool>
@@ -119,7 +119,7 @@
                 </property>
                 <property name="icon">
                  <iconset resource="../ReconstructionResources.qrc">
-                  <normaloff>:/icons/UI/icons/arrow-move.png</normaloff>:/icons/UI/icons/arrow-move.png</iconset>
+                  <normaloff>:/icons/UI/icons/arrows-move.svg</normaloff>:/icons/UI/icons/arrows-move.svg</iconset>
                 </property>
                 <property name="checkable">
                  <bool>true</bool>
@@ -160,7 +160,7 @@
                 </property>
                 <property name="icon">
                  <iconset resource="../ReconstructionResources.qrc">
-                  <normaloff>:/icons/UI/icons/texture-left.png</normaloff>:/icons/UI/icons/texture-left.png</iconset>
+                  <normaloff>:/icons/UI/icons/front.svg</normaloff>:/icons/UI/icons/front.svg</iconset>
                 </property>
                 <property name="checkable">
                  <bool>true</bool>
@@ -189,7 +189,7 @@
                 </property>
                 <property name="icon">
                  <iconset resource="../ReconstructionResources.qrc">
-                  <normaloff>:/icons/UI/icons/texture-empty.png</normaloff>:/icons/UI/icons/texture-empty.png</iconset>
+                  <normaloff>:/icons/UI/icons/x-square.svg</normaloff>:/icons/UI/icons/x-square.svg</iconset>
                 </property>
                 <property name="checkable">
                  <bool>true</bool>
@@ -215,7 +215,7 @@
                 </property>
                 <property name="icon">
                  <iconset resource="../ReconstructionResources.qrc">
-                  <normaloff>:/icons/UI/icons/texture-right.png</normaloff>:/icons/UI/icons/texture-right.png</iconset>
+                  <normaloff>:/icons/UI/icons/back.svg</normaloff>:/icons/UI/icons/back.svg</iconset>
                 </property>
                 <property name="checkable">
                  <bool>true</bool>
@@ -244,7 +244,7 @@
              </property>
              <property name="icon">
               <iconset resource="../ReconstructionResources.qrc">
-               <normaloff>:/icons/UI/icons/grid.png</normaloff>:/icons/UI/icons/grid.png</iconset>
+               <normaloff>:/icons/UI/icons/grid-3x3.svg</normaloff>:/icons/UI/icons/grid-3x3.svg</iconset>
              </property>
              <property name="checkable">
               <bool>true</bool>
@@ -439,7 +439,7 @@
         </property>
         <attribute name="icon">
          <iconset resource="../ReconstructionResources.qrc">
-          <normaloff>:/icons/UI/icons/application-task.png</normaloff>:/icons/UI/icons/application-task.png</iconset>
+          <normaloff>:/icons/UI/icons/sliders.svg</normaloff>:/icons/UI/icons/sliders.svg</iconset>
         </attribute>
         <attribute name="label">
          <string>Reconstruction</string>
@@ -564,7 +564,7 @@
            </property>
            <property name="icon">
             <iconset resource="../ReconstructionResources.qrc">
-             <normaloff>:/icons/UI/icons/border-draw.png</normaloff>:/icons/UI/icons/border-draw.png</iconset>
+             <normaloff>:/icons/UI/icons/easel.svg</normaloff>:/icons/UI/icons/easel.svg</iconset>
            </property>
           </widget>
          </item>
@@ -578,7 +578,7 @@
            </property>
            <property name="icon">
             <iconset resource="../ReconstructionResources.qrc">
-             <normaloff>:/icons/UI/icons/document-import.png</normaloff>:/icons/UI/icons/document-import.png</iconset>
+             <normaloff>:/icons/UI/icons/file-earmark-easel.svg</normaloff>:/icons/UI/icons/file-earmark-easel.svg</iconset>
            </property>
           </widget>
          </item>
@@ -592,7 +592,7 @@
            </property>
            <property name="icon">
             <iconset resource="../ReconstructionResources.qrc">
-             <normaloff>:/icons/UI/icons/disk.png</normaloff>:/icons/UI/icons/disk.png</iconset>
+             <normaloff>:/icons/UI/icons/save.svg</normaloff>:/icons/UI/icons/save.svg</iconset>
            </property>
           </widget>
          </item>
@@ -641,7 +641,7 @@
               </property>
               <property name="icon">
                <iconset resource="../ReconstructionResources.qrc">
-                <normaloff>:/icons/UI/icons/document-import.png</normaloff>:/icons/UI/icons/document-import.png</iconset>
+                <normaloff>:/icons/UI/icons/file-earmark-image.svg</normaloff>:/icons/UI/icons/file-earmark-image.svg</iconset>
               </property>
              </widget>
             </item>
@@ -665,7 +665,7 @@
               </property>
               <property name="icon">
                <iconset resource="../ReconstructionResources.qrc">
-                <normaloff>:/icons/UI/icons/document-import.png</normaloff>:/icons/UI/icons/document-import.png</iconset>
+                <normaloff>:/icons/UI/icons/file-earmark-image.svg</normaloff>:/icons/UI/icons/file-earmark-image.svg</iconset>
               </property>
              </widget>
             </item>
@@ -688,7 +688,7 @@
         </property>
         <attribute name="icon">
          <iconset resource="../ReconstructionResources.qrc">
-          <normaloff>:/icons/UI/icons/magnifier--pencil.png</normaloff>:/icons/UI/icons/magnifier--pencil.png</iconset>
+          <normaloff>:/icons/UI/icons/search.svg</normaloff>:/icons/UI/icons/search.svg</iconset>
         </attribute>
         <attribute name="label">
          <string>Inspector</string>
@@ -776,7 +776,7 @@
               </property>
               <property name="icon">
                <iconset resource="../ReconstructionResources.qrc">
-                <normaloff>:/icons/UI/icons/pencil-ruler.png</normaloff>:/icons/UI/icons/pencil-ruler.png</iconset>
+                <normaloff>:/icons/UI/icons/rulers.svg</normaloff>:/icons/UI/icons/rulers.svg</iconset>
               </property>
               <property name="checkable">
                <bool>true</bool>
@@ -793,7 +793,7 @@
               </property>
               <property name="icon">
                <iconset resource="../ReconstructionResources.qrc">
-                <normaloff>:/icons/UI/icons/pencil-ruler.png</normaloff>:/icons/UI/icons/pencil-ruler.png</iconset>
+                <normaloff>:/icons/UI/icons/rulers.svg</normaloff>:/icons/UI/icons/rulers.svg</iconset>
               </property>
               <property name="checkable">
                <bool>true</bool>
@@ -819,7 +819,7 @@
         </property>
         <attribute name="icon">
          <iconset resource="../ReconstructionResources.qrc">
-          <normaloff>:/icons/UI/icons/pictures-stack.png</normaloff>:/icons/UI/icons/pictures-stack.png</iconset>
+          <normaloff>:/icons/UI/icons/collection.svg</normaloff>:/icons/UI/icons/collection.svg</iconset>
         </attribute>
         <attribute name="label">
          <string>Image library</string>
@@ -842,7 +842,7 @@
            </property>
            <property name="icon">
             <iconset resource="../ReconstructionResources.qrc">
-             <normaloff>:/icons/UI/icons/document-import.png</normaloff>:/icons/UI/icons/document-import.png</iconset>
+             <normaloff>:/icons/UI/icons/file-earmark-image.svg</normaloff>:/icons/UI/icons/file-earmark-image.svg</iconset>
            </property>
           </widget>
          </item>
@@ -856,7 +856,7 @@
            </property>
            <property name="icon">
             <iconset resource="../ReconstructionResources.qrc">
-             <normaloff>:/icons/UI/icons/document-import.png</normaloff>:/icons/UI/icons/document-import.png</iconset>
+             <normaloff>:/icons/UI/icons/file-earmark-image.svg</normaloff>:/icons/UI/icons/file-earmark-image.svg</iconset>
            </property>
           </widget>
          </item>
@@ -870,7 +870,7 @@
            </property>
            <property name="icon">
             <iconset resource="../ReconstructionResources.qrc">
-             <normaloff>:/icons/UI/icons/plus.png</normaloff>:/icons/UI/icons/plus.png</iconset>
+             <normaloff>:/icons/UI/icons/file-earmark-plus.svg</normaloff>:/icons/UI/icons/file-earmark-plus.svg</iconset>
            </property>
           </widget>
          </item>
@@ -884,7 +884,7 @@
            </property>
            <property name="icon">
             <iconset resource="../ReconstructionResources.qrc">
-             <normaloff>:/icons/UI/icons/minus.png</normaloff>:/icons/UI/icons/minus.png</iconset>
+             <normaloff>:/icons/UI/icons/file-earmark-minus.svg</normaloff>:/icons/UI/icons/file-earmark-minus.svg</iconset>
            </property>
           </widget>
          </item>
@@ -928,7 +928,7 @@
   <action name="actionAbout">
    <property name="icon">
     <iconset resource="../ReconstructionResources.qrc">
-     <normaloff>:/icons/UI/icons/information.png</normaloff>:/icons/UI/icons/information.png</iconset>
+     <normaloff>:/icons/UI/icons/info-circle.svg</normaloff>:/icons/UI/icons/info-circle.svg</iconset>
    </property>
    <property name="text">
     <string>About...</string>

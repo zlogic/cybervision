@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="386.60214"
+   height="150.09999"
+   id="svg1"
+   sodipodi:version="0.32"
+   inkscape:version="0.48.2 r9819"
+   sodipodi:docname="CV-tilt.svg"
+   inkscape:export-filename="CV-tilt-flicker.png"
+   inkscape:export-xdpi="476.68225"
+   inkscape:export-ydpi="476.68225"
+   version="1.0"
+   x="0.0000000"
+   y="0.0000000">
+  <defs
+     id="defs3">
+    <linearGradient
+       id="linearGradient1825">
+      <stop
+         style="stop-color:#7f7f7f;stop-opacity:0.34509805;"
+         offset="0"
+         id="stop1826" />
+      <stop
+         style="stop-color:#ffffff;stop-opacity:0.17254902;"
+         offset="0.28125"
+         id="stop1828" />
+      <stop
+         style="stop-color:#7a7a7a;stop-opacity:0.25490198;"
+         offset="0.5"
+         id="stop1829" />
+      <stop
+         style="stop-color:#000000;stop-opacity:0.58039218;"
+         offset="1"
+         id="stop1827" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient3047"
+       id="linearGradient6464"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="scale(1.908831,0.523881)"
+       x1="452.77139"
+       y1="-34.49073"
+       x2="364.27032"
+       y2="-24.504248" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient11066"
+       id="linearGradient11069"
+       gradientTransform="scale(2.449491,0.408248)"
+       x1="168.63081"
+       y1="351.44873"
+       x2="160.40492"
+       y2="-7.9874716"
+       gradientUnits="userSpaceOnUse"
+       spreadMethod="pad" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient1825"
+       id="linearGradient1824"
+       gradientTransform="matrix(0.816497,0,0,0.47140364,43.329935,0)"
+       x1="219.35716"
+       y1="0"
+       x2="217.98618"
+       y2="439.31094"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="1.081456"
+     inkscape:cx="147.70622"
+     inkscape:cy="105.88338"
+     inkscape:current-layer="layer1"
+     showgrid="false"
+     inkscape:guide-bbox="true"
+     inkscape:window-width="1093"
+     inkscape:window-height="575"
+     inkscape:window-x="-4"
+     inkscape:window-y="-4"
+     showguides="true"
+     showborder="true"
+     inkscape:grid-bbox="false"
+     inkscape:window-maximized="1"
+     fit-margin-top="0"
+     fit-margin-left="0"
+     fit-margin-right="0"
+     fit-margin-bottom="0" />
+  <metadata
+     id="metadata4">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+        <dc:date>2005-06-12</dc:date>
+        <dc:creator>
+          <cc:Agent>
+            <dc:title>Zlogic</dc:title>
+          </cc:Agent>
+        </dc:creator>
+        <dc:rights>
+          <cc:Agent>
+            <dc:title>Zlogic</dc:title>
+          </cc:Agent>
+        </dc:rights>
+        <dc:publisher>
+          <cc:Agent>
+            <dc:title>Zlogic</dc:title>
+          </cc:Agent>
+        </dc:publisher>
+        <dc:language>English?</dc:language>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Boxes"
+     inkscape:groupmode="layer"
+     id="layer1"
+     style="display:block"
+     sodipodi:insensitive="true"
+     transform="translate(43.272202,0)">
+    <rect
+       style="fill:#ff9900;fill-opacity:1;fill-rule:evenodd;stroke:none"
+       id="rect1110"
+       width="149.8"
+       x="43.429935"
+       inkscape:export-filename="/home/zlogic/Documents/C Letter.png"
+       inkscape:export-xdpi="178.05000"
+       inkscape:export-ydpi="178.05000"
+       height="172.97394"
+       y="0.3464027"
+       transform="matrix(1,0,-0.49999826,0.86602641,0,0)" />
+    <rect
+       style="fill:#666666;fill-opacity:1;fill-rule:evenodd;stroke:none"
+       id="rect2308"
+       width="149.8"
+       x="193.42995"
+       inkscape:export-filename="/home/zlogic/Documents/C Letter.png"
+       inkscape:export-xdpi="178.05000"
+       inkscape:export-ydpi="178.05000"
+       height="172.97394"
+       y="0.3464027"
+       transform="matrix(1,0,-0.49999826,0.86602641,0,0)" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer2"
+     inkscape:label="Letters"
+     style="display:block"
+     sodipodi:insensitive="true"
+     transform="translate(43.272202,0)">
+    <path
+       style="fill:#ffffff;fill-opacity:1;fill-rule:evenodd;stroke-width:1.39999998;stroke-miterlimit:4;display:block"
+       d="m 43.329935,0 -17.320427,30 -51.961283,90 -17.320427,30 150.000002,0 30,0 206.60214,-150 -30,0 L 158.37833,112.5 223.32994,0 l -30,0 -120.000005,0 -30,0 z M 56.009508,30 176.00951,30 124.04823,120 4.0482253,120 56.009508,30 z"
+       id="rect1741"
+       inkscape:connector-curvature="0" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer3"
+     inkscape:label="Flicker"
+     style="display:inline"
+     sodipodi:insensitive="true"
+     transform="translate(43.272202,0)">
+    <rect
+       style="fill:url(#linearGradient1824);fill-opacity:1;fill-rule:nonzero;stroke:none"
+       id="rect1199"
+       x="43.329937"
+       y="0"
+       width="300"
+       height="173.20488"
+       transform="matrix(1,0,-0.49999826,0.86602641,0,0)" />
+  </g>
+</svg>

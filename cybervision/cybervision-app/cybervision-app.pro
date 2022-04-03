@@ -57,26 +57,30 @@ OTHER_FILES += \
 	Reconstruction/PointMatcherKernel.cl \
 	Reconstruction/SceneJSTemplate.js \
 	UI/cybervision.rc \
-	UI/translations/cybervision-app_ru.ts \
-	UI/icons/texture-right.png \
-	UI/icons/texture-left.png \
-	UI/icons/texture-empty.png \
-	UI/icons/plus.png \
-	UI/icons/pencil-ruler.png \
-	UI/icons/minus.png \
-	UI/icons/grid.png \
-	UI/icons/document-import.png \
-	UI/icons/disk.png \
+        UI/translations/cybervision-app_ru.ts
+
+DISTFILES += \
 	UI/icons/cybervision.png \
 	UI/icons/cybervision.ico \
-	UI/icons/border-draw.png \
-	UI/icons/arrow-move.png \
-	UI/icons/arrow-circle.png \
-	UI/icons/application-task.png \
-	UI/icons/cybervision-large.png \
-	UI/icons/pictures-stack.png \
-	UI/icons/magnifier--pencil.png \
-	UI/icons/information.png
+	UI/icons/cybervision-large.svg \
+	UI/icons/arrow-repeat.svg \
+	UI/icons/arrows-move.svg \
+	UI/icons/back.svg \
+	UI/icons/badge-3d.svg \
+	UI/icons/collection.svg \
+	UI/icons/easel.svg \
+	UI/icons/file-earmark-easel.svg \
+	UI/icons/file-earmark-image.svg \
+	UI/icons/file-earmark-minus.svg \
+	UI/icons/file-earmark-plus.svg \
+	UI/icons/front.svg \
+	UI/icons/grid-3x3.svg \
+	UI/icons/info-circle.svg \
+	UI/icons/rulers.svg \
+	UI/icons/save.svg \
+	UI/icons/search.svg \
+	UI/icons/sliders.svg \
+	UI/icons/x-square.svg
 
 TRANSLATIONS = UI/translations/cybervision-app_ru.ts
 CODECFORTR = UTF-8
