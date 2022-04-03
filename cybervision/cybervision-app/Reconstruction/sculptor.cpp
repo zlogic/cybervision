@@ -101,7 +101,7 @@ QList<QVector3D> Sculptor::filterPoints(const QList<QVector3D>& points){
 	int count=0;
 
 	QList<QVector3D> filteredPoints;
-	for(QMap<QPointF,qreal>::const_iterator it=pointsMap.constBegin();it!=pointsMap.constEnd();it++){
+	for(QMultiMap<QPointF,qreal>::const_iterator it=pointsMap.constBegin();it!=pointsMap.constEnd();it++){
 		sum+= it.value();
 		count++;
 		if((it+1)==pointsMap.constEnd() || it.key()!=(it+1).key()){

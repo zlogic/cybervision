@@ -8,14 +8,6 @@
 #include <Reconstruction/pointmatch.h>
 #include <SIFT/siftgateway.h>
 
-//AMD APP hack for linking errors
-//#define __CYGWIN__ 1
-//Or patch cl/cl_platform.h by adding "__MINGW32__" to the list of define checks:
-//  #if defined(_WIN32) || defined(__CYGWIN__) || defined(__MINGW32__)
-
-#ifdef __MINGW32__
-#define __CYGWIN__
-#endif
 #define CL_TARGET_OPENCL_VERSION 110
 #define CL_VERSION_1_1 1
 #include <CL/cl.h>

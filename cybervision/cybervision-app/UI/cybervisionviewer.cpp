@@ -16,8 +16,8 @@
 
 #include <Qt3DRender/QCamera>
 #include <Qt3DRender/QPointLight>
-#include <Qt3DRender/QGeometry>
-#include <Qt3DRender/QAttribute>
+#include <Qt3DCore/QGeometry>
+#include <Qt3DCore/QAttribute>
 #include <Qt3DRender/QGeometryRenderer>
 #include <Qt3DRender/QRenderSettings>
 #include <Qt3DRender/QTexture>
@@ -128,12 +128,12 @@ void CybervisionViewer::addCrossSectionLines(){
 		Qt3DCore::QEntity* entity = new Qt3DCore::QEntity(surfaceEntity);
 		Qt3DRender::QGeometryRenderer* renderer = new Qt3DRender::QGeometryRenderer(entity);
 
-		Qt3DRender::QGeometry *geometry = new Qt3DRender::QGeometry(renderer);
+		Qt3DCore::QGeometry *geometry = new Qt3DCore::QGeometry(renderer);
 		QByteArray bufferBytes;
 		bufferBytes.resize(2 * stride);
 		float *positions = reinterpret_cast<float*>(bufferBytes.data());
 
-		Qt3DRender::QBuffer *buf = new Qt3DRender::QBuffer(geometry);
+		Qt3DCore::QBuffer *buf = new Qt3DCore::QBuffer(geometry);
 		buf->setData(bufferBytes);
 
 		*positions++=it->first.x();
@@ -143,15 +143,15 @@ void CybervisionViewer::addCrossSectionLines(){
 		*positions++=it->second.y();
 		*positions++=it->second.z();
 
-		Qt3DRender::QAttribute* positionAttribute = new Qt3DRender::QAttribute(geometry);
-		positionAttribute->setAttributeType(Qt3DRender::QAttribute::VertexAttribute);
+		Qt3DCore::QAttribute* positionAttribute = new Qt3DCore::QAttribute(geometry);
+		positionAttribute->setAttributeType(Qt3DCore::QAttribute::VertexAttribute);
 		positionAttribute->setBuffer(buf);
-		positionAttribute->setVertexBaseType(Qt3DRender::QAttribute::Float);
+		positionAttribute->setVertexBaseType(Qt3DCore::QAttribute::Float);
 		positionAttribute->setVertexSize(3);
 		positionAttribute->setByteOffset(0);
 		positionAttribute->setByteStride(stride);
 		positionAttribute->setCount(1);
-		positionAttribute->setName(Qt3DRender::QAttribute::defaultPositionAttributeName());
+		positionAttribute->setName(Qt3DCore::QAttribute::defaultPositionAttributeName());
 
 		geometry->addAttribute(positionAttribute);
 
@@ -269,16 +269,16 @@ void CybervisionViewer::initializeScene(){
 	initializeAxesWidget();
 }
 
-Qt3DRender::QGeometry* CybervisionViewer::createLines(const QVector<QVector3D>& lines,Qt3DCore::QNode* parent){
+Qt3DCore::QGeometry* CybervisionViewer::createLines(const QVector<QVector3D>& lines,Qt3DCore::QNode* parent){
 	const int elementSize = 3;
 	const int stride = elementSize * sizeof(float);
 
-	Qt3DRender::QGeometry *geometry = new Qt3DRender::QGeometry(parent);
+	Qt3DCore::QGeometry *geometry = new Qt3DCore::QGeometry(parent);
 	QByteArray bufferBytes;
 	bufferBytes.resize(lines.size() * stride);
 	float *positions = reinterpret_cast<float*>(bufferBytes.data());
 
-	Qt3DRender::QBuffer *buf = new Qt3DRender::QBuffer(geometry);
+	Qt3DCore::QBuffer *buf = new Qt3DCore::QBuffer(geometry);
 	buf->setData(bufferBytes);
 
 	for(QVector<QVector3D>::const_iterator it = lines.constBegin();it!=lines.constEnd();it++){
@@ -287,15 +287,15 @@ Qt3DRender::QGeometry* CybervisionViewer::createLines(const QVector<QVector3D>& 
 		*positions++=it->z();
 	}
 
-	Qt3DRender::QAttribute* positionAttribute = new Qt3DRender::QAttribute(geometry);
-	positionAttribute->setAttributeType(Qt3DRender::QAttribute::VertexAttribute);
+	Qt3DCore::QAttribute* positionAttribute = new Qt3DCore::QAttribute(geometry);
+	positionAttribute->setAttributeType(Qt3DCore::QAttribute::VertexAttribute);
 	positionAttribute->setBuffer(buf);
-	positionAttribute->setVertexBaseType(Qt3DRender::QAttribute::Float);
+	positionAttribute->setVertexBaseType(Qt3DCore::QAttribute::Float);
 	positionAttribute->setVertexSize(3);
 	positionAttribute->setByteOffset(0);
 	positionAttribute->setByteStride(stride);
 	positionAttribute->setCount(lines.size()/2);
-	positionAttribute->setName(Qt3DRender::QAttribute::defaultPositionAttributeName());
+	positionAttribute->setName(Qt3DCore::QAttribute::defaultPositionAttributeName());
 
 	geometry->addAttribute(positionAttribute);
 
@@ -567,7 +567,7 @@ void CybervisionViewer::addGrid(){
 		Qt3DCore::QEntity *linesEntity = new Qt3DCore::QEntity(cornerGridEntity);
 
 		Qt3DRender::QGeometryRenderer* renderer = new Qt3DRender::QGeometryRenderer(linesEntity);
-		Qt3DRender::QGeometry* gridGeometry= createLines(it.value(), renderer);
+		Qt3DCore::QGeometry* gridGeometry= createLines(it.value(), renderer);
 
 		renderer->setGeometry(gridGeometry);
 		renderer->setInstanceCount(1);

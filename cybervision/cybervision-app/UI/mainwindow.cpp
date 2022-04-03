@@ -197,24 +197,28 @@ void MainWindow::loadDebugPreferences(){
 		while(!stream.atEnd()){
 			QString line= stream.readLine();
 			if(!line.isNull() && !line.isEmpty()){
-				QRegExp fileRegexp("^file\\s+(.*)$",Qt::CaseInsensitive);
-				QRegExp scaleXYRegexp("^ScaleXY\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",Qt::CaseInsensitive);
-				QRegExp scaleZRegexp("^ScaleZ\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",Qt::CaseInsensitive);
-				QRegExp angleRegexp("^Angle\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",Qt::CaseInsensitive);
-				if(fileRegexp.exactMatch(line) && fileRegexp.capturedTexts().size()>=2){
-					QString fileName= fileRegexp.capturedTexts().at(1);
+				QRegularExpression fileRegexp("^file\\s+(.*)$",QRegularExpression::CaseInsensitiveOption);
+				QRegularExpression scaleXYRegexp("^ScaleXY\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",QRegularExpression::CaseInsensitiveOption);
+				QRegularExpression scaleZRegexp("^ScaleZ\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",QRegularExpression::CaseInsensitiveOption);
+				QRegularExpression angleRegexp("^Angle\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",QRegularExpression::CaseInsensitiveOption);
+				QRegularExpressionMatch fileRegexpMatch= fileRegexp.match(line);
+				QRegularExpressionMatch scaleXYRegexpMatch= scaleXYRegexp.match(line);
+				QRegularExpressionMatch scaleZRegexpMatch= scaleZRegexp.match(line);
+				QRegularExpressionMatch angleRegexpMatch= angleRegexp.match(line);
+				if(fileRegexpMatch.hasMatch() && fileRegexpMatch.capturedTexts().size()>=2){
+					QString fileName= fileRegexpMatch.capturedTexts().at(1);
 					QString name= QFileInfo(fileName).fileName();
 					QListWidgetItem* newItem= new QListWidgetItem(name);
 					newItem->setData(32,QDir::toNativeSeparators(fileName));
 					ui->imageList->addItem(newItem);
 
 					startPath= QFileInfo(fileName).canonicalPath();
-				}else if(scaleXYRegexp.exactMatch(line) && scaleXYRegexp.capturedTexts().size()>=2){
-					ui->scaleXYEdit->setText(scaleXYRegexp.capturedTexts().at(1));
-				}else if(scaleZRegexp.exactMatch(line) && scaleZRegexp.capturedTexts().size()>=2){
-					ui->scaleZEdit->setText(scaleZRegexp.capturedTexts().at(1));
-				}else if(angleRegexp.exactMatch(line) && angleRegexp.capturedTexts().size()>=2){
-					ui->angleEdit->setText(angleRegexp.capturedTexts().at(1));
+				}else if(scaleXYRegexpMatch.hasMatch() && scaleXYRegexpMatch.capturedTexts().size()>=2){
+					ui->scaleXYEdit->setText(scaleXYRegexpMatch.capturedTexts().at(1));
+				}else if(scaleZRegexpMatch.hasMatch() && scaleZRegexpMatch.capturedTexts().size()>=2){
+					ui->scaleZEdit->setText(scaleZRegexpMatch.capturedTexts().at(1));
+				}else if(angleRegexpMatch.hasMatch() && angleRegexpMatch.capturedTexts().size()>=2){
+					ui->angleEdit->setText(angleRegexpMatch.capturedTexts().at(1));
 				}
 			}
 		}

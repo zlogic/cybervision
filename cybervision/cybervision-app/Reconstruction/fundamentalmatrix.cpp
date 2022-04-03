@@ -112,12 +112,12 @@ Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(){
 
 				while(consensus_set.size()<Options::RANSAC_n){
 					//Generate random distance
-					int rand_number= (matches_keys_max_i*(long long)rand())/RAND_MAX;
+					qsizetype rand_number= (matches_keys_max_i*(long long)rand())/RAND_MAX;
 					float random_distance= matches_keys.at(std::min(rand_number,matches_keys.size()-1));
 					//Find points at generated distance
 					QList<KeypointMatch> it1_values= matches.values(random_distance);
 					//Find a match on a random position
-					int random_pos= (it1_values.size()*(long long)rand())/RAND_MAX;
+					qsizetype random_pos= (it1_values.size()*(long long)rand())/RAND_MAX;
 					QPair<float,KeypointMatch> new_match(
 								random_distance,
 								it1_values.at(std::min(it1_values.size()-1,random_pos))
@@ -263,7 +263,7 @@ bool FundamentalMatrix::computeFundamentalMatrix(const SortedKeypointMatches&mat
 
 
 void FundamentalMatrix::saveAcceptedMatches(const QFileInfo &target){
-	QFile file(target.absoluteFilePath());
+	QFile file(target.filesystemAbsoluteFilePath());
 	if (file.open(QFile::WriteOnly|QFile::Text)) {
 		QTextStream out(&file);
 

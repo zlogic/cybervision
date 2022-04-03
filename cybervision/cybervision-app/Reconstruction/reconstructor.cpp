@@ -57,7 +57,7 @@ bool Reconstructor::run(const QString& filename1,const QString& filename2,qreal 
 			//Save matches if needed
 			if(Options::SaveFilteredMatches){
 				connect(&fundamentalMatrix,&FundamentalMatrix::sgnLogMessage,this,&Reconstructor::sgnLogMessage,Qt::DirectConnection);
-				fundamentalMatrix.saveAcceptedMatches(QFileInfo(QFileInfo(filename1).absoluteDir(),QFileInfo(filename1).fileName()+" "+QFileInfo(filename1).fileName()+" filtered.txt").absoluteFilePath());
+				fundamentalMatrix.saveAcceptedMatches(QFileInfo(QFileInfo(filename1).dir(),QFileInfo(filename1).fileName()+" "+QFileInfo(filename2).fileName()+" filtered.txt"));
 				disconnect(&fundamentalMatrix,&FundamentalMatrix::sgnLogMessage,this,&Reconstructor::sgnLogMessage);
 			}
 		}

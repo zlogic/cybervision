@@ -106,6 +106,7 @@ win32-g++ {
 	equals(CYBERVISION_OPENCL, true){
 		LIBS += -lOpenCL
 	}
+	QMAKE_CXXFLAGS_DEBUG += -Wa,-mbig-obj
 }
 
 unix {

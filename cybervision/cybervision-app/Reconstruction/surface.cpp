@@ -1,7 +1,7 @@
 #include <Qt3DCore/QTransform>
 #include <Qt3DRender/QGeometryRenderer>
-#include <Qt3DRender/QAttribute>
-#include <Qt3DRender/QBuffer>
+#include <Qt3DCore/QAttribute>
+#include <Qt3DCore/QBuffer>
 #include <QPainter>
 #include <QTextStream>
 #include <QLineF>
@@ -69,49 +69,49 @@ Qt3DCore::QEntity* Surface::create3DEntity(Qt3DCore::QEntity* parent) const{
 
 	Qt3DCore::QEntity* entity = new Qt3DCore::QEntity(parent);
 	Qt3DRender::QGeometryRenderer* renderer = new Qt3DRender::QGeometryRenderer(entity);
-	Qt3DRender::QGeometry* geometry = new Qt3DRender::QGeometry(renderer);
+	Qt3DCore::QGeometry* geometry = new Qt3DCore::QGeometry(renderer);
 
-	Qt3DRender::QBuffer* vertexBuffer = new Qt3DRender::QBuffer(geometry);
+	Qt3DCore::QBuffer* vertexBuffer = new Qt3DCore::QBuffer(geometry);
 	vertexBuffer->setData(vertexBytes);
 
-	Qt3DRender::QAttribute* positionAttribute = new Qt3DRender::QAttribute(geometry);
-	positionAttribute->setAttributeType(Qt3DRender::QAttribute::VertexAttribute);
+	Qt3DCore::QAttribute* positionAttribute = new Qt3DCore::QAttribute(geometry);
+	positionAttribute->setAttributeType(Qt3DCore::QAttribute::VertexAttribute);
 	positionAttribute->setBuffer(vertexBuffer);
-	positionAttribute->setVertexBaseType(Qt3DRender::QAttribute::Float);
+	positionAttribute->setVertexBaseType(Qt3DCore::QAttribute::Float);
 	positionAttribute->setVertexSize(3);
 	positionAttribute->setByteOffset(0);
 	positionAttribute->setByteStride(vertStride);
 	positionAttribute->setCount(nVerts);
-	positionAttribute->setName(Qt3DRender::QAttribute::defaultPositionAttributeName());
+	positionAttribute->setName(Qt3DCore::QAttribute::defaultPositionAttributeName());
 
-	Qt3DRender::QAttribute* normalAttribute = new Qt3DRender::QAttribute(geometry);
-	normalAttribute->setAttributeType(Qt3DRender::QAttribute::VertexAttribute);
+	Qt3DCore::QAttribute* normalAttribute = new Qt3DCore::QAttribute(geometry);
+	normalAttribute->setAttributeType(Qt3DCore::QAttribute::VertexAttribute);
 	normalAttribute->setBuffer(vertexBuffer);
-	normalAttribute->setVertexBaseType(Qt3DRender::QAttribute::Float);
+	normalAttribute->setVertexBaseType(Qt3DCore::QAttribute::Float);
 	normalAttribute->setVertexSize(3);
 	normalAttribute->setByteOffset(3 * sizeof(float));
 	normalAttribute->setByteStride(vertStride);
 	normalAttribute->setCount(nVerts);
-	normalAttribute->setName(Qt3DRender::QAttribute::defaultNormalAttributeName());
+	normalAttribute->setName(Qt3DCore::QAttribute::defaultNormalAttributeName());
 
-	Qt3DRender::QAttribute* texCoordAttribute = new Qt3DRender::QAttribute(geometry);
-	texCoordAttribute->setAttributeType(Qt3DRender::QAttribute::VertexAttribute);
+	Qt3DCore::QAttribute* texCoordAttribute = new Qt3DCore::QAttribute(geometry);
+	texCoordAttribute->setAttributeType(Qt3DCore::QAttribute::VertexAttribute);
 	texCoordAttribute->setBuffer(vertexBuffer);
-	texCoordAttribute->setVertexBaseType(Qt3DRender::QAttribute::Float);
+	texCoordAttribute->setVertexBaseType(Qt3DCore::QAttribute::Float);
 	texCoordAttribute->setVertexSize(2);
 	texCoordAttribute->setByteOffset((3 + 3) * sizeof(float));
 	texCoordAttribute->setByteStride(vertStride);
 	texCoordAttribute->setCount(nVerts);
-	texCoordAttribute->setName(Qt3DRender::QAttribute::defaultTextureCoordinateAttributeName());
+	texCoordAttribute->setName(Qt3DCore::QAttribute::defaultTextureCoordinateAttributeName());
 
 
-	Qt3DRender::QBuffer* indexBuffer = new Qt3DRender::QBuffer(geometry);
+	Qt3DCore::QBuffer* indexBuffer = new Qt3DCore::QBuffer(geometry);
 	indexBuffer->setData(indexBytes);
 
-	Qt3DRender::QAttribute* indexAttribute = new Qt3DRender::QAttribute(geometry);
-	indexAttribute->setAttributeType(Qt3DRender::QAttribute::IndexAttribute);
+	Qt3DCore::QAttribute* indexAttribute = new Qt3DCore::QAttribute(geometry);
+	indexAttribute->setAttributeType(Qt3DCore::QAttribute::IndexAttribute);
 	indexAttribute->setBuffer(indexBuffer);
-	indexAttribute->setVertexBaseType(Qt3DRender::QAttribute::UnsignedInt);
+	indexAttribute->setVertexBaseType(Qt3DCore::QAttribute::UnsignedInt);
 	indexAttribute->setVertexSize(1);
 	indexAttribute->setByteOffset(0);
 	indexAttribute->setByteStride(indexStride);

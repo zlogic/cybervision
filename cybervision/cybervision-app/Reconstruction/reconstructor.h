@@ -9,6 +9,7 @@
 #include <QVector3D>
 #include <QSize>
 #include <QImage>
+#include <QObject>
 
 #include <Reconstruction/config.h>
 #include <Reconstruction/options.h>

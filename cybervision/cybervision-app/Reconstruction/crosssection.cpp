@@ -90,7 +90,7 @@ void CrossSection::computeCrossSection(const Surface&surface,const QVector3D &st
 	int count=0;
 	qreal lineLength= intersectionLine.length();
 
-	for(QMap<qreal,qreal>::const_iterator it=intersections.constBegin();it!=intersections.constEnd();it++){
+	for(QMultiMap<qreal,qreal>::const_iterator it=intersections.constBegin();it!=intersections.constEnd();it++){
 		sum+= it.value();
 		count++;
 		if((it+1)==intersections.constEnd() || !qFuzzyCompare(it.key(),(it+1).key())){
@@ -168,7 +168,7 @@ void CrossSection::computeParams(int p){
 
 		qreal sum=0;
 		int count=0;
-		for(QMap<qreal,qreal>::const_iterator it=crossSectionSorted.constBegin();it!=crossSectionSorted.constEnd();it++){
+		for(QMultiMap<qreal,qreal>::const_iterator it=crossSectionSorted.constBegin();it!=crossSectionSorted.constEnd();it++){
 			sum+= it.value();
 			count++;
 			if((it+1)==crossSectionSorted.constEnd() || !qFuzzyCompare(it.key(),(it+1).key())){

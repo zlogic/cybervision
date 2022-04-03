@@ -44,20 +44,22 @@ const QString& ImageLoader::getMetadataString() const{
 }
 
 QMap<QString,QString> ImageLoader::parseTagString(const QString& metadata)const{
-	QMultiMap<QString,QString> newTags;
+	QMap<QString,QString> newTags;
 	QString currentRoot="";
 
 
-	QRegExp rootRegExp("\\[([^\\]]+)\\]",Qt::CaseInsensitive);
-	QRegExp lineRegexp("([^ \\t=]+)\\s*=\\s*(.*)",Qt::CaseInsensitive);
+	QRegularExpression rootRegExp("^\\[([^\\]]+)\\]$",QRegularExpression::CaseInsensitiveOption);
+	QRegularExpression lineRegexp("^([^ \\t=]+)\\s*=\\s*(.*)$",QRegularExpression::CaseInsensitiveOption);
 
-	QStringList lines= metadata.split(QRegExp("(\\r\\n)|(\\n)"),Qt::SkipEmptyParts);
+	QStringList lines= metadata.split(QRegularExpression("(\\r\\n)|(\\n)"),Qt::SkipEmptyParts);
 	for(QStringList::const_iterator it=lines.constBegin();it!=lines.constEnd();it++){
 		QString line= *it;
-		if(rootRegExp.exactMatch(line) && rootRegExp.capturedTexts().size()>=2)
-			currentRoot= rootRegExp.capturedTexts().at(1);
-		else if(lineRegexp.exactMatch(line) && lineRegexp.capturedTexts().size()>=3)
-			newTags.insert(currentRoot+(currentRoot.isEmpty()?"":".")+lineRegexp.capturedTexts().at(1),lineRegexp.capturedTexts().at(2));
+		QRegularExpressionMatch rootMatch= rootRegExp.match(line);
+		QRegularExpressionMatch lineMatch= lineRegexp.match(line);
+		if(rootMatch.hasMatch() && rootMatch.capturedTexts().size()>=2)
+			currentRoot= rootMatch.capturedTexts().at(1);
+		else if(lineMatch.hasMatch() && lineMatch.capturedTexts().size()>=3)
+			newTags.insert(currentRoot+(currentRoot.isEmpty()?"":".")+lineMatch.capturedTexts().at(1),lineMatch.capturedTexts().at(2));
 	}
 
 	return newTags;

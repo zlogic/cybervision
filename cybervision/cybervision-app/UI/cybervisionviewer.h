@@ -10,8 +10,8 @@
 #include <Qt3DCore/QEntity>
 #include <Qt3DCore/QTransform>
 #include <Qt3DRender/QPaintedTextureImage>
-#include <Qt3DRender/QGeometry>
-#include <Qt3DRender/QBuffer>
+#include <Qt3DCore/QGeometry>
+#include <Qt3DCore/QBuffer>
 #include <Qt3DRender/QScreenRayCaster>
 #include <Qt3DExtras/Qt3DWindow>
 
@@ -74,7 +74,7 @@ protected:
 	QVector3D clickLocation;
 	Qt3DCore::QEntity *selectedPointEntity;
 	Qt3DCore::QTransform *selectedPointTransform;
-	QList<Qt3DRender::QBuffer*> crossSectionLineEntities;
+	QList<Qt3DCore::QBuffer*> crossSectionLineEntities;
 	QList<QPair<QVector3D,QVector3D> > crossSectionLines;
 	//Click detection
 	QVector3D getClickLocation(const QPointF&);
@@ -103,7 +103,7 @@ protected:
 	void initializeScene();
 	void initializeAxesWidget();
 
-	Qt3DRender::QGeometry* createLines(const QVector<QVector3D>& lines,Qt3DCore::QNode* parent=nullptr);
+	Qt3DCore::QGeometry* createLines(const QVector<QVector3D>& lines,Qt3DCore::QNode* parent=nullptr);
 
 	//Rotation/movement with mouse
 	void mousePressEvent(QMouseEvent *event);
