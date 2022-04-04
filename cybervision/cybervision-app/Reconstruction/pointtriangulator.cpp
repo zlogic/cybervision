@@ -35,7 +35,7 @@ QList<PointTriangulator::StereopairPosition> PointTriangulator::computePose(cons
 	for(QList<StereopairPosition>::const_iterator i= RTList.constBegin();i!=RTList.constEnd();i++){
 		RT_str.append(QString("R%1T\n").arg(QString(""),40));
 		for(int j=0;j<3;j++){
-			qreal T_value_i= j==0? i->T(0,0): (j==1?i->T(1,0):i->T(2,0));//Extract i-th value from QVector3D
+			double T_value_i= j==0? i->T(0,0): (j==1?i->T(1,0):i->T(2,0));//Extract i-th value from QVector3D
 			QString matrix_row= QString("%1 %2 %3 %4\n").arg(i->R(j,0),6,'g',6).arg(i->R(j,1),6,'g',6).arg(i->R(j,2),6,'g',6).arg(T_value_i,6,'g',6);
 			RT_str.append(matrix_row);
 		}
@@ -281,7 +281,7 @@ bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,co
 	return true;
 }
 
-bool PointTriangulator::triangulatePoints(const QList<cybervision::KeypointMatch>&matches,qreal angle){
+bool PointTriangulator::triangulatePoints(const QList<cybervision::KeypointMatch>&matches,double angle){
 	Points3D.clear();
 	result= RESULT_OK;
 	camera_K= Eigen::Matrix3d();
@@ -372,11 +372,11 @@ bool PointTriangulator::triangulatePoints(const QList<cybervision::KeypointMatch
 	X= (Q.inverse()*(X.transpose())).transpose();
 
 	//Compute rotation axis position
-	qreal axis_angle= 0;
-	qreal axis_displacement=0;
+	double axis_angle= 0;
+	double axis_displacement=0;
 	Eigen::MatrixXd rotation(2,2);
 	{
-		qreal deltaX=0,deltaY=0;
+		double deltaX=0,deltaY=0;
 		for(Eigen::MatrixXd::Index i=0;i<W.cols();i++){
 			deltaX+= W(0,i)-W(2,i);
 			deltaY+= W(1,i)-W(3,i);
@@ -401,7 +401,7 @@ bool PointTriangulator::triangulatePoints(const QList<cybervision::KeypointMatch
 
 
 	//Compute image-wide scale
-	qreal scale=0;
+	double scale=0;
 	{
 		Eigen::VectorXd Z_multiplier(3);
 		Z_multiplier<< 0,0,-sin(angle*M_PI/180);
@@ -440,7 +440,7 @@ bool PointTriangulator::triangulatePoints(const QList<cybervision::KeypointMatch
 	return true;
 }
 
-bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,qreal angle,bool filterPeaks){
+bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,double angle,bool filterPeaks){
 	QList<cybervision::KeypointMatch> matches_values= matches.values();
 	QList<QVector3D> Points3DTotal;
 
@@ -495,17 +495,17 @@ bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,qr
 
 QSet<int> PointTriangulator::findPeaks(const QList<QVector3D> &points) const{
 	QSet<int> discardedPoints;
-	QList<qreal> values_x,values_y;
+	QList<float> values_x,values_y;
 
 	//Find min/max values
 	//Fill the first cell
 	{
-		qreal minX= points.begin()->x(), minY= points.begin()->y(), maxX= points.begin()->x(), maxY= points.begin()->y();
+		float minX= points.begin()->x(), minY= points.begin()->y(), maxX= points.begin()->x(), maxY= points.begin()->y();
 		for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
-			minX= std::min(minX,(qreal)it->x());
-			minY= std::min(minY,(qreal)it->y());
-			maxX= std::max(maxX,(qreal)it->x());
-			maxY= std::max(maxY,(qreal)it->y());
+			minX= std::min(minX,it->x());
+			minY= std::min(minY,it->y());
+			maxX= std::max(maxX,it->x());
+			maxY= std::max(maxY,it->y());
 		}
 		values_x<<minX<<maxX;
 		values_y<<minY<<maxY;
@@ -513,39 +513,39 @@ QSet<int> PointTriangulator::findPeaks(const QList<QVector3D> &points) const{
 
 	for(int resolution=0;resolution<Options::gridResolution;resolution++){
 		//Increase grid density (steps)
-		for(QList<qreal>::iterator it=values_x.begin();it!=values_x.end()-1;){
+		for(QList<float>::iterator it=values_x.begin();it!=values_x.end()-1;){
 			//Add X-middle
-			qreal min_x= *it,max_x= *(it+1);
-			qreal middle_x=(min_x+max_x)/2;
+			float min_x= *it,max_x= *(it+1);
+			float middle_x=(min_x+max_x)/2;
 			it= values_x.insert(it+1,middle_x)+1;
 		}
-		for(QList<qreal>::iterator jt=values_y.begin();jt!=values_y.end()-1;){
+		for(QList<float>::iterator jt=values_y.begin();jt!=values_y.end()-1;){
 			//Add Y-middle
-			qreal min_y= *jt,max_y= *(jt+1);
-			qreal middle_y=(min_y+max_y)/2;
+			float min_y= *jt,max_y= *(jt+1);
+			float middle_y=(min_y+max_y)/2;
 			jt= values_y.insert(jt+1,middle_y)+1;
 		}
 		//Iterate through grid
 
 		#pragma omp parallel
-		for(QList<qreal>::const_iterator it=values_x.constBegin();it!=values_x.constEnd()-1;it++){
-			qreal min_x= *it,max_x= *(it+1);
+		for(QList<float>::const_iterator it=values_x.constBegin();it!=values_x.constEnd()-1;it++){
+			float min_x= *it,max_x= *(it+1);
 			#pragma omp single nowait
 			{
-				for(QList<qreal>::const_iterator jt=values_y.constBegin();jt!=values_y.constEnd()-1;jt++){
-					qreal min_y= *jt,max_y= *(jt+1);
+				for(QList<float>::const_iterator jt=values_y.constBegin();jt!=values_y.constEnd()-1;jt++){
+					float min_y= *jt,max_y= *(jt+1);
 					//Create filter for peaks
 					QVector2D min(min_x,min_y);
 					QVector2D max(max_x,max_y);
 					QVector2D middle= min+(max-min)/2;
-					QList<qreal> Zp;
+					QList<float> Zp;
 					for(QList<QVector3D>::const_iterator kt=points.constBegin();kt!=points.constEnd();kt++){
-						qreal distance= (QVector2D(*kt)-middle).length();
+						float distance= (QVector2D(*kt)-middle).length();
 						if(distance <= Options::gridPeakFilterRadius*(max-middle).length())
 							Zp<< kt->z();
 					}
 					std::sort(Zp.begin(),Zp.end());
-					qreal median,
+					float median,
 							Zmax= !Zp.isEmpty()?Zp.at(Zp.size()-1):0,
 							Zmin= !Zp.isEmpty()?Zp.at(0):0;
 

@@ -63,9 +63,9 @@ public:
 	//Performs a complete triangulation with pose estimation (for perspective projection)
 	bool triangulatePoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d& F,const QSize& imageSize);
 	//Performs a triangulation without pose estimation (for parallel projection), no peak filtering
-	bool triangulatePoints(const QList<cybervision::KeypointMatch>&matches,qreal angle);
+	bool triangulatePoints(const QList<cybervision::KeypointMatch>&matches,double angle);
 	//Performs a triangulation without pose estimation (for parallel projection), with configurable peak filtering
-	bool triangulatePoints(const SortedKeypointMatches&matches,qreal angle,bool filterPeaks);
+	bool triangulatePoints(const SortedKeypointMatches&matches,double angle,bool filterPeaks);
 
 	//Getters
 	QList<QVector3D> getPoints3D()const;

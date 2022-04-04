@@ -63,7 +63,7 @@ protected:
 	//Generate the grid
 	void addGrid();
 	//Returns the optimal scale step for the min/max value pair
-	qreal getOptimalGridStep(qreal min,qreal max) const;
+	float getOptimalGridStep(float min,float max) const;
 	//Returns the best visible corner
 	Corner getOptimalCorner(const QVector3D& min,const QVector3D& max)const;
 	//Update grid visibility

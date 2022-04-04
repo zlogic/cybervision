@@ -9,8 +9,8 @@ int main(int argc, char *argv[]){
 	//Translate the app, if possible
 	QString locale = QLocale::system().name();
 	QTranslator translator;
-	translator.load(QString("cybervision-app_") + locale);
-	app.installTranslator(&translator);
+	if(translator.load(QString("cybervision-app_") + locale))
+		app.installTranslator(&translator);
 
 	//Run the main window
 	MainWindow w;

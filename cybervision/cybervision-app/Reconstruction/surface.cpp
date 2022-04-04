@@ -137,13 +137,13 @@ Qt3DCore::QEntity* Surface::create3DEntity(Qt3DCore::QEntity* parent) const{
 
 bool Surface::isOk()const{ return !triangles.empty() && !points.empty() && scale>0.0; }
 
-qreal Surface::getMedianDepth()const{ return medianDepth; }
-qreal Surface::getMinDepth()const{ return minDepth; }
-qreal Surface::getMaxDepth()const{ return maxDepth; }
-qreal Surface::getBaseDepth()const{ return baseDepth; }
+float Surface::getMedianDepth()const{ return medianDepth; }
+float Surface::getMinDepth()const{ return minDepth; }
+float Surface::getMaxDepth()const{ return maxDepth; }
+float Surface::getBaseDepth()const{ return baseDepth; }
 QRectF cybervision::Surface::getImageSize() const{ return imageSize; }
 
-qreal Surface::getScale()const{ return scale; }
+float Surface::getScale()const{ return scale; }
 
 
 const QImage& Surface::getTexture1()const{ return image1; }

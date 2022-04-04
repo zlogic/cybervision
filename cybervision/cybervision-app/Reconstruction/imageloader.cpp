@@ -48,10 +48,11 @@ QMap<QString,QString> ImageLoader::parseTagString(const QString& metadata)const{
 	QString currentRoot="";
 
 
-	QRegularExpression rootRegExp("^\\[([^\\]]+)\\]$",QRegularExpression::CaseInsensitiveOption);
-	QRegularExpression lineRegexp("^([^ \\t=]+)\\s*=\\s*(.*)$",QRegularExpression::CaseInsensitiveOption);
+	static QRegularExpression rootRegExp("^\\[([^\\]]+)\\]$",QRegularExpression::CaseInsensitiveOption);
+	static QRegularExpression lineRegexp("^([^ \\t=]+)\\s*=\\s*(.*)$",QRegularExpression::CaseInsensitiveOption);
+	static QRegularExpression lineSplit("(\\r\\n)|(\\n)");
 
-	QStringList lines= metadata.split(QRegularExpression("(\\r\\n)|(\\n)"),Qt::SkipEmptyParts);
+	QStringList lines= metadata.split(lineSplit,Qt::SkipEmptyParts);
 	for(QStringList::const_iterator it=lines.constBegin();it!=lines.constEnd();it++){
 		QString line= *it;
 		QRegularExpressionMatch rootMatch= rootRegExp.match(line);

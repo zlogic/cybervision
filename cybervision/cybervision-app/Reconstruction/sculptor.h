@@ -17,11 +17,11 @@ protected:
 	class CellData{
 	public:
 		QList<QVector3D> points;
-		qreal averageDepth;
+		float averageDepth;
 		QVector2D min, max;
 
 		CellData();
-		CellData(const QList<QVector3D>& points,qreal parentAverageDepth,const QVector2D& min,const QVector2D& max);
+		CellData(const QList<QVector3D>& points,float parentAverageDepth,const QVector2D& min,const QVector2D& max);
 		CellData(const CellData&);
 
 		void operator=(const CellData&);
@@ -30,7 +30,7 @@ protected:
 
 	cybervision::Surface surface;
 	QSize imageSize;
-	qreal scaleXY,scaleZ;
+	double scaleXY,scaleZ;
 
 	//Average points with the same (x,y) values, change scale to better fit result
 	QList<QVector3D> filterPoints(const QList<QVector3D>& points);

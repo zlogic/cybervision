@@ -17,7 +17,7 @@ protected:
 
 	//For reconstruction task
 	QStringList image_filenames;
-	qreal scaleXY, scaleZ,angle;
+	double scaleXY, scaleZ,angle;
 	QSize imageSize;
 	bool preferScaleFromMetadata;
 
@@ -27,7 +27,7 @@ public:
 	ProcessThread();
 	void setUi(MainWindow *nw=NULL);
 
-	void reconstruct3DShape(QStringList image_filenames,qreal scaleXY,qreal scaleZ,qreal angle,bool preferScaleFromMetadata=false);
+	void reconstruct3DShape(QStringList image_filenames,double scaleXY,double scaleZ,double angle,bool preferScaleFromMetadata=false);
 	void run();//the main thread loop
 signals:
 	void processStarted();

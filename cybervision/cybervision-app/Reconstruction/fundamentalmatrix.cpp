@@ -38,7 +38,7 @@ Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(const KeypointMatche
 	{
 		int i=0;
 		for(KeypointMatches::const_iterator it= matches.begin();it!=matches.end();it++,i++){
-			qreal x1= it->second.a.x(), x2=it->second.b.x(), y1=it->second.a.y(), y2=it->second.b.y(), z1=1, z2=1;
+			double x1= it->second.a.x(), x2=it->second.b.x(), y1=it->second.a.y(), y2=it->second.b.y(), z1=1, z2=1;
 			//Kronecker product
 			chi(i,0)= x1*x2, chi(i,1)= x1*y2, chi(i,2)= x1*z2;
 			chi(i,3)= y1*x2, chi(i,4)= y1*y2, chi(i,5)= y1*z2;

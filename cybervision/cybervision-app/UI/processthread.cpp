@@ -9,7 +9,7 @@
 
 ProcessThread::ProcessThread(){mw=NULL;}
 
-void ProcessThread::reconstruct3DShape(QStringList image_filenames,qreal scaleXY,qreal scaleZ,qreal angle,bool preferScaleFromMetadata){
+void ProcessThread::reconstruct3DShape(QStringList image_filenames,double scaleXY,double scaleZ,double angle,bool preferScaleFromMetadata){
 	wait();
 	this->image_filenames= image_filenames;
 	this->scaleXY= scaleXY, this->scaleZ= scaleZ, this->angle= angle;
@@ -39,7 +39,7 @@ void ProcessThread::run(){
 
 	if(reconstructor_success){
 		//Run surface generation
-		qreal scaleMetadata= reconstructor.getScaleMetadata();
+		double scaleMetadata= reconstructor.getScaleMetadata();
 		if(scaleMetadata>0 && preferScaleFromMetadata){
 			scaleXY= scaleMetadata;
 			scaleZ= scaleMetadata;

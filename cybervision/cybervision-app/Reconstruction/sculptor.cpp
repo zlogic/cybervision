@@ -34,7 +34,7 @@ inline bool qFuzzyCompare(const QPointF& a,const QPointF& b){
 }
 
 namespace cybervision{
-Sculptor::Sculptor(const QList<QVector3D>& points,QSize imageSize,qreal scaleXY,qreal scaleZ){
+Sculptor::Sculptor(const QList<QVector3D>& points,QSize imageSize,double scaleXY,double scaleZ){
 	this->scaleXY= scaleXY, this->scaleZ= scaleZ;
 	this->imageSize= imageSize;
 
@@ -57,10 +57,10 @@ QList<QVector3D> Sculptor::filterPoints(const QList<QVector3D>& points){
 	QVector3D maxCoords(-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity());
 
 	//These values are unwanted
-	qreal max_z=points.constBegin()->z(), min_z=points.constBegin()->z();
+	float max_z=points.constBegin()->z(), min_z=points.constBegin()->z();
 	for(QList<QVector3D>::const_iterator it= points.constBegin();it!=points.constEnd();it++){
-		max_z= std::max(max_z,(qreal)it->z());
-		min_z= std::min(min_z,(qreal)it->z());
+		max_z= std::max(max_z,it->z());
+		min_z= std::min(min_z,it->z());
 	}
 
 	for(QList<QVector3D>::const_iterator it= points.constBegin();it!=points.constEnd();it++){
@@ -80,9 +80,9 @@ QList<QVector3D> Sculptor::filterPoints(const QList<QVector3D>& points){
 	centroid.setY(centroid.y()/points.count());
 	centroid.setZ(centroid.z()/points.count());
 
-	qreal scale_x= scaleXY;
-	qreal scale_y= scaleXY;
-	qreal scale_z= scaleZ;
+	double scale_x= scaleXY;
+	double scale_y= scaleXY;
+	double scale_z= scaleZ;
 
 	QPointF center;
 	{
@@ -92,20 +92,20 @@ QList<QVector3D> Sculptor::filterPoints(const QList<QVector3D>& points){
 
 	surface.scale= Options::surfaceSize/(scaleXY*std::max(maxCoords.x()-minCoords.x(),maxCoords.y()-minCoords.y()));
 
-	QMultiMap<QPointF,qreal> pointsMap;
+	QMultiMap<QPointF,float> pointsMap;
 	for(QList<QVector3D>::const_iterator it= points.constBegin();it!=points.constEnd();it++){
 		QPointF point(it->x(),it->y());
 		pointsMap.insert(point,it->z());
 	}
-	qreal sum=0;
+	float sum=0;
 	int count=0;
 
 	QList<QVector3D> filteredPoints;
-	for(QMultiMap<QPointF,qreal>::const_iterator it=pointsMap.constBegin();it!=pointsMap.constEnd();it++){
+	for(QMultiMap<QPointF,float>::const_iterator it=pointsMap.constBegin();it!=pointsMap.constEnd();it++){
 		sum+= it.value();
 		count++;
-		if((it+1)==pointsMap.constEnd() || it.key()!=(it+1).key()){
-			qreal z= sum/(qreal)count;
+		if(std::next(it,1)==pointsMap.constEnd() || it.key()!=std::next(it,1).key()){
+			float z= sum/(float)count;
 			QVector3D scaled_point((it.key().x()-minCoords.x())*scale_x-center.x(),
 								   -(it.key().y()-minCoords.y())*scale_y+center.y(),
 								   -(z-minCoords.z())*scale_z
@@ -156,9 +156,9 @@ bool Sculptor::filterTriangles(QList<QVector3D>& points,const QList<Surface::Tri
 				sorted_heights.append(point1.z());
 				sorted_heights.append(point2.z());
 
-				qreal distanceXY= (point1.x()-point2.x())*(point1.x()-point2.x()) + (point1.y()-point2.y())*(point1.y()-point2.y());
+				float distanceXY= (point1.x()-point2.x())*(point1.x()-point2.x()) + (point1.y()-point2.y())*(point1.y()-point2.y());
 
-				if(fabs(points[p].z()-point1.z())>distanceXY*Options::peakSize*surface.scale && fabs(points[p].z()-point2.z())>distanceXY*Options::peakSize*surface.scale){
+				if(fabsf(points[p].z()-point1.z())>distanceXY*Options::peakSize*surface.scale && fabsf(points[p].z()-point2.z())>distanceXY*Options::peakSize*surface.scale){
 					isPeakCandidate=true;
 				}else{
 					isPeakCandidate=false;
@@ -182,10 +182,10 @@ bool Sculptor::filterTriangles(QList<QVector3D>& points,const QList<Surface::Tri
 	}
 
 	//Renormalize z-coordinate
-	qreal zMin= std::numeric_limits<qreal>::infinity(), zMax= -std::numeric_limits<qreal>::infinity();
+	float zMin= std::numeric_limits<float>::infinity(), zMax= -std::numeric_limits<float>::infinity();
 	for(QList<QVector3D>::const_iterator it= points.constBegin();it!=points.constEnd();it++){
-		zMin= std::min(zMin,(qreal)it->z());
-		zMax= std::max(zMax,(qreal)it->z());
+		zMin= std::min(zMin,it->z());
+		zMax= std::max(zMax,it->z());
 	}
 
 	for(QList<QVector3D>::iterator it= points.begin();it!=points.end();it++){
@@ -200,7 +200,7 @@ Sculptor::CellData::CellData(){
 	averageDepth=0;
 	min= QVector2D(0,0), max= QVector2D(0,0);
 }
-Sculptor::CellData::CellData(const QList<QVector3D> &points,qreal parentAverageDepth, const QVector2D &min, const QVector2D &max){
+Sculptor::CellData::CellData(const QList<QVector3D> &points,float parentAverageDepth, const QVector2D &min, const QVector2D &max){
 	averageDepth=parentAverageDepth;
 	this->min= min, this->max= max;
 	/*
@@ -217,7 +217,7 @@ Sculptor::CellData::CellData(const QList<QVector3D> &points,qreal parentAverageD
 	QVector2D middle= min+(max-min)/2;
 
 	for(QList<QVector3D>::const_iterator it=points.begin();it!=points.end();it++){
-		qreal distance= (QVector2D(*it)-middle).length();
+		float distance= (QVector2D(*it)-middle).length();
 		if(distance <= Options::gridCellArea*(max-middle).length()){
 			sumDepth+= it->z()/distance;
 			sumDistance+= 1/distance;
@@ -243,12 +243,12 @@ QList<QVector3D> Sculptor::interpolatePointsToGrid(const QList<QVector3D>& point
 
 	//Fill the first cell
 	{
-		qreal minX= points.constBegin()->x(), minY= points.constBegin()->y(), maxX= points.constBegin()->x(), maxY= points.constBegin()->y();
+		float minX= points.constBegin()->x(), minY= points.constBegin()->y(), maxX= points.constBegin()->x(), maxY= points.constBegin()->y();
 		for(QList<QVector3D>::const_iterator it=points.constBegin();it!=points.constEnd();it++){
-			minX= std::min(minX,(qreal)it->x());
-			minY= std::min(minY,(qreal)it->y());
-			maxX= std::max(maxX,(qreal)it->x());
-			maxY= std::max(maxY,(qreal)it->y());
+			minX= std::min(minX,it->x());
+			minY= std::min(minY,it->y());
+			maxX= std::max(maxX,it->x());
+			maxY= std::max(maxY,it->y());
 		}
 		//minX= 0, minY= 0;
 		//maxX= imageSize.width(), maxY= imageSize.height();
@@ -355,7 +355,7 @@ QVector3D Sculptor::calcNormal(const QVector3D& vector)const{
 	//Rotate vector's projection onto XY plane 90 degrees
 	QVector3D projection(vector.x(),vector.y(),0);
 	QMatrix4x4 rotationMatrix; rotationMatrix.rotate(90.0,0,0,1);
-	QVector3D projection_rotated= rotationMatrix*projection;
+	QVector3D projection_rotated= rotationMatrix.map(projection);
 	return calcNormal(vector,projection_rotated);
 }
 
@@ -565,7 +565,7 @@ void Sculptor::delaunayTriangulate(const QList<QVector3D>& unfilteredPoints){
 
 	//Calculate depth median, min & max
 	{
-		QList<qreal> depthList;
+		QList<float> depthList;
 		for(QList<QVector3D>::const_iterator it=points.constBegin();it!=points.constEnd();it++)
 			depthList<<it->z();
 		std::sort(depthList.begin(),depthList.end());
@@ -585,8 +585,8 @@ void Sculptor::delaunayTriangulate(const QList<QVector3D>& unfilteredPoints){
 	//Calculate base level with histogram
 	if(Options::statsBaseLevelMethod == Options::STATS_BASELEVEL_HISTOGRAM){
 		//Prepare histogram
-		QVector<qreal> depthHistogram(Options::statsDepthHistogramSize,0),depthHistogramCount(Options::statsDepthHistogramSize,0);
-		qreal histogramStep= (surface.maxDepth-surface.minDepth)/Options::statsDepthHistogramSize;
+		QVector<float> depthHistogram(Options::statsDepthHistogramSize,0),depthHistogramCount(Options::statsDepthHistogramSize,0);
+		float histogramStep= (surface.maxDepth-surface.minDepth)/Options::statsDepthHistogramSize;
 		//Build histogram
 		for(QList<QVector3D>::const_iterator it=points.constBegin();it!=points.constEnd();it++){
 			int pos= (it->z()-surface.minDepth)/histogramStep;
@@ -602,7 +602,7 @@ void Sculptor::delaunayTriangulate(const QList<QVector3D>& unfilteredPoints){
 				maxPoints= i;
 		}
 		depthHistogramCount.clear();
-		qreal baseLevel= depthHistogram[maxPoints];
+		float baseLevel= depthHistogram[maxPoints];
 		surface.baseDepth= baseLevel;
 	}
 }

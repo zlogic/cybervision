@@ -132,10 +132,10 @@ void MainWindow::updateWidgetStatus(){
 
 void MainWindow::updateSurfaceStats(int lineId){
 	QMutexLocker lock(&surfaceViewport.getSurfaceMutex());
-	qreal minDepth= surfaceViewport.getSurface3D().getMinDepth();
-	qreal maxDepth= surfaceViewport.getSurface3D().getMaxDepth();
-	qreal medianDepth= surfaceViewport.getSurface3D().getMedianDepth();
-	qreal baseDepth= surfaceViewport.getSurface3D().getBaseDepth();
+	float minDepth= surfaceViewport.getSurface3D().getMinDepth();
+	float maxDepth= surfaceViewport.getSurface3D().getMaxDepth();
+	float medianDepth= surfaceViewport.getSurface3D().getMedianDepth();
+	float baseDepth= surfaceViewport.getSurface3D().getBaseDepth();
 	if(surfaceViewport.getSurface3D().isOk())
 		ui->statisticsLabel->setText(QString(tr("Depth range: %1 \xC2\xB5m\nBase depth: %2 \xC2\xB5m\nMedian depth: %3 \xC2\xB5m"))
 									 .arg((maxDepth-minDepth)*cybervision::Options::TextUnitScale)
@@ -189,6 +189,11 @@ void MainWindow::loadDebugPreferences(){
 	if(debugFileName.isNull())
 		return;
 
+	static QRegularExpression fileRegexp("^file\\s+(.*)$",QRegularExpression::CaseInsensitiveOption);
+	static QRegularExpression scaleXYRegexp("^ScaleXY\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",QRegularExpression::CaseInsensitiveOption);
+	static QRegularExpression scaleZRegexp("^ScaleZ\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",QRegularExpression::CaseInsensitiveOption);
+	static QRegularExpression angleRegexp("^Angle\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",QRegularExpression::CaseInsensitiveOption);
+
 	QFile debugFile(debugFileName);
 	if(debugFile.exists()){
 		debugFile.open(QFile::ReadOnly);
@@ -197,10 +202,6 @@ void MainWindow::loadDebugPreferences(){
 		while(!stream.atEnd()){
 			QString line= stream.readLine();
 			if(!line.isNull() && !line.isEmpty()){
-				QRegularExpression fileRegexp("^file\\s+(.*)$",QRegularExpression::CaseInsensitiveOption);
-				QRegularExpression scaleXYRegexp("^ScaleXY\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",QRegularExpression::CaseInsensitiveOption);
-				QRegularExpression scaleZRegexp("^ScaleZ\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",QRegularExpression::CaseInsensitiveOption);
-				QRegularExpression angleRegexp("^Angle\\s+([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)$",QRegularExpression::CaseInsensitiveOption);
 				QRegularExpressionMatch fileRegexpMatch= fileRegexp.match(line);
 				QRegularExpressionMatch scaleXYRegexpMatch= scaleXYRegexp.match(line);
 				QRegularExpressionMatch scaleZRegexpMatch= scaleZRegexp.match(line);
@@ -260,7 +261,7 @@ void MainWindow::processStopped(QString resultText,cybervision::Surface surface)
 }
 
 void MainWindow::viewerSelectedPointUpdated(QVector3D point){
-	if(point.x()==std::numeric_limits<qreal>::infinity() || point.y()==std::numeric_limits<qreal>::infinity() || point.z()==std::numeric_limits<qreal>::infinity())
+	if(point.x()==std::numeric_limits<float>::infinity() || point.y()==std::numeric_limits<float>::infinity() || point.z()==std::numeric_limits<float>::infinity())
 		ui->pointCoordinatesLabel->setText(tr("No point selected"));
 	else
 		ui->pointCoordinatesLabel->setText(QString(tr("x: %1 \xC2\xB5m\ny: %2 \xC2\xB5m\nz: %3 \xC2\xB5m"))

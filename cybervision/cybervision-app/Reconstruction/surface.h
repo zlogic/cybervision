@@ -35,10 +35,10 @@ protected:
 	QList<Point> points;
 
 	//Scale for viewport
-	qreal scale;
+	float scale;
 
 	//Depth statistics
-	qreal medianDepth,baseDepth,minDepth,maxDepth;
+	float medianDepth,baseDepth,minDepth,maxDepth;
 
 	//Image size
 	QRectF imageSize;
@@ -54,16 +54,16 @@ public:
 	bool isOk() const;
 
 	//Returns point depth statistics (min/max/median)
-	qreal getMedianDepth()const;
-	qreal getMinDepth()const;
-	qreal getMaxDepth()const;
-	qreal getBaseDepth()const;
+	float getMedianDepth()const;
+	float getMinDepth()const;
+	float getMaxDepth()const;
+	float getBaseDepth()const;
 
 	//Returns source image size
 	QRectF getImageSize()const;
 
 	//Returns scale
-	qreal getScale()const;
+	float getScale()const;
 
 	//Returns the textures
 	const QImage& getTexture1() const;

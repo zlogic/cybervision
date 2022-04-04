@@ -33,7 +33,7 @@ protected:
 public:
 	explicit Reconstructor(QObject *parent);
 
-	bool run(const QString& filename1,const QString& filename2,qreal angle);
+	bool run(const QString& filename1,const QString& filename2,double angle);
 
 	//Getters
 	bool isOk()const;

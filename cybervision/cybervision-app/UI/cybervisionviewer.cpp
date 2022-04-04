@@ -43,11 +43,11 @@ CybervisionViewer::CybervisionViewer(): Qt3DExtras::Qt3DWindow(){
 	this->textureMode= TEXTURE_1;
 	this->showGrid= false;
 	this->drawingCrossSectionLine= -1;
-	clickLocation= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+	clickLocation= QVector3D(std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity());
 	for(int i=0;i<2;i++){
 		QPair<QVector3D,QVector3D> crossSectionLine;
-		crossSectionLine.first= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
-		crossSectionLine.second= QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+		crossSectionLine.first= QVector3D(std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity());
+		crossSectionLine.second= QVector3D(std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity());
 		crossSectionLines<<crossSectionLine;
 	}
 
@@ -59,7 +59,7 @@ CybervisionViewer::~CybervisionViewer(){
 }
 
 void CybervisionViewer::setSurface3D(const cybervision::Surface& surface){
-	QVector3D infinity(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+	QVector3D infinity(std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity());
 	clickLocation= infinity;
 	for(QList<QPair<QVector3D,QVector3D> >::iterator it=crossSectionLines.begin();it!=crossSectionLines.end();it++){
 		it->first= infinity;
@@ -217,8 +217,8 @@ QVector3D CybervisionViewer::getSelectedPoint() const{
 QPair<QVector3D,QVector3D> CybervisionViewer::getCrossSectionLine(int lineId) const{
 	if(lineId<0 || lineId>=crossSectionLines.size()){
 		QPair<QVector3D,QVector3D> result(
-					QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity()),
-					QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity())
+					QVector3D(std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity()),
+					QVector3D(std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity())
 					);
 		return result;
 	}
@@ -394,7 +394,7 @@ void CybervisionViewer::updateCrossSectionLines(){
 		*positions++=end.y();
 		*positions++=end.z();
 
-		crossSectionLineEntities[i]->setEnabled(start!=QVector3D(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity()));
+		crossSectionLineEntities[i]->setEnabled(start!=QVector3D(std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity()));
 		crossSectionLineEntities[i]->setData(bufferBytes);
 	}
 }
@@ -404,18 +404,18 @@ void CybervisionViewer::addGrid(){
 		return;
 
 	//Calculate grid steps
-	qreal step_x= getOptimalGridStep(surface.getImageSize().left(),surface.getImageSize().right());
-	qreal step_y= getOptimalGridStep(surface.getImageSize().top(),surface.getImageSize().bottom());
-	qreal step_z= getOptimalGridStep(surface.getMinDepth(),surface.getMaxDepth());
-	qreal step_xy= std::max(step_x,step_y);
+	float step_x= getOptimalGridStep(surface.getImageSize().left(),surface.getImageSize().right());
+	float step_y= getOptimalGridStep(surface.getImageSize().top(),surface.getImageSize().bottom());
+	float step_z= getOptimalGridStep(surface.getMinDepth(),surface.getMaxDepth());
+	float step_xy= std::max(step_x,step_y);
 	step_x= step_xy, step_y= step_xy;
-	const int min_x= floor(surface.getImageSize().left()/step_x);
-	const int max_x= ceil(surface.getImageSize().right()/step_x);
-	const int min_y= floor(surface.getImageSize().top()/step_y);
-	const int max_y= ceil(surface.getImageSize().bottom()/step_y);
-	const int min_z= floor(surface.getMinDepth()/step_z);
-	const int max_z= ceil(surface.getMaxDepth()/step_z);
-	const qreal tickSize= 1/surface.getScale();
+	const int min_x= floorf(surface.getImageSize().left()/step_x);
+	const int max_x= ceilf(surface.getImageSize().right()/step_x);
+	const int min_y= floorf(surface.getImageSize().top()/step_y);
+	const int max_y= ceilf(surface.getImageSize().bottom()/step_y);
+	const int min_z= floorf(surface.getMinDepth()/step_z);
+	const int max_z= ceilf(surface.getMaxDepth()/step_z);
+	const float tickSize= 1/surface.getScale();
 
 	gridMin= QVector3D(min_x*step_x*surface.getScale(),min_y*step_y*surface.getScale(),min_z*step_z*surface.getScale());
 	gridMax= QVector3D(max_x*step_x*surface.getScale(),max_y*step_y*surface.getScale(),max_z*step_z*surface.getScale());
@@ -423,7 +423,7 @@ void CybervisionViewer::addGrid(){
 	//Create grid
 	QMap<Corner,QVector<QVector3D> > gridLines;
 	for(int i=min_x;i<=max_x;i++) {
-		qreal x= step_x*i;
+		float x= step_x*i;
 
 		QVector<QVector3D> lines;
 
@@ -466,7 +466,7 @@ void CybervisionViewer::addGrid(){
 		gridLines[CORNER_XYz].append(lines);
 	}
 	for(int i=min_y;i<=max_y;i++) {
-		qreal y= step_y*i;
+		float y= step_y*i;
 
 		QVector<QVector3D> lines;
 
@@ -509,7 +509,7 @@ void CybervisionViewer::addGrid(){
 		gridLines[CORNER_XYz].append(lines);
 	}
 	for(int i=min_z;i<=max_z;i++) {
-		qreal z= step_z*i;
+		float z= step_z*i;
 
 		QVector<QVector3D> lines;
 
@@ -581,7 +581,7 @@ void CybervisionViewer::addGrid(){
 
 	QMultiMap<Corner,QPair<QString,QVector3D> > labels;
 	for(int i=min_x;i<=max_x;i++) {
-		qreal x= step_x*i;
+		float x= step_x*i;
 		QString str;
 		QTextStream stream(&str);
 		//stream.setRealNumberPrecision(1);
@@ -607,7 +607,7 @@ void CybervisionViewer::addGrid(){
 		labels.insert(CORNER_XYz, label);
 	}
 	for(int i=min_y;i<=max_y;i++) {
-		qreal y= step_y*i;
+		float y= step_y*i;
 		QString str;
 		QTextStream stream(&str);
 		//stream.setRealNumberPrecision(1);
@@ -633,7 +633,7 @@ void CybervisionViewer::addGrid(){
 		labels.insert(CORNER_XYz, label);
 	}
 	for(int i=min_z;i<=max_z;i++) {
-		qreal z= step_z*i;
+		float z= step_z*i;
 		QString str;
 		QTextStream stream(&str);
 		//stream.setRealNumberPrecision(1);
@@ -691,9 +691,9 @@ void CybervisionViewer::updateGrid(){
 		it.value()->setEnabled(showGrid && it.key() == selected_corner);
 }
 
-qreal CybervisionViewer::getOptimalGridStep(qreal min, qreal max) const{
-	qreal delta= max-min;
-	qreal exp_x= pow(10.0,floor(log10(delta)));
+float CybervisionViewer::getOptimalGridStep(float min, float max) const{
+	float delta= max-min;
+	float exp_x= powf(10.0f,floorf(log10f(delta)));
 
 	//Check if selected scale is too small
 	if(delta/exp_x<5)
@@ -701,7 +701,7 @@ qreal CybervisionViewer::getOptimalGridStep(qreal min, qreal max) const{
 
 	//Select optimal step
 	int max_step_count= 10;
-	qreal step_1= exp_x, step_2= exp_x*2, step_5= exp_x*5;
+	float step_1= exp_x, step_2= exp_x*2, step_5= exp_x*5;
 	int step_1_count= ceil(delta/step_1);
 	int step_2_count= ceil(delta/step_2);
 	//int step_5_count= ceil(delta/step_5);
@@ -717,7 +717,7 @@ void CybervisionViewer::mousePressEvent(QMouseEvent *event){
 	lastMousePos= event->pos();
 	clickMousePos= event->pos();
 	if(drawingCrossSectionLine>=0 && drawingCrossSectionLine<crossSectionLines.size()){
-		QVector3D infinityLocation(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+		QVector3D infinityLocation(std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity());
 		QPair<QVector3D,QVector3D> currentCrossSectionLine(infinityLocation,infinityLocation);
 		crossSectionLines[drawingCrossSectionLine]= currentCrossSectionLine;
 	}
@@ -791,7 +791,7 @@ void CybervisionViewer::hitsChanged(const Qt3DRender::QAbstractRayCaster::Hits &
 		clickLocation = hit.localIntersection();
 		emit selectedPointUpdated(hit.localIntersection()-QVector3D(0,0,surface.getBaseDepth()));
 	}else if(drawingCrossSectionLine>=0 && drawingCrossSectionLine<crossSectionLines.size()){
-		QVector3D infinity(std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity(),std::numeric_limits<qreal>::infinity());
+		QVector3D infinity(std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity());
 		QVector3D hitLocation(hit.localIntersection().x(),hit.localIntersection().y(),0);
 		if(crossSectionLines[drawingCrossSectionLine].first==infinity)
 			crossSectionLines[drawingCrossSectionLine].first= hitLocation;
@@ -818,10 +818,10 @@ CybervisionViewer::Corner CybervisionViewer::getOptimalCorner(const QVector3D& m
 	corners<<QPair<QVector3D,Corner>(QVector3D( max.x(), max.y(), min.z()),CORNER_XYz);
 	corners<<QPair<QVector3D,Corner>(QVector3D( max.x(), max.y(), max.z()),CORNER_XYZ);
 
-	qreal closestDistance= -std::numeric_limits<qreal>::infinity();
+	float closestDistance= -std::numeric_limits<float>::infinity();
 	Corner closestCorner= CORNER_NONE;
 	for(QList<QPair<QVector3D,Corner> >::const_iterator it=corners.constBegin();it!=corners.constEnd();it++){
-		QVector3D projection= projectionMatrix*((transformationMatrix*QVector4D(it->first,-1)).toVector3DAffine());
+		QVector3D projection= projectionMatrix.map((transformationMatrix*QVector4D(it->first,-1)).toVector3DAffine());
 		if(projection.z()>closestDistance){
 			closestDistance= projection.z();
 			closestCorner= it->second;

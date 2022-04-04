@@ -93,7 +93,7 @@ void CrossSection::computeCrossSection(const Surface&surface,const QVector3D &st
 	for(QMultiMap<qreal,qreal>::const_iterator it=intersections.constBegin();it!=intersections.constEnd();it++){
 		sum+= it.value();
 		count++;
-		if((it+1)==intersections.constEnd() || !qFuzzyCompare(it.key(),(it+1).key())){
+		if(std::next(it,1)==intersections.constEnd() || !qFuzzyCompare(it.key(),std::next(it,1).key())){
 			qreal z= sum/(qreal)count;
 			QPointF point(it.key()*lineLength,z);
 			crossSection.push_back(point);
@@ -113,13 +113,12 @@ void CrossSection::computeParams(int p){
 		//Compute middle-line with least-squares
 		//See http://mathworld.wolfram.com/LeastSquaresFitting.html
 		qreal xAverage=0,yAverage=0;
-		qreal xSquares=0,ySquares=0;
+		qreal xSquares=0;
 		qreal xy=0;
 		for(QList<QPointF>::const_iterator it=crossSection.constBegin();it!=crossSection.constEnd();it++){
 			xAverage+= it->x();
 			yAverage+= it->y();
 			xSquares+= it->x()*it->x();
-			ySquares+= it->y()*it->y();
 			xy+= it->x()*it->y();
 		}
 		xAverage/= (qreal)crossSection.size();
@@ -171,7 +170,7 @@ void CrossSection::computeParams(int p){
 		for(QMultiMap<qreal,qreal>::const_iterator it=crossSectionSorted.constBegin();it!=crossSectionSorted.constEnd();it++){
 			sum+= it.value();
 			count++;
-			if((it+1)==crossSectionSorted.constEnd() || !qFuzzyCompare(it.key(),(it+1).key())){
+			if(std::next(it,1)==crossSectionSorted.constEnd() || !qFuzzyCompare(it.key(),std::next(it,1).key())){
 				qreal Y= sum/(qreal)count;
 				QPointF point(it.key(),Y);
 				crossSectionProjected.push_back(point);
