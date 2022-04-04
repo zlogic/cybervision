@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
-<TS version="2.1" language="ru">
+<TS version="2.1" language="ru" sourcelanguage="en">
 <context>
     <name>AboutWindow</name>
     <message>
@@ -9,13 +9,13 @@
         <translation>О программе Cybervision</translation>
     </message>
     <message>
-        <location filename="../aboutwindow.ui" line="35"/>
+        <location filename="../aboutwindow.ui" line="38"/>
         <source>&lt;b&gt;Cybervision&lt;/b&gt;&lt;br /&gt;3D reconstruction software for SEM images</source>
         <translation>&lt;b&gt;Cybervision&lt;/b&gt;&lt;br /&gt;Программа трехмерной реконструкции для изображений с РЭМ</translation>
     </message>
     <message>
-        <location filename="../aboutwindow.ui" line="55"/>
-        <source>&amp;copy; 2009-2012&lt;br /&gt;
+        <location filename="../aboutwindow.ui" line="58"/>
+        <source>&amp;copy; 2009-2022&lt;br /&gt;
 Dmitry Zolotukhin &lt;a href=&quot;mailto:dmitri.zolotukhin@gmail.com&quot;&gt;dmitri.zolotukhin@gmail.com&lt;/a&gt;&lt;br /&gt;
 National nuclear research university MePHI&lt;br /&gt;
 &lt;br /&gt;
@@ -23,9 +23,9 @@ Includes third-party components, sources available upon request:&lt;br /&gt;
 Contains a dynamically linked version of &lt;a href=&quot;https://www.qt.io/&quot;&gt;Qt&lt;/a&gt; library, licensed with LGPLv3.&lt;br /&gt;
 Contains &lt;a href=&quot;https://eigen.tuxfamily.org/&quot;&gt;Eigen&lt;/a&gt; library, licensed with LGPL3+.&lt;br /&gt;
 Contains a dynamically linked version of &lt;a href=&quot;https://sourceforge.net/projects/libsift/&quot;&gt;Fast SIFT Image Features Library&lt;/a&gt;, licensed with LGPL.&lt;br /&gt;
-Some icons by &lt;a href=&quot;https://p.yusukekamiyamane.com/&quot;&gt;Yusuke Kamiyamane&lt;/a&gt;, licensed by Creative Commons Attribution 3.0 License.
+Some icons from &lt;a href=&quot;https://icons.getbootstrap.com/&quot;&gt;Bootstrap&lt;/a&gt;, licensed with MIT License.
 </source>
-        <translation>&amp;copy; 2009-2012&lt;br /&gt;
+        <translation>&amp;copy; 2009-2022&lt;br /&gt;
 Дмитрий Золотухин &lt;a href=&quot;mailto:dmitri.zolotukhin@gmail.com&quot;&gt;dmitri.zolotukhin@gmail.com&lt;/a&gt;&lt;br /&gt;
 Национальный ядерный университет МИФИ&lt;br /&gt;
 &lt;br /&gt;
@@ -33,11 +33,11 @@ Some icons by &lt;a href=&quot;https://p.yusukekamiyamane.com/&quot;&gt;Yusuke K
 Содержит динамически связанную библиотеку &lt;a href=&quot;https://www.qt.io/&quot;&gt;Qt&lt;/a&gt; по лицензии LGPLv3.&lt;br /&gt;
 Содержит библиотеку &lt;a href=&quot;https://eigen.tuxfamily.org/&quot;&gt;Eigen&lt;/a&gt; по лицензии LGPL3+.&lt;br /&gt;
 Содержит динамически связанную библиотеку &lt;a href=&quot;https://sourceforge.net/projects/libsift/&quot;&gt;Fast SIFT Image Features Library&lt;/a&gt; по лицензии LGPL.&lt;br /&gt;
-Некоторые иконки &lt;a href=&quot;https://p.yusukekamiyamane.com/&quot;&gt;Yusuke Kamiyamane&lt;/a&gt; по лицензии Creative Commons Attribution 3.0 License.
+Некоторые иконки из &lt;a href=&quot;https://icons.getbootstrap.com/&quot;&gt;Bootstrap&lt;/a&gt; по лицензии MIT.
 </translation>
     </message>
     <message>
-        <location filename="../aboutwindow.ui" line="87"/>
+        <location filename="../aboutwindow.ui" line="93"/>
         <source>Close</source>
         <translation>Закрыть</translation>
     </message>
@@ -116,24 +116,24 @@ h2= %5 µм
 <context>
     <name>CybervisionViewer</name>
     <message>
-        <location filename="../cybervisionviewer.cpp" line="317"/>
+        <location filename="../cybervisionviewer.cpp" line="322"/>
         <source>x</source>
         <translation>x</translation>
     </message>
     <message>
-        <location filename="../cybervisionviewer.cpp" line="318"/>
+        <location filename="../cybervisionviewer.cpp" line="323"/>
         <source>y</source>
         <translation>y</translation>
     </message>
     <message>
-        <location filename="../cybervisionviewer.cpp" line="319"/>
+        <location filename="../cybervisionviewer.cpp" line="324"/>
         <source>z</source>
         <translation>z</translation>
     </message>
     <message>
-        <location filename="../cybervisionviewer.cpp" line="590"/>
-        <location filename="../cybervisionviewer.cpp" line="616"/>
-        <location filename="../cybervisionviewer.cpp" line="642"/>
+        <location filename="../cybervisionviewer.cpp" line="595"/>
+        <location filename="../cybervisionviewer.cpp" line="621"/>
+        <location filename="../cybervisionviewer.cpp" line="647"/>
         <source>%1 µm</source>
         <translation>%1 µм</translation>
     </message>
@@ -385,7 +385,7 @@ h2= %5 µм
 - Использование приложения более %1 минут</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="260"/>
+        <location filename="../mainwindow.cpp" line="265"/>
         <source>No point selected</source>
         <translation>Точка не выбрана</translation>
     </message>
@@ -405,7 +405,7 @@ Median depth: %3 µm</source>
         <translation>&lt;b&gt;Изображение не выбрано&lt;/b&gt;</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="262"/>
+        <location filename="../mainwindow.cpp" line="267"/>
         <source>x: %1 µm
 y: %2 µm
 z: %3 µm</source>
@@ -414,68 +414,68 @@ y: %2 µм
 z: %3 µм</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="292"/>
+        <location filename="../mainwindow.cpp" line="297"/>
         <source>Please restart the application to reconstruct another surface.</source>
         <translation>Пожалуйста, перезапустите программу для реконструкции следующей поверхности.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="302"/>
+        <location filename="../mainwindow.cpp" line="307"/>
         <source>Surface points</source>
         <translation>Точки поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="303"/>
+        <location filename="../mainwindow.cpp" line="308"/>
         <source>Surface polygons</source>
         <translation>Полигоны поверхности</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="304"/>
+        <location filename="../mainwindow.cpp" line="309"/>
         <source>PNG image</source>
         <translation>Изображение PNG</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="305"/>
+        <location filename="../mainwindow.cpp" line="310"/>
         <source>SceneJS model</source>
         <translation>Модель SceneJS</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="306"/>
+        <location filename="../mainwindow.cpp" line="311"/>
         <source>COLLADA model</source>
         <translation>Модель COLLADA</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="307"/>
-        <location filename="../mainwindow.cpp" line="355"/>
+        <location filename="../mainwindow.cpp" line="312"/>
+        <location filename="../mainwindow.cpp" line="360"/>
         <source>Cybervision surface</source>
         <translation>Поверхность Cybervision</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="312"/>
+        <location filename="../mainwindow.cpp" line="317"/>
         <source>Save the surface</source>
         <translation>Сохранить поверхность</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="314"/>
+        <location filename="../mainwindow.cpp" line="319"/>
         <source>Save functionality is disabled.</source>
         <translation>Функция сохранения отключена.</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="346"/>
+        <location filename="../mainwindow.cpp" line="351"/>
         <source>Bad save format selected</source>
         <translation>Выбран неправильный формат для записи</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="347"/>
+        <location filename="../mainwindow.cpp" line="352"/>
         <source>&lt;b&gt;Bad save format selected:&lt;/b&gt; %1</source>
         <translation>&lt;b&gt;Выбран неправильный формат для записи:&lt;/b&gt; %1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="356"/>
+        <location filename="../mainwindow.cpp" line="361"/>
         <source>Select surface to load</source>
         <translation>Выберите поверхность, которую нужно загрузить</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="360"/>
+        <location filename="../mainwindow.cpp" line="365"/>
         <source>Error loading surface from %1</source>
         <translation>Ошибка при загрузке поверхности %1</translation>
     </message>
@@ -485,13 +485,13 @@ z: %3 µм</translation>
         <translation>Изображения</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="498"/>
+        <location filename="../mainwindow.cpp" line="503"/>
         <source>The demo has run for %1 minutes and will now quit.</source>
         <translation>Демо-версия работала %1 минут и будет закрыта.</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="51"/>
-        <location filename="../mainwindow.cpp" line="355"/>
+        <location filename="../mainwindow.cpp" line="360"/>
         <source>All files</source>
         <translation>Все файлы</translation>
     </message>
@@ -501,17 +501,17 @@ z: %3 µм</translation>
         <translation>Программа Cybervision (Демонстрационная версия)</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="374"/>
+        <location filename="../mainwindow.cpp" line="379"/>
         <source>Select image 1</source>
         <translation>Выбрать изображение 1</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="392"/>
+        <location filename="../mainwindow.cpp" line="397"/>
         <source>Select image 2</source>
         <translation>Выбрать изображение 2</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="410"/>
+        <location filename="../mainwindow.cpp" line="415"/>
         <source>Select images to add</source>
         <translation>Выберите изображения, которые нужно добавить</translation>
     </message>

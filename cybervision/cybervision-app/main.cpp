@@ -9,7 +9,7 @@ int main(int argc, char *argv[]){
 	//Translate the app, if possible
 	QString locale = QLocale::system().name();
 	QTranslator translator;
-	if(translator.load(QString("cybervision-app_") + locale))
+	if(translator.load(QString("cybervision-app_") + locale,":/i18n/UI/translations"))
 		app.installTranslator(&translator);
 
 	//Run the main window

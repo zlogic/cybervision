@@ -420,6 +420,6 @@ void CybervisionCrosssectionScene::updateSceneData(const QList<QGraphicsItem*>& 
 CybervisionCrosssectionGraphicsView::CybervisionCrosssectionGraphicsView(QWidget *parent):QGraphicsView(parent){}
 CybervisionCrosssectionGraphicsView::CybervisionCrosssectionGraphicsView(QGraphicsScene *scene, QWidget *parent):QGraphicsView(scene,parent){}
 
-void CybervisionCrosssectionGraphicsView::resizeEvent(QResizeEvent *event){
+void CybervisionCrosssectionGraphicsView::resizeEvent(QResizeEvent *){
 	emit resized();
 }

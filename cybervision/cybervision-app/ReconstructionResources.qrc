@@ -30,4 +30,7 @@
     <qresource prefix="/scenejs">
         <file alias="Template.js">Reconstruction/SceneJSTemplate.js.template</file>
     </qresource>
+    <qresource prefix="/i18n">
+        <file>UI/translations/cybervision-app_ru.qm</file>
+    </qresource>
 </RCC>

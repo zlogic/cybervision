@@ -318,7 +318,7 @@ QVector3D Sculptor::calcNormal(const QList<Surface::Triangle>& triangles,const Q
 		if(it->a==a && (it->b!=a && it->c!=a)){
 			b=it->b;
 			c=it->c;
-		}else if (it->b==a && (it->c!=a && it->b!=a)){
+		}else if (it->b==a && (it->c!=a && it->a!=a)){
 			b=it->c;
 			c=it->a;
 		}else if (it->c==a && (it->a!=a && it->b!=a)){
@@ -337,9 +337,10 @@ QVector3D Sculptor::calcNormal(const QList<Surface::Triangle>& triangles,const Q
 			N++;
 		}
 	}
-	normal= normal/N;
 	if(N==0 || std::isnan(normal.x()) || std::isnan(normal.y()) || std::isnan(normal.z()))
 		normal= QVector3D(0,0,0);//This is not good!
+	else
+		normal= normal/N;
 	return normal;
 }
 
