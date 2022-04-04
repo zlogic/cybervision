@@ -1,6 +1,6 @@
 # Cybervision
 
-![Cybervision](https://github.com/zlogic/cybervision/releases/download/tag_qt515_gcc810_qt3d/screenshot.png)
+![Cybervision](https://github.com/zlogic/cybervision/releases/download/tag_qt62_gcc1120_cmake/screenshot.png)
 
 Cybervision is a 3D reconstruction software for Scanning Electron Microscope images.
 It's an abandoned project, but can be useful as a working example for many, many technologies, such as:
