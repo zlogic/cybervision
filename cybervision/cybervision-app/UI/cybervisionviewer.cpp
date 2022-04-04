@@ -96,6 +96,8 @@ void CybervisionViewer::addSurfaceMaterial(){
 	texture2D->setMagnificationFilter(Qt3DRender::QTexture2D::Linear);
 	texture2D->setMinificationFilter(Qt3DRender::QTexture2D::Linear);
 	material->setDiffuse(QVariant::fromValue(texture2D));
+	material->setAmbient(QColor(0x66,0x66,0x66));
+	material->setSpecular(QColor(0x09,0x09,0x09));
 	material->setTextureScale(1.0f);
 
 	surfaceEntity->addComponent(material);
@@ -111,7 +113,10 @@ void CybervisionViewer::addSelectedPoint(){
 	selectedPointTransform->setScale(cybervision::Options::PointDiameter/surface.getScale());
 
 	Qt3DExtras::QDiffuseSpecularMaterial *material = new Qt3DExtras::QDiffuseSpecularMaterial();
+	material->setAmbient(QColor(0xff,0x99,0x00));
 	material->setDiffuse(QColor(0xff,0x99,0x00));
+	material->setSpecular(QColor(0xff,0x99,0x00));
+	material->setShininess(.0f);
 
 	selectedPointEntity->addComponent(mesh);
 	selectedPointEntity->addComponent(material);
@@ -253,7 +258,7 @@ void CybervisionViewer::initializeScene(){
 	Qt3DCore::QEntity *lightEntity = new Qt3DCore::QEntity(cameraEntity);
 	Qt3DRender::QPointLight *light = new Qt3DRender::QPointLight(lightEntity);
 	light->setColor(QColor(0xff,0xff,0xff));
-	light->setIntensity(1);
+	light->setIntensity(1.0f);
 	lightEntity->addComponent(light);
 
 	clickDetector= new Qt3DRender::QScreenRayCaster(rootEntity);
