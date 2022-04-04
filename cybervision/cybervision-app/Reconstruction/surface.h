@@ -17,7 +17,7 @@ class Surface{
 	friend class CrossSection;
 protected:
 	//Internal classes
-	typedef int PolygonPoint;//Index of point in array. NOT checked! TODO: remove int limits
+	typedef qsizetype PolygonPoint;//Index of point in array. NOT checked!
 	class Triangle{
 	public:
 		PolygonPoint a,b,c;

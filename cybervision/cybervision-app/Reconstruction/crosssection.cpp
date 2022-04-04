@@ -87,7 +87,7 @@ void CrossSection::computeCrossSection(const Surface&surface,const QVector3D &st
 		}
 	}
 	qreal sum=0;
-	int count=0;
+	qsizetype count=0;
 	qreal lineLength= intersectionLine.length();
 
 	for(QMultiMap<qreal,qreal>::const_iterator it=intersections.constBegin();it!=intersections.constEnd();it++){
@@ -166,7 +166,7 @@ void CrossSection::computeParams(int p){
 		}
 
 		qreal sum=0;
-		int count=0;
+		qsizetype count=0;
 		for(QMultiMap<qreal,qreal>::const_iterator it=crossSectionSorted.constBegin();it!=crossSectionSorted.constEnd();it++){
 			sum+= it.value();
 			count++;
@@ -196,8 +196,8 @@ void CrossSection::computeParams(int p){
 		qreal lastCrossingX= std::numeric_limits<qreal>::quiet_NaN();
 		S= 0;
 		Sm= 0;
-		int SPeakCount= 0;//for S
-		int SCrossingCount= 0;//for Sm
+		qsizetype SPeakCount= 0;//for S
+		qsizetype SCrossingCount= 0;//for Sm
 		for(QVector<QPointF>::const_iterator it=crossSectionProjected.constBegin();it!=crossSectionProjected.constEnd();it++){
 			qreal pointX=it->x(), pointY=it->y();
 
@@ -256,7 +256,7 @@ void CrossSection::computeParams(int p){
 			Rz= std::numeric_limits<qreal>::quiet_NaN();
 		else{
 			Rz= 0;
-			for(int i=0;i<std::min(maxHeights.size(),minHeights.size());i++)
+			for(qsizetype i=0;i<std::min(maxHeights.size(),minHeights.size());i++)
 				Rz+= maxHeights[i]+minHeights[i];
 			Rz/= 5.0;
 		}
@@ -276,7 +276,7 @@ void CrossSection::computeParams(int p){
 		bool lastHeightPositive= true;
 		tp= 0;
 		qreal upX= std::numeric_limits<qreal>::quiet_NaN();//Crossing the p-line up (from negative to positive y)
-		int tpCount=0;
+		qsizetype tpCount=0;
 		for(QVector<QPointF>::const_iterator it=crossSectionProjected.constBegin();it!=crossSectionProjected.constEnd();it++){
 			qreal pointX=it->x(), height=it->y();
 			if(it!=crossSectionProjected.constBegin()){

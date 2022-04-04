@@ -52,7 +52,7 @@ protected:
 	//Compute distances with OpenCL only
 	SortedKeypointMatches CalcDistancesOpenCL(const QList<SIFT::Keypoint>& keypoints1,const QList<SIFT::Keypoint>& keypoints2);
 public:
-	explicit PointMatcherOpenCL(int vectorSize, QObject *parent = 0);
+	explicit PointMatcherOpenCL(qsizetype vectorSize, QObject *parent = 0);
 	~PointMatcherOpenCL();
 
 	//OpenCL init/release code. Returns true on success, emits messages and returns false on errors.

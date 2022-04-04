@@ -15,7 +15,7 @@
 
 
 namespace cybervision{
-PointMatcherOpenCL::PointMatcherOpenCL(int vectorSize, QObject *parent) : QObject(parent){
+PointMatcherOpenCL::PointMatcherOpenCL(qsizetype vectorSize, QObject *parent) : QObject(parent){
 	//Read kernel from file
 	{
 		QFile kernelFile(":/opencl/PointMatcherKernel.cl");
@@ -85,7 +85,7 @@ bool PointMatcherOpenCL::InitCL(){
 	}
 
 	QString bestPlatformVendor;
-	int bestPlatformSpeed = 0;
+	qsizetype bestPlatformSpeed = 0;
 	if(numPlatforms > 0)
 	{
 		QScopedArrayPointer<cl_platform_id> platforms(new cl_platform_id[numPlatforms]);
@@ -95,7 +95,7 @@ bool PointMatcherOpenCL::InitCL(){
 			return false;
 		}
 
-		for(unsigned int i=0; i < numPlatforms; ++i)
+		for(cl_uint i=0; i < numPlatforms; ++i)
 		{
 			char pbuff[100];
 			status = clGetPlatformInfo(
@@ -134,7 +134,7 @@ bool PointMatcherOpenCL::InitCL(){
 				emit sgnLogMessage(QString(tr("OpenCL Error: Getting Device IDs.(clGetDeviceIDs) code=%1")).arg(status));
 				continue;
 			}
-			for(unsigned int j=0;j<numDevices;j++){
+			for(cl_uint j=0;j<numDevices;j++){
 				cl_uint maxComputeUnits;
 				status = clGetDeviceInfo(
 							devices[j],
@@ -159,7 +159,7 @@ bool PointMatcherOpenCL::InitCL(){
 					continue;
 				}
 
-				int speed = maxComputeUnits*maxClockFrequency;
+				qsizetype speed = maxComputeUnits*maxClockFrequency;
 				if(speed>bestPlatformSpeed){
 					platform = platforms[i];
 					bestPlatformVendor = QLatin1String(pbuff);
@@ -573,16 +573,16 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesHybrid(const QList<SIFT::
 	bool gpuBusy= false;
 	bool openCLFailed= false;
 
-	QVector<QSet<int> > keypoints1Matches(keypoints1.size(),QSet<int>());
-	QVector<QSet<int> > keypoints2Matches(keypoints2.size(),QSet<int>());
+	QVector<QSet<qsizetype> > keypoints1Matches(keypoints1.size(),QSet<qsizetype>());
+	QVector<QSet<qsizetype> > keypoints2Matches(keypoints2.size(),QSet<qsizetype>());
 
 
 	//Compute distances for all keypoints from keypoints1, then choose the minumum distance
 	#pragma omp parallel
-	for(int x1=0;x1<keypoints1.size();x1+=inputVectorsBufferSize){
+	for(qsizetype x1=0;x1<keypoints1.size();x1+=inputVectorsBufferSize){
 		#pragma omp single nowait
 		{
-			for(int x2=0;x2<keypoints2.size();x2+=inputVectorsBufferSize){
+			for(qsizetype x2=0;x2<keypoints2.size();x2+=inputVectorsBufferSize){
 				if(!openCLFailed)
 				{
 					bool useGPU=false;
@@ -602,14 +602,14 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesHybrid(const QList<SIFT::
 					}
 
 					if(useGPU){
-						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
+						for(qsizetype i=0;(i<(qsizetype)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
 							const SIFT::Keypoint& keypoint1= keypoints1[x1+i];
 							for(cl_uint j=0;j<vectorSize;j++)
 								input1[i*vectorSize+j]= keypoint1[j];
 						}
 
 						//Prepare matches set from second image
-						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
+						for(qsizetype i=0;(i<(qsizetype)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
 							const SIFT::Keypoint& keypoint2= keypoints2[x2+i];
 							for(cl_uint j=0;j<vectorSize;j++)
 								input2[i*vectorSize+j]= keypoint2[j];
@@ -619,10 +619,10 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesHybrid(const QList<SIFT::
 							openCLFailed= true;
 
 						//Extract matches
-						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
+						for(qsizetype i=0;(i<(qsizetype)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
 							float minDistance= std::numeric_limits<float>::infinity();
-							int min_j=0;
-							for(int j=0;(j<(int)inputVectorsBufferSize) && ((x2+j)<keypoints2.size());j++){
+							qsizetype min_j=0;
+							for(qsizetype j=0;(j<(qsizetype)inputVectorsBufferSize) && ((x2+j)<keypoints2.size());j++){
 								float distance= output[inputVectorsBufferSize*i+j];
 								if(distance<minDistance){
 									minDistance=distance;
@@ -634,10 +634,10 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesHybrid(const QList<SIFT::
 								keypoints1Matches[x1+i].insert(x2+min_j);
 							}
 						}
-						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
+						for(qsizetype i=0;(i<(qsizetype)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
 							float minDistance= std::numeric_limits<float>::infinity();
-							int min_j=0;
-							for(int j=0;(j<(int)inputVectorsBufferSize) && ((x1+j)<keypoints1.size());j++){
+							qsizetype min_j=0;
+							for(qsizetype j=0;(j<(qsizetype)inputVectorsBufferSize) && ((x1+j)<keypoints1.size());j++){
 								float distance= output[inputVectorsBufferSize*j+i];
 								if(distance<minDistance){
 									minDistance=distance;
@@ -653,16 +653,16 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesHybrid(const QList<SIFT::
 					}else{
 						QVector<float> outputCpu(inputVectorsBufferSize*inputVectorsBufferSize);
 
-						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
-							for(int j=0;(j<(int)inputVectorsBufferSize) && ((x2+j)<keypoints2.size());j++){
+						for(qsizetype i=0;(i<(qsizetype)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
+							for(qsizetype j=0;(j<(qsizetype)inputVectorsBufferSize) && ((x2+j)<keypoints2.size());j++){
 								outputCpu[inputVectorsBufferSize*i+j]= keypoints1[x1+i].distance(keypoints2[x2+j]);
 							}
 						}
 
-						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
+						for(qsizetype i=0;(i<(qsizetype)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
 							float minDistance= std::numeric_limits<float>::infinity();
-							int min_j=0;
-							for(int j=0;(j<(int)inputVectorsBufferSize) && ((x2+j)<keypoints2.size());j++){
+							qsizetype min_j=0;
+							for(qsizetype j=0;(j<(qsizetype)inputVectorsBufferSize) && ((x2+j)<keypoints2.size());j++){
 								float distance= outputCpu[inputVectorsBufferSize*i+j];
 								if(distance<minDistance){
 									minDistance=distance;
@@ -674,10 +674,10 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesHybrid(const QList<SIFT::
 								keypoints1Matches[x1+i].insert(x2+min_j);
 							}
 						}
-						for(int i=0;(i<(int)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
+						for(qsizetype i=0;(i<(qsizetype)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
 							float minDistance= std::numeric_limits<float>::infinity();
-							int min_j=0;
-							for(int j=0;(j<(int)inputVectorsBufferSize) && ((x1+j)<keypoints1.size());j++){
+							qsizetype min_j=0;
+							for(qsizetype j=0;(j<(qsizetype)inputVectorsBufferSize) && ((x1+j)<keypoints1.size());j++){
 								float distance= outputCpu[inputVectorsBufferSize*j+i];
 								if(distance<minDistance){
 									minDistance=distance;
@@ -698,15 +698,15 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesHybrid(const QList<SIFT::
 	if(openCLFailed)
 		return SortedKeypointMatches();
 
-	for(int i=0;i<keypoints1Matches.size();i++){
+	for(qsizetype i=0;i<keypoints1Matches.size();i++){
 		const SIFT::Keypoint& keypoint1= keypoints1[i];
 		float minDistance= std::numeric_limits<float>::infinity();
-		int min_j=0;
+		qsizetype min_j=0;
 		{
-			const QSet<int>& keypoint1Distances= keypoints1Matches[i];
+			const QSet<qsizetype>& keypoint1Distances= keypoints1Matches[i];
 			if(keypoint1Distances.empty())
 				continue;
-			for(QSet<int>::const_iterator it=keypoint1Distances.begin();it!=keypoint1Distances.end();it++){
+			for(QSet<qsizetype>::const_iterator it=keypoint1Distances.begin();it!=keypoint1Distances.end();it++){
 				float distance= keypoint1.distance(keypoints2[*it]);
 				if(distance<minDistance){
 					minDistance= distance;
@@ -726,15 +726,15 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesHybrid(const QList<SIFT::
 		}
 	}
 
-	for(int i=0;i<keypoints2Matches.size();i++){
+	for(qsizetype i=0;i<keypoints2Matches.size();i++){
 		const SIFT::Keypoint& keypoint2= keypoints2[i];
 		float minDistance= std::numeric_limits<float>::infinity();
-		int min_j=0;
+		qsizetype min_j=0;
 		{
-			const QSet<int>& keypoint2Distances= keypoints2Matches[i];
+			const QSet<qsizetype>& keypoint2Distances= keypoints2Matches[i];
 			if(keypoint2Distances.empty())
 				continue;
-			for(QSet<int>::const_iterator it=keypoint2Distances.begin();it!=keypoint2Distances.end();it++){
+			for(QSet<qsizetype>::const_iterator it=keypoint2Distances.begin();it!=keypoint2Distances.end();it++){
 				float distance= keypoint2.distance(keypoints1[*it]);
 				if(distance<minDistance){
 					minDistance= distance;
@@ -765,18 +765,18 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesOpenCL(const QList<SIFT::
 
 	SortedKeypointMatches result;
 
-	QVector<QSet<int> > keypoints1Matches(keypoints1.size(),QSet<int>());
-	QVector<QSet<int> > keypoints2Matches(keypoints2.size(),QSet<int>());
-	for(int x1=0;x1<keypoints1.size();x1+=inputVectorsBufferSize){
+	QVector<QSet<qsizetype> > keypoints1Matches(keypoints1.size(),QSet<qsizetype>());
+	QVector<QSet<qsizetype> > keypoints2Matches(keypoints2.size(),QSet<qsizetype>());
+	for(qsizetype x1=0;x1<keypoints1.size();x1+=inputVectorsBufferSize){
 		//Prepare matches set from first image
-		for(int i=0;(i<(int)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
+		for(qsizetype i=0;(i<(qsizetype)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
 			const SIFT::Keypoint& keypoint1= keypoints1[x1+i];
 			for(cl_uint j=0;j<vectorSize;j++)
 				input1[i*vectorSize+j]= keypoint1[j];
 		}
-		for(int x2=0;x2<keypoints2.size();x2+=inputVectorsBufferSize){
+		for(qsizetype x2=0;x2<keypoints2.size();x2+=inputVectorsBufferSize){
 			//Prepare matches set from second image
-			for(int i=0;(i<(int)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
+			for(qsizetype i=0;(i<(qsizetype)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
 				const SIFT::Keypoint& keypoint2= keypoints2[x2+i];
 				for(cl_uint j=0;j<vectorSize;j++)
 					input2[i*vectorSize+j]= keypoint2[j];
@@ -786,10 +786,10 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesOpenCL(const QList<SIFT::
 				return SortedKeypointMatches();
 
 			//Extract matches
-			for(int i=0;(i<(int)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
+			for(qsizetype i=0;(i<(qsizetype)inputVectorsBufferSize) && ((x1+i)<keypoints1.size());i++){
 				float minDistance= std::numeric_limits<float>::infinity();
-				int min_j=0;
-				for(int j=0;(j<(int)inputVectorsBufferSize) && ((x2+j)<keypoints2.size());j++){
+				qsizetype min_j=0;
+				for(qsizetype j=0;(j<(qsizetype)inputVectorsBufferSize) && ((x2+j)<keypoints2.size());j++){
 					float distance= output[inputVectorsBufferSize*i+j];
 					if(distance<minDistance){
 						minDistance=distance;
@@ -798,10 +798,10 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesOpenCL(const QList<SIFT::
 				}
 				keypoints1Matches[x1+i].insert(x2+min_j);
 			}
-			for(int i=0;(i<(int)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
+			for(qsizetype i=0;(i<(qsizetype)inputVectorsBufferSize) && ((x2+i)<keypoints2.size());i++){
 				float minDistance= std::numeric_limits<float>::infinity();
-				int min_j=0;
-				for(int j=0;(j<(int)inputVectorsBufferSize) && ((x1+j)<keypoints1.size());j++){
+				qsizetype min_j=0;
+				for(qsizetype j=0;(j<(qsizetype)inputVectorsBufferSize) && ((x1+j)<keypoints1.size());j++){
 					float distance= output[inputVectorsBufferSize*j+i];
 					if(distance<minDistance){
 						minDistance=distance;
@@ -813,15 +813,15 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesOpenCL(const QList<SIFT::
 		}
 	}
 
-	for(int i=0;i<keypoints1Matches.size();i++){
+	for(qsizetype i=0;i<keypoints1Matches.size();i++){
 		const SIFT::Keypoint& keypoint1= keypoints1[i];
 		float minDistance= std::numeric_limits<float>::infinity();
-		int min_j=0;
+		qsizetype min_j=0;
 		{
-			const QSet<int>& keypoint1Distances= keypoints1Matches[i];
+			const QSet<qsizetype>& keypoint1Distances= keypoints1Matches[i];
 			if(keypoint1Distances.empty())
 				continue;
-			for(QSet<int>::const_iterator it=keypoint1Distances.begin();it!=keypoint1Distances.end();it++){
+			for(QSet<qsizetype>::const_iterator it=keypoint1Distances.begin();it!=keypoint1Distances.end();it++){
 				float distance= keypoint1.distance(keypoints2[*it]);
 				if(distance<minDistance){
 					minDistance= distance;
@@ -841,15 +841,15 @@ SortedKeypointMatches PointMatcherOpenCL::CalcDistancesOpenCL(const QList<SIFT::
 		}
 	}
 
-	for(int i=0;i<keypoints2Matches.size();i++){
+	for(qsizetype i=0;i<keypoints2Matches.size();i++){
 		const SIFT::Keypoint& keypoint2= keypoints2[i];
 		float minDistance= std::numeric_limits<float>::infinity();
-		int min_j=0;
+		qsizetype min_j=0;
 		{
-			const QSet<int>& keypoint2Distances= keypoints2Matches[i];
+			const QSet<qsizetype>& keypoint2Distances= keypoints2Matches[i];
 			if(keypoint2Distances.empty())
 				continue;
-			for(QSet<int>::const_iterator it=keypoint2Distances.begin();it!=keypoint2Distances.end();it++){
+			for(QSet<qsizetype>::const_iterator it=keypoint2Distances.begin();it!=keypoint2Distances.end();it++){
 				float distance= keypoint2.distance(keypoints1[*it]);
 				if(distance<minDistance){
 					minDistance= distance;

@@ -35,9 +35,9 @@ void Surface::operator =(const Surface&sc){
 }
 
 Qt3DCore::QEntity* Surface::create3DEntity(Qt3DCore::QEntity* parent) const{
-	const int nVerts = 2 * points.size();
-	const int vertElementSize = 3 + 3 + 2;
-	const int vertStride = vertElementSize * sizeof(float);
+	const qsizetype nVerts = 2 * points.size();
+	const qsizetype vertElementSize = 3 + 3 + 2;
+	const qsizetype vertStride = vertElementSize * sizeof(float);
 
 	QByteArray vertexBytes;
 	vertexBytes.resize(vertStride * nVerts);
@@ -53,8 +53,8 @@ Qt3DCore::QEntity* Surface::create3DEntity(Qt3DCore::QEntity* parent) const{
 		*vertices++= it->uv.x(); *vertices++= it->uv.y();
 	}
 
-	const int nIndexes= 3 * 2 * triangles.size();
-	const int indexStride= sizeof(uint);
+	const qsizetype nIndexes= 3 * 2 * triangles.size();
+	const qsizetype indexStride= sizeof(uint);
 
 	QByteArray indexBytes;
 	indexBytes.resize(indexStride * nIndexes);
@@ -343,7 +343,7 @@ void Surface::saveCybervision(QString fileName) const{
 	file.open(QIODevice::WriteOnly);
 	QDataStream out(&file);
 
-	out<<(int)1;//Image format version
+	out<<(int)2;//Image format version
 
 	out<<points.size();
 	for(QList<Point>::const_iterator it= points.begin();it!=points.end();it++)
@@ -368,17 +368,17 @@ const Surface Surface::fromFile(QString fileName){
 
 	int version;
 	in>>version;
-	if(version==1){
-		int pointsCount;
+	if(version==2){
+		qsizetype pointsCount;
 		in>>pointsCount;
-		for(int i=0;i<pointsCount;i++){
+		for(qsizetype i=0;i<pointsCount;i++){
 			Point point;
 			in>>point.coord>>point.normal>>point.uv;
 			surface.points<<point;
 		}
-		int trianglesCount;
+		qsizetype trianglesCount;
 		in>>trianglesCount;
-		for(int i=0;i<trianglesCount;i++){
+		for(qsizetype i=0;i<trianglesCount;i++){
 			Triangle triangle;
 			in>>triangle.a>>triangle.b>>triangle.c>>triangle.normal;
 			surface.triangles<<triangle;

@@ -98,7 +98,7 @@ QList<QVector3D> Sculptor::filterPoints(const QList<QVector3D>& points){
 		pointsMap.insert(point,it->z());
 	}
 	float sum=0;
-	int count=0;
+	qsizetype count=0;
 
 	QList<QVector3D> filteredPoints;
 	for(QMultiMap<QPointF,float>::const_iterator it=pointsMap.constBegin();it!=pointsMap.constEnd();it++){
@@ -312,7 +312,7 @@ Surface::Triangle Sculptor::createTriangle(const QList<QVector3D>& points,const 
 QVector3D Sculptor::calcNormal(const QList<Surface::Triangle>& triangles,const QList<QVector3D>& points,const Surface::PolygonPoint& point)const{
 	Surface::PolygonPoint a= point;
 	QVector3D normal;
-	int N=0;
+	qsizetype N=0;
 	for(QList<Surface::Triangle>::const_iterator it= triangles.constBegin();it!=triangles.constEnd();it++){
 		Surface::PolygonPoint b,c;
 		if(it->a==a && (it->b!=a && it->c!=a)){
@@ -589,14 +589,14 @@ void Sculptor::delaunayTriangulate(const QList<QVector3D>& unfilteredPoints){
 		float histogramStep= (surface.maxDepth-surface.minDepth)/Options::statsDepthHistogramSize;
 		//Build histogram
 		for(QList<QVector3D>::const_iterator it=points.constBegin();it!=points.constEnd();it++){
-			int pos= (it->z()-surface.minDepth)/histogramStep;
+			qsizetype pos= (it->z()-surface.minDepth)/histogramStep;
 			pos= (pos<0)?0:pos;
 			pos= (pos>=Options::statsDepthHistogramSize)?Options::statsDepthHistogramSize-1:pos;
 			depthHistogram[pos]+= it->z();
 			depthHistogramCount[pos]++;
 		}
 		int maxPoints=0;
-		for(int i=0;i<Options::statsDepthHistogramSize;i++){
+		for(qsizetype i=0;i<Options::statsDepthHistogramSize;i++){
 			depthHistogram[i]/=depthHistogramCount[i];
 			if(depthHistogramCount[i]>depthHistogramCount[maxPoints])
 				maxPoints= i;

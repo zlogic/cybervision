@@ -43,7 +43,7 @@ protected:
 	bool mousePressed;
 	QPoint lastMousePos,clickMousePos;
 	MouseMode mouseMode;
-	int drawingCrossSectionLine;
+	qsizetype drawingCrossSectionLine;
 	TextureMode textureMode;
 	bool showGrid;
 

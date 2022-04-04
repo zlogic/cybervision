@@ -124,8 +124,8 @@ void CybervisionViewer::addSelectedPoint(){
 }
 
 void CybervisionViewer::addCrossSectionLines(){
-	const int elementSize = 3;
-	const int stride = elementSize * sizeof(float);
+	const qsizetype elementSize = 3;
+	const qsizetype stride = elementSize * sizeof(float);
 
 	crossSectionLineEntities.clear();
 
@@ -275,8 +275,8 @@ void CybervisionViewer::initializeScene(){
 }
 
 Qt3DCore::QGeometry* CybervisionViewer::createLines(const QVector<QVector3D>& lines,Qt3DCore::QNode* parent){
-	const int elementSize = 3;
-	const int stride = elementSize * sizeof(float);
+	const qsizetype elementSize = 3;
+	const qsizetype stride = elementSize * sizeof(float);
 
 	Qt3DCore::QGeometry *geometry = new Qt3DCore::QGeometry(parent);
 	QByteArray bufferBytes;
@@ -384,7 +384,7 @@ void CybervisionViewer::initializeAxesWidget(){
 }
 
 void CybervisionViewer::updateCrossSectionLines(){
-	for(int i=0;i<crossSectionLines.size();i++){
+	for(qsizetype i=0;i<crossSectionLines.size();i++){
 		const QVector3D& start= crossSectionLines[i].first;
 		const QVector3D& end= crossSectionLines[i].second;
 

@@ -56,7 +56,7 @@ protected:
 	QList<QVector3D> computeTriangulatedPoints(const SortedKeypointMatches&matches,const Eigen::Matrix3d&R,const Eigen::Vector3d& T,bool normalizeCameras);
 
 	//Filters out peaks from a 3D point cloud; returns indexes of discarded points. Designed for "grid" interpolation with parallel projection.
-	QSet<int> findPeaks(const QList<QVector3D>& points)const;
+	QSet<qsizetype> findPeaks(const QList<QVector3D>& points)const;
 public:
 	explicit PointTriangulator(QObject *parent = 0);
 

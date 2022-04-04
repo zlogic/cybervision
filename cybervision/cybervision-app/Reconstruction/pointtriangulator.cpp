@@ -446,13 +446,13 @@ bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,do
 
 	bool ok=true;
 
-	int point_set_count= (matches_values.size()/Options::maxTriangulationPointSize)+1;
-	int point_set_size= matches_values.size()/point_set_count;
+	qsizetype point_set_count= (matches_values.size()/Options::maxTriangulationPointSize)+1;
+	qsizetype point_set_size= matches_values.size()/point_set_count;
 
 	//First reconstruction run
-	for(int k=0;k<point_set_count;k++){
+	for(qsizetype k=0;k<point_set_count;k++){
 		QList<cybervision::KeypointMatch> matches_values_current;
-		for(int i=k*point_set_size,i_start=k*point_set_size;i<i_start+point_set_size && i<matches_values.size();i++)
+		for(qsizetype i=k*point_set_size,i_start=k*point_set_size;i<i_start+point_set_size && i<matches_values.size();i++)
 			matches_values_current<<matches_values.at(i);
 
 		ok&= triangulatePoints(matches_values_current,angle);
@@ -463,9 +463,9 @@ bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,do
 	if(filterPeaks){
 		//Filter peaks
 		{
-			QSet<int> peaks= findPeaks(Points3DTotal);
+			QSet<qsizetype> peaks= findPeaks(Points3DTotal);
 			QList<cybervision::KeypointMatch> matches_values_no_peaks;
-			for(int i=0;i<matches_values.size();i++){
+			for(qsizetype i=0;i<matches_values.size();i++){
 				if(!peaks.contains(i))
 					matches_values_no_peaks<<matches_values[i];
 			}
@@ -477,9 +477,9 @@ bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,do
 		point_set_size= matches_values.size()/point_set_count;
 
 		//Second run (after filtering peaks)
-		for(int k=0;k<point_set_count;k++){
+		for(qsizetype k=0;k<point_set_count;k++){
 			QList<cybervision::KeypointMatch> matches_values_current;
-			for(int i=k*point_set_size,i_start=k*point_set_size;i<i_start+point_set_size && i<matches_values.size();i++)
+			for(qsizetype i=k*point_set_size,i_start=k*point_set_size;i<i_start+point_set_size && i<matches_values.size();i++)
 				matches_values_current<<matches_values.at(i);
 
 			ok&= triangulatePoints(matches_values_current,angle);
@@ -493,8 +493,8 @@ bool PointTriangulator::triangulatePoints(const SortedKeypointMatches&matches,do
 	return ok;
 }
 
-QSet<int> PointTriangulator::findPeaks(const QList<QVector3D> &points) const{
-	QSet<int> discardedPoints;
+QSet<qsizetype> PointTriangulator::findPeaks(const QList<QVector3D> &points) const{
+	QSet<qsizetype> discardedPoints;
 	QList<float> values_x,values_y;
 
 	//Find min/max values
@@ -557,19 +557,19 @@ QSet<int> PointTriangulator::findPeaks(const QList<QVector3D> &points) const{
 									((Zp[Zp.size()/2-1]+Zp[Zp.size()/2])/2.0);
 
 					if(Zp.size()>=3){
-						for(int i=0;i<Zp.size()/2;i++)
-							if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i+1)-median))
+						for(qsizetype i=0;i<Zp.size()/2;i++)
+							if(fabs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i+1)-median))
 								Zmin= Zp.at(i+1);
 							else break;
 
-						for(int i=Zp.size()-1;i>Zp.size()/2;i--)
-							if(abs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i-1)-median))
+						for(qsizetype i=Zp.size()-1;i>Zp.size()/2;i--)
+							if(fabs(Zp.at(i)-median)>Options::gridPeakSize*abs(Zp.at(i-1)-median))
 								Zmax= Zp.at(i-1);
 							else break;
 					}
 					Zp.clear();
 
-					for(int k=0;k<points.length();k++){
+					for(qsizetype k=0;k<points.length();k++){
 						if((points[k].z()>=Zmin) && (points[k].z()<=Zmax))
 							continue;
 

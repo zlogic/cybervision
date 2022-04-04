@@ -82,13 +82,13 @@ Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(){
 
 	//Increase speed with precomputed lists
 	QList<float> matches_keys= matches.uniqueKeys();
-	int matches_keys_max_i=0;
-	for(int i=0;i<matches_keys.size();i++)
+	qsizetype matches_keys_max_i=0;
+	for(qsizetype i=0;i<matches_keys.size();i++)
 		if(matches_keys.at(i)<=Options::ReliableDistance)
 			matches_keys_max_i= i;
 		else
 			break;
-	matches_keys_max_i=std::max(matches_keys_max_i,8);
+	matches_keys_max_i=std::max(matches_keys_max_i,(qsizetype)8);
 
 
 	//Use the RANSAC algorithm to estimate camera poses
@@ -112,12 +112,12 @@ Eigen::Matrix3d FundamentalMatrix::computeFundamentalMatrix(){
 
 				while(consensus_set.size()<Options::RANSAC_n){
 					//Generate random distance
-					qsizetype rand_number= (matches_keys_max_i*(long long)rand())/RAND_MAX;
+					qsizetype rand_number= (matches_keys_max_i*(qsizetype)rand())/RAND_MAX;
 					float random_distance= matches_keys.at(std::min(rand_number,matches_keys.size()-1));
 					//Find points at generated distance
 					QList<KeypointMatch> it1_values= matches.values(random_distance);
 					//Find a match on a random position
-					qsizetype random_pos= (it1_values.size()*(long long)rand())/RAND_MAX;
+					qsizetype random_pos= (it1_values.size()*(qsizetype)rand())/RAND_MAX;
 					QPair<float,KeypointMatch> new_match(
 								random_distance,
 								it1_values.at(std::min(it1_values.size()-1,random_pos))
