@@ -1,13 +1,13 @@
 from setuptools import setup, Extension
 
-fast = Extension('fast',sources=[
-    'fast/fast_9.c',
-    'fast/fast_10.c',
-    'fast/fast_11.c',
-    'fast/fast_12.c',
-    'fast/fast.c',
-    'fast/nonmax.c',
-    'fast/fast_python.c'
+machine = Extension('machine',sources=[
+    'machine/fast/fast_9.c',
+    'machine/fast/fast_10.c',
+    'machine/fast/fast_11.c',
+    'machine/fast/fast_12.c',
+    'machine/fast/fast.c',
+    'machine/fast/nonmax.c',
+    'machine/machine.c'
     ])
 
 setup(
@@ -22,7 +22,7 @@ setup(
     license='Apache License, Version 2.0',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
-    ext_modules=[fast],
+    ext_modules=[machine],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'License :: OSI Approved :: Apache Software License',
