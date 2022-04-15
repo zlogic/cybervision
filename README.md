@@ -10,3 +10,8 @@ It's an abandoned project, but can be useful as a working example for many, many
 * [OpenCL](https://www.khronos.org/registry/OpenCL/)
 
 and of course, 3D reconstruction in general.
+
+
+## External dependencies
+
+[fast](https://www.edwardrosten.com/work/fast.html)

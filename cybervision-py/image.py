@@ -1,4 +1,5 @@
 import configparser
+from fast_detector import fast_points
 
 from PIL import Image as PILImage
 
@@ -35,4 +36,4 @@ class Image:
     def __init__(self, filename):
         self.img = PILImage.open(filename)
         self.extract_tags()
-        self.img.show()
+        fast_points(self.img)

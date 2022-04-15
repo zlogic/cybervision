@@ -1,2 +1,12 @@
-.vscode
+# Python venv
 .venv
+
+# Python distribution
+build/
+*.egg-info/
+
+# C extensions
+*.so
+
+# Visual Studio Code configuration
+.vscode/

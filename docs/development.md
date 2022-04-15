@@ -13,3 +13,17 @@ Switch to virtual environment (not required when running from Visual Studio Code
 ```shell
 . .venv/bin/activate
 ```
+
+## Build C sources
+
+Build and install sources
+
+```shell
+python setup.py develop
+```
+
+or
+
+```shell
+pip install -e .
+```
