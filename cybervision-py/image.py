@@ -1,14 +1,13 @@
 import configparser
-from fast_detector import fast_points
 
-from PIL import Image as PILImage
+from PIL import Image
 
 # FEI tags containing image details
 TIFFTAG_META_PHENOM = 34683
 TIFFTAG_META_QUANTA = 34682
 TIFFTAGS = [TIFFTAG_META_PHENOM, TIFFTAG_META_QUANTA]
 
-class Image:
+class SEMImage:
     def extract_tags(self):
         sem_metadata = None
         exif = self.img.getexif()
@@ -34,6 +33,5 @@ class Image:
             self.img = self.img.crop((0,0,self.img.width,self.img.height-int(databar_height)))
 
     def __init__(self, filename):
-        self.img = PILImage.open(filename)
+        self.img = Image.open(filename)
         self.extract_tags()
-        fast_points(self.img)
