@@ -28,6 +28,8 @@ class Reconstructor:
         points1 = self.fast_points(img1_adjusted)
         points2 = self.fast_points(img2_adjusted)
 
+        self.log.info(f'Extracted points reconstruction in {datetime.now()-started}')
+
         matches = match(img1_adjusted, img2_adjusted, points1, points2, CORRELATION_KERNEL_SIZE, CORRELATION_THRESHOLD)
 
         self.log.info(f'Completed reconstruction in {datetime.now()-started}')

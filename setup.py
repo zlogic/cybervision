@@ -8,8 +8,7 @@ machine = Extension('machine',sources=[
         'machine/fast/fast.c',
         'machine/fast/nonmax.c',
         'machine/machine.c'
-    ],
-    extra_compile_args=['-Xpreprocessor -fopenmp']
+    ]
 )
 
 setup(

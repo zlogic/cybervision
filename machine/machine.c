@@ -116,12 +116,15 @@ machine_match(PyObject *self, PyObject *args)
 {
     PyObject *img1, *img2;
     Py_buffer img1_buffer, img2_buffer;
-    char *img1_bytes, *img2_bytes;
-    int kernel_size, kernel_point_count;
+    char *img1_bytes = NULL, *img2_bytes = NULL;
+    int kernel_size, kernel_width, kernel_point_count;
     float threshold;
     int w1, h1, w2, h2;
     PyObject *points1, *points2;
     Py_ssize_t points1_size, points2_size;
+
+    float *delta1 = NULL, *delta2 = NULL;
+    float *sigma1 = NULL, *sigma2 = NULL;
 
     PyObject *out = NULL;
 
@@ -131,7 +134,8 @@ machine_match(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    kernel_point_count = SQR(2*kernel_size + 1);
+    kernel_width = 2*kernel_size + 1;
+    kernel_point_count = SQR(kernel_width);
 
     w1 = read_long_attr(img1, "width");
     if (w1 == -1)
@@ -161,63 +165,97 @@ machine_match(PyObject *self, PyObject *args)
     points1_size = PyList_Size(points1);
     points2_size = PyList_Size(points2);
 
-    #pragma omp parallel for
+    delta1 = malloc(sizeof(float)*kernel_point_count*points1_size);
+    delta2 = malloc(sizeof(float)*kernel_point_count*points2_size);
+    sigma1 = malloc(sizeof(float)*points1_size);
+    sigma2 = malloc(sizeof(float)*points2_size);
+
+    for (Py_ssize_t p=0;p<points1_size;p++)
+    {
+        PyObject *point;
+        int x, y;
+        float avg = 0, sigma = 0;
+
+        sigma1[p] = INFINITY;
+        point = PyList_GetItem(points1, p);
+        if (!PyArg_ParseTuple(point, "ii", &x, &y))
+            continue;
+        if (x-kernel_size<0 || x+kernel_size>=w1 || y-kernel_size<0 || y+kernel_size>=h1)
+            continue;
+
+        for (int i=-kernel_size;i<=kernel_size;i++)
+        {
+            for(int j=-kernel_size;j<=kernel_size;j++)
+            {
+                float value;
+                value = (float)img1_bytes[(y+j)*w1 + (x+i)];
+                avg += value;
+                delta1[p*kernel_point_count + (j+kernel_size)*kernel_width + (i+kernel_size)] = value;
+            }
+        }
+        avg /= (float)kernel_point_count;
+        for (int i=0;i<kernel_point_count;i++)
+        {
+            delta1[p*kernel_point_count + i] -= avg;
+            sigma += SQR(delta1[p*kernel_point_count + i]);
+        }
+        sigma1[p] = sqrt(sigma/(float)kernel_point_count);
+    }
+    PyBuffer_Release(&img1_buffer);
+
+    for (Py_ssize_t p=0;p<points2_size;p++)
+    {
+        PyObject *point;
+        int x, y;
+        float avg = 0, sigma = 0;
+
+        sigma2[p] = INFINITY;
+
+        point = PyList_GetItem(points2, p);
+        if (!PyArg_ParseTuple(point, "ii", &x, &y))
+            continue;
+        if (x-kernel_size<0 || x+kernel_size>=w2 || y-kernel_size<0 || y+kernel_size>=h2)
+            continue;
+
+        for (int i=-kernel_size;i<=kernel_size;i++)
+        {
+            for(int j=-kernel_size;j<=kernel_size;j++)
+            {
+                float value;
+                value = (float)img2_bytes[(y+j)*w2 + (x+i)];
+                avg += value;
+                delta2[p*kernel_point_count + (j+kernel_size)*kernel_width + (i+kernel_size)] = value;
+            }
+        }
+        avg /= (float)kernel_point_count;
+        for (int i=0;i<kernel_point_count;i++)
+        {
+            delta2[p*kernel_point_count + i] -= avg;
+            sigma += SQR(delta2[p*kernel_point_count + i]);
+        }
+        sigma2[p] = sqrt(sigma/(float)kernel_point_count);
+    }
+    PyBuffer_Release(&img2_buffer);
+
     for (Py_ssize_t p1=0;p1<points1_size;p1++)
     {
-        PyObject *point1;
-        int x1, y1;
-        float avg1 = 0, sigma1 = 0;
-
-        point1 = PyList_GetItem(points1, p1);
-        if (!PyArg_ParseTuple(point1, "ii", &x1, &y1))
+        if (!isfinite(sigma1[p1]))
             continue;
-        if (x1-kernel_size<0 || x1+kernel_size>=w1 || y1-kernel_size<0 || y1+kernel_size>=h1)
-            continue;
-
-        #pragma omp simd
-        for (int x=-kernel_size;x<=kernel_size;x++)
-            for(int y=-kernel_size;y<=kernel_size;y++)
-                avg1 += (float)img1_bytes[(y1+y)*w1 + (x1+x)];
-        avg1 /= (float)kernel_point_count;
-        #pragma omp simd
-        for (int x=-kernel_size;x<=kernel_size;x++)
-            for(int y=-kernel_size;y<=kernel_size;y++)
-                sigma1 += SQR((float)img1_bytes[(y1+y)*w1 + (x1+x)] - avg1);
-        sigma1 = sqrt(sigma1/(float)kernel_point_count);
 
         for (Py_ssize_t p2=0;p2<points2_size;p2++)
         {
-            PyObject *point2;
-            int x2, y2;
-            float avg2 = 0, sigma2 = 0;
             float corr = 0;
 
-            point1 = PyList_GetItem(points2, p2);
-            if (!PyArg_ParseTuple(point1, "ii", &x2, &y2))
+            if (!isfinite(sigma2[p1]))
                 continue;
-            if (x2-kernel_size<0 || x2+kernel_size>=w2 || y2-kernel_size<0 || y2+kernel_size>=h2)
-                continue;
-            
-            #pragma omp simd
-            for (int x=-kernel_size;x<=kernel_size;x++)
-                for(int y=-kernel_size;y<=kernel_size;y++)
-                    avg2 += (float)img2_bytes[(y2+y)*w2 + (x2+x)];
-            avg2 /= (float)kernel_point_count;
-            #pragma omp simd
-            for (int x=-kernel_size;x<=kernel_size;x++)
-                for(int y=-kernel_size;y<=kernel_size;y++)
-                    sigma2 += SQR((float)img2_bytes[(y2+y)*w2 + (x2+x)] - avg2);
-            sigma2 = sqrt(sigma2/(float)kernel_point_count);
-            #pragma omp simd
-            for (int x=-kernel_size;x<=kernel_size;x++)
-                for(int y=-kernel_size;y<=kernel_size;y++)
-                    corr += ((float)img1_bytes[(y1+y)*w1 + (x1+x)] - avg1) * ((float)img2_bytes[(y2+y)*w2 + (x2+x)] - avg2);
-            corr = corr/(sigma1*sigma2*(float)kernel_point_count);
+
+            for (int i=0;i<kernel_point_count;i++)
+                corr += delta1[p1*kernel_point_count + i] * delta2[p2*kernel_point_count + i];
+            corr = corr/(sigma1[p1]*sigma2[p2]*(float)kernel_point_count);
 
             if (corr >= threshold || -corr <= -threshold)
             {
                 PyObject *correlation_value = Py_BuildValue("(iif)", p1, p2, corr);
-                #pragma omp critical
                 {
                     PyList_Append(out, correlation_value);
                 }
@@ -225,8 +263,11 @@ machine_match(PyObject *self, PyObject *args)
             }
         }
     }
-    PyBuffer_Release(&img1_buffer);
-    PyBuffer_Release(&img2_buffer);
+
+    free(delta1);
+    free(delta2);
+    free(sigma1);
+    free(sigma2);
 
     return out;
 }
