@@ -29,5 +29,8 @@ setup(
         'Programming Language :: Python :: 3.8',
         'Topic :: Scientific/Engineering :: Image Recognition'
     ],
-    setup_requires=['wheel']
+    setup_requires=['wheel'],
+    install_requires=[
+        "Pillow>=9.1.0"
+    ]
 )
