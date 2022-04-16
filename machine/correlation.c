@@ -56,7 +56,7 @@ void *ctx_prepare_task(void *args)
                 for (int i=-kernel_size;i<=kernel_size;i++)
                 {
                     float value;
-                    value = (float)ctx->img[(y+j)*width + (x+i)];
+                    value = (float)(unsigned char)prepare_line_args->img[(y+j)*width + (x+i)];
                     avg += value;
                     delta[(j+kernel_size)*kernel_width + (i+kernel_size)] = value;
                 }
@@ -84,11 +84,11 @@ int ctx_init(context *ctx, const char* img, int width, int height, int kernel_si
     ctx->kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
     ctx->delta = malloc(sizeof(float)*ctx->kernel_point_count*width*height);
     ctx->sigma = malloc(sizeof(float)*width*height);
-    ctx->img = img;
 
     threads = malloc(sizeof(pthread_t)*num_threads);
     thread_args.ctx = ctx;
     thread_args.y = 0;
+    thread_args.img = img;
     if (pthread_mutex_init(&thread_args.lock, NULL) != 0)
         return 0;
 
@@ -99,8 +99,6 @@ int ctx_init(context *ctx, const char* img, int width, int height, int kernel_si
         pthread_join(threads[i], NULL);
 
     pthread_mutex_destroy(&thread_args.lock);
-
-    ctx->img = NULL;
     return 1;
 }
 
@@ -114,8 +112,6 @@ void ctx_free(context *ctx)
     if (ctx->sigma != NULL)
         free(ctx->sigma);
     ctx->sigma = NULL;
-    if (ctx->img != NULL)
-        free(ctx->img);
 }
 
 typedef struct {

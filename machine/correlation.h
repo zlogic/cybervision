@@ -5,7 +5,6 @@ typedef struct {
     int width, height;
     int kernel_size, kernel_point_count;
     float *delta, *sigma;
-    unsigned char* img;
 } context;
 
 int ctx_init(context *ctx, const char* img, int width, int height, int kernel_size, int num_threads);
