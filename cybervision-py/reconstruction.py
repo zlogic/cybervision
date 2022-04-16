@@ -24,6 +24,22 @@ class Reconstructor:
     def prepare_correlation_context(self, img: Image):
         return machine.ctx_prepare(img, CORRELATION_KERNEL_SIZE, self.num_threads)
 
+    def show_result(self, points1, points2, matches):
+        composite = Image.new("RGBA", (self.img1.img.width+self.img2.img.width, max(self.img1.img.height,self.img2.img.height)), (255, 255, 255, 0))
+        composite.paste(self.img1.img)
+        composite.paste(self.img2.img, (self.img1.img.width, 0))
+        draw = ImageDraw.Draw(composite)
+
+        for m in matches:
+            point1 = points1[m[0]]
+            point2 = points2[m[1]]
+            point2 = (point2[0]+self.img1.img.width, point2[1])
+            draw.line(point1 + point2, fill=(255, 255, 255, 255))
+            draw.point(point1, fill=(255, 0, 0, 255))
+            draw.point(point2, fill=(255, 0, 0, 255))
+
+        composite.show()
+
     def reconstruct(self):
         time_started = datetime.now()
 
@@ -51,18 +67,7 @@ class Reconstructor:
         time_completed = datetime.now()
         self.log.info(f'Completed reconstruction in {time_completed-time_started}')
 
-        composite = Image.new("RGBA", (img1_adjusted.width+img2_adjusted.width, max(img1_adjusted.height,img2_adjusted.height)), (255, 255, 255, 0))
-        composite.paste(self.img1.img)
-        composite.paste(self.img2.img, (self.img1.img.width, 0))
-        draw = ImageDraw.Draw(composite)
-
-        for m in matches:
-            point1 = points1[m[0]]
-            point2 = points2[m[1]]
-            draw.line(point1 + (point2[0] + self.img1.img.width, point2[1]), fill=(255, 255, 255, 255))
-
-        composite.show()
-
+        self.show_result(points1, points2, matches)
 
     def __init__(self, img1: SEMImage, img2: SEMImage):
         self.img1 = img1
