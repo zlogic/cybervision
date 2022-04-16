@@ -2,6 +2,7 @@
 #include <Python.h>
 
 #include <math.h>
+#include "correlation.h"
 
 #include "fast/fast.h"
 
@@ -45,7 +46,39 @@ int read_img_bytes(PyObject *obj, Py_buffer *buffer)
     return 1;
 }
 
-#define SQR(x) ((x)*(x))
+correlation_point *read_points(PyObject *points)
+{
+    Py_ssize_t points_size = PyList_Size(points);
+    correlation_point *converted_points = malloc(sizeof(correlation_point)*points_size);
+    for (Py_ssize_t p=0;p<points_size;p++)
+    {
+        PyObject *point = PyList_GetItem(points, p);
+        correlation_point *converted_point = &converted_points[p];
+
+        if (!PyArg_ParseTuple(point, "ii", &converted_point->x, &converted_point->y))
+        {
+            PyErr_SetString(MachineError, "Failed to parse point");
+            free(converted_points);
+            return NULL;
+        }
+    }
+    return converted_points;
+}
+
+void context_destroy(PyObject *obj)
+{
+    context *ctx = PyCapsule_GetPointer(obj, NULL);
+    ctx_free(ctx);
+    free(ctx);
+}
+
+void add_match(size_t p1, size_t p2, float corr, void* cb_args)
+{
+    PyObject *out = cb_args;
+    PyObject *correlation_value = Py_BuildValue("(iif)", p1, p2, corr);
+    PyList_Append(out, correlation_value);
+    Py_DECREF(correlation_value);
+}
 
 /*
  * Python exported functions
@@ -112,168 +145,101 @@ machine_detect(PyObject *self, PyObject *args)
 }
 
 static PyObject *
-machine_match(PyObject *self, PyObject *args)
+machine_ctx_prepare(PyObject *self, PyObject *args)
 {
-    PyObject *img1, *img2;
-    Py_buffer img1_buffer, img2_buffer;
-    char *img1_bytes = NULL, *img2_bytes = NULL;
-    int kernel_size, kernel_width, kernel_point_count;
-    float threshold;
-    int w1, h1, w2, h2;
-    PyObject *points1, *points2;
-    Py_ssize_t points1_size, points2_size;
-
-    float *delta1 = NULL, *delta2 = NULL;
-    float *sigma1 = NULL, *sigma2 = NULL;
-
-    PyObject *out = NULL;
-
-    if (!PyArg_ParseTuple(args, "OOOOif", &img1, &img2, &points1, &points2, &kernel_size, &threshold))
+    PyObject *img;
+    Py_buffer img_buffer;
+    int kernel_size;
+    int width, height;
+    int num_threads;
+    context *ctx;
+    
+    if (!PyArg_ParseTuple(args, "Oii", &img, &kernel_size, &num_threads))
     {
         PyErr_SetString(MachineError, "Failed to parse args");
         return NULL;
     }
 
-    kernel_width = 2*kernel_size + 1;
-    kernel_point_count = SQR(kernel_width);
-
-    w1 = read_long_attr(img1, "width");
-    if (w1 == -1)
+    width = read_long_attr(img, "width");
+    if (width == -1)
         return NULL;
-    h1 = read_long_attr(img1, "height");
-    if (h1 == -1)
-        return NULL;
-    w2 = read_long_attr(img2, "width");
-    if (w2 == -1)
-        return NULL;
-    h2 = read_long_attr(img2, "height");
-    if (h2 == -1)
+    height = read_long_attr(img, "height");
+    if (height == -1)
         return NULL;
 
-    if (!read_img_bytes(img1, &img1_buffer))
+    if (!read_img_bytes(img, &img_buffer))
         return NULL;
-    if (!read_img_bytes(img2, &img2_buffer)){
-        PyBuffer_Release(&img1_buffer);
+
+    ctx = malloc(sizeof(context));
+
+    if(!ctx_init(ctx, img_buffer.buf, width, height, kernel_size, num_threads))
+    {
+        PyBuffer_Release(&img_buffer);
+        PyErr_SetString(MachineError, "Failed to initialize context");
+        return NULL;
+    }
+    PyBuffer_Release(&img_buffer);
+
+    return PyCapsule_New(ctx, NULL, context_destroy);
+}
+
+static PyObject *
+machine_match(PyObject *self, PyObject *args)
+{
+    float threshold;
+    int num_threads;
+    PyObject *ctx1_obj, *ctx2_obj;
+    PyObject *points1, *points2;
+    correlation_point *c_points1, *c_points2;
+    context *ctx1, *ctx2;
+
+    PyObject *out = NULL;
+
+    if (!PyArg_ParseTuple(args, "OOOOfi", &ctx1_obj, &ctx2_obj, &points1, &points2, &threshold, &num_threads))
+    {
+        PyErr_SetString(MachineError, "Failed to parse args");
+        return NULL;
+    }
+    ctx1 = PyCapsule_GetPointer(ctx1_obj, NULL);
+    if (ctx1 == NULL)
+    {
+        PyErr_SetString(MachineError, "Failed to get ctx1 pointer");
         return NULL;
     }
 
-    img1_bytes = (char*)img1_buffer.buf;
-    img2_bytes = (char*)img2_buffer.buf;
+    ctx2 = PyCapsule_GetPointer(ctx2_obj, NULL);
+    if (ctx2 == NULL)
+    {
+        PyErr_SetString(MachineError, "Failed to get ctx2 pointer");
+        return NULL;
+    }
+
+    c_points1 = read_points(points1);
+    if (c_points1 == NULL)
+        return NULL;
+
+    c_points2 = read_points(points2);
+    if (c_points2 == NULL)
+    {
+        free(c_points1);
+        return NULL;
+    }
 
     out = PyList_New(0);
 
-    points1_size = PyList_Size(points1);
-    points2_size = PyList_Size(points2);
-
-    delta1 = malloc(sizeof(float)*kernel_point_count*points1_size);
-    delta2 = malloc(sizeof(float)*kernel_point_count*points2_size);
-    sigma1 = malloc(sizeof(float)*points1_size);
-    sigma2 = malloc(sizeof(float)*points2_size);
-
-    for (Py_ssize_t p=0;p<points1_size;p++)
+    if(!ctx_correlate(ctx1, ctx2, c_points1, c_points2, PyList_Size(points1), PyList_Size(points2), threshold, num_threads, add_match, out))
     {
-        PyObject *point;
-        int x, y;
-        float avg = 0, sigma = 0;
-
-        sigma1[p] = INFINITY;
-        point = PyList_GetItem(points1, p);
-        if (!PyArg_ParseTuple(point, "ii", &x, &y))
-            continue;
-        if (x-kernel_size<0 || x+kernel_size>=w1 || y-kernel_size<0 || y+kernel_size>=h1)
-            continue;
-
-        for (int i=-kernel_size;i<=kernel_size;i++)
-        {
-            for(int j=-kernel_size;j<=kernel_size;j++)
-            {
-                float value;
-                value = (float)img1_bytes[(y+j)*w1 + (x+i)];
-                avg += value;
-                delta1[p*kernel_point_count + (j+kernel_size)*kernel_width + (i+kernel_size)] = value;
-            }
-        }
-        avg /= (float)kernel_point_count;
-        for (int i=0;i<kernel_point_count;i++)
-        {
-            delta1[p*kernel_point_count + i] -= avg;
-            sigma += SQR(delta1[p*kernel_point_count + i]);
-        }
-        sigma1[p] = sqrt(sigma/(float)kernel_point_count);
+        PyErr_SetString(MachineError, "Failed to correlate points");
+        Py_DECREF(out);
+        return NULL;
     }
-    PyBuffer_Release(&img1_buffer);
-
-    for (Py_ssize_t p=0;p<points2_size;p++)
-    {
-        PyObject *point;
-        int x, y;
-        float avg = 0, sigma = 0;
-
-        sigma2[p] = INFINITY;
-
-        point = PyList_GetItem(points2, p);
-        if (!PyArg_ParseTuple(point, "ii", &x, &y))
-            continue;
-        if (x-kernel_size<0 || x+kernel_size>=w2 || y-kernel_size<0 || y+kernel_size>=h2)
-            continue;
-
-        for (int i=-kernel_size;i<=kernel_size;i++)
-        {
-            for(int j=-kernel_size;j<=kernel_size;j++)
-            {
-                float value;
-                value = (float)img2_bytes[(y+j)*w2 + (x+i)];
-                avg += value;
-                delta2[p*kernel_point_count + (j+kernel_size)*kernel_width + (i+kernel_size)] = value;
-            }
-        }
-        avg /= (float)kernel_point_count;
-        for (int i=0;i<kernel_point_count;i++)
-        {
-            delta2[p*kernel_point_count + i] -= avg;
-            sigma += SQR(delta2[p*kernel_point_count + i]);
-        }
-        sigma2[p] = sqrt(sigma/(float)kernel_point_count);
-    }
-    PyBuffer_Release(&img2_buffer);
-
-    for (Py_ssize_t p1=0;p1<points1_size;p1++)
-    {
-        if (!isfinite(sigma1[p1]))
-            continue;
-
-        for (Py_ssize_t p2=0;p2<points2_size;p2++)
-        {
-            float corr = 0;
-
-            if (!isfinite(sigma2[p1]))
-                continue;
-
-            for (int i=0;i<kernel_point_count;i++)
-                corr += delta1[p1*kernel_point_count + i] * delta2[p2*kernel_point_count + i];
-            corr = corr/(sigma1[p1]*sigma2[p2]*(float)kernel_point_count);
-
-            if (corr >= threshold || -corr <= -threshold)
-            {
-                PyObject *correlation_value = Py_BuildValue("(iif)", p1, p2, corr);
-                {
-                    PyList_Append(out, correlation_value);
-                }
-                Py_DECREF(correlation_value);
-            }
-        }
-    }
-
-    free(delta1);
-    free(delta2);
-    free(sigma1);
-    free(sigma2);
 
     return out;
 }
 
 static PyMethodDef MachineMethods[] = {
     {"detect", machine_detect, METH_VARARGS, "Detect keypoints with FAST."},
+    {"ctx_prepare", machine_ctx_prepare, METH_VARARGS, "Prepare correlation context."},
     {"match", machine_match, METH_VARARGS, "Find correlation between image points."},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };

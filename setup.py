@@ -7,8 +7,10 @@ machine = Extension('machine',sources=[
         'machine/fast/fast_12.c',
         'machine/fast/fast.c',
         'machine/fast/nonmax.c',
-        'machine/machine.c'
-    ]
+        'machine/machine.c',
+        'machine/correlation.c'
+    ],
+    extra_compile_args=['-pthread']
 )
 
 setup(

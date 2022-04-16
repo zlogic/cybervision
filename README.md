@@ -12,6 +12,7 @@ It's an abandoned project, but can be useful as a working example for many, many
 and of course, 3D reconstruction in general.
 
 
-## External dependencies
+## External libraries
 
-[fast](https://www.edwardrosten.com/work/fast.html)
+* [fast](https://www.edwardrosten.com/work/fast.html) keypoint detector
+* [Pillow](https://python-pillow.org) image library
