@@ -6,7 +6,7 @@
 
 #include "fast/fast.h"
 
-static PyObject *MachineError;
+static PyObject *CybervisionError;
 
 /*
  * Helper functions
@@ -19,7 +19,7 @@ long read_long_attr(PyObject *obj, const char* attr_name)
     attr_value = PyObject_GetAttrString(obj, attr_name);
     if (attr_value == NULL)
     {
-        PyErr_Format(MachineError, "Failed to parse attribute %s", attr_name);
+        PyErr_Format(CybervisionError, "Failed to parse attribute %s", attr_name);
         return -1;
     }
     value = PyLong_AsLong(attr_value);
@@ -33,12 +33,12 @@ int read_img_bytes(PyObject *obj, Py_buffer *buffer)
     img_bytes = PyObject_CallMethod(obj, "tobytes", "ss", "raw", "L", NULL);
     if (!img_bytes)
     {
-        PyErr_SetString(MachineError, "Failed to convert image");
+        PyErr_SetString(CybervisionError, "Failed to convert image");
         return 0;
     }
     if (PyObject_GetBuffer(img_bytes, buffer, PyBUF_ANY_CONTIGUOUS) != 0)
     {
-        PyErr_SetString(MachineError, "Failed to get image buffer");
+        PyErr_SetString(CybervisionError, "Failed to get image buffer");
         Py_DECREF(img_bytes);
         return 0;
     }
@@ -57,7 +57,7 @@ correlation_point *read_points(PyObject *points)
 
         if (!PyArg_ParseTuple(point, "ii", &converted_point->x, &converted_point->y))
         {
-            PyErr_SetString(MachineError, "Failed to parse point");
+            PyErr_SetString(CybervisionError, "Failed to parse point");
             free(converted_points);
             return NULL;
         }
@@ -84,7 +84,7 @@ void add_match(size_t p1, size_t p2, float corr, void* cb_args)
  * Python exported functions
  */
 static PyObject *
-machine_detect(PyObject *self, PyObject *args)
+cybervision_detect(PyObject *self, PyObject *args)
 {
     PyObject *img;
     Py_buffer img_buffer;
@@ -96,7 +96,7 @@ machine_detect(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "Oiib", &img, &threshold, &mode, &nonmax))
     {
-        PyErr_SetString(MachineError, "Failed to parse args");
+        PyErr_SetString(CybervisionError, "Failed to parse args");
         return NULL;
     }
 
@@ -128,7 +128,7 @@ machine_detect(PyObject *self, PyObject *args)
         corners = fast12_detect(img_buffer.buf, width, height, width, threshold, &num_corners);
     else
     {
-        PyErr_Format(MachineError, "Unsupported FAST options nonmax=%i mode=%i", nonmax, mode);
+        PyErr_Format(CybervisionError, "Unsupported FAST options nonmax=%i mode=%i", nonmax, mode);
         PyBuffer_Release(&img_buffer);
         return NULL;
     }
@@ -145,7 +145,7 @@ machine_detect(PyObject *self, PyObject *args)
 }
 
 static PyObject *
-machine_ctx_prepare(PyObject *self, PyObject *args)
+cybervision_ctx_prepare(PyObject *self, PyObject *args)
 {
     PyObject *img;
     Py_buffer img_buffer;
@@ -156,7 +156,7 @@ machine_ctx_prepare(PyObject *self, PyObject *args)
     
     if (!PyArg_ParseTuple(args, "Oii", &img, &kernel_size, &num_threads))
     {
-        PyErr_SetString(MachineError, "Failed to parse args");
+        PyErr_SetString(CybervisionError, "Failed to parse args");
         return NULL;
     }
 
@@ -175,7 +175,7 @@ machine_ctx_prepare(PyObject *self, PyObject *args)
     if(!ctx_init(ctx, img_buffer.buf, width, height, kernel_size, num_threads))
     {
         PyBuffer_Release(&img_buffer);
-        PyErr_SetString(MachineError, "Failed to initialize context");
+        PyErr_SetString(CybervisionError, "Failed to initialize context");
         return NULL;
     }
     PyBuffer_Release(&img_buffer);
@@ -184,7 +184,7 @@ machine_ctx_prepare(PyObject *self, PyObject *args)
 }
 
 static PyObject *
-machine_match(PyObject *self, PyObject *args)
+cybervision_match(PyObject *self, PyObject *args)
 {
     float threshold;
     int num_threads;
@@ -197,20 +197,20 @@ machine_match(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "OOOOfi", &ctx1_obj, &ctx2_obj, &points1, &points2, &threshold, &num_threads))
     {
-        PyErr_SetString(MachineError, "Failed to parse args");
+        PyErr_SetString(CybervisionError, "Failed to parse args");
         return NULL;
     }
     ctx1 = PyCapsule_GetPointer(ctx1_obj, NULL);
     if (ctx1 == NULL)
     {
-        PyErr_SetString(MachineError, "Failed to get ctx1 pointer");
+        PyErr_SetString(CybervisionError, "Failed to get ctx1 pointer");
         return NULL;
     }
 
     ctx2 = PyCapsule_GetPointer(ctx2_obj, NULL);
     if (ctx2 == NULL)
     {
-        PyErr_SetString(MachineError, "Failed to get ctx2 pointer");
+        PyErr_SetString(CybervisionError, "Failed to get ctx2 pointer");
         return NULL;
     }
 
@@ -229,7 +229,7 @@ machine_match(PyObject *self, PyObject *args)
 
     if(!ctx_correlate(ctx1, ctx2, c_points1, c_points2, PyList_Size(points1), PyList_Size(points2), threshold, num_threads, add_match, out))
     {
-        PyErr_SetString(MachineError, "Failed to correlate points");
+        PyErr_SetString(CybervisionError, "Failed to correlate points");
         Py_DECREF(out);
         return NULL;
     }
@@ -237,30 +237,30 @@ machine_match(PyObject *self, PyObject *args)
     return out;
 }
 
-static PyMethodDef MachineMethods[] = {
-    {"detect", machine_detect, METH_VARARGS, "Detect keypoints with FAST."},
-    {"ctx_prepare", machine_ctx_prepare, METH_VARARGS, "Prepare correlation context."},
-    {"match", machine_match, METH_VARARGS, "Find correlation between image points."},
+static PyMethodDef CybervisionMethods[] = {
+    {"detect", cybervision_detect, METH_VARARGS, "Detect keypoints with FAST."},
+    {"ctx_prepare", cybervision_ctx_prepare, METH_VARARGS, "Prepare correlation context."},
+    {"match", cybervision_match, METH_VARARGS, "Find correlation between image points."},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
-static struct PyModuleDef machinemodule = {
-    PyModuleDef_HEAD_INIT, "machine", NULL, -1, MachineMethods
+static struct PyModuleDef cybervisionmodule = {
+    PyModuleDef_HEAD_INIT, "cybervision", NULL, -1, CybervisionMethods
 };
 
 PyMODINIT_FUNC
-PyInit_machine(void)
+PyInit_cybervision(void)
 {
     PyObject *m;
-    m = PyModule_Create(&machinemodule);
+    m = PyModule_Create(&cybervisionmodule);
     if (m == NULL)
         return m;
 
-    MachineError = PyErr_NewException("machine.error", NULL, NULL);
-    Py_XINCREF(MachineError);
-    if (PyModule_AddObject(m, "error", MachineError) < 0) {
-        Py_XDECREF(MachineError);
-        Py_CLEAR(MachineError);
+    CybervisionError = PyErr_NewException("cybervision.error", NULL, NULL);
+    Py_XINCREF(CybervisionError);
+    if (PyModule_AddObject(m, "error", CybervisionError) < 0) {
+        Py_XDECREF(CybervisionError);
+        Py_CLEAR(CybervisionError);
         Py_DECREF(m);
         return NULL;
     }

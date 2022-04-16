@@ -1,13 +1,13 @@
 from setuptools import setup, Extension
 
-machine = Extension('machine',sources=[
+machine = Extension('cybervision',sources=[
         'machine/fast/fast_9.c',
         'machine/fast/fast_10.c',
         'machine/fast/fast_11.c', 
         'machine/fast/fast_12.c',
         'machine/fast/fast.c',
         'machine/fast/nonmax.c',
-        'machine/machine.c',
+        'machine/cybervision.c',
         'machine/correlation.c'
     ],
     extra_compile_args=['-pthread']

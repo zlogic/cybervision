@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from PIL import Image, ImageOps, ImageDraw
 
-import machine
+from cybervision import detect, ctx_prepare, match
 from image import SEMImage
 
 FAST_THRESHOLD = 15
@@ -19,10 +19,10 @@ CORRELATION_THRESHOLD = 0.9
 
 class Reconstructor:
     def fast_points(self, img: Image):
-        return machine.detect(img, FAST_THRESHOLD, FAST_METHOD, FAST_NONMAX)
+        return detect(img, FAST_THRESHOLD, FAST_METHOD, FAST_NONMAX)
 
     def prepare_correlation_context(self, img: Image):
-        return machine.ctx_prepare(img, CORRELATION_KERNEL_SIZE, self.num_threads)
+        return ctx_prepare(img, CORRELATION_KERNEL_SIZE, self.num_threads)
 
     def show_result(self, points1, points2, matches):
         composite = Image.new("RGBA", (self.img1.img.width+self.img2.img.width, max(self.img1.img.height,self.img2.img.height)), (255, 255, 255, 0))
@@ -57,7 +57,7 @@ class Reconstructor:
         time_completed_context = datetime.now()
         self.log.info(f'Precomputed correlation data  in {time_completed_context-time_completed_fast}')
 
-        matches = machine.match(img1_context, img2_context, points1, points2, CORRELATION_THRESHOLD, self.num_threads)
+        matches = match(img1_context, img2_context, points1, points2, CORRELATION_THRESHOLD, self.num_threads)
         del(img1_context)
         del(img2_context)
 
