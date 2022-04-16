@@ -27,3 +27,17 @@ or
 ```shell
 pip install -e .
 ```
+
+## Prepare for distribution
+
+Freeze dependencies:
+
+```shell
+pip3 freeze > requirements.txt
+```
+
+Install frozen dependencies:
+
+```shell
+pip3 install -r requirements.txt
+```
