@@ -34,6 +34,9 @@ setup(
     ],
     setup_requires=['wheel'],
     install_requires=[
-        "Pillow>=9.1.0"
+        "Pillow>=9.1.0",
+        "matplotlib>=3.5.1",
+        "scipy>=1.8.0",
+        "numpy>=1.22.3"
     ]
 )

@@ -33,7 +33,7 @@ pip install -e .
 Freeze dependencies:
 
 ```shell
-pip3 freeze > requirements.txt
+pip3 freeze | grep -v cybervision > requirements.txt
 ```
 
 Install frozen dependencies:
