@@ -65,13 +65,6 @@ correlation_point *read_points(PyObject *points)
     return converted_points;
 }
 
-void context_destroy(PyObject *obj)
-{
-    context *ctx = PyCapsule_GetPointer(obj, NULL);
-    ctx_free(ctx);
-    free(ctx);
-}
-
 void add_match(size_t p1, size_t p2, float corr, void* cb_args)
 {
     PyObject *out = cb_args;
@@ -145,74 +138,36 @@ cybervision_detect(PyObject *self, PyObject *args)
 }
 
 static PyObject *
-cybervision_ctx_prepare(PyObject *self, PyObject *args)
-{
-    PyObject *img;
-    Py_buffer img_buffer;
-    int kernel_size;
-    int width, height;
-    int num_threads;
-    context *ctx;
-    
-    if (!PyArg_ParseTuple(args, "Oii", &img, &kernel_size, &num_threads))
-    {
-        PyErr_SetString(CybervisionError, "Failed to parse args");
-        return NULL;
-    }
-
-    width = read_long_attr(img, "width");
-    if (width == -1)
-        return NULL;
-    height = read_long_attr(img, "height");
-    if (height == -1)
-        return NULL;
-
-    if (!read_img_bytes(img, &img_buffer))
-        return NULL;
-
-    ctx = malloc(sizeof(context));
-
-    if(!ctx_init(ctx, img_buffer.buf, width, height, kernel_size, num_threads))
-    {
-        PyBuffer_Release(&img_buffer);
-        PyErr_SetString(CybervisionError, "Failed to initialize context");
-        return NULL;
-    }
-    PyBuffer_Release(&img_buffer);
-
-    return PyCapsule_New(ctx, NULL, context_destroy);
-}
-
-static PyObject *
 cybervision_match(PyObject *self, PyObject *args)
 {
+    int kernel_size;
     float threshold;
     int num_threads;
-    PyObject *ctx1_obj, *ctx2_obj;
+    PyObject *img1, *img2;
+    Py_buffer img1_buffer, img2_buffer;
+    correlation_image c_image1, c_image2;
     PyObject *points1, *points2;
     correlation_point *c_points1, *c_points2;
-    context *ctx1, *ctx2;
 
     PyObject *out = NULL;
 
-    if (!PyArg_ParseTuple(args, "OOOOfi", &ctx1_obj, &ctx2_obj, &points1, &points2, &threshold, &num_threads))
+    if (!PyArg_ParseTuple(args, "OOOOifi", &img1, &img2, &points1, &points2, &kernel_size, &threshold, &num_threads))
     {
         PyErr_SetString(CybervisionError, "Failed to parse args");
         return NULL;
     }
-    ctx1 = PyCapsule_GetPointer(ctx1_obj, NULL);
-    if (ctx1 == NULL)
-    {
-        PyErr_SetString(CybervisionError, "Failed to get ctx1 pointer");
+    c_image1.width = read_long_attr(img1, "width");
+    if (c_image1.width == -1)
         return NULL;
-    }
-
-    ctx2 = PyCapsule_GetPointer(ctx2_obj, NULL);
-    if (ctx2 == NULL)
-    {
-        PyErr_SetString(CybervisionError, "Failed to get ctx2 pointer");
+    c_image1.height = read_long_attr(img1, "height");
+    if (c_image1.height == -1)
         return NULL;
-    }
+    c_image2.width = read_long_attr(img2, "width");
+    if (c_image2.width == -1)
+        return NULL;
+    c_image2.height = read_long_attr(img2, "height");
+    if (c_image2.height == -1)
+        return NULL;
 
     c_points1 = read_points(points1);
     if (c_points1 == NULL)
@@ -225,21 +180,34 @@ cybervision_match(PyObject *self, PyObject *args)
         return NULL;
     }
 
+    if (!read_img_bytes(img1, &img1_buffer))
+        return NULL;
+    if (!read_img_bytes(img2, &img2_buffer))
+    {
+        PyBuffer_Release(&img1_buffer);
+        return NULL;
+    }
+    c_image1.img = img1_buffer.buf;
+    c_image2.img = img2_buffer.buf;
+
     out = PyList_New(0);
 
-    if(!ctx_correlate(ctx1, ctx2, c_points1, c_points2, PyList_Size(points1), PyList_Size(points2), threshold, num_threads, add_match, out))
+    if(!correlation_correlate(&c_image1, &c_image2, c_points1, c_points2, PyList_Size(points1), PyList_Size(points2), 
+        kernel_size, threshold, num_threads, add_match, out))
     {
         PyErr_SetString(CybervisionError, "Failed to correlate points");
         Py_DECREF(out);
         return NULL;
     }
 
+    PyBuffer_Release(&img1_buffer);
+    PyBuffer_Release(&img2_buffer);
+
     return out;
 }
 
 static PyMethodDef CybervisionMethods[] = {
     {"detect", cybervision_detect, METH_VARARGS, "Detect keypoints with FAST."},
-    {"ctx_prepare", cybervision_ctx_prepare, METH_VARARGS, "Prepare correlation context."},
     {"match", cybervision_match, METH_VARARGS, "Find correlation between image points."},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
