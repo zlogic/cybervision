@@ -1,8 +1,9 @@
 from PIL import Image, ImageDraw
 
 import numpy as np
-from scipy import interpolate
+from scipy import interpolate, spatial
 import matplotlib.pyplot as plt
+import matplotlib.tri as mtri
 
 class Visualiser:
     def show_points(self):
@@ -66,10 +67,24 @@ class Visualiser:
         ax.plot_surface(xx, yy, interp_grid, shade=True, cmap='jet')
         plt.show()
 
+    def show_surface_mesh(self):
+        x = [p[0] for p in self.points3d]
+        y = [p[1] for p in self.points3d]
+        xy_points = [[p[0], p[1]] for p in self.points3d]
+        z_values = [p[2] for p in self.points3d]
+
+        mesh = spatial.Delaunay(xy_points)
+        triang = mtri.Triangulation(x=x, y=y, triangles=mesh.vertices)
+
+        ax = plt.axes(projection='3d')
+        ax.plot_trisurf(triang, z_values, cmap='jet')
+        plt.show()
+
     def show_results(self):
         self.show_points()
         self.show_matches()
         self.show_distances()
+        self.show_surface_mesh()
         self.show_surface_plot()
 
     def __init__(self, img1: Image, img2: Image, matches, points3d):
