@@ -96,6 +96,9 @@ class Reconstructor:
 
         self.matches = match(img1_adjusted, img2_adjusted, self.points1, self.points2, self.correlation_kernel_size, self.correlation_threshold, self.num_threads)
 
+        if not self.matches:
+            raise NoMatchesFound('No matches found')
+
         time_completed_matching = datetime.now()
         self.log.info(f'Matched keypoints in {time_completed_matching-time_completed_fast}')
         self.log.info(f'Found {len(self.matches)} matches')

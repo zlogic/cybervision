@@ -127,6 +127,8 @@ int correlation_correlate(correlation_image *img1, correlation_image *img2,
 {
     pthread_t *threads;
     correlate_args thread_args;
+
+    int kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
     
     threads = malloc(sizeof(pthread_t)*num_threads);
 
@@ -138,11 +140,11 @@ int correlation_correlate(correlation_image *img1, correlation_image *img2,
     thread_args.points1_size = points1_size;
     thread_args.points2_size = points2_size;
     thread_args.kernel_size = kernel_size;
+    thread_args.kernel_point_count = kernel_point_count;
     thread_args.threshold = threshold;
     thread_args.cb = cb;
     thread_args.cb_args = cb_args;
 
-    int kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
     thread_args.delta2 = malloc(sizeof(float)*kernel_point_count*points2_size);
     thread_args.sigma2 = malloc(sizeof(float)*points2_size);
     for(size_t p=0;p<points2_size;p++){
