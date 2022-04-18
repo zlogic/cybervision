@@ -1,6 +1,8 @@
+import sys
 from setuptools import setup, Extension
 
-machine = Extension('cybervision.machine',sources=[
+extra_compile_args = []
+sources = [
         'machine/cybervision.c',
         'machine/correlation.c',
         'machine/fast/fast_9.c',
@@ -9,8 +11,17 @@ machine = Extension('cybervision.machine',sources=[
         'machine/fast/fast_12.c',
         'machine/fast/fast.c',
         'machine/fast/nonmax.c'
-    ],
-    extra_compile_args=['-pthread']
+    ]
+
+if sys.platform in ['darwin', 'linux']:
+    extra_compile_args.append('-pthread')
+elif sys.platform == 'win32':
+    sources.append('machine/win32/pthread.c')
+
+machine = Extension(
+    'cybervision.machine',
+    sources=sources,
+    extra_compile_args=extra_compile_args
 )
 
 setup(

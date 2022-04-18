@@ -1,13 +1,19 @@
 #include <stdlib.h>
 #include <string.h>
-//#include <stdio.h>
 
 #if defined(_POSIX_THREADS) || defined(__APPLE__)
 # include <pthread.h>
+# define THREAD_FUNCTION void*
+# define THREAD_RETURN_VALUE NULL
+#elif defined(_WIN32)
+# include "win32/pthread.h"
+#define THREAD_FUNCTION DWORD WINAPI
+# define THREAD_RETURN_VALUE 1
 #else
-# error "pthread is required, Windows builds are not supported yet"
+# error "pthread is required"
 #endif
 
+#define _USE_MATH_DEFINES
 #include <math.h>
 
 #include "correlation.h"
@@ -45,7 +51,7 @@ void compute_correlation_data(correlation_image *image, int kernel_size, int x, 
         delta[i] -= avg;
         *sigma += delta[i] * delta[i];
     }
-    *sigma = sqrt(*sigma/(float)kernel_point_count);
+    *sigma = sqrtf(*sigma/(float)kernel_point_count);
 }
 
 typedef struct {
@@ -62,14 +68,14 @@ typedef struct {
     pthread_mutex_t lock;
 } correlate_points_args; 
 
-void *correlate_points_task(void *args)
+THREAD_FUNCTION correlate_points_task(void *args)
 {
     correlate_points_args *c_args = args;
 
     int kernel_size = c_args->kernel_size;
     int kernel_point_count = c_args->kernel_point_count;
-    size_t points1_size= c_args->points1_size;
-    size_t points2_size= c_args->points2_size;
+    size_t points1_size = c_args->points1_size;
+    size_t points2_size = c_args->points2_size;
     correlation_point *points1 = c_args->points1;
     correlation_point *points2 = c_args->points2;
     int w1 = c_args->img1->width, h1 = c_args->img1->height;
@@ -81,10 +87,10 @@ void *correlate_points_task(void *args)
         size_t p1;
         int x1, y1;
         if (pthread_mutex_lock(&c_args->lock) != 0)
-            return NULL;
+            return THREAD_RETURN_VALUE;
         p1 = c_args->p1++;
         if (pthread_mutex_unlock(&c_args->lock) != 0)
-            return NULL;
+            return THREAD_RETURN_VALUE;
 
         if (p1 >= points1_size)
             break;
@@ -110,15 +116,15 @@ void *correlate_points_task(void *args)
             if (corr >= c_args->threshold)
             {
                 if (pthread_mutex_lock(&c_args->lock) != 0)
-                    return NULL;
+                    return THREAD_RETURN_VALUE;
                 c_args->cb(p1, p2, corr, c_args->cb_args);
                 if (pthread_mutex_unlock(&c_args->lock) != 0)
-                    return NULL;
+                    return THREAD_RETURN_VALUE;
             }
         }
     }
     free(delta1);
-    return NULL;
+    return THREAD_RETURN_VALUE;
 }
 
 int correlation_correlate_points(correlation_image *img1, correlation_image *img2,
@@ -215,7 +221,7 @@ typedef struct {
 
 #define STRIPE_WIDTH 64
 
-void *correlate_images_task(void *args)
+THREAD_FUNCTION correlate_images_task(void *args)
 {
     correlate_image_args *c_args = args;
 
@@ -242,12 +248,12 @@ void *correlate_images_task(void *args)
         int x_stripe;
         int x_max;
         if (pthread_mutex_lock(&c_args->lock) != 0)
-            return NULL;
+            return THREAD_RETURN_VALUE;
         x_stripe = c_args->x_stripe;
         c_args->x_stripe += STRIPE_WIDTH;
         x_max = (x_stripe+STRIPE_WIDTH) < c_args->x_max ? x_stripe+STRIPE_WIDTH : c_args->x_max;
         if (pthread_mutex_unlock(&c_args->lock) != 0)
-            return NULL;
+            return THREAD_RETURN_VALUE;
 
         if (x_stripe >= x_max)
             break;
@@ -293,11 +299,11 @@ void *correlate_images_task(void *args)
                         
                         if (corr >= c_args->threshold && corr > best_corr)
                         {
-                            float dx = x2-x1;
-                            float dy = y2-y1;
+                            float dx = (float)(x2-x1);
+                            float dy = (float)(y2-y1);
                             // TODO: use distance from tilt center
-                            float sgn = y2>y1 ? -1 : 1;
-                            best_distance = sgn*sqrt(dx*dx+dy*dy);
+                            float sgn = y2>y1 ? -1.0f : 1.0f;
+                            best_distance = sgn*sqrtf(dx*dx+dy*dy);
                             best_corr = corr;
                         }
                     }
@@ -316,7 +322,7 @@ void *correlate_images_task(void *args)
     free(img2_cache.delta);
     free(img2_cache.sigma);
 
-    return NULL;
+    return THREAD_RETURN_VALUE;
 }
 
 int correlation_correlate_images(correlation_image *img1, correlation_image *img2,
@@ -348,19 +354,19 @@ int correlation_correlate_images(correlation_image *img1, correlation_image *img
         int l_offset = 0, r_offset = 0;
         if (fabs(angle-M_PI/2)>1e-5)
         {
-            a = 1.0/tan(angle);
+            a = 1.0f/tanf(angle);
             if (a>0)
             {
-                l_offset = -(float)img1->height*a;
-                r_offset = (float)img1->height*a;
+                l_offset = (int)(-(float)img1->height*a);
+                r_offset = (int)((float)img1->height*a);
             }
             else
             {
-                r_offset = -(float)img1->height*a;
+                r_offset = (int)(-(float)img1->height*a);
             }
         }
         for (int y=0;y<max_height;y++)
-            args.x_front[y] = a*y+l_offset;
+            args.x_front[y] = (int)(a*y)+l_offset;
         args.x_stripe = l_offset;
         args.x_max = img1->width + r_offset;
     }
