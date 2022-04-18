@@ -41,3 +41,15 @@ Install frozen dependencies:
 ```shell
 pip3 install -r requirements.txt
 ```
+
+Build wheel:
+
+```shell
+python setup.py bdist_wheel 
+```
+
+## Installation
+
+```shell
+wheel unpack cybervision-<version>.whl
+```

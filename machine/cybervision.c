@@ -77,7 +77,7 @@ void add_match(size_t p1, size_t p2, float corr, void* cb_args)
  * Python exported functions
  */
 static PyObject *
-cybervision_detect(PyObject *self, PyObject *args)
+machine_detect(PyObject *self, PyObject *args)
 {
     PyObject *img;
     Py_buffer img_buffer;
@@ -138,7 +138,7 @@ cybervision_detect(PyObject *self, PyObject *args)
 }
 
 static PyObject *
-cybervision_match(PyObject *self, PyObject *args)
+machine_match(PyObject *self, PyObject *args)
 {
     int kernel_size;
     float threshold;
@@ -209,7 +209,7 @@ cybervision_match(PyObject *self, PyObject *args)
 }
 
 static PyObject *
-cybervision_correlate(PyObject *self, PyObject *args)
+machine_correlate(PyObject *self, PyObject *args)
 {
     float angle;
     int corridor_size;
@@ -283,22 +283,22 @@ cybervision_correlate(PyObject *self, PyObject *args)
     return out;
 }
 
-static PyMethodDef CybervisionMethods[] = {
-    {"detect", cybervision_detect, METH_VARARGS, "Detect keypoints with FAST."},
-    {"match", cybervision_match, METH_VARARGS, "Find correlation between image points."},
-    {"correlate", cybervision_correlate, METH_VARARGS, "Find correlation between images."},
+static PyMethodDef MachineMethods[] = {
+    {"detect", machine_detect, METH_VARARGS, "Detect keypoints with FAST."},
+    {"match", machine_match, METH_VARARGS, "Find correlation between image points."},
+    {"correlate", machine_correlate, METH_VARARGS, "Find correlation between images."},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
-static struct PyModuleDef cybervisionmodule = {
-    PyModuleDef_HEAD_INIT, "cybervision", NULL, -1, CybervisionMethods
+static struct PyModuleDef machinemodule = {
+    PyModuleDef_HEAD_INIT, "machine", NULL, -1, MachineMethods
 };
 
 PyMODINIT_FUNC
-PyInit_cybervision(void)
+PyInit_machine(void)
 {
     PyObject *m;
-    m = PyModule_Create(&cybervisionmodule);
+    m = PyModule_Create(&machinemodule);
     if (m == NULL)
         return m;
 
