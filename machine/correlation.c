@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
+//#include <stdio.h>
 
 #if defined(_POSIX_THREADS) || defined(__APPLE__)
 # include <pthread.h>
@@ -172,6 +172,37 @@ int correlation_correlate_points(correlation_image *img1, correlation_image *img
 }
 
 typedef struct {
+    correlation_image *img;
+    int *x_front;
+    float *delta;
+    float *sigma;
+    int kernel_size, kernel_point_count;
+    int corridor_size;
+    int last_pos;
+} correlation_stripe_cache;
+
+void correlate_corridor_add_stripe(correlation_stripe_cache *cache, int x)
+{
+    int corridor_width = (2*cache->corridor_size)+1;
+    int next_pos = (cache->last_pos+1) % corridor_width;
+    int c_offset = next_pos*cache->img->height;
+    for (int y=0;y<cache->img->height;y++)
+    {
+        int x_pos = x + cache->x_front[y];
+        float *sigma = &cache->sigma[c_offset+y];
+        float *delta = &cache->delta[(c_offset+y)*cache->kernel_point_count];
+        compute_correlation_data(cache->img, cache->kernel_size, x_pos, y, sigma, delta);
+    }
+    cache->last_pos = next_pos;
+}
+
+int cache_get_offset(correlation_stripe_cache *cache, int c)
+{
+    int corridor_width = (2*cache->corridor_size)+1;
+    return (c + cache->corridor_size + cache->last_pos + corridor_width) % corridor_width;
+}
+
+typedef struct {
     correlation_image *img1, *img2;
     int corridor_size;
     int kernel_size, kernel_point_count;
@@ -196,8 +227,16 @@ void *correlate_images_task(void *args)
     int h2 = c_args->img2->height;
 
     float *delta1 = malloc(sizeof(float)*kernel_point_count);
-    float *sigma2_values = malloc(sizeof(float)*h2*corridor_stripes);
-    float *delta2_values = malloc(sizeof(float)*kernel_point_count*h2*corridor_stripes);
+
+    correlation_stripe_cache img2_cache;
+    img2_cache.img = c_args->img2;
+    img2_cache.x_front = c_args->x_front;
+    img2_cache.delta = malloc(sizeof(float)*kernel_point_count*h2*corridor_stripes);
+    img2_cache.sigma = malloc(sizeof(float)*h2*corridor_stripes);
+    img2_cache.kernel_size = kernel_size;
+    img2_cache.kernel_point_count = kernel_point_count;
+    img2_cache.corridor_size = corridor_size;
+    img2_cache.last_pos = -1;
 
     for(;;){
         int x_stripe;
@@ -212,20 +251,17 @@ void *correlate_images_task(void *args)
 
         if (x_stripe >= x_max)
             break;
+        
+        img2_cache.last_pos = -1;
+        for (int c=-corridor_size;c<corridor_size;c++)
+        {
+            int x = x_stripe + c;
+            correlate_corridor_add_stripe(&img2_cache, x);
+        }
 
         for (int i=x_stripe;i<x_max;i++)
         {
-            for (int c=-corridor_size;c<=corridor_size;c++)
-            {
-                int c_offset = (c+corridor_size)*h2;
-                for (int y2=0;y2<h2;y2++)
-                {
-                    int x2 = i + c + c_args->x_front[y2];
-                    float *sigma2 = &sigma2_values[c_offset+y2];
-                    float *delta2 = &delta2_values[(c_offset+y2)*kernel_point_count];
-                    compute_correlation_data(c_args->img2, kernel_size, x2, y2, sigma2, delta2);
-                }
-            }
+            correlate_corridor_add_stripe(&img2_cache, i+corridor_size);
             for (int y1=0;y1<h1;y1++)
             {
                 float sigma1;
@@ -240,12 +276,12 @@ void *correlate_images_task(void *args)
 
                 for (int c=-corridor_size;c<=corridor_size;c++)
                 {
-                    int c_offset = (c+corridor_size)*h2;
+                    int c_offset = cache_get_offset(&img2_cache, c)*h2;
                     for (int y2=0;y2<h2;y2++)
                     {
                         int x2 = i + c + c_args->x_front[y2];
-                        float sigma2 = sigma2_values[c_offset+y2];
-                        float *delta2 = &delta2_values[(c_offset+y2)*kernel_point_count];
+                        float sigma2 = img2_cache.sigma[c_offset+y2];
+                        float *delta2 = &img2_cache.delta[(c_offset+y2)*kernel_point_count];
                         float corr = 0;
 
                         if (!isfinite(sigma2))
@@ -277,8 +313,8 @@ void *correlate_images_task(void *args)
     }
 
     free(delta1);
-    free(delta2_values);
-    free(sigma2_values);
+    free(img2_cache.delta);
+    free(img2_cache.sigma);
 
     return NULL;
 }
@@ -340,6 +376,7 @@ int correlation_correlate_images(correlation_image *img1, correlation_image *img
 
     pthread_mutex_destroy(&args.lock);
 
+    free(args.x_front);
     free(threads);
     return 1;
 }
