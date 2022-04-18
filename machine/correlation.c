@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(_POSIX_THREADS) || defined(__APPLE__)
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
 # include <pthread.h>
 # define THREAD_FUNCTION void*
 # define THREAD_RETURN_VALUE NULL

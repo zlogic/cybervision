@@ -4,6 +4,7 @@
 # Python distribution
 /build/
 /*.egg-info/
+/dist/
 
 # C extensions
 /cybervision/*.so
