@@ -173,6 +173,7 @@ int correlation_correlate_points(correlation_image *img1, correlation_image *img
 
 typedef struct {
     correlation_image *img1, *img2;
+    int corridor_size;
     int kernel_size, kernel_point_count;
     float threshold;
     int x_stripe, x_max;
@@ -188,13 +189,15 @@ void *correlate_images_task(void *args)
     correlate_image_args *c_args = args;
 
     int kernel_size = c_args->kernel_size;
-    int kernel_point_count = c_args->kernel_point_count; 
+    int kernel_point_count = c_args->kernel_point_count;
+    int corridor_size = c_args->corridor_size;
+    int corridor_stripes = 2*corridor_size + 1;
     int w1 = c_args->img1->width, h1 = c_args->img1->height;
     int h2 = c_args->img2->height;
 
     float *delta1 = malloc(sizeof(float)*kernel_point_count);
-    float *sigma2_values = malloc(sizeof(float)*h2);
-    float *delta2_values = malloc(sizeof(float)*kernel_point_count*h2);
+    float *sigma2_values = malloc(sizeof(float)*h2*corridor_stripes);
+    float *delta2_values = malloc(sizeof(float)*kernel_point_count*h2*corridor_stripes);
 
     for(;;){
         int x_stripe;
@@ -212,12 +215,16 @@ void *correlate_images_task(void *args)
 
         for (int i=x_stripe;i<x_max;i++)
         {
-            for (int y2=0;y2<h2;y2++)
+            for (int c=-corridor_size;c<=corridor_size;c++)
             {
-                int x2 = i + c_args->x_front[y2];
-                float *sigma2 = &sigma2_values[y2];
-                float *delta2 = &delta2_values[y2*kernel_point_count];
-                compute_correlation_data(c_args->img2, kernel_size, x2, y2, sigma2, delta2);
+                int c_offset = (c+corridor_size)*h2;
+                for (int y2=0;y2<h2;y2++)
+                {
+                    int x2 = i + c + c_args->x_front[y2];
+                    float *sigma2 = &sigma2_values[c_offset+y2];
+                    float *delta2 = &delta2_values[(c_offset+y2)*kernel_point_count];
+                    compute_correlation_data(c_args->img2, kernel_size, x2, y2, sigma2, delta2);
+                }
             }
             for (int y1=0;y1<h1;y1++)
             {
@@ -230,37 +237,42 @@ void *correlate_images_task(void *args)
 
                 if (!isfinite(sigma1))
                     continue;
-                for (int y2=0;y2<h2;y2++)
+
+                for (int c=-corridor_size;c<=corridor_size;c++)
                 {
-                    int x2 = i + c_args->x_front[y2];
-                    float sigma2 = sigma2_values[y2];
-                    float *delta2 = &delta2_values[y2*kernel_point_count];
-                    float corr = 0;
-
-                    if (!isfinite(sigma2))
-                        continue;
-
-                    for (int l=0;l<kernel_point_count;l++)
-                        corr += delta1[l] * delta2[l];
-                    corr = corr/(sigma1*sigma2*(float)kernel_point_count);
-                    
-                    if (corr >= c_args->threshold && corr > best_corr)
+                    int c_offset = (c+corridor_size)*h2;
+                    for (int y2=0;y2<h2;y2++)
                     {
-                        float dx = x2-x1;
-                        float dy = y2-y1;
-                        // TODO: use distance from tilt center
-                        float sgn = y2>y1 ? -1 : 1;
-                        best_distance = sgn*sqrt(dx*dx+dy*dy);
-                        best_corr = corr;
+                        int x2 = i + c + c_args->x_front[y2];
+                        float sigma2 = sigma2_values[c_offset+y2];
+                        float *delta2 = &delta2_values[(c_offset+y2)*kernel_point_count];
+                        float corr = 0;
+
+                        if (!isfinite(sigma2))
+                            continue;
+
+                        for (int l=0;l<kernel_point_count;l++)
+                            corr += delta1[l] * delta2[l];
+                        corr = corr/(sigma1*sigma2*(float)kernel_point_count);
+                        
+                        if (corr >= c_args->threshold && corr > best_corr)
+                        {
+                            float dx = x2-x1;
+                            float dy = y2-y1;
+                            // TODO: use distance from tilt center
+                            float sgn = y2>y1 ? -1 : 1;
+                            best_distance = sgn*sqrt(dx*dx+dy*dy);
+                            best_corr = corr;
+                        }
+                    }
+                    if(isfinite(best_distance))
+                    {
+                        c_args->out_points[y1*w1 + x1] = best_distance;
+                        //printf("x=%i y=%i distance=%f corr=%f\n", x1, y1, best_distance, best_corr);
                     }
                 }
-                if(isfinite(best_distance))
-                {
-                    c_args->out_points[y1*w1 + x1] = best_distance;
-                    //printf("x=%i y=%i distance=%f corr=%f\n", x1, y1, best_distance, best_corr);
-                }
             }
-            printf("i=%i\n", i);
+            //printf("i=%i\n", i);
         }
     }
 
@@ -284,6 +296,7 @@ int correlation_correlate_images(correlation_image *img1, correlation_image *img
 
     args.img1 = img1;
     args.img2 = img2;
+    args.corridor_size = corridor_size;
     args.kernel_size = kernel_size;
     args.kernel_point_count = kernel_point_count;
     args.threshold = threshold;
