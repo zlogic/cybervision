@@ -193,7 +193,8 @@ void *correlate_images_task(void *args)
     int h2 = c_args->img2->height;
 
     float *delta1 = malloc(sizeof(float)*kernel_point_count);
-    float *delta2 = malloc(sizeof(float)*kernel_point_count);
+    float *sigma2_values = malloc(sizeof(float)*h2);
+    float *delta2_values = malloc(sizeof(float)*kernel_point_count*h2);
 
     for(;;){
         int x_stripe;
@@ -211,11 +212,17 @@ void *correlate_images_task(void *args)
 
         for (int i=x_stripe;i<x_max;i++)
         {
-            for (int j=0;j<h1;j++)
+            for (int y2=0;y2<h2;y2++)
+            {
+                int x2 = i + c_args->x_front[y2];
+                float *sigma2 = &sigma2_values[y2];
+                float *delta2 = &delta2_values[y2*kernel_point_count];
+                compute_correlation_data(c_args->img2, kernel_size, x2, y2, sigma2, delta2);
+            }
+            for (int y1=0;y1<h1;y1++)
             {
                 float sigma1;
-                int x1 = i + c_args->x_front[j];
-                int y1 = j;
+                int x1 = i + c_args->x_front[y1];
                 float best_distance = NAN;
                 float best_corr = 0;
 
@@ -223,13 +230,12 @@ void *correlate_images_task(void *args)
 
                 if (!isfinite(sigma1))
                     continue;
-                for (int k=0;k<h2;k++)
+                for (int y2=0;y2<h2;y2++)
                 {
-                    int x2 = i + c_args->x_front[k];
-                    int y2 = k;
-                    float sigma2;
+                    int x2 = i + c_args->x_front[y2];
+                    float sigma2 = sigma2_values[y2];
+                    float *delta2 = &delta2_values[y2*kernel_point_count];
                     float corr = 0;
-                    compute_correlation_data(c_args->img2, kernel_size, x2, y1, &sigma2, delta2);
 
                     if (!isfinite(sigma2))
                         continue;
@@ -259,7 +265,8 @@ void *correlate_images_task(void *args)
     }
 
     free(delta1);
-    free(delta2);
+    free(delta2_values);
+    free(sigma2_values);
 
     return NULL;
 }
