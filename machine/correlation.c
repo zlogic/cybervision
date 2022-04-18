@@ -301,9 +301,8 @@ THREAD_FUNCTION correlate_images_task(void *args)
                         {
                             float dx = (float)(x2-x1);
                             float dy = (float)(y2-y1);
-                            // TODO: use distance from tilt center
-                            float sgn = y2>y1 ? -1.0f : 1.0f;
-                            best_distance = sgn*sqrtf(dx*dx+dy*dy);
+                            // TODO: use distance from tilt center?
+                            best_distance = -sqrtf(dx*dx+dy*dy);
                             best_corr = corr;
                         }
                     }
