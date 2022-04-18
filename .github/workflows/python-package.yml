@@ -18,6 +18,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.8", "3.9", "3.10"]
+        include:
+        - os: ubuntu-latest
+          CIBW_ARCHS: x86_64 aarch64
+        - os: macos-latest
+          CIBW_ARCHS: auto
+        - os: windows-latest
+          CIBW_ARCHS: x86_64
 
     steps:
     - uses: actions/checkout@v3
@@ -37,11 +44,10 @@ jobs:
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Create wheel distribution
-      run: |
-        python setup.py bdist_wheel
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v2.4.0
     - name: Upload wheel artifacts
       uses: actions/upload-artifact@v3
       with:
-        name: cybervision ${{ matrix.python-version }}-${{ matrix.os }}
-        path: dist/**
+        name: cybervision-${{ matrix.python-version }}-${{ matrix.os }}
+        path: ./wheelhouse/*.whl
