@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #if defined(_POSIX_THREADS) || defined(__APPLE__)
 # include <pthread.h>
@@ -120,7 +121,7 @@ void *correlate_task(void *args)
     return NULL;
 }
 
-int correlation_correlate(correlation_image *img1, correlation_image *img2,
+int correlation_correlate_points(correlation_image *img1, correlation_image *img2,
     correlation_point *points1, correlation_point *points2, size_t points1_size, size_t points2_size, 
     int kernel_size, float threshold, int num_threads,
     correlation_matched cb, void *cb_args)
@@ -167,5 +168,131 @@ int correlation_correlate(correlation_image *img1, correlation_image *img2,
     free(threads);
     free(thread_args.delta2);
     free(thread_args.sigma2);
+    return 1;
+}
+
+typedef struct {
+    correlation_image *img1, *img2;
+    int kernel_size, kernel_point_count;
+    float threshold;
+    int y;
+    int *x_front;
+    float *out_points;
+    pthread_mutex_t lock;
+} correlate_image_args;
+
+int correlation_correlate_images(correlation_image *img1, correlation_image *img2,
+    float angle, int corridor_size,
+    int kernel_size, float threshold, int num_threads,
+    float *out_points)
+{
+    correlate_image_args thread_args;
+    pthread_t *threads = malloc(sizeof(pthread_t)*num_threads);
+
+    int kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
+    int max_height = img1->height>img2->height ? img1->height : img2->height;
+
+    float *delta1 = malloc(sizeof(float)*kernel_point_count);
+    float *delta2 = malloc(sizeof(float)*kernel_point_count);
+
+    int l_offset = 0;
+    int r_offset = 0;
+
+    thread_args.img1 = img1;
+    thread_args.img2 = img2;
+    thread_args.kernel_size = kernel_size;
+    thread_args.kernel_point_count = kernel_point_count;
+    thread_args.threshold = threshold;
+    thread_args.y = 0;
+    thread_args.x_front = malloc(sizeof(int)*max_height);
+    thread_args.out_points = out_points;
+
+    for (int y=0;y<img1->height;y++)
+        for (int x=0;x<img1->width;x++)
+            out_points[y*img1->width + x] = NAN;
+
+    {
+        float a = 0;
+        if (fabs(angle-M_PI/2)>1e-5)
+        {
+            a = 1.0/tan(angle);
+            if (a>0)
+            {
+                l_offset = -(float)img1->height*a;
+                r_offset = (float)img1->height*a;
+            }
+            else
+            {
+                r_offset = -(float)img1->height*a;
+            }
+        }
+        for (int y=0;y<max_height;y++)
+        {
+            thread_args.x_front[y] = a*y+l_offset;
+        }
+    }
+
+    for (int i=l_offset;i<img1->width+r_offset;i++)
+    {
+        for (int j=0;j<img1->height;j++)
+        {
+            float sigma1;
+            int x1 = i + thread_args.x_front[j];
+            int y1 = j;
+            float best_distance = NAN;
+            float best_corr = 0;
+
+            compute_correlation_data(img1, kernel_size, x1, y1, &sigma1, delta1);
+
+            if (!isfinite(sigma1))
+                continue;
+            for (int k=0;k<img2->height;k++)
+            {
+                int x2 = i + thread_args.x_front[k];
+                int y2 = k;
+                float sigma2;
+                float corr = 0;
+                compute_correlation_data(img2, kernel_size, x2, y1, &sigma2, delta2);
+
+                if (!isfinite(sigma2))
+                    continue;
+
+                for (int l=0;l<kernel_point_count;l++)
+                    corr += delta1[l] * delta2[l];
+                corr = corr/(sigma1*sigma2*(float)kernel_point_count);
+                
+                if (corr >= threshold && corr > best_corr)
+                {
+                    float dx = x2-x1;
+                    float dy = y2-y1;
+                    // TODO: use distance from tilt center
+                    float sgn = y2>y1 ? -1 : 1;
+                    best_distance = sgn*sqrt(dx*dx+dy*dy);
+                    best_corr = corr;
+                }
+            }
+            if(isfinite(best_distance))
+            {
+                out_points[y1*img1->width + x1] = best_distance;
+                printf("x=%i y=%i distance=%f corr=%f\n", x1, y1, best_distance, best_corr);
+            }
+        }
+        printf("i=%i\n", i);
+    }
+    free(delta1);
+    free(delta2);
+/*
+    if (pthread_mutex_init(&thread_args.lock, NULL) != 0)
+        return 0;
+
+    for (int i = 0; i < num_threads; i++)
+        pthread_create(&threads[i], NULL, correlate_task, &thread_args);
+
+    for (int i = 0; i < num_threads; i++)
+        pthread_join(threads[i], NULL);
+
+    pthread_mutex_destroy(&thread_args.lock);
+        */
+    free(threads);
     return 1;
 }

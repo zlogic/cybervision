@@ -24,5 +24,5 @@ if __name__ == '__main__':
         sys.exit(err)
     matches = reconstructor.get_matches()
     
-    #v = Visualiser(img1.img, img2.img, reconstructor.get_matches(), reconstructor.points3d)
-    #v.show_results()
+    v = Visualiser(img1.img, img2.img, reconstructor.get_matches(), reconstructor.points3d)
+    v.show_results()

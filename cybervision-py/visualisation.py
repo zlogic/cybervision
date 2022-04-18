@@ -80,12 +80,24 @@ class Visualiser:
         ax.plot_trisurf(triang, z_values, cmap='jet')
         plt.show()
 
+    def show_surface_image(self):
+        surface = Image.new("RGBA", self.img1.size, (255, 0, 255, 255))
+        min_z = min(self.points3d, key=lambda p: p[2])[2]
+        max_z = max(self.points3d, key=lambda p: p[2])[2]
+        draw = ImageDraw.Draw(surface)
+        for p in self.points3d:
+            z = int((p[2]-min_z)/(max_z-min_z)*255)
+            draw.point((p[0], p[1]), fill=(z, z, z, 255))
+
+        surface.show()
+
     def show_results(self):
-        self.show_points()
-        self.show_matches()
-        self.show_distances()
-        self.show_surface_mesh()
-        self.show_surface_plot()
+        #self.show_points()
+        #self.show_matches()
+        #self.show_distances()
+        self.show_surface_image()
+        #self.show_surface_mesh()
+        #self.show_surface_plot()
 
     def __init__(self, img1: Image, img2: Image, matches, points3d):
         self.img1 = img1

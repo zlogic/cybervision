@@ -192,11 +192,13 @@ cybervision_match(PyObject *self, PyObject *args)
 
     out = PyList_New(0);
 
-    if(!correlation_correlate(&c_image1, &c_image2, c_points1, c_points2, PyList_Size(points1), PyList_Size(points2), 
+    if(!correlation_correlate_points(&c_image1, &c_image2, c_points1, c_points2, PyList_Size(points1), PyList_Size(points2), 
         kernel_size, threshold, num_threads, add_match, out))
     {
         PyErr_SetString(CybervisionError, "Failed to correlate points");
         Py_DECREF(out);
+        PyBuffer_Release(&img1_buffer);
+        PyBuffer_Release(&img2_buffer);
         return NULL;
     }
 
@@ -206,9 +208,85 @@ cybervision_match(PyObject *self, PyObject *args)
     return out;
 }
 
+static PyObject *
+cybervision_correlate(PyObject *self, PyObject *args)
+{
+    float angle;
+    int corridor_size;
+    int kernel_size;
+    float threshold;
+    int num_threads;
+    PyObject *img1, *img2;
+    Py_buffer img1_buffer, img2_buffer;
+    correlation_image c_image1, c_image2;
+
+    float *out_points;
+
+    PyObject *out = NULL;
+
+    if (!PyArg_ParseTuple(args, "OOfiifi", &img1, &img2, &angle, &corridor_size, &kernel_size, &threshold, &num_threads))
+    {
+        PyErr_SetString(CybervisionError, "Failed to parse args");
+        return NULL;
+    }
+    c_image1.width = read_long_attr(img1, "width");
+    if (c_image1.width == -1)
+        return NULL;
+    c_image1.height = read_long_attr(img1, "height");
+    if (c_image1.height == -1)
+        return NULL;
+    c_image2.width = read_long_attr(img2, "width");
+    if (c_image2.width == -1)
+        return NULL;
+    c_image2.height = read_long_attr(img2, "height");
+    if (c_image2.height == -1)
+        return NULL;
+
+    if (!read_img_bytes(img1, &img1_buffer))
+        return NULL;
+    if (!read_img_bytes(img2, &img2_buffer))
+    {
+        PyBuffer_Release(&img1_buffer);
+        return NULL;
+    }
+    c_image1.img = img1_buffer.buf;
+    c_image2.img = img2_buffer.buf;
+
+    out_points = malloc(sizeof(float)*c_image1.width*c_image1.height);
+    if(!correlation_correlate_images(&c_image1, &c_image2, angle, corridor_size,
+        kernel_size, threshold, num_threads, out_points))
+    {
+        PyErr_SetString(CybervisionError, "Failed to correlate images");
+        PyBuffer_Release(&img1_buffer);
+        PyBuffer_Release(&img2_buffer);
+        free(out_points);
+        return NULL;
+    }
+
+    PyBuffer_Release(&img1_buffer);
+    PyBuffer_Release(&img2_buffer);
+
+    out = PyList_New(0);
+    for (int y=0;y<c_image1.height;y++)
+    {
+        for (int x=0;x<c_image1.width;x++)
+        {
+            float depth = out_points[y*c_image1.width + x];
+            if (!isfinite(depth))
+                continue;
+            PyObject *point = Py_BuildValue("(iif)", x, y, depth);
+            PyList_Append(out, point);
+        }
+    }
+
+    free(out_points);
+    return out;
+}
+
 static PyMethodDef CybervisionMethods[] = {
     {"detect", cybervision_detect, METH_VARARGS, "Detect keypoints with FAST."},
     {"match", cybervision_match, METH_VARARGS, "Find correlation between image points."},
+    {"correlate", cybervision_correlate, METH_VARARGS, "Find correlation between images."},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
