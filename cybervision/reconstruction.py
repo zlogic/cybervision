@@ -71,9 +71,12 @@ class Reconstructor:
     def create_surface(self):
         # TODO: only angles between pi/4 and 3*pi/4 have been tested, others might require transposing or rotation
         # TODO: remove scaling when performance is improved
-        scale = 4
-        img1 = self.img1.resize((int(self.img1.width/scale), int(self.img1.height/scale)), Image.ANTIALIAS)
-        img2 = self.img2.resize((int(self.img2.width/scale), int(self.img2.height/scale)), Image.ANTIALIAS)
+        img1 = self.img1
+        img2 = self.img2
+        scale = 1
+        if scale != 1:
+            img1 = self.img1.resize((int(img1.width/scale), int(img1.height/scale)), Image.ANTIALIAS)
+            img2 = self.img2.resize((int(img2.width/scale), int(img2.height/scale)), Image.ANTIALIAS)
         points3d = correlate(img1, img2, self.angle, self.triangulation_corridor, self.triangulation_kernel_size, self.triangulation_threshold, self.num_threads)
         return [(p[0], p[1], p[2]) for p in points3d]
 
@@ -142,13 +145,11 @@ class Reconstructor:
         self.correlation_kernel_size = 7
         # slower, but more effective
         # self.correlation_kernel_size = 10
-        self.triangulation_kernel_size = 7
-        #self.triangulation_kernel_size = 15
-        self.triangulation_threshold = 0.7
-        #self.triangulation_threshold = 0.3
-        #self.triangulation_threshold = 0.001
-        self.triangulation_corridor = 1
-        self.ransac_min_length = 5
+        self.triangulation_kernel_size = 3
+        self.triangulation_threshold = 0.5
+        self.triangulation_corridor = 5
+        #self.triangulation_corridor = 7
+        self.ransac_min_length = 3
         self.ransac_k = 1000
         self.ransac_n = 10
         self.ransac_t = 0.01
