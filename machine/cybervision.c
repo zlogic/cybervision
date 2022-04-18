@@ -291,7 +291,7 @@ static PyMethodDef MachineMethods[] = {
 };
 
 static struct PyModuleDef machinemodule = {
-    PyModuleDef_HEAD_INIT, "machine", NULL, -1, MachineMethods
+    PyModuleDef_HEAD_INIT, "cybervision.machine", NULL, -1, MachineMethods
 };
 
 PyMODINIT_FUNC

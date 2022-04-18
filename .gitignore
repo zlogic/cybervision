@@ -1,12 +1,12 @@
 # Python venv
-.venv
+/.venv
 
 # Python distribution
-build/
-*.egg-info/
+/build/
+/*.egg-info/
 
 # C extensions
-*.so
+/cybervision/*.so
 
 # Visual Studio Code configuration
-.vscode/
+/.vscode/

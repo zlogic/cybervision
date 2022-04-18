@@ -1,6 +1,6 @@
 from setuptools import setup, Extension
 
-machine = Extension('machine',sources=[
+machine = Extension('cybervision.machine',sources=[
         'machine/fast/fast_9.c',
         'machine/fast/fast_10.c',
         'machine/fast/fast_11.c', 

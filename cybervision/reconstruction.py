@@ -5,7 +5,7 @@ import math
 from datetime import datetime
 from PIL import Image, ImageOps
 
-from machine import detect, match, correlate
+from cybervision.machine import detect, match, correlate
 
 class NoMatchesFound(Exception):
     def __init__(self, message):
