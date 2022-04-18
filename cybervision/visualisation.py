@@ -61,13 +61,14 @@ class Visualiser:
         xx, yy = np.meshgrid(x_coords, y_coords)
         xy_coords = [(p[0], p[1]) for p in self.points3d]
         z_values = [p[2] for p in self.points3d]
-        interp_grid = interpolate.griddata(xy_coords, z_values, (xx, yy), method='nearest', rescale=True)
+        interp_grid = interpolate.griddata(xy_coords, z_values, (xx, yy), method='linear')
 
         ax = plt.axes(projection='3d')
         ax.plot_surface(xx, yy, interp_grid, shade=True, cmap='jet')
         plt.show()
 
     def show_surface_mesh(self):
+        # Too slow without resampling
         x = [p[0] for p in self.points3d]
         y = [p[1] for p in self.points3d]
         xy_points = [[p[0], p[1]] for p in self.points3d]
@@ -95,9 +96,9 @@ class Visualiser:
         #self.show_points()
         #self.show_matches()
         #self.show_distances()
-        self.show_surface_image()
-        #self.show_surface_mesh()
         #self.show_surface_plot()
+        #self.show_surface_mesh()
+        self.show_surface_image()
 
     def __init__(self, img1: Image, img2: Image, matches, points3d):
         self.img1 = img1

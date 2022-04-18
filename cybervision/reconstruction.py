@@ -145,8 +145,8 @@ class Reconstructor:
         self.correlation_kernel_size = 7
         # slower, but more effective
         # self.correlation_kernel_size = 10
-        self.triangulation_kernel_size = 3
-        self.triangulation_threshold = 0.5
+        self.triangulation_kernel_size = 5
+        self.triangulation_threshold = 0.8
         self.triangulation_corridor = 5
         #self.triangulation_corridor = 7
         self.ransac_min_length = 3
