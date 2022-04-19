@@ -34,7 +34,7 @@ setup(
     url='https://github.com/zlogic/cybervision',
     packages=['cybervision'],
     license='Apache License, Version 2.0',
-    long_description=open('README.md').read(),
+    long_description=open('README.md', encoding='utf-8').read(),
     long_description_content_type='text/markdown',
     ext_modules=[machine],
     entry_points={

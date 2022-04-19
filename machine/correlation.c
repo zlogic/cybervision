@@ -302,7 +302,6 @@ THREAD_FUNCTION correlate_images_task(void *args)
                         {
                             float dx = (float)(x2-x1);
                             float dy = (float)(y2-y1);
-                            // TODO: use distance from tilt center?
                             best_distance = -sqrtf(dx*dx+dy*dy);
                             best_corr = corr;
                         }
@@ -310,11 +309,9 @@ THREAD_FUNCTION correlate_images_task(void *args)
                     if(isfinite(best_distance))
                     {
                         c_args->out_points[y1*w1 + x1] = best_distance;
-                        //printf("x=%i y=%i distance=%f corr=%f\n", x1, y1, best_distance, best_corr);
                     }
                 }
             }
-            //printf("i=%i\n", i);
         }
     }
 
@@ -345,9 +342,8 @@ int correlation_correlate_images(correlation_image *img1, correlation_image *img
     args.x_front = malloc(sizeof(int)*max_height);
     args.out_points = out_points;
 
-    for (int y=0;y<img1->height;y++)
-        for (int x=0;x<img1->width;x++)
-            out_points[y*img1->width + x] = NAN;
+    for (int i=0;i<img1->width*img1->height;i++)
+        out_points[i] = NAN;
 
     {
         float a = 0;
