@@ -105,6 +105,8 @@ class Reconstructor:
         self.log.info(f'Found {len(self.matches)} matches')
 
         self.matches, self.angle = self.ransac_fit()
+        if not self.matches:
+            raise NoMatchesFound('Failed to fit the model')
 
         time_completed_ransac = datetime.now()
         self.log.info(f'Completed RANSAC fitting in {time_completed_ransac-time_completed_matching}')

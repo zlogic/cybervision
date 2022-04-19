@@ -18,6 +18,9 @@
 
 #include "correlation.h"
 
+#define CORRELATION_STRIPE_WIDTH 64
+#define ANGLE_EPSILON 1e-5
+
 void compute_correlation_data(correlation_image *image, int kernel_size, int x, int y, float *sigma, float *delta)
 {
     int kernel_width = 2*kernel_size + 1;
@@ -219,8 +222,6 @@ typedef struct {
     pthread_mutex_t lock;
 } correlate_image_args;
 
-#define STRIPE_WIDTH 64
-
 THREAD_FUNCTION correlate_images_task(void *args)
 {
     correlate_image_args *c_args = args;
@@ -250,8 +251,8 @@ THREAD_FUNCTION correlate_images_task(void *args)
         if (pthread_mutex_lock(&c_args->lock) != 0)
             return THREAD_RETURN_VALUE;
         x_stripe = c_args->x_stripe;
-        c_args->x_stripe += STRIPE_WIDTH;
-        x_max = (x_stripe+STRIPE_WIDTH) < c_args->x_max ? x_stripe+STRIPE_WIDTH : c_args->x_max;
+        c_args->x_stripe += CORRELATION_STRIPE_WIDTH;
+        x_max = (x_stripe+CORRELATION_STRIPE_WIDTH) < c_args->x_max ? x_stripe+CORRELATION_STRIPE_WIDTH : c_args->x_max;
         if (pthread_mutex_unlock(&c_args->lock) != 0)
             return THREAD_RETURN_VALUE;
 
@@ -351,7 +352,7 @@ int correlation_correlate_images(correlation_image *img1, correlation_image *img
     {
         float a = 0;
         int l_offset = 0, r_offset = 0;
-        if (fabs(angle-M_PI/2)>1e-5)
+        if (fabs(angle-M_PI/2)>ANGLE_EPSILON)
         {
             a = 1.0f/tanf(angle);
             if (a>0)
