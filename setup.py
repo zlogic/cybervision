@@ -39,7 +39,7 @@ setup(
     ext_modules=[machine],
     entry_points={
         'console_scripts': [
-            'cybervision = cybervision.main:main'
+            'cybervision = cybervision.__main__:main'
         ]
     },
     classifiers=[
