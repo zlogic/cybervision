@@ -28,10 +28,10 @@ class Visualiser:
         for m in self.matches:
             point1 = (m[0], m[1])
             point2 = (m[2]+self.img1.width, m[3])
-            draw.line(point1 + point2, fill=(255, 255, 255, 255))
+            draw.line(point1 + point2, fill=(255, 0, 0, 255))
         for m in self.matches:
-            draw.point(point1, fill=(255, 0, 0, 255))
-            draw.point(point2, fill=(255, 0, 0, 255))
+            draw.point(point1, fill=(0, 255, 0, 255))
+            draw.point(point2, fill=(0, 255, 0, 255))
 
         composite.show()
 
@@ -46,12 +46,12 @@ class Visualiser:
             point12 = (m[2], m[3])
             point21 = (m[0]+self.img1.width, m[1])
             point22 = (m[2]+self.img1.width, m[3])
-            draw.line(point11 + point12, fill=(255, 255, 255, 255))
-            draw.line(point21 + point22, fill=(255, 255, 255, 255))
-            draw.point(point11, fill=(255, 0, 0, 255))
-            draw.point(point12, fill=(255, 0, 0, 255))
-            draw.point(point21, fill=(255, 0, 0, 255))
-            draw.point(point22, fill=(255, 0, 0, 255))
+            draw.line(point11 + point12, fill=(255, 0, 0, 255))
+            draw.line(point21 + point22, fill=(255, 0, 0, 255))
+            draw.point(point11, fill=(0, 255, 0, 255))
+            draw.point(point12, fill=(0, 255, 0, 255))
+            draw.point(point21, fill=(0, 255, 0, 255))
+            draw.point(point22, fill=(0, 255, 0, 255))
 
         composite.show()
 
@@ -61,10 +61,10 @@ class Visualiser:
         xx, yy = np.meshgrid(x_coords, y_coords)
         xy_coords = [(p[0], p[1]) for p in self.points3d]
         z_values = [p[2] for p in self.points3d]
-        interp_grid = interpolate.griddata(xy_coords, z_values, (xx, yy), method='linear')
+        interp_grid = interpolate.griddata(xy_coords, z_values, (xx, yy), method='cubic')
 
         ax = plt.axes(projection='3d')
-        ax.plot_surface(xx, yy, interp_grid, shade=True, cmap='jet')
+        ax.plot_surface(xx, yy, interp_grid, shade=False, cmap='jet')
         plt.show()
 
     def show_surface_mesh(self):
@@ -78,17 +78,17 @@ class Visualiser:
         triang = mtri.Triangulation(x=x, y=y, triangles=mesh.vertices)
 
         ax = plt.axes(projection='3d')
-        ax.plot_trisurf(triang, z_values, cmap='jet')
+        ax.plot_trisurf(triang, z_values, cmap='jet', shade=False)
         plt.show()
 
     def show_surface_image(self):
-        surface = Image.new("RGBA", self.img1.size, (255, 0, 255, 255))
+        surface = Image.new("RGBA", self.img1.size, (0, 0, 0, 255))
         min_z = min(self.points3d, key=lambda p: p[2])[2]
         max_z = max(self.points3d, key=lambda p: p[2])[2]
         draw = ImageDraw.Draw(surface)
         for p in self.points3d:
             z = int((p[2]-min_z)/(max_z-min_z)*255)
-            draw.point((p[0], p[1]), fill=(z, z, z, 255))
+            draw.point((p[0], p[1]), fill=(0, z, 0, 255))
 
         surface.show()
 

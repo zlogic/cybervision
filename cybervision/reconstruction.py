@@ -140,8 +140,8 @@ class Reconstructor:
         self.num_threads = os.cpu_count()
 
         # Tunable parameters
-        self.fast_threshold = 15
-        self.fast_method = 12
+        self.fast_threshold = 20
+        self.fast_method = 9
         self.fast_nonmax = True
         self.correlation_threshold = 0.9
         self.correlation_kernel_size = 7
