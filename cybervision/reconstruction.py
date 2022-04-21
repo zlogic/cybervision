@@ -70,14 +70,7 @@ class Reconstructor:
 
     def create_surface(self):
         # TODO: only angles between pi/4 and 3*pi/4 have been tested, others might require transposing or rotation
-        # TODO: remove scaling when performance is improved
-        img1 = self.img1
-        img2 = self.img2
-        scale = 1
-        if scale != 1:
-            img1 = self.img1.resize((int(img1.width/scale), int(img1.height/scale)), Image.ANTIALIAS)
-            img2 = self.img2.resize((int(img2.width/scale), int(img2.height/scale)), Image.ANTIALIAS)
-        points3d = correlate(img1, img2, self.angle, self.triangulation_corridor, self.triangulation_kernel_size, self.triangulation_threshold, self.num_threads)
+        points3d = correlate(self.img1, self.img2, self.angle, self.triangulation_corridor, self.triangulation_kernel_size, self.triangulation_threshold, self.num_threads)
         return [(p[0], p[1], p[2]) for p in points3d]
 
     def reconstruct(self):
@@ -140,8 +133,8 @@ class Reconstructor:
         self.num_threads = os.cpu_count()
 
         # Tunable parameters
-        self.fast_threshold = 20
-        self.fast_method = 9
+        self.fast_threshold = 15
+        self.fast_method = 12
         self.fast_nonmax = True
         self.correlation_threshold = 0.9
         self.correlation_kernel_size = 7
