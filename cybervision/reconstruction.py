@@ -4,6 +4,8 @@ import random
 import math
 from datetime import datetime
 from PIL import Image, ImageOps
+import numpy as np
+import scipy.ndimage
 
 from cybervision.machine import detect, match, correlate
 
@@ -73,6 +75,59 @@ class Reconstructor:
         points3d = correlate(self.img1, self.img2, self.angle, self.triangulation_corridor, self.triangulation_kernel_size, self.triangulation_threshold, self.num_threads)
         return [(p[0], p[1], p[2]) for p in points3d]
 
+    def filter_peaks(self):
+        depth_grid = np.full((self.img1.width, self.img1.height), np.nan)
+        for (x,y,z) in self.points3d:
+            depth_grid[x][y] = z
+
+        new_depth_grid = np.full((self.img1.width, self.img1.height), np.nan)
+        for y in range(self.img1.height):
+            for x in range(self.img1.width):
+                z_values = []
+                for j in range (-7, 8):
+                    y_point = y+j
+                    if y_point<0 or y_point>=self.img1.height:
+                        continue
+                    for i in range (-7, 8):
+                        x_point = x+i
+                        if x_point<0 or x_point>=self.img1.width:
+                            continue
+                        z = depth_grid[x_point][y_point]
+                        if math.isnan(z):
+                            continue
+                        z_values.append(z)
+                if not z_values or len(z_values) < 5:
+                    continue
+                median = np.median(z_values)
+                stddev = np.std(z_values)
+                z = depth_grid[x][y]
+                if abs(z-median) < stddev:
+                    new_depth_grid[x][y] = z
+        depth_grid = new_depth_grid
+
+        return [(x, y, z) for (x,y), z in np.ndenumerate(depth_grid) if not math.isnan(z)]
+
+
+    def filter_peaks_2(self):
+        xy_points = [(p[0], p[1]) for p in self.points3d]
+        x_coords = np.linspace(0, self.img1.width, self.img1.width, endpoint=False)
+        y_coords = np.linspace(0, self.img1.height, self.img1.height, endpoint=False)
+        xx, yy = np.meshgrid(x_coords, y_coords)
+        z_values = [p[2] for p in self.points3d]
+
+        depth_grid = np.full((self.img1.width, self.img1.height), np.nan)
+        for (x,y,z) in self.points3d:
+            depth_grid[x][y] = z
+        median = np.nanmedian(depth_grid)
+        np.nan_to_num(depth_grid, nan=median)
+        depth_grid = scipy.ndimage.percentile_filter(depth_grid, percentile=5, size=64)
+        #depth_grid = scipy.ndimage.median_filter(depth_grid, size=10)
+        #depth_values = scipy.interpolate.griddata(xy_points, z_values, (xx, yy), method='cubic')
+        #depth_values = scipy.ndimage.median_filter(depth_values, size=20)
+        #depth_values = scipy.ndimage.percentile_filter(depth_values, percentile=5, size=5)
+        #return [(x, y, z) for (x,y,z) in self.points3d if not math.isnan(depth_values[y][x])]
+        return [(x, y, z) for (x,y,z) in self.points3d if not math.isnan(depth_grid[x][y])]
+
     def reconstruct(self):
         time_started = datetime.now()
 
@@ -116,6 +171,9 @@ class Reconstructor:
     
         if not self.matches:
             raise NoMatchesFound('No reliable matches found')
+
+        self.points3d = self.filter_peaks()
+        #self.points3d = self.filter_peaks_2()
 
     def get_matches(self):
         matches = []

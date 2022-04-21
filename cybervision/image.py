@@ -1,6 +1,6 @@
 import configparser
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 # FEI tags containing image details
 TIFFTAG_META_PHENOM = 34683
@@ -32,6 +32,8 @@ class SEMImage:
             databar_height = config['PrivateFei'].get('DatabarHeight','0')
             self.img = self.img.crop((0,0,self.img.width,self.img.height-int(databar_height)))
 
-    def __init__(self, filename):
+    def __init__(self, filename, scale=1):
         self.img = Image.open(filename)
         self.extract_tags()
+        if scale != 1:
+            self.img = ImageOps.scale(self.img, scale)

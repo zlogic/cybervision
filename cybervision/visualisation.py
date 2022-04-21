@@ -7,7 +7,33 @@ import scipy.spatial
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 
+# Sunset from https://jiffyclub.github.io/palettable/cartocolors/sequential/
+COLORMAP = [
+    [252, 222, 156],
+    [250, 164, 118],
+    [240, 116, 110],
+    [227, 79, 111],
+    [220, 57, 119],
+    [185, 37, 122],
+    [124, 29, 111],
+]
+
 class Visualiser:
+    def map_color(self, p):
+        if p<0:
+            return COLORMAP[0] 
+        if p>=1:
+            return COLORMAP[-1]
+        step = 1/(len(COLORMAP)-1)
+        box = math.floor(p/step)
+        ratio = (p-step*box)/step
+        c1 = COLORMAP[box]
+        c2 = COLORMAP[box+1]
+        r = int(c2[0]*ratio+c1[0]*(1-ratio))
+        g = int(c2[1]*ratio+c1[1]*(1-ratio))
+        b = int(c2[2]*ratio+c1[2]*(1-ratio))
+        return (r,g,b)
+
     def show_points(self):
         composite = Image.new("RGBA", (self.img1.width+self.img2.width, max(self.img1.height,self.img2.height)), (255, 255, 255, 0))
         composite.paste(self.img1)
@@ -63,7 +89,7 @@ class Visualiser:
         xx, yy = np.meshgrid(x_coords, y_coords)
         xy_coords = [(p[0], p[1]) for p in self.points3d]
         z_values = [p[2] for p in self.points3d]
-        interp_grid = scipy.interpolate.griddata(xy_coords, z_values, (xx, yy), method='nearest')
+        interp_grid = scipy.interpolate.griddata(xy_coords, z_values, (xx, yy), method='linear')
 
         ax = plt.axes(projection='3d')
         ax.plot_surface(xx, yy, interp_grid, rcount=100, ccount=100, shade=True, cmap='jet')
@@ -84,13 +110,14 @@ class Visualiser:
         plt.show()
 
     def show_surface_image(self):
-        surface = Image.new("RGBA", self.img1.size, (0, 0, 0, 255))
+        surface = Image.new("RGBA", self.img1.size, (0, 0, 0, 0))
         min_z = min(self.points3d, key=lambda p: p[2])[2]
         max_z = max(self.points3d, key=lambda p: p[2])[2]
         draw = ImageDraw.Draw(surface)
         for p in self.points3d:
-            z = int((p[2]-min_z)/(max_z-min_z)*255)
-            draw.point((p[0], p[1]), fill=(0, z, 0, 255))
+            z = (p[2]-min_z)/(max_z-min_z)
+            (r, g, b) = self.map_color(z)
+            draw.point((p[0], p[1]), fill=(r, g, b, 255))
 
         surface.show()
 
@@ -102,15 +129,16 @@ class Visualiser:
         z_values = [p[2] for p in self.points3d]
         depth_values = scipy.interpolate.griddata(xy_points, z_values, (xx, yy), method='linear')
 
-        surface = Image.new("RGBA", self.img1.size, (0, 0, 0, 255))
+        surface = Image.new("RGBA", self.img1.size, (0, 0, 0, 0))
         min_z = np.nanmin(depth_values)
         max_z = np.nanmax(depth_values)
         for (ix,iy), z in np.ndenumerate(depth_values.T):
             if not math.isnan(z):
                 x = round(x_coords[ix])
                 y = round(y_coords[iy])
-                z = int((z-min_z)/(max_z-min_z)*255)
-                surface.putpixel((x, y), (0, z, 0, 255))
+                z = (z-min_z)/(max_z-min_z)
+                (r, g, b) = self.map_color(z)
+                surface.putpixel((x, y), (r, g, b, 255))
         surface.show()
 
     def show_results(self):
