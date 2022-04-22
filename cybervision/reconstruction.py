@@ -107,27 +107,6 @@ class Reconstructor:
 
         return [(x, y, z) for (x,y), z in np.ndenumerate(depth_grid) if not math.isnan(z)]
 
-
-    def filter_peaks_2(self):
-        xy_points = [(p[0], p[1]) for p in self.points3d]
-        x_coords = np.linspace(0, self.img1.width, self.img1.width, endpoint=False)
-        y_coords = np.linspace(0, self.img1.height, self.img1.height, endpoint=False)
-        xx, yy = np.meshgrid(x_coords, y_coords)
-        z_values = [p[2] for p in self.points3d]
-
-        depth_grid = np.full((self.img1.width, self.img1.height), np.nan)
-        for (x,y,z) in self.points3d:
-            depth_grid[x][y] = z
-        median = np.nanmedian(depth_grid)
-        np.nan_to_num(depth_grid, nan=median)
-        depth_grid = scipy.ndimage.percentile_filter(depth_grid, percentile=5, size=64)
-        #depth_grid = scipy.ndimage.median_filter(depth_grid, size=10)
-        #depth_values = scipy.interpolate.griddata(xy_points, z_values, (xx, yy), method='cubic')
-        #depth_values = scipy.ndimage.median_filter(depth_values, size=20)
-        #depth_values = scipy.ndimage.percentile_filter(depth_values, percentile=5, size=5)
-        #return [(x, y, z) for (x,y,z) in self.points3d if not math.isnan(depth_values[y][x])]
-        return [(x, y, z) for (x,y,z) in self.points3d if not math.isnan(depth_grid[x][y])]
-
     def reconstruct(self):
         time_started = datetime.now()
 
@@ -173,7 +152,6 @@ class Reconstructor:
             raise NoMatchesFound('No reliable matches found')
 
         self.points3d = self.filter_peaks()
-        #self.points3d = self.filter_peaks_2()
 
     def get_matches(self):
         matches = []
