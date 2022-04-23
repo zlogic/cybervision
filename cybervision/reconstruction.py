@@ -6,8 +6,6 @@ import time
 import statistics
 from datetime import datetime
 from PIL import Image, ImageOps
-import numpy as np
-import scipy.ndimage
 
 import cybervision.machine as machine
 from cybervision.progressbar import Progressbar
@@ -96,38 +94,6 @@ class Reconstructor:
             else:
                 points3d = machine.correlate_result(correlate_task)
                 return [(p[0], p[1], p[2]) for p in points3d]
-
-    def filter_peaks(self, width, height):
-        depth_grid = np.full((width, height), np.nan)
-        for (x,y,z) in self.points3d:
-            depth_grid[x][y] = z
-
-        new_depth_grid = np.full((width, height), np.nan)
-        for y in range(height):
-            for x in range(width):
-                z_values = []
-                for j in range (-7, 8):
-                    y_point = y+j
-                    if y_point<0 or y_point>=height:
-                        continue
-                    for i in range (-7, 8):
-                        x_point = x+i
-                        if x_point<0 or x_point>=width:
-                            continue
-                        z = depth_grid[x_point][y_point]
-                        if math.isnan(z):
-                            continue
-                        z_values.append(z)
-                if not z_values or len(z_values) < 5:
-                    continue
-                median = np.median(z_values)
-                stddev = np.std(z_values)
-                z = depth_grid[x][y]
-                if abs(z-median) < stddev:
-                    new_depth_grid[x][y] = z
-        depth_grid = new_depth_grid
-
-        return [(x, y, z) for (x,y), z in np.ndenumerate(depth_grid) if not math.isnan(z)]
 
     def filter_quad(self, new_quad, current_points):
         keep_points = []
@@ -237,7 +203,6 @@ class Reconstructor:
         if not self.points3d:
             raise NoMatchesFound('No reliable correlation points found')
 
-        #self.points3d = self.filter_peaks(width=w1, height=h1)
         self.points3d = self.filter_peaks_quad(width=w1, height=h1)
 
         time_completed_filter = datetime.now()
