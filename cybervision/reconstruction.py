@@ -2,12 +2,14 @@ import logging
 import os
 import random
 import math
+import time
 from datetime import datetime
 from PIL import Image, ImageOps
 import numpy as np
 import scipy.ndimage
 
-from cybervision.machine import detect, match, correlate
+from cybervision.machine import detect, match_start, match_status, match_result, correlate
+from cybervision.progressbar import Progressbar
 
 class NoMatchesFound(Exception):
     def __init__(self, message):
@@ -16,6 +18,17 @@ class NoMatchesFound(Exception):
 class Reconstructor:
     def fast_points(self, img: Image):
         return detect(img, self.fast_threshold, self.fast_method, self.fast_nonmax)
+
+    def match_points(self):
+        matcher_task = match_start(self.img1, self.img2, self.points1, self.points2, self.correlation_kernel_size, self.correlation_threshold, self.num_threads)
+        progressbar = Progressbar()
+        while True:
+            (completed, percent_complete) = match_status(matcher_task)
+            if not completed:
+                progressbar.update(percent_complete)
+                time.sleep(0.1)
+            else:
+                return match_result(matcher_task)
 
     def calculate_model(self, matches):
         angle = 0
@@ -122,7 +135,7 @@ class Reconstructor:
         self.log.info(f'Image 1 has {len(self.points1)} points')
         self.log.info(f'Image 2 has {len(self.points2)} points')
 
-        self.matches = match(self.img1, self.img2, self.points1, self.points2, self.correlation_kernel_size, self.correlation_threshold, self.num_threads)
+        self.matches = self.match_points()
 
         if not self.matches:
             raise NoMatchesFound('No matches found')

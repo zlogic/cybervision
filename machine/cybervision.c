@@ -65,12 +65,25 @@ correlation_point *read_points(PyObject *points)
     return converted_points;
 }
 
-void add_match(size_t p1, size_t p2, float corr, void* cb_args)
+void free_match_task(PyObject *task_object)
 {
-    PyObject *out = cb_args;
-    PyObject *correlation_value = Py_BuildValue("(iif)", p1, p2, corr);
-    PyList_Append(out, correlation_value);
-    Py_DECREF(correlation_value);
+    match_task *task = PyCapsule_GetPointer(task_object, NULL);
+    if (task == NULL)
+        return;
+    correlation_match_points_cancel(task);
+    correlation_match_points_complete(task);
+
+    if (task->img1.img != NULL)
+        free(task->img1.img);
+    if (task->img2.img != NULL)
+        free(task->img2.img);
+    if (task->points1 != NULL)
+        free(task->points1);
+    if (task->points2 != NULL)
+        free(task->points2);
+    if (task->matches != NULL)
+        free(task->matches);
+    free(task);
 }
 
 /*
@@ -138,16 +151,15 @@ machine_detect(PyObject *self, PyObject *args)
 }
 
 static PyObject *
-machine_match(PyObject *self, PyObject *args)
+machine_match_start(PyObject *self, PyObject *args)
 {
     int kernel_size;
     float threshold;
     int num_threads;
     PyObject *img1, *img2;
-    Py_buffer img1_buffer, img2_buffer;
-    correlation_image c_image1, c_image2;
+    Py_buffer img_buffer;
     PyObject *points1, *points2;
-    correlation_point *c_points1, *c_points2;
+    match_task *task;
 
     PyObject *out = NULL;
 
@@ -156,54 +168,124 @@ machine_match(PyObject *self, PyObject *args)
         PyErr_SetString(CybervisionError, "Failed to parse args");
         return NULL;
     }
-    c_image1.width = read_long_attr(img1, "width");
-    if (c_image1.width == -1)
-        return NULL;
-    c_image1.height = read_long_attr(img1, "height");
-    if (c_image1.height == -1)
-        return NULL;
-    c_image2.width = read_long_attr(img2, "width");
-    if (c_image2.width == -1)
-        return NULL;
-    c_image2.height = read_long_attr(img2, "height");
-    if (c_image2.height == -1)
-        return NULL;
 
-    c_points1 = read_points(points1);
-    if (c_points1 == NULL)
-        return NULL;
+    task = malloc(sizeof(match_task));
+    task->kernel_size = kernel_size;
+    task->threshold = threshold;
+    task->num_threads = num_threads;
+    task->img1.img = NULL;
+    task->img2.img = NULL;
+    task->points1 = NULL;
+    task->points2 = NULL;
 
-    c_points2 = read_points(points2);
-    if (c_points2 == NULL)
+    out = PyCapsule_New(task, NULL, free_match_task);
+
+    task->img1.width = read_long_attr(img1, "width");
+    task->img1.height = read_long_attr(img1, "height");
+    task->img2.width = read_long_attr(img2, "width");
+    task->img2.height = read_long_attr(img2, "height");
+
+    if (task->img1.width == -1 || task->img1.height == -1 || task->img2.width == -1 || task->img2.height == -1)
     {
-        free(c_points1);
-        return NULL;
-    }
-
-    if (!read_img_bytes(img1, &img1_buffer))
-        return NULL;
-    if (!read_img_bytes(img2, &img2_buffer))
-    {
-        PyBuffer_Release(&img1_buffer);
-        return NULL;
-    }
-    c_image1.img = img1_buffer.buf;
-    c_image2.img = img2_buffer.buf;
-
-    out = PyList_New(0);
-
-    if(!correlation_correlate_points(&c_image1, &c_image2, c_points1, c_points2, PyList_Size(points1), PyList_Size(points2), 
-        kernel_size, threshold, num_threads, add_match, out))
-    {
-        PyErr_SetString(CybervisionError, "Failed to correlate points");
+        PyErr_SetString(CybervisionError, "Failed to get image size");
         Py_DECREF(out);
-        PyBuffer_Release(&img1_buffer);
-        PyBuffer_Release(&img2_buffer);
+        return NULL;
+    }
+    task->points1 = read_points(points1);
+    if (task->points1 == NULL)
+    {
+        Py_DECREF(out);
+        return NULL;
+    }
+    task->points2 = read_points(points2);
+    if (task->points2 == NULL)
+    {
+        Py_DECREF(out);
+        return NULL;
+    }
+    task->points1_size = PyList_Size(points1);
+    task->points2_size = PyList_Size(points2);
+    
+    if (!read_img_bytes(img1, &img_buffer))
+    {
+        Py_DECREF(out);
+        return NULL;
+    }
+    task->img1.img = malloc(img_buffer.len);
+    memcpy(task->img1.img, img_buffer.buf, img_buffer.len);
+    PyBuffer_Release(&img_buffer);
+
+    if (!read_img_bytes(img2, &img_buffer))
+    {
+        Py_DECREF(out);
+        return NULL;
+    }
+    task->img2.img = malloc(img_buffer.len);
+    memcpy(task->img2.img, img_buffer.buf, img_buffer.len);
+    PyBuffer_Release(&img_buffer);
+
+    if(!correlation_match_points_start(task))
+    {
+        PyErr_SetString(CybervisionError, "Failed to start correlation task");
+        Py_DECREF(out);
         return NULL;
     }
 
-    PyBuffer_Release(&img1_buffer);
-    PyBuffer_Release(&img2_buffer);
+    return out;
+}
+
+static PyObject *
+machine_match_status(PyObject *self, PyObject *args)
+{
+    PyObject *task_object;
+    match_task *task;
+
+    if (!PyArg_ParseTuple(args, "O", &task_object))
+    {
+        PyErr_SetString(CybervisionError, "Failed to parse args");
+        return NULL;
+    }
+
+    task = PyCapsule_GetPointer(task_object, NULL);
+    if (task == NULL)
+    {
+        PyErr_SetString(CybervisionError, "Failed to get task from args");
+        return NULL;
+    }
+
+    return Py_BuildValue("(Of)", task->completed?Py_True:Py_False, task->percent_complete);
+}
+
+static PyObject *
+machine_match_result(PyObject *self, PyObject *args)
+{
+    PyObject *task_object;
+    match_task *task;
+
+    PyObject *out = NULL;
+
+    if (!PyArg_ParseTuple(args, "O", &task_object))
+    {
+        PyErr_SetString(CybervisionError, "Failed to parse args");
+        return NULL;
+    }
+
+    task = PyCapsule_GetPointer(task_object, NULL);
+    if (task == NULL)
+    {
+        PyErr_SetString(CybervisionError, "Failed to get task from args");
+        return NULL;
+    }
+    
+    out = PyList_New(task->matches_count);
+
+    correlation_match_points_complete(task);
+    for (size_t i=0;i<task->matches_count;i++)
+    {
+        correlation_match match = task->matches[i];
+        PyObject *correlation_value = Py_BuildValue("(iif)", match.point1, match.point2, match.corr);
+        PyList_SetItem(out, i, correlation_value);
+    }
 
     return out;
 }
@@ -285,7 +367,9 @@ machine_correlate(PyObject *self, PyObject *args)
 
 static PyMethodDef MachineMethods[] = {
     {"detect", machine_detect, METH_VARARGS, "Detect keypoints with FAST."},
-    {"match", machine_match, METH_VARARGS, "Find correlation between image points."},
+    {"match_start", machine_match_start, METH_VARARGS, "Start a task to find correlation between image points."},
+    {"match_status", machine_match_status, METH_VARARGS, "Status of a task to find correlation between image points."},
+    {"match_result", machine_match_result, METH_VARARGS, "Result of a task to find correlation between image points."},
     {"correlate", machine_correlate, METH_VARARGS, "Find correlation between images."},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };

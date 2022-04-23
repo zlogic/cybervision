@@ -18,6 +18,7 @@
 
 #include "correlation.h"
 
+#define MATCH_RESULT_GROW_SIZE 1000
 #define CORRELATION_STRIPE_WIDTH 64
 #define ANGLE_EPSILON 1e-5
 
@@ -58,56 +59,56 @@ void compute_correlation_data(correlation_image *image, int kernel_size, int x, 
 }
 
 typedef struct {
-    correlation_image *img1, *img2;
+    int threads_completed;
+    size_t matches_limit;
     size_t p1;
-    correlation_point *points1, *points2;
-    size_t points1_size, points2_size;
     float *delta2;
     float *sigma2;
-    int kernel_size, kernel_point_count;
-    float threshold;
-    correlation_matched cb;
-    void *cb_args;
     pthread_mutex_t lock;
-} correlate_points_args; 
+    pthread_t *threads;
+} match_task_ctx;
 
 THREAD_FUNCTION correlate_points_task(void *args)
 {
-    correlate_points_args *c_args = args;
+    match_task *t = args;
+    match_task_ctx *ctx = t->internal;
 
-    int kernel_size = c_args->kernel_size;
-    int kernel_point_count = c_args->kernel_point_count;
-    size_t points1_size = c_args->points1_size;
-    size_t points2_size = c_args->points2_size;
-    correlation_point *points1 = c_args->points1;
-    correlation_point *points2 = c_args->points2;
-    int w1 = c_args->img1->width, h1 = c_args->img1->height;
-    int w2 = c_args->img2->width, h2 = c_args->img2->height;
+    int kernel_size = t->kernel_size;
+    int kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
+    size_t points1_size = t->points1_size;
+    size_t points2_size = t->points2_size;
+    correlation_point *points1 = t->points1;
+    correlation_point *points2 = t->points2;
+    int w1 = t->img1.width, h1 = t->img1.height;
+    int w2 = t->img2.width, h2 = t->img2.height;
 
     float *delta1 = malloc(sizeof(float)*kernel_point_count);
     float sigma1;
-    for(;;){
+    while (!t->completed)
+    {
         size_t p1;
         int x1, y1;
-        if (pthread_mutex_lock(&c_args->lock) != 0)
-            return THREAD_RETURN_VALUE;
-        p1 = c_args->p1++;
-        if (pthread_mutex_unlock(&c_args->lock) != 0)
-            return THREAD_RETURN_VALUE;
+        if (pthread_mutex_lock(&ctx->lock) != 0)
+            goto cleanup;
+        p1 = ctx->p1++;
+        if (pthread_mutex_unlock(&ctx->lock) != 0)
+            break;
 
         if (p1 >= points1_size)
-            break;
+            goto cleanup;
+
+        t->percent_complete = 100.0*(float)p1/(float)points1_size;
 
         x1 = points1[p1].x, y1 = points1[p1].y;
         if (x1-kernel_size<0 || x1+kernel_size>=w1 || y1-kernel_size<0 || y1+kernel_size>=h1)
             continue;
         
-        compute_correlation_data(c_args->img1, kernel_size, x1, y1, &sigma1, delta1);
+        compute_correlation_data(&t->img1, kernel_size, x1, y1, &sigma1, delta1);
         for (size_t p2=0;p2<points2_size;p2++)
         {
             int x2 = points2[p2].x, y2 = points2[p2].y;
-            float sigma2 = c_args->sigma2[p2];
-            float *delta2 = &c_args->delta2[p2*kernel_point_count];
+            float sigma2 = ctx->sigma2[p2];
+            float *delta2 = &ctx->delta2[p2*kernel_point_count];
             float corr = 0;
 
             if (x2-kernel_size<0 || x2+kernel_size>=w2 || y2-kernel_size<0 || y2+kernel_size>=h2)
@@ -116,67 +117,94 @@ THREAD_FUNCTION correlate_points_task(void *args)
                 corr += delta1[i] * delta2[i];
             corr = corr/(sigma1*sigma2*(float)kernel_point_count);
             
-            if (corr >= c_args->threshold)
+            if (corr >= t->threshold)
             {
-                if (pthread_mutex_lock(&c_args->lock) != 0)
-                    return THREAD_RETURN_VALUE;
-                c_args->cb(p1, p2, corr, c_args->cb_args);
-                if (pthread_mutex_unlock(&c_args->lock) != 0)
-                    return THREAD_RETURN_VALUE;
+                correlation_match m;
+                m.point1 = p1;
+                m.point2 = p2;
+                m.corr = corr;
+                if (pthread_mutex_lock(&ctx->lock) != 0)
+                    goto cleanup;
+                if (t->matches_count >= ctx->matches_limit)
+                {
+                    ctx->matches_limit += MATCH_RESULT_GROW_SIZE;
+                    t->matches = realloc(t->matches, sizeof(correlation_match)*ctx->matches_limit);
+                }
+                t->matches[t->matches_count] = m;
+                t->matches_count++;
+                if (pthread_mutex_unlock(&ctx->lock) != 0)
+                    goto cleanup;
             }
         }
     }
+
+cleanup:
     free(delta1);
+    pthread_mutex_lock(&ctx->lock);
+    ctx->threads_completed++;
+    pthread_mutex_unlock(&ctx->lock);
+    if (ctx->threads_completed >= t->num_threads)
+        t->completed = 1;
     return THREAD_RETURN_VALUE;
 }
 
-int correlation_correlate_points(correlation_image *img1, correlation_image *img2,
-    correlation_point *points1, correlation_point *points2, size_t points1_size, size_t points2_size, 
-    int kernel_size, float threshold, int num_threads,
-    correlation_matched cb, void *cb_args)
+int correlation_match_points_start(match_task *task)
 {
-    pthread_t *threads;
-    correlate_points_args args;
-
+    int kernel_size = task->kernel_size;
     int kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
+    match_task_ctx *ctx = malloc(sizeof(match_task_ctx));
     
-    threads = malloc(sizeof(pthread_t)*num_threads);
+    task->internal = ctx;
+    ctx->threads= malloc(sizeof(pthread_t)*task->num_threads);
 
-    args.img1 = img1;
-    args.img2 = img2;
-    args.p1 = 0;
-    args.points1 = points1;
-    args.points2 = points2;
-    args.points1_size = points1_size;
-    args.points2_size = points2_size;
-    args.kernel_size = kernel_size;
-    args.kernel_point_count = kernel_point_count;
-    args.threshold = threshold;
-    args.cb = cb;
-    args.cb_args = cb_args;
+    ctx->p1 = 0;
+    task->percent_complete = 0.0;
+    ctx->threads_completed = 0;
+    task->completed = 0;
 
-    args.delta2 = malloc(sizeof(float)*kernel_point_count*points2_size);
-    args.sigma2 = malloc(sizeof(float)*points2_size);
-    for(size_t p=0;p<points2_size;p++){
-        int x = points2[p].x, y = points2[p].y;
-        float *delta2 = &args.delta2[p*kernel_point_count];
-        float *sigma2 = &args.sigma2[p];
-        compute_correlation_data(img2, kernel_size, x, y, sigma2, delta2);
+    ctx->delta2 = malloc(sizeof(float)*kernel_point_count*task->points2_size);
+    ctx->sigma2 = malloc(sizeof(float)*task->points2_size);
+    ctx->matches_limit = MATCH_RESULT_GROW_SIZE;
+    task->matches = malloc(sizeof(correlation_match)*ctx->matches_limit);
+    task->matches_count = 0;
+    for(size_t p=0;p<task->points2_size;p++){
+        int x = task->points2[p].x, y = task->points2[p].y;
+        float *delta2 = &ctx->delta2[p*kernel_point_count];
+        float *sigma2 = &ctx->sigma2[p];
+        compute_correlation_data(&task->img2, kernel_size, x, y, sigma2, delta2);
     }
 
-    if (pthread_mutex_init(&args.lock, NULL) != 0)
+    if (pthread_mutex_init(&ctx->lock, NULL) != 0)
         return 0;
 
-    for (int i = 0; i < num_threads; i++)
-        pthread_create(&threads[i], NULL, correlate_points_task, &args);
+    for (int i = 0; i < task->num_threads; i++)
+        pthread_create(&ctx->threads[i], NULL, correlate_points_task, task);
 
-    for (int i = 0; i < num_threads; i++)
-        pthread_join(threads[i], NULL);
+    return 1;
+}
 
-    pthread_mutex_destroy(&args.lock);
-    free(threads);
-    free(args.delta2);
-    free(args.sigma2);
+void correlation_match_points_cancel(match_task *t)
+{
+    if (t == NULL)
+        return;
+    t->completed = 1;
+}
+
+int correlation_match_points_complete(match_task *t)
+{
+    match_task_ctx *ctx;
+    if (t == NULL || t->internal == NULL)
+        return 1;
+    ctx = t->internal;
+    for (int i = 0; i < t->num_threads; i++)
+        pthread_join(ctx->threads[i], NULL);
+
+    pthread_mutex_destroy(&ctx->lock);
+    free(ctx->threads);
+    free(ctx->delta2);
+    free(ctx->sigma2);
+    free(t->internal);
+    t->internal = NULL;
     return 1;
 }
 
