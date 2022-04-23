@@ -56,6 +56,8 @@ jobs:
     - name: Install cibuildwheel
       run: python3 -m pip install cibuildwheel==2.4.0
     - name: Build wheels
+      env:
+        CIBW_BUILD_VERBOSITY: 1
       run: python3 -m cibuildwheel --output-dir wheelhouse
     - name: Upload wheel artifacts
       uses: actions/upload-artifact@v3
