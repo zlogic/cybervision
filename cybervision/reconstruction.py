@@ -128,18 +128,16 @@ class Reconstructor:
                 stdev = statistics.stdev(z_values)
                 qw = int((q[2] - q[0])/2)
                 qh = int((q[3] - q[1])/2)
-                keep_points = []
-                for p in quad_points:
-                    z = p[2]
-                    if abs(z-mean)<self.filter_match_stddev*stdev:
-                        keep_points.append(p)
                 if stdev > self.filter_split_stddev and not last_iteration:
                     new_quadrants.append(self.filter_quad((q[0],    q[1],    q[0]+qw, q[1]+qh), quad_points))
                     new_quadrants.append(self.filter_quad((q[0]+qw, q[1],    q[2],    q[1]+qh), quad_points))
                     new_quadrants.append(self.filter_quad((q[0],    q[1]+qh, q[0]+qw, q[3]   ), quad_points))
                     new_quadrants.append(self.filter_quad((q[0]+qw, q[1]+qh, q[2],    q[3]   ), quad_points))
                 else:
-                    filtered_points = filtered_points+keep_points
+                    for p in quad_points:
+                        (x, y, z) = p
+                        if abs(z-mean)<self.filter_match_stddev*stdev and x>=q[0] and y>=q[1] and x<q[2] and y<q[3]:
+                            filtered_points.append(p)
                 
                 current_time = datetime.now()
                 if (current_time-last_progress_update).total_seconds() > 0.5:
