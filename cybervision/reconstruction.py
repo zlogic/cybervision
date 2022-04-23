@@ -26,7 +26,7 @@ class Reconstructor:
             (completed, percent_complete) = machine.match_status(matcher_task)
             if not completed:
                 progressbar.update(percent_complete)
-                time.sleep(0.1)
+                time.sleep(0.5)
             else:
                 return machine.match_result(matcher_task)
 
@@ -91,7 +91,7 @@ class Reconstructor:
             (completed, percent_complete) = machine.correlate_status(correlate_task)
             if not completed:
                 progressbar.update(percent_complete)
-                time.sleep(0.1)
+                time.sleep(0.5)
             else:
                 points3d = machine.correlate_result(correlate_task)
                 return [(p[0], p[1], p[2]) for p in points3d]
@@ -156,11 +156,23 @@ class Reconstructor:
         if not self.matches:
             raise NoMatchesFound('Failed to fit the model')
 
+        matches_count = len(self.matches)
+        if not self.keep_intermediate_results:
+            self.matches = []
+            self.points1 = []
+            self.points2 = []
+
         time_completed_ransac = datetime.now()
         self.log.info(f'Completed RANSAC fitting in {time_completed_ransac-time_completed_matching}')
-        self.log.info(f'Kept {len(self.matches)} matches')
+        self.log.info(f'Kept {matches_count} matches')
+        
+        if matches_count == 0:
+            raise NoMatchesFound('No reliable matches found')
 
         self.points3d = self.create_surface()
+        if not self.keep_intermediate_results:
+            del(self.img1)
+            del(self.img2)
 
         time_completed_surface = datetime.now()
         self.log.info(f'Completed surface generation in {time_completed_surface-time_completed_ransac}')
@@ -169,8 +181,8 @@ class Reconstructor:
         time_completed = datetime.now()
         self.log.info(f'Completed reconstruction in {time_completed-time_started}')
     
-        if not self.matches:
-            raise NoMatchesFound('No reliable matches found')
+        if not self.points3d:
+            raise NoMatchesFound('No reliable correlation points found')
 
         self.points3d = self.filter_peaks()
 
@@ -183,11 +195,12 @@ class Reconstructor:
             matches.append((p1[0], p1[1], p2[0], p2[1], corr))
         return matches
 
-    def __init__(self, img1: Image, img2: Image):
+    def __init__(self, img1: Image, img2: Image, keep_intermediate_results=False):
         self.img1 = img1
         self.img2 = img2
         self.log = logging.getLogger("reconstructor")
         self.num_threads = os.cpu_count()
+        self.keep_intermediate_results = keep_intermediate_results
 
         # Tunable parameters
         self.fast_threshold = 15

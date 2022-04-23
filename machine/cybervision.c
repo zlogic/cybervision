@@ -423,8 +423,6 @@ machine_correlate_result(PyObject *self, PyObject *args)
         return NULL;
     }
     
-    out = PyList_New(0);
-
     correlation_cross_correlate_complete(task);
 
     out = PyList_New(0);
@@ -437,6 +435,7 @@ machine_correlate_result(PyObject *self, PyObject *args)
                 continue;
             PyObject *point = Py_BuildValue("(iif)", x, y, depth);
             PyList_Append(out, point);
+            Py_DECREF(point);
         }
     }
 
