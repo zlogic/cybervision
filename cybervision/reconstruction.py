@@ -8,7 +8,7 @@ from PIL import Image, ImageOps
 import numpy as np
 import scipy.ndimage
 
-from cybervision.machine import detect, match_start, match_status, match_result, correlate
+import cybervision.machine as machine
 from cybervision.progressbar import Progressbar
 
 class NoMatchesFound(Exception):
@@ -17,18 +17,18 @@ class NoMatchesFound(Exception):
 
 class Reconstructor:
     def fast_points(self, img: Image):
-        return detect(img, self.fast_threshold, self.fast_method, self.fast_nonmax)
+        return machine.detect(img, self.fast_threshold, self.fast_method, self.fast_nonmax)
 
     def match_points(self):
-        matcher_task = match_start(self.img1, self.img2, self.points1, self.points2, self.correlation_kernel_size, self.correlation_threshold, self.num_threads)
+        matcher_task = machine.match_start(self.img1, self.img2, self.points1, self.points2, self.correlation_kernel_size, self.correlation_threshold, self.num_threads)
         progressbar = Progressbar()
         while True:
-            (completed, percent_complete) = match_status(matcher_task)
+            (completed, percent_complete) = machine.match_status(matcher_task)
             if not completed:
                 progressbar.update(percent_complete)
                 time.sleep(0.1)
             else:
-                return match_result(matcher_task)
+                return machine.match_result(matcher_task)
 
     def calculate_model(self, matches):
         angle = 0
@@ -85,8 +85,16 @@ class Reconstructor:
 
     def create_surface(self):
         # TODO: only angles between pi/4 and 3*pi/4 have been tested, others might require transposing or rotation
-        points3d = correlate(self.img1, self.img2, self.angle, self.triangulation_corridor, self.triangulation_kernel_size, self.triangulation_threshold, self.num_threads)
-        return [(p[0], p[1], p[2]) for p in points3d]
+        correlate_task = machine.correlate_start(self.img1, self.img2, self.angle, self.triangulation_corridor, self.triangulation_kernel_size, self.triangulation_threshold, self.num_threads)
+        progressbar = Progressbar()
+        while True:
+            (completed, percent_complete) = machine.correlate_status(correlate_task)
+            if not completed:
+                progressbar.update(percent_complete)
+                time.sleep(0.1)
+            else:
+                points3d = machine.correlate_result(correlate_task)
+                return [(p[0], p[1], p[2]) for p in points3d]
 
     def filter_peaks(self):
         depth_grid = np.full((self.img1.width, self.img1.height), np.nan)

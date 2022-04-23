@@ -28,13 +28,28 @@ typedef struct {
 
     match_task_internal internal;
 } match_task;
-int correlation_match_points_start(match_task *match_task);
-void correlation_match_points_cancel(match_task *match_task);
-int correlation_match_points_complete(match_task *match_task);
+int correlation_match_points_start(match_task*);
+void correlation_match_points_cancel(match_task*);
+int correlation_match_points_complete(match_task*);
 
-int correlation_correlate_images(correlation_image *img1, correlation_image *img2,
-    float angle, int corridor_size,
-    int kernel_size, float threshold, int num_threads,
-    float *out_points);
+typedef void* cross_correlate_task_internal;
+typedef struct {
+    correlation_image img1, img2;
+    float angle;
+    int corridor_size;
+    int kernel_size;
+    float threshold;
+    int num_threads;
+
+    float percent_complete;
+    int completed;
+
+    float *out_points;
+
+    cross_correlate_task_internal internal;
+} cross_correlate_task;
+int correlation_cross_correlate_start(cross_correlate_task*);
+void correlation_cross_correlate_cancel(cross_correlate_task*);
+int correlation_cross_correlate_complete(cross_correlate_task*);
 
 #endif
