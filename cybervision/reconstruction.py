@@ -107,7 +107,7 @@ class Reconstructor:
         return (new_quad[0], new_quad[1], new_quad[2], new_quad[3], keep_points)
 
     def filter_peaks_quad(self, width, height):
-        filtered_points = []
+        filtered_points = set()
         quadrants = [(0, 0, width, height, self.points3d)]
         iterations = math.floor(math.log(min(width, height)/self.filter_min_size, 2))
         progressbar = Progressbar()
@@ -135,9 +135,8 @@ class Reconstructor:
                     new_quadrants.append(self.filter_quad((q[0]+qw, q[1]+qh, q[2],    q[3]   ), quad_points))
                 else:
                     for p in quad_points:
-                        (x, y, z) = p
-                        if abs(z-mean)<self.filter_match_stddev*stdev and x>=q[0] and y>=q[1] and x<q[2] and y<q[3]:
-                            filtered_points.append(p)
+                        if abs(p[2]-mean)<self.filter_match_stddev*stdev:
+                            filtered_points.add(p)
                 
                 current_time = datetime.now()
                 if (current_time-last_progress_update).total_seconds() > 0.5:
@@ -146,7 +145,7 @@ class Reconstructor:
                     progressbar.update(percent_complete)
             quadrants = new_quadrants
 
-        return filtered_points
+        return list(filtered_points)
 
     def reconstruct(self):
         time_started = datetime.now()
