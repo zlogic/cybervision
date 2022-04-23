@@ -3,6 +3,7 @@ import os
 import random
 import math
 import time
+import statistics
 from datetime import datetime
 from PIL import Image, ImageOps
 import numpy as np
@@ -96,22 +97,22 @@ class Reconstructor:
                 points3d = machine.correlate_result(correlate_task)
                 return [(p[0], p[1], p[2]) for p in points3d]
 
-    def filter_peaks(self):
-        depth_grid = np.full((self.img1.width, self.img1.height), np.nan)
+    def filter_peaks(self, width, height):
+        depth_grid = np.full((width, height), np.nan)
         for (x,y,z) in self.points3d:
             depth_grid[x][y] = z
 
-        new_depth_grid = np.full((self.img1.width, self.img1.height), np.nan)
-        for y in range(self.img1.height):
-            for x in range(self.img1.width):
+        new_depth_grid = np.full((width, height), np.nan)
+        for y in range(height):
+            for x in range(width):
                 z_values = []
                 for j in range (-7, 8):
                     y_point = y+j
-                    if y_point<0 or y_point>=self.img1.height:
+                    if y_point<0 or y_point>=height:
                         continue
                     for i in range (-7, 8):
                         x_point = x+i
-                        if x_point<0 or x_point>=self.img1.width:
+                        if x_point<0 or x_point>=width:
                             continue
                         z = depth_grid[x_point][y_point]
                         if math.isnan(z):
@@ -127,6 +128,58 @@ class Reconstructor:
         depth_grid = new_depth_grid
 
         return [(x, y, z) for (x,y), z in np.ndenumerate(depth_grid) if not math.isnan(z)]
+
+    def filter_quad(self, new_quad, current_points):
+        keep_points = []
+        for p in current_points:
+            (x, y, _) = p
+            if x>=new_quad[0] and x<new_quad[3] and y>=new_quad[2] and y<new_quad[3]:
+                keep_points.append(p)
+        return (new_quad[0], new_quad[1], new_quad[2], new_quad[3], keep_points)
+
+    def filter_peaks_quad(self, width, height):
+        filtered_points = []
+        quadrants = [(0, 0, width, height, self.points3d)]
+        iterations = int(math.log(min(width, height)/self.filter_min_size, 2))
+        progressbar = Progressbar()
+        for i in range(iterations):
+            last_iteration = i == iterations-1
+            if not quadrants:
+                break
+            new_quadrants = []
+            for q in quadrants:
+                z_values = []
+                quad_points = q[4]
+                if not quad_points:
+                    continue
+                for p in quad_points:
+                    z_values.append(p[2])
+                median = statistics.median(z_values)
+                mean = statistics.mean(z_values)
+                stdev = statistics.stdev(z_values)
+                min_z = min(z_values)
+                max_z = max(z_values)
+                qw = int((q[2] - q[0])/2)
+                qh = int((q[3] - q[1])/2)
+                max_z_distance = max(qw, qh)
+                keep_points = []
+                for p in quad_points:
+                    z = p[2]
+                    if abs(z-median)<self.filter_max_slope*max_z_distance and abs(z-mean)<self.filter_stddev*stdev:
+                        keep_points.append(p)
+                if (median-min_z>self.filter_split_slope*max_z_distance or max_z-median>self.filter_split_slope*max_z_distance) and not last_iteration:
+                    new_quadrants.append(self.filter_quad((q[0],    q[1],    q[0]+qw, q[1]+qh), quad_points))
+                    new_quadrants.append(self.filter_quad((q[0]+qw, q[1],    q[2],    q[1]+qh), quad_points))
+                    new_quadrants.append(self.filter_quad((q[0],    q[1]+qh, q[0]+qw, q[3]   ), quad_points))
+                    new_quadrants.append(self.filter_quad((q[0]+qw, q[1]+qh, q[2],    q[3]   ), quad_points))
+                else:
+                    filtered_points = filtered_points+keep_points
+
+            quadrants = new_quadrants
+            percent_complete = 100.0*(i+1)/iterations
+            progressbar.update(percent_complete)
+
+        return filtered_points
 
     def reconstruct(self):
         time_started = datetime.now()
@@ -170,6 +223,8 @@ class Reconstructor:
             raise NoMatchesFound('No reliable matches found')
 
         self.points3d = self.create_surface()
+        w1 = self.img1.width
+        h1 = self.img1.height
         if not self.keep_intermediate_results:
             del(self.img1)
             del(self.img2)
@@ -178,13 +233,18 @@ class Reconstructor:
         self.log.info(f'Completed surface generation in {time_completed_surface-time_completed_ransac}')
         self.log.info(f'Surface contains {len(self.points3d)} points')
 
-        time_completed = datetime.now()
-        self.log.info(f'Completed reconstruction in {time_completed-time_started}')
     
         if not self.points3d:
             raise NoMatchesFound('No reliable correlation points found')
 
-        self.points3d = self.filter_peaks()
+        #self.points3d = self.filter_peaks(width=w1, height=h1)
+        self.points3d = self.filter_peaks_quad(width=w1, height=h1)
+
+        time_completed_filter = datetime.now()
+        self.log.info(f'Completed filtering peaks in {time_completed_filter-time_completed_surface}')
+
+        time_completed = datetime.now()
+        self.log.info(f'Completed reconstruction in {time_completed-time_started}')
 
     def get_matches(self):
         matches = []
@@ -219,3 +279,7 @@ class Reconstructor:
         self.ransac_n = 10
         self.ransac_t = 0.01
         self.ransac_d = 10
+        self.filter_min_size = 16
+        self.filter_split_slope = 2.0
+        self.filter_max_slope = 0.25
+        self.filter_stddev = 2.0

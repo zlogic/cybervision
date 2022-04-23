@@ -24,7 +24,7 @@ class Visualiser:
             return COLORMAP[0] 
         if p>=1:
             return COLORMAP[-1]
-        step = 1/(len(COLORMAP)-1)
+        step = 1/(len(COLORMAP)-2)
         box = math.floor(p/step)
         ratio = (p-step*box)/step
         c1 = COLORMAP[box]
