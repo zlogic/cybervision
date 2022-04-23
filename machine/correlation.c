@@ -98,7 +98,7 @@ THREAD_FUNCTION correlate_points_task(void *args)
         if (p1 >= points1_size)
             goto cleanup;
 
-        t->percent_complete = 100.0*(float)p1/(float)points1_size;
+        t->percent_complete = 100.0F*(float)p1/(float)points1_size;
 
         x1 = points1[p1].x, y1 = points1[p1].y;
         if (x1-kernel_size<0 || x1+kernel_size>=w1 || y1-kernel_size<0 || y1+kernel_size>=h1)
@@ -349,7 +349,7 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
                 goto cleanup;
             ctx->processed_points += processed_points;
             if (points_to_process != 0)
-                t->percent_complete = 100.0*(float)ctx->processed_points/(points_to_process);
+                t->percent_complete = 100.0F*(float)ctx->processed_points/(points_to_process);
             if (pthread_mutex_unlock(&ctx->lock) != 0)
                 goto cleanup;
             processed_points = 0;
