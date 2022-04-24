@@ -90,7 +90,7 @@ class Visualiser:
         x_coords = np.linspace(0, self.img1.width, self.img1.width, endpoint=False)
         y_coords = np.linspace(0, self.img1.height, self.img1.height, endpoint=False)
         xx, yy = np.meshgrid(x_coords, y_coords)
-        xy_coords = [(p[0], p[1]) for p in self.points3d]
+        xy_coords = [(p[0], self.img1.height-p[1]) for p in self.points3d]
         z_values = [p[2] for p in self.points3d]
         interp_grid = scipy.interpolate.griddata(xy_coords, z_values, (xx, yy), method='linear')
 
@@ -101,8 +101,8 @@ class Visualiser:
     def show_surface_mesh(self):
         # Too slow without resampling
         x = [p[0] for p in self.points3d]
-        y = [p[1] for p in self.points3d]
-        xy_points = [[p[0], p[1]] for p in self.points3d]
+        y = [self.img1.height-p[1] for p in self.points3d]
+        xy_points = [[p[0], self.img1.height-p[1]] for p in self.points3d]
         z_values = [p[2] for p in self.points3d]
 
         mesh = scipy.spatial.Delaunay(xy_points)
