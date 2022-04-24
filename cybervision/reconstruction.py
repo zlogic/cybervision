@@ -181,8 +181,8 @@ class Reconstructor:
         return matches
 
     def __init__(self, img1: Image, img2: Image, keep_intermediate_results=False):
-        self.img1 = img1
-        self.img2 = img2
+        self.img1 = img1.convert('L')
+        self.img2 = img2.convert('L')
         self.log = logging.getLogger("reconstructor")
         self.num_threads = os.cpu_count()
         self.keep_intermediate_results = keep_intermediate_results
