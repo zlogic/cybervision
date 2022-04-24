@@ -10,7 +10,7 @@ Cybervision can match those images and use the parallax effect to determine the 
 ⚠️ Only high-contrast images with parallel projection are supported.
 Regular photos are not likely to work correctly, because regular cameras have perspective projection.
 
-More information is available in the [Wiki](/zlogic/cybervision/wiki).
+More information is available in the [Wiki](https://github.com/zlogic/cybervision/wiki).
 
 ## How to use it
 
