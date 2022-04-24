@@ -9,16 +9,21 @@ from PIL import Image, ImageOps
 import cybervision.machine as machine
 from cybervision.progressbar import Progressbar
 
+
 class NoMatchesFound(Exception):
     def __init__(self, message):
         self.message = message
+
 
 class Reconstructor:
     def fast_points(self, img: Image):
         return machine.detect(img, self.fast_threshold, self.fast_method, self.fast_nonmax)
 
     def match_points(self):
-        matcher_task = machine.match_start(self.img1, self.img2, self.points1, self.points2, self.correlation_kernel_size, self.correlation_threshold, self.num_threads)
+        matcher_task = machine.match_start(self.img1, self.img2,
+                                           self.points1, self.points2,
+                                           self.correlation_kernel_size, self.correlation_threshold,
+                                           self.num_threads)
         progressbar = Progressbar()
         while True:
             (completed, percent_complete) = machine.match_status(matcher_task)
@@ -36,11 +41,11 @@ class Reconstructor:
             p2 = self.points2[match[1]]
             dx = p2[0] - p1[0]
             dy = p2[1] - p1[1]
-            l = math.sqrt(dx**2 + dy**2)
-            if abs(dx)>abs(dy):
-                angle += math.asin(dy/l) if dx>0 else math.pi-math.asin(dy/l)
+            length = math.sqrt(dx**2 + dy**2)
+            if abs(dx) > abs(dy):
+                angle += math.asin(dy/length) if dx > 0 else math.pi-math.asin(dy/length)
             else:
-                angle += math.acos(dx/l) if dy>0 else -math.acos(dx/l)
+                angle += math.acos(dx/length) if dy > 0 else -math.acos(dx/length)
         return angle/len(matches)
 
     def ransac_fit(self):
@@ -50,10 +55,10 @@ class Reconstructor:
             p2 = self.points2[match[1]]
             dx = p2[0] - p1[0]
             dy = p2[1] - p1[1]
-            l = math.sqrt(dx**2 + dy**2)
-            if l>self.ransac_min_length:
+            legth = math.sqrt(dx**2 + dy**2)
+            if legth > self.ransac_min_length:
                 suitable_matches.append(match)
-        
+
         best_direction = math.nan
         best_error = math.inf
         best_matches = []
@@ -83,7 +88,10 @@ class Reconstructor:
 
     def create_surface(self):
         # TODO: only angles between pi/4 and 3*pi/4 have been tested, others might require transposing or rotation
-        correlate_task = machine.correlate_start(self.img1, self.img2, self.angle, self.triangulation_corridor, self.triangulation_kernel_size, self.triangulation_threshold, self.num_threads)
+        correlate_task = machine.correlate_start(self.img1, self.img2, self.angle,
+                                                 self.triangulation_corridor, self.triangulation_kernel_size,
+                                                 self.triangulation_threshold,
+                                                 self.num_threads)
         progressbar = Progressbar()
         while True:
             (completed, percent_complete) = machine.correlate_status(correlate_task)
@@ -131,15 +139,15 @@ class Reconstructor:
                 qw = int((q[2] - q[0])/2)
                 qh = int((q[3] - q[1])/2)
                 if stdev_z > self.filter_split_stddev and not last_iteration:
-                    new_quadrants.append(self.filter_quad((q[0],    q[1],    q[0]+qw, q[1]+qh), quad_points))
-                    new_quadrants.append(self.filter_quad((q[0]+qw, q[1],    q[2],    q[1]+qh), quad_points))
-                    new_quadrants.append(self.filter_quad((q[0],    q[1]+qh, q[0]+qw, q[3]   ), quad_points))
-                    new_quadrants.append(self.filter_quad((q[0]+qw, q[1]+qh, q[2],    q[3]   ), quad_points))
+                    new_quadrants.append(self.filter_quad((q[0], q[1], q[0]+qw, q[1]+qh), quad_points))
+                    new_quadrants.append(self.filter_quad((q[0]+qw, q[1], q[2], q[1]+qh), quad_points))
+                    new_quadrants.append(self.filter_quad((q[0], q[1]+qh, q[0]+qw, q[3]), quad_points))
+                    new_quadrants.append(self.filter_quad((q[0]+qw, q[1]+qh, q[2], q[3]), quad_points))
                 else:
                     for p in quad_points:
-                        if abs(p[2]-mean_z)<self.filter_match_stddev*stdev_z:
+                        if abs(p[2]-mean_z) < self.filter_match_stddev*stdev_z:
                             filtered_points.add(p)
-                
+
                 current_time = datetime.now()
                 if (current_time-last_progress_update).total_seconds() > 0.5:
                     last_progress_update = current_time
@@ -186,7 +194,7 @@ class Reconstructor:
         time_completed_ransac = datetime.now()
         self.log.info(f'Completed RANSAC fitting in {time_completed_ransac-time_completed_matching}')
         self.log.info(f'Kept {matches_count} matches')
-        
+
         if matches_count == 0:
             raise NoMatchesFound('No reliable matches found')
 
@@ -200,7 +208,7 @@ class Reconstructor:
         time_completed_surface = datetime.now()
         self.log.info(f'Completed surface generation in {time_completed_surface-time_completed_ransac}')
         self.log.info(f'Surface contains {len(self.points3d)} points')
-    
+
         if not self.points3d:
             raise NoMatchesFound('No reliable correlation points found')
 
@@ -240,7 +248,7 @@ class Reconstructor:
         self.triangulation_kernel_size = 5
         self.triangulation_threshold = 0.8
         self.triangulation_corridor = 5
-        #self.triangulation_corridor = 7
+        # self.triangulation_corridor = 7
         self.ransac_min_length = 3
         self.ransac_k = 1000
         self.ransac_n = 10

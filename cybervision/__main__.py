@@ -5,6 +5,7 @@ from cybervision.image import SEMImage
 from cybervision.reconstruction import Reconstructor, NoMatchesFound
 from cybervision.visualisation import Visualiser
 
+
 def main():
     logging.basicConfig(level="INFO")
 
@@ -23,10 +24,10 @@ def main():
         reconstructor.reconstruct()
     except NoMatchesFound as err:
         sys.exit(err)
-    
+
     v = Visualiser(img1.img, img2.img, reconstructor.get_matches(), reconstructor.points3d)
     v.show_results()
 
+
 if __name__ == '__main__':
     main()
- 
