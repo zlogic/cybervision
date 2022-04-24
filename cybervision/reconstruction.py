@@ -8,6 +8,7 @@ from PIL import Image, ImageOps
 
 import cybervision.machine as machine
 from cybervision.progressbar import Progressbar
+from cybervision.filter import PeakFilter
 
 
 class NoMatchesFound(Exception):
@@ -102,60 +103,9 @@ class Reconstructor:
                 points3d = machine.correlate_result(correlate_task)
                 return [(p[0], p[1], p[2]) for p in points3d]
 
-    def filter_quad(self, new_quad, current_points):
-        keep_points = []
-        halfsize = ((new_quad[2]-new_quad[0])/2, (new_quad[3]-new_quad[1])/2)
-        center = (new_quad[0]+halfsize[0], new_quad[1]+halfsize[1])
-        max_distance = self.filter_quad_radius*(halfsize[0]**2 + halfsize[1]**2)
-        for p in current_points:
-            distance = (p[0]-center[0])**2 + (p[1]-center[1])**2
-            if distance < max_distance:
-                keep_points.append(p)
-        return (new_quad[0], new_quad[1], new_quad[2], new_quad[3], keep_points)
-
-    def filter_peaks_quad(self, width, height):
-        filtered_points = set()
-        quadrants = [(0, 0, width, height, self.points3d)]
-        iterations = math.floor(math.log(min(width, height)/self.filter_min_size, 2))
-        progressbar = Progressbar()
-        last_progress_update = datetime.now()
-        for i in range(iterations):
-            last_iteration = i == iterations-1
-            if not quadrants:
-                break
-            new_quadrants = []
-            for (j, q) in enumerate(quadrants):
-                quad_points = q[4]
-                if not quad_points:
-                    continue
-                mean_z = 0
-                for p in quad_points:
-                    mean_z = mean_z+p[2]
-                mean_z = mean_z/len(quad_points)
-                stdev_z = 0
-                for p in quad_points:
-                    stdev_z = stdev_z+(p[2]-mean_z)**2
-                stdev_z = math.sqrt(stdev_z/len(quad_points))
-                qw = int((q[2] - q[0])/2)
-                qh = int((q[3] - q[1])/2)
-                if stdev_z > self.filter_split_stddev and not last_iteration:
-                    new_quadrants.append(self.filter_quad((q[0], q[1], q[0]+qw, q[1]+qh), quad_points))
-                    new_quadrants.append(self.filter_quad((q[0]+qw, q[1], q[2], q[1]+qh), quad_points))
-                    new_quadrants.append(self.filter_quad((q[0], q[1]+qh, q[0]+qw, q[3]), quad_points))
-                    new_quadrants.append(self.filter_quad((q[0]+qw, q[1]+qh, q[2], q[3]), quad_points))
-                else:
-                    for p in quad_points:
-                        if abs(p[2]-mean_z) < self.filter_match_stddev*stdev_z:
-                            filtered_points.add(p)
-
-                current_time = datetime.now()
-                if (current_time-last_progress_update).total_seconds() > 0.5:
-                    last_progress_update = current_time
-                    percent_complete = 100.0*(i+j/len(quadrants))/iterations
-                    progressbar.update(percent_complete)
-            quadrants = new_quadrants
-
-        return list(filtered_points)
+    def filter_peaks(self, width, height):
+        filter = PeakFilter(self.points3d, width, height)
+        return filter.filter_peaks()
 
     def reconstruct(self):
         time_started = datetime.now()
@@ -212,7 +162,7 @@ class Reconstructor:
         if not self.points3d:
             raise NoMatchesFound('No reliable correlation points found')
 
-        self.points3d = self.filter_peaks_quad(width=w1, height=h1)
+        self.points3d = self.filter_peaks(width=w1, height=h1)
 
         time_completed_filter = datetime.now()
         self.log.info(f'Completed peak filtering in {time_completed_filter-time_completed_surface}')
@@ -254,7 +204,3 @@ class Reconstructor:
         self.ransac_n = 10
         self.ransac_t = 0.01
         self.ransac_d = 10
-        self.filter_min_size = 16
-        self.filter_split_stddev = 1.0
-        self.filter_match_stddev = 0.25
-        self.filter_quad_radius = 1.5
