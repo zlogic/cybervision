@@ -3,7 +3,6 @@ import os
 import random
 import math
 import time
-import statistics
 from datetime import datetime
 from PIL import Image, ImageOps
 
@@ -118,24 +117,27 @@ class Reconstructor:
                 break
             new_quadrants = []
             for (j, q) in enumerate(quadrants):
-                z_values = []
                 quad_points = q[4]
                 if not quad_points:
                     continue
+                mean_z = 0
                 for p in quad_points:
-                    z_values.append(p[2])
-                mean = statistics.mean(z_values)
-                stdev = statistics.stdev(z_values)
+                    mean_z = mean_z+p[2]
+                mean_z = mean_z/len(quad_points)
+                stdev_z = 0
+                for p in quad_points:
+                    stdev_z = stdev_z+(p[2]-mean_z)**2
+                stdev_z = math.sqrt(stdev_z/len(quad_points))
                 qw = int((q[2] - q[0])/2)
                 qh = int((q[3] - q[1])/2)
-                if stdev > self.filter_split_stddev and not last_iteration:
+                if stdev_z > self.filter_split_stddev and not last_iteration:
                     new_quadrants.append(self.filter_quad((q[0],    q[1],    q[0]+qw, q[1]+qh), quad_points))
                     new_quadrants.append(self.filter_quad((q[0]+qw, q[1],    q[2],    q[1]+qh), quad_points))
                     new_quadrants.append(self.filter_quad((q[0],    q[1]+qh, q[0]+qw, q[3]   ), quad_points))
                     new_quadrants.append(self.filter_quad((q[0]+qw, q[1]+qh, q[2],    q[3]   ), quad_points))
                 else:
                     for p in quad_points:
-                        if abs(p[2]-mean)<self.filter_match_stddev*stdev:
+                        if abs(p[2]-mean_z)<self.filter_match_stddev*stdev_z:
                             filtered_points.add(p)
                 
                 current_time = datetime.now()
