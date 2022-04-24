@@ -1,22 +1,19 @@
 import sys
 from setuptools import setup, Extension
+from glob import glob
 
 extra_compile_args = []
 sources = [
         'machine/cybervision.c',
-        'machine/correlation.c',
-        'machine/fast/fast_9.c',
-        'machine/fast/fast_10.c',
-        'machine/fast/fast_11.c', 
-        'machine/fast/fast_12.c',
-        'machine/fast/fast.c',
-        'machine/fast/nonmax.c'
+        'machine/correlation.c'
     ]
 
 if sys.platform in ['darwin', 'linux']:
     extra_compile_args.append('-pthread')
 elif sys.platform == 'win32':
     sources.append('machine/win32/pthread.c')
+
+sources = sources + glob('machine/fast/*.c')
 
 machine = Extension(
     'cybervision.machine',
@@ -51,7 +48,6 @@ setup(
     setup_requires=['wheel'],
     install_requires=[
         "Pillow>=9.1.0",
-        "matplotlib>=3.5.1",
         "scipy>=1.8.0",
         "numpy>=1.22.3"
     ]

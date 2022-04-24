@@ -13,6 +13,10 @@ def main():
     parser.add_argument('img1')
     parser.add_argument('img2')
     parser.add_argument('--resize-scale', type=float, default=1.0)
+    parser.add_argument('--interpolate', dest='interpolate', action='store_true')
+    parser.add_argument('--no-interpolate', dest='interpolate', action='store_false')
+    parser.set_defaults(interpolate=True)
+    parser.add_argument('--output-file', required=True)
     args = parser.parse_args()
 
     img1 = SEMImage(args.img1, args.resize_scale)
@@ -25,8 +29,11 @@ def main():
     except NoMatchesFound as err:
         sys.exit(err)
 
-    v = Visualiser(img1.img, img2.img, reconstructor.get_matches(), reconstructor.points3d)
-    v.show_results()
+    v = Visualiser(img1.img, img2.img, reconstructor.points3d)
+    if args.interpolate:
+        v.save_surface_image_interpolated(args.output_file)
+    else:
+        v.save_surface_image(args.output_file)
 
 
 if __name__ == '__main__':

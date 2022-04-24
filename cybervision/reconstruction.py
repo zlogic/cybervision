@@ -136,10 +136,9 @@ class Reconstructor:
             raise NoMatchesFound('Failed to fit the model')
 
         matches_count = len(self.matches)
-        if not self.keep_intermediate_results:
-            self.matches = []
-            self.points1 = []
-            self.points2 = []
+        del(self.matches)
+        del(self.points1)
+        del(self.points2)
 
         time_completed_ransac = datetime.now()
         self.log.info(f'Completed RANSAC fitting in {time_completed_ransac-time_completed_matching}')
@@ -151,9 +150,8 @@ class Reconstructor:
         self.points3d = self.create_surface()
         w1 = self.img1.width
         h1 = self.img1.height
-        if not self.keep_intermediate_results:
-            del(self.img1)
-            del(self.img2)
+        del(self.img1)
+        del(self.img2)
 
         time_completed_surface = datetime.now()
         self.log.info(f'Completed surface generation in {time_completed_surface-time_completed_ransac}')
@@ -180,12 +178,11 @@ class Reconstructor:
             matches.append((p1[0], p1[1], p2[0], p2[1], corr))
         return matches
 
-    def __init__(self, img1: Image, img2: Image, keep_intermediate_results=False):
+    def __init__(self, img1: Image, img2: Image):
         self.img1 = img1.convert('L')
         self.img2 = img2.convert('L')
         self.log = logging.getLogger("reconstructor")
         self.num_threads = os.cpu_count()
-        self.keep_intermediate_results = keep_intermediate_results
 
         # Tunable parameters
         self.fast_threshold = 15
