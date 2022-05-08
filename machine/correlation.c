@@ -21,6 +21,8 @@
 #define MATCH_RESULT_GROW_SIZE 1000
 #define CORRELATION_STRIPE_WIDTH 64
 #define ANGLE_EPSILON 1e-5
+#define CORRELATION_STRIPE_VERTICAL 0
+#define CORRELATION_STRIPE_HORIZONTAL 1
 
 void compute_correlation_data(correlation_image *image, int kernel_size, int x, int y, float *stddev, float *delta)
 {
@@ -212,7 +214,8 @@ int correlation_match_points_complete(match_task *t)
 
 typedef struct {
     correlation_image *img;
-    int *x_front;
+    int *stripe_front;
+    char stripe_direction;
     float *delta;
     float *stddev;
     int kernel_size, kernel_point_count;
@@ -220,17 +223,20 @@ typedef struct {
     int last_pos;
 } correlation_stripe_cache;
 
-void corridor_add_stripe(correlation_stripe_cache *cache, int x)
+void corridor_add_stripe(correlation_stripe_cache *cache, int stripe)
 {
     int corridor_width = (2*cache->corridor_size)+1;
     int next_pos = (cache->last_pos+1) % corridor_width;
-    int c_offset = next_pos*cache->img->height;
-    for (int y=0;y<cache->img->height;y++)
+    int stripe_length = cache->stripe_direction == CORRELATION_STRIPE_VERTICAL ? cache->img->height : cache->img->width;
+    int c_offset = next_pos*stripe_length;
+    for (int i=0;i<stripe_length;i++)
     {
-        int x_pos = x + cache->x_front[y];
-        float *stddev = &cache->stddev[c_offset+y];
-        float *delta = &cache->delta[(c_offset+y)*cache->kernel_point_count];
-        compute_correlation_data(cache->img, cache->kernel_size, x_pos, y, stddev, delta);
+        int stripe_pos = stripe + cache->stripe_front[i];
+        float *stddev = &cache->stddev[c_offset+i];
+        float *delta = &cache->delta[(c_offset+i)*cache->kernel_point_count];
+        int x = cache->stripe_direction == CORRELATION_STRIPE_VERTICAL ? stripe_pos : i;
+        int y = cache->stripe_direction == CORRELATION_STRIPE_VERTICAL ? i : stripe_pos;
+        compute_correlation_data(cache->img, cache->kernel_size, x, y, stddev, delta);
     }
     cache->last_pos = next_pos;
 }
@@ -243,8 +249,9 @@ int cache_get_offset(correlation_stripe_cache *cache, int c)
 
 typedef struct {
     int kernel_point_count;
-    int x_stripe, x_max;
-    int *x_front;
+    int stripe, stripe_max;
+    int *stripe_front;
+    char stripe_direction;
     int threads_completed;
     size_t processed_points;
     pthread_mutex_t lock;
@@ -260,8 +267,9 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
     int kernel_point_count = ctx->kernel_point_count;
     int corridor_size = t->corridor_size;
     int corridor_stripes = 2*corridor_size + 1;
+    int stripe1_length = ctx->stripe_direction == CORRELATION_STRIPE_VERTICAL ? t->img1.height : t->img1.width;
+    int stripe2_length = ctx->stripe_direction == CORRELATION_STRIPE_VERTICAL ? t->img2.height : t->img2.width;
     int w1 = t->img1.width, h1 = t->img1.height;
-    int h2 = t->img2.height;
     int processed_points = 0;
     int points_to_process = (w1-2*kernel_size)*(h1-2*kernel_size);
 
@@ -269,42 +277,44 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
 
     correlation_stripe_cache img2_cache;
     img2_cache.img = &t->img2;
-    img2_cache.x_front = ctx->x_front;
-    img2_cache.delta = malloc(sizeof(float)*kernel_point_count*h2*corridor_stripes);
-    img2_cache.stddev = malloc(sizeof(float)*h2*corridor_stripes);
+    img2_cache.stripe_front = ctx->stripe_front;
+    img2_cache.stripe_direction = ctx->stripe_direction;
+    img2_cache.delta = malloc(sizeof(float)*kernel_point_count*stripe2_length*corridor_stripes);
+    img2_cache.stddev = malloc(sizeof(float)*stripe2_length*corridor_stripes);
     img2_cache.kernel_size = kernel_size;
     img2_cache.kernel_point_count = kernel_point_count;
     img2_cache.corridor_size = corridor_size;
     img2_cache.last_pos = -1;
 
     for(;;){
-        int x_stripe;
-        int x_max;
+        int stripe;
+        int stripe_max;
         if (pthread_mutex_lock(&ctx->lock) != 0)
             goto cleanup;
-        x_stripe = ctx->x_stripe;
-        ctx->x_stripe += CORRELATION_STRIPE_WIDTH;
-        x_max = (x_stripe+CORRELATION_STRIPE_WIDTH) < ctx->x_max ? x_stripe+CORRELATION_STRIPE_WIDTH : ctx->x_max;
+        stripe = ctx->stripe;
+        ctx->stripe += CORRELATION_STRIPE_WIDTH;
+        stripe_max = (stripe+CORRELATION_STRIPE_WIDTH) < ctx->stripe_max ? stripe+CORRELATION_STRIPE_WIDTH : ctx->stripe_max;
         if (pthread_mutex_unlock(&ctx->lock) != 0)
             goto cleanup;
 
-        if (x_stripe >= x_max)
+        if (stripe >= stripe_max)
             break;
         
         img2_cache.last_pos = -1;
         for (int c=-corridor_size;c<corridor_size;c++)
         {
-            int x = x_stripe + c;
-            corridor_add_stripe(&img2_cache, x);
+            int i = stripe + c;
+            corridor_add_stripe(&img2_cache, i);
         }
 
-        for (int i=x_stripe;i<x_max;i++)
+        for (int i=stripe;i<stripe_max;i++)
         {
             corridor_add_stripe(&img2_cache, i+corridor_size);
-            for (int y1=0;y1<h1;y1++)
+            for (int j1=0;j1<stripe1_length;j1++)
             {
                 float stddev1;
-                int x1 = i + ctx->x_front[y1];
+                int x1 = ctx->stripe_direction == CORRELATION_STRIPE_VERTICAL ? i + ctx->stripe_front[j1] : j1;
+                int y1 = ctx->stripe_direction == CORRELATION_STRIPE_VERTICAL ? j1 : i + ctx->stripe_front[j1];
                 float best_distance = NAN;
                 float best_corr = 0;
 
@@ -315,12 +325,13 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
 
                 for (int c=-corridor_size;c<=corridor_size;c++)
                 {
-                    int c_offset = cache_get_offset(&img2_cache, c)*h2;
-                    for (int y2=0;y2<h2;y2++)
+                    int c_offset = cache_get_offset(&img2_cache, c)*stripe2_length;
+                    for (int j2=0;j2<stripe2_length;j2++)
                     {
-                        int x2 = i + c + ctx->x_front[y2];
-                        float stddev2 = img2_cache.stddev[c_offset+y2];
-                        float *delta2 = &img2_cache.delta[(c_offset+y2)*kernel_point_count];
+                        int x2 = ctx->stripe_direction == CORRELATION_STRIPE_VERTICAL ? i + c + ctx->stripe_front[j2] : j2;
+                        int y2 = ctx->stripe_direction == CORRELATION_STRIPE_VERTICAL ? j2 : i + c + ctx->stripe_front[j2];
+                        float stddev2 = img2_cache.stddev[c_offset+j2];
+                        float *delta2 = &img2_cache.delta[(c_offset+j2)*kernel_point_count];
                         float corr = 0;
 
                         if (!isfinite(stddev2))
@@ -371,7 +382,7 @@ cleanup:
 int correlation_cross_correlate_start(cross_correlate_task* task)
 {
     int w1 = task->img1.width, h1 = task->img1.height;
-    int h2 = task->img2.height;
+    int w2 = task->img2.width, h2 = task->img2.height;
     int kernel_point_count = (2*task->kernel_size+1)*(2*task->kernel_size+1);
     cross_correlation_task_ctx *ctx = malloc(sizeof(cross_correlation_task_ctx));
     
@@ -384,33 +395,31 @@ int correlation_cross_correlate_start(cross_correlate_task* task)
     task->completed = 0;
 
     int max_height = h1>h2 ? h1 : h2;
+    int max_width = w1>w2 ? w1 : w2;
 
     ctx->kernel_point_count = kernel_point_count;
-    ctx->x_front = malloc(sizeof(int)*max_height);
+    ctx->stripe_front = malloc(sizeof(int)*max_height);
 
     for (int i=0;i<w1*h1;i++)
         task->out_points[i] = NAN;
 
+    if (fabs(task->dir_y)>=fabs(task->dir_x))
     {
-        float a = 0;
-        int l_offset = 0, r_offset = 0;
-        if (fabs(task->angle-M_PI/2)>ANGLE_EPSILON)
-        {
-            a = 1.0f/tanf(task->angle);
-            if (a>0)
-            {
-                l_offset = (int)(-(float)h1*a);
-                r_offset = (int)((float)h1*a);
-            }
-            else
-            {
-                r_offset = (int)(-(float)h1*a);
-            }
-        }
+        int offset = (int)((float)h1*fabs(task->dir_y));
+        ctx->stripe_direction = CORRELATION_STRIPE_VERTICAL;
         for (int y=0;y<max_height;y++)
-            ctx->x_front[y] = (int)(a*y)+l_offset;
-        ctx->x_stripe = l_offset;
-        ctx->x_max = w1 + r_offset;
+            ctx->stripe_front[y] = (int)(task->dir_x/task->dir_y*y);
+        ctx->stripe = -offset;
+        ctx->stripe_max = w1 + offset;
+    }
+    else
+    {
+        int offset = (int)((float)w1*fabs(task->dir_x));
+        ctx->stripe_direction = CORRELATION_STRIPE_HORIZONTAL;
+        for (int x=0;x<max_width;x++)
+            ctx->stripe_front[x] = (int)(task->dir_y/task->dir_x*x);
+        ctx->stripe = -offset;
+        ctx->stripe_max = h1 + offset;
     }
 
     if (pthread_mutex_init(&ctx->lock, NULL) != 0)
@@ -440,7 +449,7 @@ int correlation_cross_correlate_complete(cross_correlate_task *t)
 
     pthread_mutex_destroy(&ctx->lock);
     free(ctx->threads);
-    free(ctx->x_front);
+    free(ctx->stripe_front);
     free(t->internal);
     t->internal = NULL;
     return 1;

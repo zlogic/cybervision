@@ -310,7 +310,7 @@ machine_match_result(PyObject *self, PyObject *args)
 static PyObject *
 machine_correlate_start(PyObject *self, PyObject *args)
 {
-    float angle;
+    float dir_x, dir_y;
     int corridor_size;
     int kernel_size;
     float threshold;
@@ -321,14 +321,15 @@ machine_correlate_start(PyObject *self, PyObject *args)
 
     PyObject *out = NULL;
 
-    if (!PyArg_ParseTuple(args, "OOfiifi", &img1, &img2, &angle, &corridor_size, &kernel_size, &threshold, &num_threads))
+    if (!PyArg_ParseTuple(args, "OOffiifi", &img1, &img2, &dir_x, &dir_y, &corridor_size, &kernel_size, &threshold, &num_threads))
     {
         PyErr_SetString(CybervisionError, "Failed to parse args");
         return NULL;
     }
 
     task = malloc(sizeof(match_task));
-    task->angle = angle;
+    task->dir_x = dir_x;
+    task->dir_y = dir_y;
     task->corridor_size = corridor_size;
     task->kernel_size = kernel_size;
     task->threshold = threshold;

@@ -35,7 +35,7 @@ int correlation_match_points_complete(match_task*);
 typedef void* cross_correlate_task_internal;
 typedef struct {
     correlation_image img1, img2;
-    float angle;
+    float dir_x, dir_y;
     int corridor_size;
     int kernel_size;
     float threshold;

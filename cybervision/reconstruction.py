@@ -35,7 +35,8 @@ class Reconstructor:
                 return machine.match_result(matcher_task)
 
     def calculate_model(self, matches):
-        angle = 0
+        sum_dx = 0
+        sum_dy = 0
         # TODO: use least squares fitting?
         for match in matches:
             p1 = self.points1[match[0]]
@@ -43,11 +44,9 @@ class Reconstructor:
             dx = p2[0] - p1[0]
             dy = p2[1] - p1[1]
             length = math.sqrt(dx**2 + dy**2)
-            if abs(dx) > abs(dy):
-                angle += math.asin(dy/length) if dx > 0 else math.pi-math.asin(dy/length)
-            else:
-                angle += math.acos(dx/length) if dy > 0 else -math.acos(dx/length)
-        return angle/len(matches)
+            sum_dx += dx/length
+            sum_dy += dy/length
+        return sum_dx/len(matches), sum_dy/len(matches)
 
     def ransac_fit(self):
         suitable_matches = []
@@ -60,36 +59,35 @@ class Reconstructor:
             if legth > self.ransac_min_length:
                 suitable_matches.append(match)
 
-        best_direction = math.nan
+        best_dir_x, best_dir_y = math.nan, math.nan
         best_error = math.inf
         best_matches = []
         for _ in range(self.ransac_k):
             inliers = random.choices(suitable_matches, k=self.ransac_n)
-            direction = self.calculate_model(inliers)
+            dir_x, dir_y = self.calculate_model(inliers)
             extended_inliers = []
             for match in suitable_matches:
                 if match not in inliers:
-                    match_direction = self.calculate_model([match])
-                    error = abs(match_direction - direction)
+                    match_dir_x, match_dir_y = self.calculate_model([match])
+                    error = math.sqrt((match_dir_x - dir_x)**2 + (match_dir_y - dir_y)**2)
                     if error < self.ransac_t:
                         extended_inliers.append(match)
 
             if len(extended_inliers) > self.ransac_d:
                 current_matches = inliers + extended_inliers
-                current_direction = self.calculate_model(current_matches)
+                current_dir_x, current_dir_y = self.calculate_model(current_matches)
                 error = 0
                 for match in current_matches:
-                    match_direction = self.calculate_model([match])
-                    error += abs(match_direction - current_direction)/len(current_matches)
+                    match_dir_x, match_dir_y = self.calculate_model([match])
+                    error += math.sqrt((match_dir_x - dir_x)**2 + (match_dir_y - dir_y)**2)/len(current_matches)
                 if error < best_error:
-                    best_direction = current_direction
+                    best_dir_x, best_dir_y = current_dir_x, current_dir_y
                     best_error = error
                     best_matches = current_matches
-        return (best_matches, best_direction)
+        return (best_matches, best_dir_x, best_dir_y)
 
     def create_surface(self):
-        # TODO: only angles between pi/4 and 3*pi/4 have been tested, others might require transposing or rotation
-        correlate_task = machine.correlate_start(self.img1, self.img2, self.angle,
+        correlate_task = machine.correlate_start(self.img1, self.img2, self.dir_x, self.dir_y,
                                                  self.triangulation_corridor, self.triangulation_kernel_size,
                                                  self.triangulation_threshold,
                                                  self.num_threads)
@@ -131,7 +129,7 @@ class Reconstructor:
         self.log.info(f'Matched keypoints in {time_completed_matching-time_completed_fast}')
         self.log.info(f'Found {len(self.matches)} matches')
 
-        self.matches, self.angle = self.ransac_fit()
+        self.matches, self.dir_x, self.dir_y = self.ransac_fit()
         if not self.matches:
             raise NoMatchesFound('Failed to fit the model')
 
