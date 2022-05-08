@@ -222,7 +222,7 @@ typedef struct {
     int last_pos;
 } correlation_stripe_cache;
 
-void corridor_add_stripe(correlation_stripe_cache *cache, int stripe)
+inline void corridor_add_stripe(correlation_stripe_cache *cache, int stripe)
 {
     int corridor_width = (2*cache->corridor_size)+1;
     int next_pos = (cache->last_pos+1) % corridor_width;
@@ -240,7 +240,7 @@ void corridor_add_stripe(correlation_stripe_cache *cache, int stripe)
     cache->last_pos = next_pos;
 }
 
-int cache_get_offset(correlation_stripe_cache *cache, int c)
+inline int cache_get_offset(correlation_stripe_cache *cache, int c)
 {
     int corridor_width = (2*cache->corridor_size)+1;
     return (c + cache->corridor_size + cache->last_pos + corridor_width) % corridor_width;
