@@ -20,7 +20,6 @@
 
 #define MATCH_RESULT_GROW_SIZE 1000
 #define CORRELATION_STRIPE_WIDTH 64
-#define ANGLE_EPSILON 1e-5
 #define CORRELATION_STRIPE_VERTICAL 0
 #define CORRELATION_STRIPE_HORIZONTAL 1
 
@@ -398,7 +397,6 @@ int correlation_cross_correlate_start(cross_correlate_task* task)
     int max_width = w1>w2 ? w1 : w2;
 
     ctx->kernel_point_count = kernel_point_count;
-    ctx->stripe_front = malloc(sizeof(int)*max_height);
 
     for (int i=0;i<w1*h1;i++)
         task->out_points[i] = NAN;
@@ -407,6 +405,7 @@ int correlation_cross_correlate_start(cross_correlate_task* task)
     {
         int offset = (int)((float)h1*fabs(task->dir_y));
         ctx->stripe_direction = CORRELATION_STRIPE_VERTICAL;
+        ctx->stripe_front = malloc(sizeof(int)*max_height);
         for (int y=0;y<max_height;y++)
             ctx->stripe_front[y] = (int)(task->dir_x/task->dir_y*y);
         ctx->stripe = -offset;
@@ -416,6 +415,7 @@ int correlation_cross_correlate_start(cross_correlate_task* task)
     {
         int offset = (int)((float)w1*fabs(task->dir_x));
         ctx->stripe_direction = CORRELATION_STRIPE_HORIZONTAL;
+        ctx->stripe_front = malloc(sizeof(int)*max_width);
         for (int x=0;x<max_width;x++)
             ctx->stripe_front[x] = (int)(task->dir_y/task->dir_x*x);
         ctx->stripe = -offset;
