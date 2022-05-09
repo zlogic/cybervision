@@ -1,12 +1,14 @@
 import sys
+import os
 from setuptools import setup, Extension
 from glob import glob
 
 extra_compile_args = []
 sources = [
-        'machine/cybervision.c',
-        'machine/correlation.c'
-    ]
+    'machine/cybervision.c',
+    'machine/correlation.c',
+    'machine/gpu_correlation.c'
+]
 
 if sys.platform in ['darwin', 'linux']:
     extra_compile_args.append('-pthread')
@@ -15,10 +17,27 @@ elif sys.platform == 'win32':
 
 sources = sources + glob('machine/fast/*.c')
 
+include_dirs = []
+library_dirs = []
+libraries = []
+
+if 'VULKAN_SDK' in os.environ:
+    sdk_path = os.environ.get('VULKAN_SDK')
+    library_dirs.append(f'{sdk_path}/lib')
+    include_dirs.append(f'{sdk_path}/include')
+    if sys.platform == 'darwin':
+        include_dirs.append(f'{sdk_path}/libexec/include')
+        libraries.append('MoltenVK')
+    elif sys.platform in ['linux', 'win32']:
+        libraries.append('vulkan')
+
 machine = Extension(
     'cybervision.machine',
     sources=sources,
-    extra_compile_args=extra_compile_args
+    extra_compile_args=extra_compile_args,
+    include_dirs=include_dirs,
+    library_dirs=library_dirs,
+    libraries=libraries
 )
 
 setup(
