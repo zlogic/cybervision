@@ -23,8 +23,3 @@ Or with the MoltenVKShaderConverter:
 ```shell
 MoltenVKShaderConverter -gi shaders/correlation.glsl -oh -t c -so machine/shaders_spv.h
 ```
-
-## Reference projects
-
-* https://github.com/Erkaman/vulkan_minimal_compute
-* https://itzmeanjan.in/pages/parallel-matrix-multiplication-with-vulkan-compute.html
