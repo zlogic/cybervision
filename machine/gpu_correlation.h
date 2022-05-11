@@ -1,12 +1,10 @@
 #ifndef GPU_CORRELATION_H
 #define GPU_CORRELATION_H
 
-typedef void* gpu_context_internal;
-typedef struct {
-    int width, height;
-    gpu_context_internal internal;
-} gpu_context;
-int correlation_gpu_init(gpu_context*);
-int correlation_gpu_free(gpu_context*);
+#include "correlation.h"
+
+int gpu_correlation_cross_correlate_start(cross_correlate_task*);
+void gpu_correlation_cross_correlate_cancel(cross_correlate_task*);
+int gpu_correlation_cross_correlate_complete(cross_correlate_task*);
 
 #endif

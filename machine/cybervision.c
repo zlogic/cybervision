@@ -3,6 +3,7 @@
 
 #include <math.h>
 #include "correlation.h"
+#include "gpu_correlation.h"
 
 #include "fast/fast.h"
 
@@ -371,7 +372,7 @@ machine_correlate_start(PyObject *self, PyObject *args)
     PyBuffer_Release(&img_buffer);
 
     task->out_points = malloc(sizeof(float)*task->img1.width*task->img2.height);
-    if(!correlation_cross_correlate_start(task))
+    if(!gpu_correlation_cross_correlate_start(task))
     {
         PyErr_SetString(CybervisionError, "Failed to start cross correlation task");
         Py_DECREF(out);
@@ -424,7 +425,8 @@ machine_correlate_result(PyObject *self, PyObject *args)
         return NULL;
     }
     
-    correlation_cross_correlate_complete(task);
+    // TODO: map memory instead of copying
+    gpu_correlation_cross_correlate_complete(task);
 
     out = PyList_New(0);
     for (int y=0;y<task->img1.height;y++)

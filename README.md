@@ -28,6 +28,12 @@ Run cybervision:
 python3 -m cybervision <img1.tif> <img2.tif> --output-file=<out.png> [--no-interpolate]
 ```
 
+### GPU details
+
+Compiling a GPU-accelerated (Vulkan) version requires additional libraries and build tools.
+
+More details can be found in [gpu.md](gpu.md).
+
 ## Python version
 
 Cybervision was rewritten in Python (with C extensions).
