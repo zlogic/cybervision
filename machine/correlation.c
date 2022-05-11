@@ -344,13 +344,13 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
                         {
                             float dx = (float)(x2-x1);
                             float dy = (float)(y2-y1);
-                            best_distance = -sqrtf(dx*dx+dy*dy);
+                            best_distance = dx*dx+dy*dy;
                             best_corr = corr;
                         }
                     }
                     if(isfinite(best_distance))
                     {
-                        t->out_points[y1*w1 + x1] = best_distance;
+                        t->out_points[y1*w1 + x1] = -sqrtf(best_distance);
                     }
                 }
                 processed_points++;
