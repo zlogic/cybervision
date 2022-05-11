@@ -1,8 +1,6 @@
 #version 450
 #pragma shader_stage(compute)
 
-#define MAX_KERNEL_POINTS (2*9+1)*(2*9+1)
-
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1 ) in;
 
 layout(std430, binding = 0) buffer readonly Parameters
@@ -34,7 +32,7 @@ const float NaN = 0.0f/0.0f;
 void main() {
     const uint x1 = gl_GlobalInvocationID.x;
     const uint y1 = gl_GlobalInvocationID.y;
-    const uint kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
+    const float kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
 
     if(x1 < kernel_size || x1 >= img1_width-kernel_size || y1 < kernel_size ||  y1 >= img1_height-kernel_size)
     {
@@ -44,7 +42,6 @@ void main() {
 
     float avg1 = 0;
     float stdev1 = 0;
-    float delta1[MAX_KERNEL_POINTS];
 
     for (int j=-kernel_size;j<=kernel_size;j++)
     {
@@ -52,16 +49,20 @@ void main() {
         {
             float value = img1[(y1+j)*img1_width+(x1+i)];
             avg1 += value;
-            delta1[(j+kernel_size)*img1_width+(i+kernel_size)] = value;
         }
     }
+    avg1 /= kernel_point_count;
 
-    for (uint i=0;i<kernel_point_count;i++)
+    for (int j=-kernel_size;j<=kernel_size;j++)
     {
-        delta1[i] -= avg1;
-        stdev1 += delta1[i] * delta1[i];
+        for (int i=-kernel_size;i<=kernel_size;i++)
+        {
+            float value = img1[(y1+j)*img1_width+(x1+i)];
+            float delta = value-avg1;
+            stdev1 += delta*delta;
+        }
     }
-    stdev1 = sqrt(stdev1/float(kernel_point_count));
+    stdev1 = sqrt(stdev1/kernel_point_count);
 
     //const int x2_min = -corridor_size;
     //const int x2_max = corridor_size+1;
@@ -72,7 +73,6 @@ void main() {
     
     float best_corr = 0;
     float best_distance = NaN;
-    float delta2[MAX_KERNEL_POINTS];
     for (int c=x2_min;c<x2_max;c++)
     {
         for (int s=y2_min;s<y2_max;s++)
@@ -87,19 +87,31 @@ void main() {
                 {
                     float value = img2[(y2+j)*img2_width+(x2+i)];
                     avg2 += value;
-                    delta2[(j+kernel_size)*img2_width+(i+kernel_size)] = value;
                 }
             }
-            for (int i=0;i<kernel_point_count;i++)
+            avg2 /= kernel_point_count;
+
+            for (int j=-kernel_size;j<=kernel_size;j++)
             {
-                delta2[i] -= avg2;
-                stdev2 += delta2[i] * delta2[i];
+                for (int i=-kernel_size;i<=kernel_size;i++)
+                {
+                    float value = img2[(y2+j)*img2_width+(x2+i)];
+                    float delta = value-avg2;
+                    stdev2 += delta*delta;
+                }
             }
-            stdev2 = sqrt(stdev2/float(kernel_point_count));
+            stdev2 = sqrt(stdev2/kernel_point_count);
 
             float corr = 0;
-            for (int i=0;i<kernel_point_count;i++)
-                corr += delta1[i] * delta2[i];
+            for (int j=-kernel_size;j<=kernel_size;j++)
+            {
+                for (int i=-kernel_size;i<=kernel_size;i++)
+                {
+                    float delta1 = img1[(y1+j)*img1_width+(x1+i)] - avg1;
+                    float delta2 = img2[(y2+j)*img2_width+(x2+i)] - avg2;
+                    corr += delta1*delta2;
+                }
+            }
             corr = corr/(stdev1*stdev2*kernel_point_count);
 
             if (corr >= threshold && corr > best_corr)
