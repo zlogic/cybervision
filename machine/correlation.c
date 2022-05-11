@@ -23,7 +23,7 @@
 #define CORRELATION_STRIPE_VERTICAL 0
 #define CORRELATION_STRIPE_HORIZONTAL 1
 
-void compute_correlation_data(correlation_image *image, int kernel_size, int x, int y, float *stddev, float *delta)
+void compute_correlation_data(correlation_image *image, int kernel_size, int x, int y, float *stdev, float *delta)
 {
     int kernel_width = 2*kernel_size + 1;
     int kernel_point_count = kernel_width*kernel_width;
@@ -35,11 +35,11 @@ void compute_correlation_data(correlation_image *image, int kernel_size, int x, 
     {
         for (int i=0;i<kernel_point_count;i++)
             delta[i] = 0;
-        *stddev = INFINITY;
+        *stdev = INFINITY;
         return;
     }
 
-    *stddev = 0;
+    *stdev = 0;
     for(int j=-kernel_size;j<=kernel_size;j++)
     {
         for (int i=-kernel_size;i<=kernel_size;i++)
@@ -54,9 +54,9 @@ void compute_correlation_data(correlation_image *image, int kernel_size, int x, 
     for (int i=0;i<kernel_point_count;i++)
     {
         delta[i] -= avg;
-        *stddev += delta[i] * delta[i];
+        *stdev += delta[i] * delta[i];
     }
-    *stddev = sqrtf(*stddev/(float)kernel_point_count);
+    *stdev = sqrtf(*stdev/(float)kernel_point_count);
 }
 
 typedef struct {
@@ -64,7 +64,7 @@ typedef struct {
     size_t matches_limit;
     size_t p1;
     float *delta2;
-    float *stddev2;
+    float *stdev2;
     int threads_completed;
     pthread_mutex_t lock;
     pthread_t *threads;
@@ -85,7 +85,7 @@ THREAD_FUNCTION correlate_points_task(void *args)
     int w2 = t->img2.width, h2 = t->img2.height;
 
     float *delta1 = malloc(sizeof(float)*kernel_point_count);
-    float stddev1;
+    float stdev1;
     while (!t->completed)
     {
         size_t p1;
@@ -105,11 +105,11 @@ THREAD_FUNCTION correlate_points_task(void *args)
         if (x1-kernel_size<0 || x1+kernel_size>=w1 || y1-kernel_size<0 || y1+kernel_size>=h1)
             continue;
         
-        compute_correlation_data(&t->img1, kernel_size, x1, y1, &stddev1, delta1);
+        compute_correlation_data(&t->img1, kernel_size, x1, y1, &stdev1, delta1);
         for (size_t p2=0;p2<points2_size;p2++)
         {
             int x2 = points2[p2].x, y2 = points2[p2].y;
-            float stddev2 = ctx->stddev2[p2];
+            float stdev2 = ctx->stdev2[p2];
             float *delta2 = &ctx->delta2[p2*kernel_point_count];
             float corr = 0;
 
@@ -117,7 +117,7 @@ THREAD_FUNCTION correlate_points_task(void *args)
                 continue;
             for (int i=0;i<kernel_point_count;i++)
                 corr += delta1[i] * delta2[i];
-            corr = corr/(stddev1*stddev2*(float)kernel_point_count);
+            corr = corr/(stdev1*stdev2*(float)kernel_point_count);
             
             if (corr >= t->threshold)
             {
@@ -166,15 +166,15 @@ int correlation_match_points_start(match_task *task)
     task->completed = 0;
 
     ctx->delta2 = malloc(sizeof(float)*kernel_point_count*task->points2_size);
-    ctx->stddev2 = malloc(sizeof(float)*task->points2_size);
+    ctx->stdev2 = malloc(sizeof(float)*task->points2_size);
     ctx->matches_limit = MATCH_RESULT_GROW_SIZE;
     task->matches = malloc(sizeof(correlation_match)*ctx->matches_limit);
     task->matches_count = 0;
     for(size_t p=0;p<task->points2_size;p++){
         int x = task->points2[p].x, y = task->points2[p].y;
         float *delta2 = &ctx->delta2[p*kernel_point_count];
-        float *stddev2 = &ctx->stddev2[p];
-        compute_correlation_data(&task->img2, kernel_size, x, y, stddev2, delta2);
+        float *stdev2 = &ctx->stdev2[p];
+        compute_correlation_data(&task->img2, kernel_size, x, y, stdev2, delta2);
     }
 
     if (pthread_mutex_init(&ctx->lock, NULL) != 0)
@@ -205,7 +205,7 @@ int correlation_match_points_complete(match_task *t)
     pthread_mutex_destroy(&ctx->lock);
     free(ctx->threads);
     free(ctx->delta2);
-    free(ctx->stddev2);
+    free(ctx->stdev2);
     free(t->internal);
     t->internal = NULL;
     return 1;
@@ -216,7 +216,7 @@ typedef struct {
     int *stripe_front;
     char stripe_direction;
     float *delta;
-    float *stddev;
+    float *stdev;
     int kernel_size, kernel_point_count;
     int corridor_size;
     int last_pos;
@@ -231,11 +231,11 @@ inline void corridor_add_stripe(correlation_stripe_cache *cache, int stripe)
     for (int i=0;i<stripe_length;i++)
     {
         int stripe_pos = stripe + cache->stripe_front[i];
-        float *stddev = &cache->stddev[c_offset+i];
+        float *stdev = &cache->stdev[c_offset+i];
         float *delta = &cache->delta[(c_offset+i)*cache->kernel_point_count];
         int x = cache->stripe_direction == CORRELATION_STRIPE_VERTICAL ? stripe_pos : i;
         int y = cache->stripe_direction == CORRELATION_STRIPE_VERTICAL ? i : stripe_pos;
-        compute_correlation_data(cache->img, cache->kernel_size, x, y, stddev, delta);
+        compute_correlation_data(cache->img, cache->kernel_size, x, y, stdev, delta);
     }
     cache->last_pos = next_pos;
 }
@@ -279,7 +279,7 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
     img2_cache.stripe_front = ctx->stripe_front;
     img2_cache.stripe_direction = ctx->stripe_direction;
     img2_cache.delta = malloc(sizeof(float)*kernel_point_count*stripe2_length*corridor_stripes);
-    img2_cache.stddev = malloc(sizeof(float)*stripe2_length*corridor_stripes);
+    img2_cache.stdev = malloc(sizeof(float)*stripe2_length*corridor_stripes);
     img2_cache.kernel_size = kernel_size;
     img2_cache.kernel_point_count = kernel_point_count;
     img2_cache.corridor_size = corridor_size;
@@ -311,15 +311,15 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
             corridor_add_stripe(&img2_cache, i+corridor_size);
             for (int j1=0;j1<stripe1_length;j1++)
             {
-                float stddev1;
+                float stdev1;
                 int x1 = ctx->stripe_direction == CORRELATION_STRIPE_VERTICAL ? i + ctx->stripe_front[j1] : j1;
                 int y1 = ctx->stripe_direction == CORRELATION_STRIPE_VERTICAL ? j1 : i + ctx->stripe_front[j1];
                 float best_distance = NAN;
                 float best_corr = 0;
 
-                compute_correlation_data(&t->img1, kernel_size, x1, y1, &stddev1, delta1);
+                compute_correlation_data(&t->img1, kernel_size, x1, y1, &stdev1, delta1);
 
-                if (!isfinite(stddev1))
+                if (!isfinite(stdev1))
                     continue;
 
                 for (int c=-corridor_size;c<=corridor_size;c++)
@@ -329,16 +329,16 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
                     {
                         int x2 = ctx->stripe_direction == CORRELATION_STRIPE_VERTICAL ? i + c + ctx->stripe_front[j2] : j2;
                         int y2 = ctx->stripe_direction == CORRELATION_STRIPE_VERTICAL ? j2 : i + c + ctx->stripe_front[j2];
-                        float stddev2 = img2_cache.stddev[c_offset+j2];
+                        float stdev2 = img2_cache.stdev[c_offset+j2];
                         float *delta2 = &img2_cache.delta[(c_offset+j2)*kernel_point_count];
                         float corr = 0;
 
-                        if (!isfinite(stddev2))
+                        if (!isfinite(stdev2))
                             continue;
 
                         for (int l=0;l<kernel_point_count;l++)
                             corr += delta1[l] * delta2[l];
-                        corr = corr/(stddev1*stddev2*(float)kernel_point_count);
+                        corr = corr/(stdev1*stdev2*(float)kernel_point_count);
                         
                         if (corr >= t->threshold && corr > best_corr)
                         {
@@ -369,7 +369,7 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
 cleanup:
     free(delta1);
     free(img2_cache.delta);
-    free(img2_cache.stddev);
+    free(img2_cache.stdev);
     pthread_mutex_lock(&ctx->lock);
     ctx->threads_completed++;
     pthread_mutex_unlock(&ctx->lock);

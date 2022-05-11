@@ -32,7 +32,7 @@ class PeakFilter:
         stdev_z = math.sqrt(stdev_z/len(quad_points))
         qw = int((q[2] - q[0])/2)
         qh = int((q[3] - q[1])/2)
-        if stdev_z > self.split_stddev and not last_iteration:
+        if stdev_z > self.split_stdev and not last_iteration:
             new_quadrants.append(self.filter_quad((q[0], q[1], q[0]+qw, q[1]+qh), quad_points))
             new_quadrants.append(self.filter_quad((q[0]+qw, q[1], q[2], q[1]+qh), quad_points))
             new_quadrants.append(self.filter_quad((q[0], q[1]+qh, q[0]+qw, q[3]), quad_points))
@@ -40,7 +40,7 @@ class PeakFilter:
             return new_quadrants
         else:
             for p in quad_points:
-                if abs(p[2]-mean_z) < self.match_stddev*stdev_z:
+                if abs(p[2]-mean_z) < self.match_stdev*stdev_z:
                     self.filtered_points.add(p)
         return
 
@@ -72,8 +72,8 @@ class PeakFilter:
     def __init__(self, points3d, width, height):
         # Tunable parameters
         self.min_size = 16
-        self.split_stddev = 1.0
-        self.match_stddev = 0.25
+        self.split_stdev = 1.0
+        self.match_stdev = 0.25
         self.quad_radius = 1.5
 
         self.iterations = math.floor(math.log(min(width, height)/self.min_size, 2))
