@@ -425,7 +425,6 @@ machine_correlate_result(PyObject *self, PyObject *args)
         return NULL;
     }
     
-    // TODO: map memory instead of copying
     gpu_correlation_cross_correlate_complete(task);
 
     out = PyList_New(0);

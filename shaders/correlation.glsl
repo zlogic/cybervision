@@ -10,17 +10,20 @@ layout(std430, binding = 0) buffer readonly Parameters
     int img2_width;
     int img2_height;
     float dir_x, dir_y;
-    int corridor_size;
+    int corridor_offset;
+    int initial_run;
     int kernel_size;
     float threshold;
 };
-layout(std430, binding = 1) buffer readonly Image1
+layout(std430, binding = 1) buffer readonly Images
 {
-    float img1[];
+    float images[];
 };
-layout(std430, binding = 2) buffer readonly Image2
+layout(std430, binding = 2) buffer Internals
 {
-    float img2[];
+    // Layout:
+    // img1 avg; img1 stdev; img2 avg; img2 stdev; best correlation
+    float internals[];
 };
 layout(std430, binding = 3) buffer writeonly Result
 {
@@ -29,101 +32,150 @@ layout(std430, binding = 3) buffer writeonly Result
 
 const float NaN = 0.0f/0.0f;
 
+void prepare_initialdata() {
+    const uint x = gl_GlobalInvocationID.x;
+    const uint y = gl_GlobalInvocationID.y;
+    const float kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
+
+    uint img1_offset = 0;
+    uint img2_offset = img1_width*img1_height;
+
+    const int img1_avg_offset = 0;
+    const int img1_stdev_offset = img1_avg_offset + img1_width*img1_height;
+    const int img2_avg_offset = img1_stdev_offset + img1_width*img1_height;
+    const int img2_stdev_offset = img2_avg_offset + img2_width*img2_height;
+    const int correlation_offset = img2_stdev_offset + img2_width*img2_height;
+
+    if (x < img1_width && y < img1_height)
+    {
+        internals[correlation_offset + img1_width*y + x] = 0;
+        result[img1_width*y + x] = NaN;
+    }
+    
+    if(x >= kernel_size && x < img1_width-kernel_size && y >= kernel_size && y < img1_height-kernel_size)
+    {
+        float avg = 0;
+        float stdev = 0;
+
+        for (int j=-kernel_size;j<=kernel_size;j++)
+        {
+            for (int i=-kernel_size;i<=kernel_size;i++)
+            {
+                float value = images[img1_offset + (y+j)*img1_width+(x+i)];
+                avg += value;
+            }
+        }
+        avg /= kernel_point_count;
+
+        for (int j=-kernel_size;j<=kernel_size;j++)
+        {
+            for (int i=-kernel_size;i<=kernel_size;i++)
+            {
+                float value = images[img1_offset + (y+j)*img1_width+(x+i)];
+                float delta = value-avg;
+                stdev += delta*delta;
+            }
+        }
+        stdev = sqrt(stdev/kernel_point_count);
+        internals[img1_avg_offset + img1_width*y + x] = avg;
+        internals[img1_stdev_offset + img1_width*y + x] = stdev;
+    }
+
+    if(x >= kernel_size && x < img2_width-kernel_size && y >= kernel_size && y < img2_height-kernel_size)
+    {
+        float avg = 0;
+        float stdev = 0;
+
+        for (int j=-kernel_size;j<=kernel_size;j++)
+        {
+            for (int i=-kernel_size;i<=kernel_size;i++)
+            {
+                float value = images[img2_offset + (y+j)*img2_width+(x+i)];
+                avg += value;
+            }
+        }
+        avg /= kernel_point_count;
+
+        for (int j=-kernel_size;j<=kernel_size;j++)
+        {
+            for (int i=-kernel_size;i<=kernel_size;i++)
+            {
+                float value = images[img2_offset + (y+j)*img2_width+(x+i)];
+                float delta = value-avg;
+                stdev += delta*delta;
+            }
+        }
+        stdev = sqrt(stdev/kernel_point_count);
+        internals[img2_avg_offset + img2_width*y + x] = avg;
+        internals[img2_stdev_offset + img2_width*y + x] = stdev;
+    }
+}
+
 void main() {
+    if (initial_run == 1)
+    {
+        prepare_initialdata();
+        return;
+    }
+
     const uint x1 = gl_GlobalInvocationID.x;
     const uint y1 = gl_GlobalInvocationID.y;
     const float kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
 
     if(x1 < kernel_size || x1 >= img1_width-kernel_size || y1 < kernel_size ||  y1 >= img1_height-kernel_size)
-    {
-        result[y1*img1_width+x1] = NaN;
         return;
-    }
 
-    float avg1 = 0;
-    float stdev1 = 0;
+    uint img1_offset = 0;
+    uint img2_offset = img1_width*img1_height;
 
-    for (int j=-kernel_size;j<=kernel_size;j++)
-    {
-        for (int i=-kernel_size;i<=kernel_size;i++)
-        {
-            float value = img1[(y1+j)*img1_width+(x1+i)];
-            avg1 += value;
-        }
-    }
-    avg1 /= kernel_point_count;
 
-    for (int j=-kernel_size;j<=kernel_size;j++)
-    {
-        for (int i=-kernel_size;i<=kernel_size;i++)
-        {
-            float value = img1[(y1+j)*img1_width+(x1+i)];
-            float delta = value-avg1;
-            stdev1 += delta*delta;
-        }
-    }
-    stdev1 = sqrt(stdev1/kernel_point_count);
+    const int img1_avg_offset = 0;
+    const int img1_stdev_offset = img1_avg_offset + img1_width*img1_height;
+    const int img2_avg_offset = img1_stdev_offset + img1_width*img1_height;
+    const int img2_stdev_offset = img2_avg_offset + img2_width*img2_height;
+    const int correlation_offset = img2_stdev_offset + img2_width*img2_height;
+    
+    float avg1 = internals[img1_avg_offset + img1_width*y1 + x1];
+    float stdev1 = internals[img1_stdev_offset + img1_width*y1 + x1];
 
-    //const int x2_min = -corridor_size;
-    //const int x2_max = corridor_size+1;
-    const int x2_min = 0;
-    const int x2_max = 1;
     const int y2_min = kernel_size;
     const int y2_max = img2_height-kernel_size;
-    
+
     float best_corr = 0;
     float best_distance = NaN;
-    for (int c=x2_min;c<x2_max;c++)
+    for (int y2=y2_min;y2<y2_max;y2++)
     {
-        for (int s=y2_min;s<y2_max;s++)
+        const int x2 = int(x1+corridor_offset) + int(float(y2)*dir_x/dir_y);
+        if (x2 < kernel_size || x2 >= img2_width-kernel_size)
+            continue;
+        float avg2 = internals[img2_avg_offset + img2_width*y2 + x2];
+        float stdev2 = internals[img2_stdev_offset + img2_width*y2 + x2];
+
+        float corr = 0;
+        for (int j=-kernel_size;j<=kernel_size;j++)
         {
-            int y2 = s;
-            int x2 = int(x1+c)+ int(float(y2)*dir_x/dir_y);
-            float avg2 = 0;
-            float stdev2 = 0;
-            for (int j=-kernel_size;j<=kernel_size;j++)
+            for (int i=-kernel_size;i<=kernel_size;i++)
             {
-                for (int i=-kernel_size;i<=kernel_size;i++)
-                {
-                    float value = img2[(y2+j)*img2_width+(x2+i)];
-                    avg2 += value;
-                }
-            }
-            avg2 /= kernel_point_count;
-
-            for (int j=-kernel_size;j<=kernel_size;j++)
-            {
-                for (int i=-kernel_size;i<=kernel_size;i++)
-                {
-                    float value = img2[(y2+j)*img2_width+(x2+i)];
-                    float delta = value-avg2;
-                    stdev2 += delta*delta;
-                }
-            }
-            stdev2 = sqrt(stdev2/kernel_point_count);
-
-            float corr = 0;
-            for (int j=-kernel_size;j<=kernel_size;j++)
-            {
-                for (int i=-kernel_size;i<=kernel_size;i++)
-                {
-                    float delta1 = img1[(y1+j)*img1_width+(x1+i)] - avg1;
-                    float delta2 = img2[(y2+j)*img2_width+(x2+i)] - avg2;
-                    corr += delta1*delta2;
-                }
-            }
-            corr = corr/(stdev1*stdev2*kernel_point_count);
-
-            if (corr >= threshold && corr > best_corr)
-            {
-                float dx = float(x2)-float(x1);
-                float dy = float(y2)-float(y1);
-                float distance = -sqrt(dx*dx+dy*dy);
-                best_distance = distance;
-                best_corr = corr;
+                float delta1 = images[img1_offset + (y1+j)*img1_width+(x1+i)] - avg1;
+                float delta2 = images[img2_offset + (y2+j)*img2_width+(x2+i)] - avg2;
+                corr += delta1*delta2;
             }
         }
+        corr = corr/(stdev1*stdev2*kernel_point_count);
+
+        if (corr > best_corr)
+        {
+            float dx = float(x2)-float(x1);
+            float dy = float(y2)-float(y1);
+            float distance = -sqrt(dx*dx+dy*dy);
+            best_distance = distance;
+            best_corr = corr;
+        }
     }
-    
-    result[img1_width*y1 + x1] = best_distance;
+    float current_corr = internals[correlation_offset + img1_width*y1 + x1];
+    if (best_corr > current_corr && best_corr >= threshold)
+    {
+        internals[correlation_offset + img1_width*y1 + x1] = best_corr;
+        result[img1_width*y1 + x1] = best_distance;
+    }
 }

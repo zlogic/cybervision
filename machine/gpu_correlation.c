@@ -3,6 +3,18 @@
 #include <math.h>
 #include <string.h>
 
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+# include <pthread.h>
+# define THREAD_FUNCTION void*
+# define THREAD_RETURN_VALUE NULL
+#elif defined(_WIN32)
+# include "win32/pthread.h"
+#define THREAD_FUNCTION DWORD WINAPI
+# define THREAD_RETURN_VALUE 1
+#else
+# error "pthread is required"
+#endif
+
 #include "gpu_correlation.h"
 #include "shaders_spv.h"
 
@@ -12,8 +24,8 @@ typedef struct {
     VkQueue queue;
     uint32_t queueFamilyIndex;
 
-    VkBuffer params_buffer, img1_buffer, img2_buffer, out_buffer;
-    VkDeviceMemory params_bufferMemory, img1_bufferMemory, img2_bufferMemory, out_bufferMemory;
+    VkBuffer params_buffer, img_buffer, internal_buffer, out_buffer;
+    VkDeviceMemory params_bufferMemory, img_bufferMemory, internal_bufferMemory, out_bufferMemory;
 
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
@@ -30,6 +42,9 @@ typedef struct {
     VkInstance instance;
 
     vulkan_device dev;
+
+    pthread_mutex_t lock;
+    pthread_t thread;
 } vulkan_context;
 
 typedef struct {
@@ -38,7 +53,8 @@ typedef struct {
     int32_t img2_width;
     int32_t img2_height;
     float dir_x, dir_y;
-    int32_t corridor_size;
+    int32_t corridor_offset;
+    int32_t initial_run;
     int32_t kernel_size;
     float threshold;
 } shader_params;
@@ -145,9 +161,9 @@ int gpu_find_device(vulkan_context* ctx)
         VkPhysicalDevice physicalDevice = devices[i];
         vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
         vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
+        // For now, choose the first non-CPU device
         if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)
             continue;
-        // For now, choose the first device
         ctx->dev.physicalDevice = physicalDevice;
         if (!gpu_create_device(&ctx->dev))
             goto cleanup;
@@ -161,7 +177,7 @@ cleanup:
     return result;
 }
 
-int gpu_create_buffer(vulkan_device *dev, VkDeviceSize bufferSize, VkBuffer *buffer, VkDeviceMemory *bufferMemory)
+int gpu_create_buffer(vulkan_device *dev, VkDeviceSize bufferSize, VkBuffer *buffer, VkDeviceMemory *bufferMemory, int gpuonly)
 {
     VkBufferCreateInfo bufferCreateInfo = {0};
     VkMemoryRequirements memoryRequirements;
@@ -186,8 +202,9 @@ int gpu_create_buffer(vulkan_device *dev, VkDeviceSize bufferSize, VkBuffer *buf
     for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; ++i)
     {
         if ((memoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0 ||
-            (memoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0 ||
             memoryProperties.memoryHeaps[memoryProperties.memoryTypes[i].heapIndex].size < bufferSize)
+            continue;
+        if (!gpuonly && (memoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0)
             continue;
         allocateInfo.memoryTypeIndex = i;
         break;
@@ -261,11 +278,11 @@ int gpu_create_descriptor_set(vulkan_device *dev)
     descriptorBufferInfo[0].offset = 0;
     descriptorBufferInfo[0].range = VK_WHOLE_SIZE;
 
-    descriptorBufferInfo[1].buffer = dev->img1_buffer;
+    descriptorBufferInfo[1].buffer = dev->img_buffer;
     descriptorBufferInfo[1].offset = 0;
     descriptorBufferInfo[1].range = VK_WHOLE_SIZE;
 
-    descriptorBufferInfo[2].buffer = dev->img2_buffer;
+    descriptorBufferInfo[2].buffer = dev->internal_buffer;
     descriptorBufferInfo[2].offset = 0;
     descriptorBufferInfo[2].range = VK_WHOLE_SIZE;
 
@@ -323,16 +340,23 @@ int gpu_create_compute_pipeline(vulkan_device *dev)
     return 1;
 }
 
-int gpu_create_command_buffer(vulkan_device *dev, int w1, int h1)
+int gpu_create_command_pool(vulkan_device *dev)
 {
     VkCommandPoolCreateInfo commandPoolCreateInfo = {0};
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {0};
 
     commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     commandPoolCreateInfo.flags = 0;
     commandPoolCreateInfo.queueFamilyIndex = dev->queueFamilyIndex;
     if (vkCreateCommandPool(dev->device, &commandPoolCreateInfo, NULL, &dev->commandPool) != VK_SUCCESS)
         return 0;
+
+    return 1;
+}
+
+int gpu_create_command_buffer(vulkan_device *dev, int w1, int h1)
+{
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {0};
+    VkCommandBufferBeginInfo beginInfo = {};
 
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     commandBufferAllocateInfo.commandPool = dev->commandPool;
@@ -341,7 +365,6 @@ int gpu_create_command_buffer(vulkan_device *dev, int w1, int h1)
     if (vkAllocateCommandBuffers(dev->device, &commandBufferAllocateInfo, &dev->commandBuffer) != VK_SUCCESS)
         return 0;
 
-    VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     if (vkBeginCommandBuffer(dev->commandBuffer, &beginInfo) != VK_SUCCESS)
@@ -373,20 +396,23 @@ int gpu_run_command_buffer(vulkan_device *dev)
     return 1;
 }
 
-int gpu_transfer_in_image(correlation_image img, VkDevice device, VkDeviceMemory bufferMemory)
+int gpu_transfer_in_images(correlation_image img1, correlation_image img2, VkDevice device, VkDeviceMemory bufferMemory)
 {
     float *payload;
-
     if (vkMapMemory(device, bufferMemory, 0, VK_WHOLE_SIZE, 0, (void*)&payload) != VK_SUCCESS)
         return 0;
-    for (int i=0;i<img.width*img.height;i++)
-        payload[i] = (unsigned char)img.img[i];
+
+    for (int i=0;i<img1.width*img1.height;i++)
+        payload[i] = (unsigned char)img1.img[i];
+    payload += img1.width*img1.height;
+    for (int i=0;i<img2.width*img2.height;i++)
+        payload[i] = (unsigned char)img2.img[i];
     
     vkUnmapMemory(device, bufferMemory);
     return 1;
 }
 
-int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev)
+int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev, int corridor_offset, int initial_run)
 {
     shader_params *payload;
 
@@ -399,7 +425,8 @@ int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev)
     payload->img2_height = t->img2.height;
     payload->dir_x = t->dir_x;
     payload->dir_y = t->dir_y;
-    payload->corridor_size = t->corridor_size;
+    payload->corridor_offset = corridor_offset;
+    payload->initial_run = initial_run;
     payload->kernel_size = t->kernel_size;
     payload->threshold = t->threshold;
 
@@ -409,41 +436,74 @@ int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev)
 
 int gpu_transfer_out_image(cross_correlate_task *t, vulkan_device *dev)
 {
-    float *payload;
-    if (vkMapMemory(dev->device, dev->out_bufferMemory, 0, VK_WHOLE_SIZE, 0, (void*)&payload) != VK_SUCCESS)
+    float *output_points;
+    if (vkMapMemory(dev->device, dev->out_bufferMemory, 0, VK_WHOLE_SIZE, 0, (void*)&output_points) != VK_SUCCESS)
         return 0;
     for (int i=0;i<t->img1.width*t->img1.height;i++)
-        t->out_points[i] = payload[i];
+        t->out_points[i] = output_points[i];
     
     vkUnmapMemory(dev->device, dev->out_bufferMemory);
     return 1;
+}
+
+THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
+{
+    cross_correlate_task *t = args;
+    vulkan_context *ctx = t->internal;
+    int corridor_size = t->corridor_size;
+    int corridor_stripes = 2*t->corridor_size+1;
+    int max_width = t->img1.width > t->img2.width ? t->img1.width:t->img2.width;
+    int max_height = t->img1.height > t->img2.height ? t->img1.height:t->img2.height;
+
+    if (!gpu_create_command_buffer(&ctx->dev, max_width, max_height))
+        return THREAD_RETURN_VALUE;
+    if (!gpu_transfer_in_params(t, &ctx->dev, 0, 1))
+        return THREAD_RETURN_VALUE;
+    if (!gpu_run_command_buffer(&ctx->dev))
+        return THREAD_RETURN_VALUE;
+
+    t->percent_complete = 5.0F;
+
+    for (int c = -corridor_size;c<=corridor_size;c++)
+    {
+        if (!gpu_create_command_buffer(&ctx->dev, t->img1.width, t->img1.height))
+            break;
+        if (!gpu_transfer_in_params(t, &ctx->dev, c, 0))
+            break;
+        if (!gpu_run_command_buffer(&ctx->dev))
+            break;
+
+        t->percent_complete = 5.0F + 95.0F*(float)(c+corridor_size)/corridor_stripes;
+    }
+
+    // TODO: report failure if error is returned
+    gpu_transfer_out_image(t, &ctx->dev);
+    t->completed = 1;
+    return THREAD_RETURN_VALUE;
 }
 
 int gpu_correlation_cross_correlate_start(cross_correlate_task *t)
 {
     vulkan_context* ctx = malloc(sizeof(vulkan_context));
     t->internal = ctx;
-    t->completed = 1;
+    t->completed = 0;
+    t->percent_complete = 0.0;
 
     if (gpu_vk_create(ctx) != VK_SUCCESS)
         return 0;
     if (!gpu_find_device(ctx))
         return 0;
 
-    if (!gpu_create_buffer(&ctx->dev, sizeof(shader_params), &ctx->dev.params_buffer, &ctx->dev.params_bufferMemory))
+    if (!gpu_create_buffer(&ctx->dev, sizeof(shader_params), &ctx->dev.params_buffer, &ctx->dev.params_bufferMemory, 0))
         return 0;
-    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*t->img1.width*t->img1.height, &ctx->dev.img1_buffer, &ctx->dev.img1_bufferMemory))
+    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*(t->img1.width*t->img1.height + t->img2.width*t->img2.height), &ctx->dev.img_buffer, &ctx->dev.img_bufferMemory, 0))
         return 0;
-    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*t->img2.width*t->img2.height, &ctx->dev.img2_buffer, &ctx->dev.img2_bufferMemory))
+    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*(t->img1.width*t->img1.height*3 + t->img2.width*t->img2.height*2), &ctx->dev.internal_buffer, &ctx->dev.internal_bufferMemory, 1))
         return 0;
-    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*t->img1.width*t->img1.height, &ctx->dev.out_buffer, &ctx->dev.out_bufferMemory))
+    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*t->img1.width*t->img1.height, &ctx->dev.out_buffer, &ctx->dev.out_bufferMemory, 0))
         return 0;
 
-    if (!gpu_transfer_in_image(t->img1, ctx->dev.device, ctx->dev.img1_bufferMemory))
-        return 0;
-    if (!gpu_transfer_in_image(t->img2, ctx->dev.device, ctx->dev.img2_bufferMemory))
-        return 0;
-    if (!gpu_transfer_in_params(t, &ctx->dev))
+    if (!gpu_transfer_in_images(t->img1, t->img2, ctx->dev.device, ctx->dev.img_bufferMemory))
         return 0;
 
     if (!gpu_create_descriptor_set_layout(&ctx->dev))
@@ -454,13 +514,10 @@ int gpu_correlation_cross_correlate_start(cross_correlate_task *t)
     if (!gpu_create_compute_pipeline(&ctx->dev))
         return 0;
 
-    if (!gpu_create_command_buffer(&ctx->dev, t->img1.width, t->img1.height))
-        return 0;
-    if (!gpu_run_command_buffer(&ctx->dev))
+    if (!gpu_create_command_pool(&ctx->dev))
         return 0;
 
-    if (!gpu_transfer_out_image(t, &ctx->dev))
-        return 0;
+    pthread_create(&ctx->thread, NULL, gpu_correlate_cross_correlation_task, t);
 
     return 1;
 }
@@ -473,13 +530,15 @@ int gpu_correlation_cross_correlate_complete(cross_correlate_task *t)
         return 1;
     ctx = t->internal;
     device = ctx->dev.device;
+    pthread_join(ctx->thread, NULL);
+
     vkFreeMemory(device, ctx->dev.params_bufferMemory, NULL);
-    vkFreeMemory(device, ctx->dev.img1_bufferMemory, NULL);
-    vkFreeMemory(device, ctx->dev.img2_bufferMemory, NULL);
+    vkFreeMemory(device, ctx->dev.img_bufferMemory, NULL);
+    vkFreeMemory(device, ctx->dev.internal_bufferMemory, NULL);
     vkFreeMemory(device, ctx->dev.out_bufferMemory, NULL);
     vkDestroyBuffer(device, ctx->dev.params_buffer, NULL);
-    vkDestroyBuffer(device, ctx->dev.img1_buffer, NULL);
-    vkDestroyBuffer(device, ctx->dev.img2_buffer, NULL);
+    vkDestroyBuffer(device, ctx->dev.img_buffer, NULL);
+    vkDestroyBuffer(device, ctx->dev.internal_buffer, NULL);
     vkDestroyBuffer(device, ctx->dev.out_buffer, NULL);
     vkDestroyShaderModule(device, ctx->dev.computeShaderModule, NULL);
     vkDestroyDescriptorPool(device, ctx->dev.descriptorPool, NULL);
