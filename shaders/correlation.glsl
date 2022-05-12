@@ -128,7 +128,6 @@ void main() {
     uint img1_offset = 0;
     uint img2_offset = img1_width*img1_height;
 
-
     const int img1_avg_offset = 0;
     const int img1_stdev_offset = img1_avg_offset + img1_width*img1_height;
     const int img2_avg_offset = img1_stdev_offset + img1_width*img1_height;
@@ -138,14 +137,11 @@ void main() {
     float avg1 = internals[img1_avg_offset + img1_width*y1 + x1];
     float stdev1 = internals[img1_stdev_offset + img1_width*y1 + x1];
 
-    const int y2_min = kernel_size;
-    const int y2_max = img2_height-kernel_size;
-
     float best_corr = 0;
     float best_distance = NaN;
-    for (int y2=y2_min;y2<y2_max;y2++)
+    for (int y2=kernel_size;y2<img2_height-kernel_size;y2++)
     {
-        const int x2 = int(x1+corridor_offset) + int(float(y2)*dir_x/dir_y);
+        const int x2 = int(x1)+corridor_offset + int(float(y2-y1)*dir_x/dir_y);
         if (x2 < kernel_size || x2 >= img2_width-kernel_size)
             continue;
         float avg2 = internals[img2_avg_offset + img2_width*y2 + x2];
