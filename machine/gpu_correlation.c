@@ -111,9 +111,9 @@ int gpu_find_compute_queue_index(vulkan_device *device, uint32_t *index)
 
 int gpu_create_device(vulkan_device *dev)
 {
-    VkDeviceQueueCreateInfo queueCreateInfo = {};
-    VkDeviceCreateInfo deviceCreateInfo = {};
-    VkPhysicalDeviceFeatures deviceFeatures = {};
+    VkDeviceQueueCreateInfo queueCreateInfo = {0};
+    VkDeviceCreateInfo deviceCreateInfo = {0};
+    VkPhysicalDeviceFeatures deviceFeatures = {0};
 
     float queuePriorities[] = {1.0f};
 
@@ -143,6 +143,8 @@ int gpu_find_device(vulkan_context* ctx)
     uint32_t deviceCount;
     VkPhysicalDevice *devices = NULL;
     int result = 0;
+    VkPhysicalDevice best_device;
+    float best_device_score = -1;
     
     if(vkEnumeratePhysicalDevices(ctx->instance, &deviceCount, NULL) != VK_SUCCESS)
         goto cleanup;
@@ -159,15 +161,40 @@ int gpu_find_device(vulkan_context* ctx)
         VkPhysicalDeviceProperties deviceProperties;
         VkPhysicalDeviceFeatures deviceFeatures;
         VkPhysicalDevice physicalDevice = devices[i];
+        float device_score = 0.0F;
         vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
         vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
-        // For now, choose the first non-CPU device
-        if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)
-            continue;
-        ctx->dev.physicalDevice = physicalDevice;
+        switch(deviceProperties.deviceType)
+        {
+            case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+                device_score = 3.0F;
+                break;
+            case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+                device_score = 2.0F;
+                break;
+            case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+                device_score = 1.0F;
+                break;
+            default:
+                device_score = 0.0F;
+                break;
+        }
+        if (device_score > best_device_score)
+        {
+            best_device_score = device_score;
+            best_device = physicalDevice;
+        }
+    }
+
+    if (best_device_score>=0.0F)
+    {
+        ctx->dev.physicalDevice = best_device;
         if (!gpu_create_device(&ctx->dev))
             goto cleanup;
-        break;
+    }
+    else
+    {
+        goto cleanup;
     }
 
     result = 1;
@@ -225,6 +252,7 @@ int gpu_create_descriptor_set_layout(vulkan_device *dev)
 {
     VkDescriptorSetLayoutBinding descriptorSetLayoutBindings[4];
     VkDescriptorSetLayoutBinding* descriptorSetLayoutBinding = descriptorSetLayoutBinding;
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {0};
 
     for(uint32_t i=0;i<4;i++)
     {
@@ -236,7 +264,6 @@ int gpu_create_descriptor_set_layout(vulkan_device *dev)
         descriptorSetLayoutBindings[i] = descriptorSetLayoutBinding;
     }
 
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
     descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     descriptorSetLayoutCreateInfo.bindingCount = 4;
     descriptorSetLayoutCreateInfo.pBindings = descriptorSetLayoutBindings; 
@@ -356,7 +383,7 @@ int gpu_create_command_pool(vulkan_device *dev)
 int gpu_create_command_buffer(vulkan_device *dev, int w1, int h1)
 {
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {0};
-    VkCommandBufferBeginInfo beginInfo = {};
+    VkCommandBufferBeginInfo beginInfo = {0};
 
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     commandBufferAllocateInfo.commandPool = dev->commandPool;
@@ -383,15 +410,23 @@ int gpu_create_command_buffer(vulkan_device *dev, int w1, int h1)
 int gpu_run_command_buffer(vulkan_device *dev)
 {
     VkSubmitInfo submitInfo = {0};
+    VkFence fence;
+    VkFenceCreateInfo fenceCreateInfo = {0};
 
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &dev->commandBuffer;
 
-    if (vkQueueSubmit(dev->queue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
+    if (vkCreateFence(dev->device, &fenceCreateInfo, NULL, &fence) != VK_SUCCESS)
+        return 0;
+
+    if (vkQueueSubmit(dev->queue, 1, &submitInfo, fence) != VK_SUCCESS)
         return 0;
 
     if (vkQueueWaitIdle(dev->queue) != VK_SUCCESS)
+        return 0;
+
+    if (vkWaitForFences(dev->device, 1, &fence, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
         return 0;
     return 1;
 }

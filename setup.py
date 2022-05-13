@@ -21,15 +21,19 @@ include_dirs = []
 library_dirs = []
 libraries = []
 
-if 'VULKAN_SDK' in os.environ:
-    sdk_path = os.environ.get('VULKAN_SDK')
-    library_dirs.append(f'{sdk_path}/lib')
-    include_dirs.append(f'{sdk_path}/include')
-    if sys.platform == 'darwin':
-        include_dirs.append(f'{sdk_path}/libexec/include')
-        libraries.append('MoltenVK')
-    elif sys.platform in ['linux', 'win32']:
-        libraries.append('vulkan')
+sdk_path = os.environ.get('VULKAN_SDK')
+if not sdk_path:
+    raise RuntimeError("VULKAN_SDK is not set")
+
+library_dirs.append(f'{sdk_path}/lib')
+include_dirs.append(f'{sdk_path}/include')
+if sys.platform == 'darwin':
+    include_dirs.append(f'{sdk_path}/libexec/include')
+    libraries.append('MoltenVK')
+elif sys.platform == 'linux':
+    libraries.append('vulkan')
+elif sys.platform =='win32':
+    libraries.append('vulkan-1')
 
 machine = Extension(
     'cybervision.machine',
