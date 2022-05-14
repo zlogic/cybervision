@@ -1,7 +1,9 @@
 #version 450
 #pragma shader_stage(compute)
 
-layout (local_size_x = 16, local_size_y = 16, local_size_z = 1 ) in;
+#define CORRIDOR_SEGMENT_LENGTH 256
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 layout(std430, binding = 0) buffer readonly Parameters
 {
@@ -11,6 +13,7 @@ layout(std430, binding = 0) buffer readonly Parameters
     int img2_height;
     float dir_x, dir_y;
     int corridor_offset;
+    int corridor_segment;
     int initial_run;
     int kernel_size;
     float threshold;
@@ -139,23 +142,24 @@ void main() {
 
     float best_corr = 0;
     float best_distance = NaN;
-    int min_l = kernel_size;
-    bool corridor_vertical = abs(dir_y)>abs(dir_x);
-    int max_l = (corridor_vertical? img2_height : img2_width) - kernel_size;
-    float corridor_coeff = corridor_vertical? dir_x/dir_y : dir_y/dir_x;
-    for (int l=min_l;l<max_l;l++)
+    const bool corridor_vertical = abs(dir_y)>abs(dir_x);
+    const int corridor_max = (corridor_vertical? img2_height : img2_width) - kernel_size;
+    const int min_l = min(kernel_size + corridor_segment*CORRIDOR_SEGMENT_LENGTH, corridor_max);
+    const int max_l = min(min_l + CORRIDOR_SEGMENT_LENGTH, corridor_max);
+    const float corridor_coeff = corridor_vertical? dir_x/dir_y : dir_y/dir_x;
+    for (int corridor_pos=min_l;corridor_pos<max_l;corridor_pos++)
     {
         int x2, y2;
         if (corridor_vertical)
         {
-            y2 = l;
+            y2 = corridor_pos;
             x2 = int(x1)+corridor_offset + int((y2-int(y1))*corridor_coeff);
             if (x2 < kernel_size || x2 >= img2_width-kernel_size)
                 continue;
         }
         else
         {
-            x2 = l;
+            x2 = corridor_pos;
             y2 = int(y1)+corridor_offset + int((x2-int(x1))*corridor_coeff);
             if (y2 < kernel_size || y2 >= img2_height-kernel_size)
                 continue;

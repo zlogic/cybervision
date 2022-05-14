@@ -49,6 +49,7 @@ typedef struct {
 
     float percent_complete;
     int completed;
+    const char *error;
 
     float *out_points;
 

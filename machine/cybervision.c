@@ -456,6 +456,12 @@ machine_correlate_result(PyObject *self, PyObject *args)
     else if (task->correlation_mode==CORRELATION_MODE_GPU)
         gpu_correlation_cross_correlate_complete(task);
 
+    if (task->error != NULL)
+    {
+        PyErr_Format(CybervisionError, "Correlation task failed: %s", task->error);
+        return NULL;
+    }
+
     out = PyList_New(0);
     for (int y=0;y<task->img1.height;y++)
     {

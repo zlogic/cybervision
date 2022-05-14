@@ -32,7 +32,7 @@ if sys.platform == 'darwin':
     libraries.append('MoltenVK')
 elif sys.platform == 'linux':
     libraries.append('vulkan')
-elif sys.platform =='win32':
+elif sys.platform == 'win32':
     libraries.append('vulkan-1')
 
 machine = Extension(
