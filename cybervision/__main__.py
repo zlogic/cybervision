@@ -30,10 +30,13 @@ def main():
         sys.exit(err)
 
     v = Visualiser(img1.img, img2.img, reconstructor.points3d)
-    if args.interpolate:
-        v.save_surface_image_interpolated(args.output_file)
+    if args.output_file.endswith('obj'):
+        v.save_surface_mesh(args.output_file)
     else:
-        v.save_surface_image(args.output_file)
+        if args.interpolate:
+            v.save_surface_image_interpolated(args.output_file)
+        else:
+            v.save_surface_image(args.output_file)
 
 
 if __name__ == '__main__':

@@ -28,6 +28,8 @@ Run cybervision:
 python3 -m cybervision <img1.tif> <img2.tif> --output-file=<out.png> [--no-interpolate]
 ```
 
+To output a 3D [Wavefront OBJ file](https://en.wikipedia.org/wiki/Wavefront_.obj_file), use an `.obj` filename extension, e.g. `--output-file=out.obj`.
+
 ⚠️ The ideal image size is 1024x1024 (or similar). Using larger images might result in increased processing times, and might cause the GPU to time out ("Device Lost" errors). Smaller images might not have enough details.
 
 ### GPU details
