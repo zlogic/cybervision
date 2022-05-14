@@ -42,7 +42,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         include:
         - os: ubuntu-latest
           archs: x86_64 aarch64
@@ -50,9 +49,8 @@ jobs:
           vulkan_sdk: /usr
         - os: macos-latest
           archs: x86_64 arm64
-          before_build: .github/dependencies/switch-vulkan-macos.sh
           prepare_vulkan_sdk: . .github/dependencies/build-vulkan-macos.sh
-          vulkan_sdk: vulkan-sdk/current
+          vulkan_sdk: vulkan-sdk
         - os: windows-latest
           archs: AMD64
           prepare_vulkan_sdk: . .github/dependencies/build-vulkan-windows.sh
@@ -85,8 +83,8 @@ jobs:
         CIBW_BEFORE_BUILD: ${{ matrix.before_build }}
         CIBW_ENVIRONMENT: VULKAN_SDK=${{ matrix.vulkan_sdk }}
         CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
-          DYLD_LIBRARY_PATH=vulkan-sdk/current/lib delocate-listdeps {wheel} &&
-          DYLD_LIBRARY_PATH=vulkan-sdk/current/lib delocate-wheel --require-archs {delocate_archs} -w {dest_dir} {wheel}
+          DYLD_LIBRARY_PATH=vulkan-sdk/lib delocate-listdeps {wheel} &&
+          DYLD_LIBRARY_PATH=vulkan-sdk/lib delocate-wheel --require-archs {delocate_archs} -w {dest_dir} {wheel}
       run: python3 -m cibuildwheel --output-dir wheelhouse
     - name: Upload wheel artifacts
       uses: actions/upload-artifact@v3
