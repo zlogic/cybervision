@@ -139,11 +139,27 @@ void main() {
 
     float best_corr = 0;
     float best_distance = NaN;
-    for (int y2=kernel_size;y2<img2_height-kernel_size;y2++)
+    int min_l = kernel_size;
+    bool corridor_vertical = abs(dir_y)>abs(dir_x);
+    int max_l = (corridor_vertical? img2_height : img2_width) - kernel_size;
+    float corridor_coeff = corridor_vertical? dir_x/dir_y : dir_y/dir_x;
+    for (int l=min_l;l<max_l;l++)
     {
-        const int x2 = int(x1)+corridor_offset + int(float(y2-y1)*dir_x/dir_y);
-        if (x2 < kernel_size || x2 >= img2_width-kernel_size)
-            continue;
+        int x2, y2;
+        if (corridor_vertical)
+        {
+            y2 = l;
+            x2 = int(x1)+corridor_offset + int((y2-int(y1))*corridor_coeff);
+            if (x2 < kernel_size || x2 >= img2_width-kernel_size)
+                continue;
+        }
+        else
+        {
+            x2 = l;
+            y2 = int(y1)+corridor_offset + int((x2-int(x1))*corridor_coeff);
+            if (y2 < kernel_size || y2 >= img2_height-kernel_size)
+                continue;
+        }
         float avg2 = internals[img2_avg_offset + img2_width*y2 + x2];
         float stdev2 = internals[img2_stdev_offset + img2_width*y2 + x2];
 
@@ -163,7 +179,7 @@ void main() {
         {
             float dx = float(x2)-float(x1);
             float dy = float(y2)-float(y1);
-            float distance = -sqrt(dx*dx+dy*dy);
+            float distance = dx*dx+dy*dy;
             best_distance = distance;
             best_corr = corr;
         }
@@ -172,6 +188,6 @@ void main() {
     if (best_corr > current_corr && best_corr >= threshold)
     {
         internals[correlation_offset + img1_width*y1 + x1] = best_corr;
-        result[img1_width*y1 + x1] = best_distance;
+        result[img1_width*y1 + x1] = -sqrt(best_distance);
     }
 }

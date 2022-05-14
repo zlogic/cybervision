@@ -244,7 +244,7 @@ machine_match_start(PyObject *self, PyObject *args)
 
     if(!correlation_match_points_start(task))
     {
-        PyErr_SetString(CybervisionError, "Failed to start point matchins task");
+        PyErr_SetString(CybervisionError, "Failed to start point matching task");
         Py_DECREF(out);
         return NULL;
     }
@@ -311,6 +311,7 @@ machine_match_result(PyObject *self, PyObject *args)
 static PyObject *
 machine_correlate_start(PyObject *self, PyObject *args)
 {
+    const char* correlation_mode_str;
     float dir_x, dir_y;
     int corridor_size;
     int kernel_size;
@@ -322,7 +323,7 @@ machine_correlate_start(PyObject *self, PyObject *args)
 
     PyObject *out = NULL;
 
-    if (!PyArg_ParseTuple(args, "OOffiifi", &img1, &img2, &dir_x, &dir_y, &corridor_size, &kernel_size, &threshold, &num_threads))
+    if (!PyArg_ParseTuple(args, "sOOffiifi", &correlation_mode_str, &img1, &img2, &dir_x, &dir_y, &corridor_size, &kernel_size, &threshold, &num_threads))
     {
         PyErr_SetString(CybervisionError, "Failed to parse args");
         return NULL;
@@ -338,6 +339,13 @@ machine_correlate_start(PyObject *self, PyObject *args)
     task->img1.img = NULL;
     task->img2.img = NULL;
     task->out_points = NULL;
+
+    if (strcmp("cpu", correlation_mode_str)==0)
+        task->correlation_mode = CORRELATION_MODE_CPU;
+    else if (strcmp("gpu", correlation_mode_str)==0)
+        task->correlation_mode = CORRELATION_MODE_GPU;
+    else
+        task->correlation_mode = -1;
 
     out = PyCapsule_New(task, NULL, free_cross_correlate_task);
 
@@ -372,9 +380,27 @@ machine_correlate_start(PyObject *self, PyObject *args)
     PyBuffer_Release(&img_buffer);
 
     task->out_points = malloc(sizeof(float)*task->img1.width*task->img2.height);
-    if(!gpu_correlation_cross_correlate_start(task))
+    if (task->correlation_mode == CORRELATION_MODE_CPU)
     {
-        PyErr_SetString(CybervisionError, "Failed to start cross correlation task");
+        if(!correlation_cross_correlate_start(task))
+        {
+            PyErr_SetString(CybervisionError, "Failed to start cross correlation task");
+            Py_DECREF(out);
+            return NULL;
+        }
+    }
+    else if (task->correlation_mode == CORRELATION_MODE_GPU)
+    {
+        if(!gpu_correlation_cross_correlate_start(task))
+        {
+            PyErr_SetString(CybervisionError, "Failed to start cross correlation task");
+            Py_DECREF(out);
+            return NULL;
+        }
+    }
+    else
+    {
+        PyErr_Format(CybervisionError, "Unsupported correlation mode %s", correlation_mode_str);
         Py_DECREF(out);
         return NULL;
     }
@@ -425,7 +451,10 @@ machine_correlate_result(PyObject *self, PyObject *args)
         return NULL;
     }
     
-    gpu_correlation_cross_correlate_complete(task);
+    if (task->correlation_mode==CORRELATION_MODE_CPU)
+        correlation_cross_correlate_complete(task);
+    else if (task->correlation_mode==CORRELATION_MODE_GPU)
+        gpu_correlation_cross_correlate_complete(task);
 
     out = PyList_New(0);
     for (int y=0;y<task->img1.height;y++)
