@@ -499,7 +499,8 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
     int corridor_stripes = 2*t->corridor_size+1;
     int max_width = t->img1.width > t->img2.width ? t->img1.width:t->img2.width;
     int max_height = t->img1.height > t->img2.height ? t->img1.height:t->img2.height;
-    int corridor_segments = ((fabs(t->dir_y)>fabs(t->dir_x)? t->img2.height:t->img2.width) - 2*kernel_size)/CORRIDOR_SEGMENT_LENGTH + 1;
+    int corridor_length = (fabs(t->dir_y)>fabs(t->dir_x)? t->img2.height:t->img2.width) - 2*kernel_size;
+    int corridor_segments = corridor_length/CORRIDOR_SEGMENT_LENGTH + 1;
 
     if (!gpu_transfer_in_params(t, &ctx->dev, 0, 0, 1))
     {
@@ -512,12 +513,13 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
         return THREAD_RETURN_VALUE;
     }
 
-    t->percent_complete = 5.0F;
+    t->percent_complete = 2.0F;
 
     for (int c=-corridor_size;c<=corridor_size;c++)
     {
         for (int l=0;l<corridor_segments;l++)
         {
+            float corridor_complete = (float)(l)*CORRIDOR_SEGMENT_LENGTH/corridor_length;
             if (!gpu_transfer_in_params(t, &ctx->dev, c, l, 0))
             {
                 t-> error = "Failed to transfer input parameters";
@@ -529,7 +531,7 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
                 break;
             }
 
-            t->percent_complete = 5.0F + 95.0F*(c+corridor_size + (float)(l)/corridor_segments)/corridor_stripes;
+            t->percent_complete = 2.0F + 98.0F*(c+corridor_size + corridor_complete)/corridor_stripes;
         }
     }
 
