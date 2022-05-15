@@ -65,6 +65,31 @@ class Visualiser:
                 surface.putpixel((x, y), (r, g, b, 255))
         surface.save(filename)
 
+    def save_surface_mesh(self, filename):
+        # TODO: improve this code
+        xy_points = [(p[0], p[1]) for p in self.points3d]
+        x_coords = numpy.linspace(0, self.img1.width, 100, endpoint=False)
+        y_coords = numpy.linspace(0, self.img1.height, 100, endpoint=False)
+        xx, yy = numpy.meshgrid(x_coords, y_coords)
+        z_values = [p[2] for p in self.points3d]
+        depth_values = scipy.interpolate.griddata(xy_points, z_values, (xx, yy), method='linear')
+
+        xy_points = []
+        z_values = []
+        for (ix, iy), z in numpy.ndenumerate(depth_values.T):
+            if not math.isnan(z):
+                xy_points.append((x_coords[ix], self.img1.height-y_coords[iy]))
+                z_values.append(z)
+
+        mesh = scipy.spatial.Delaunay(xy_points)
+        with open(filename, 'w') as f:
+            for i, xy in enumerate(xy_points):
+                f.write(f'v {xy[0]} {xy[1]} {z_values[i]}\n')
+
+            for t in mesh.simplices:
+                point_list = ' '.join([str(tv) for tv in t])
+                f.write(f'f {point_list}\n')
+
     def __init__(self, img1: Image, img2: Image, points3d):
         self.img1 = img1
         self.img2 = img2

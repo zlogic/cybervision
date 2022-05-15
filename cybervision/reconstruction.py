@@ -87,7 +87,7 @@ class Reconstructor:
         return (best_matches, best_dir_x, best_dir_y)
 
     def create_surface(self):
-        correlate_task = machine.correlate_start(self.img1, self.img2, self.dir_x, self.dir_y,
+        correlate_task = machine.correlate_start(self.triangulation_mode, self.img1, self.img2, self.dir_x, self.dir_y,
                                                  self.triangulation_corridor, self.triangulation_kernel_size,
                                                  self.triangulation_threshold,
                                                  self.num_threads)
@@ -193,6 +193,7 @@ class Reconstructor:
         self.triangulation_kernel_size = 5
         self.triangulation_threshold = 0.8
         self.triangulation_corridor = 5
+        self.triangulation_mode = 'gpu'
         # self.triangulation_corridor = 7
         self.ransac_min_length = 3
         self.ransac_k = 1000

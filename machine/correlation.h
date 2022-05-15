@@ -33,7 +33,13 @@ void correlation_match_points_cancel(match_task*);
 int correlation_match_points_complete(match_task*);
 
 typedef void* cross_correlate_task_internal;
+typedef enum 
+{ 
+    CORRELATION_MODE_CPU = 0,
+    CORRELATION_MODE_GPU = 1
+} correlation_mode;
 typedef struct {
+    correlation_mode correlation_mode;
     correlation_image img1, img2;
     float dir_x, dir_y;
     int corridor_size;
@@ -43,6 +49,7 @@ typedef struct {
 
     float percent_complete;
     int completed;
+    const char *error;
 
     float *out_points;
 

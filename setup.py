@@ -1,12 +1,23 @@
 import sys
+import os
 from setuptools import setup, Extension
 from glob import glob
 
 extra_compile_args = []
 sources = [
-        'machine/cybervision.c',
-        'machine/correlation.c'
-    ]
+    'machine/cybervision.c',
+    'machine/correlation.c'
+]
+
+include_dirs = []
+library_dirs = []
+libraries = []
+
+sdk_path = os.environ.get('VULKAN_SDK')
+if not sdk_path:
+    raise RuntimeError("VULKAN_SDK is not set")
+else:
+    sources.append('machine/vulkan_correlation.c')
 
 if sys.platform in ['darwin', 'linux']:
     extra_compile_args.append('-pthread')
@@ -15,15 +26,28 @@ elif sys.platform == 'win32':
 
 sources = sources + glob('machine/fast/*.c')
 
+library_dirs.append(f'{sdk_path}/lib')
+include_dirs.append(f'{sdk_path}/include')
+if sys.platform == 'darwin':
+    include_dirs.append(f'{sdk_path}/libexec/include')
+    libraries.append('MoltenVK')
+elif sys.platform == 'linux':
+    libraries.append('vulkan')
+elif sys.platform == 'win32':
+    libraries.append('vulkan-1')
+
 machine = Extension(
     'cybervision.machine',
     sources=sources,
-    extra_compile_args=extra_compile_args
+    extra_compile_args=extra_compile_args,
+    include_dirs=include_dirs,
+    library_dirs=library_dirs,
+    libraries=libraries
 )
 
 setup(
     name='cybervision',
-    version='0.0.1',
+    version='0.1.0',
     python_requires='>=3.8',
     author='Dmitrii Zolotukhin',
     author_email='zlogic@gmail.com',

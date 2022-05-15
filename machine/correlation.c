@@ -392,6 +392,7 @@ int correlation_cross_correlate_start(cross_correlate_task* task)
     task->percent_complete = 0.0;
     ctx->threads_completed = 0;
     task->completed = 0;
+    task->error = NULL;
 
     int max_height = h1>h2 ? h1 : h2;
     int max_width = w1>w2 ? w1 : w2;
