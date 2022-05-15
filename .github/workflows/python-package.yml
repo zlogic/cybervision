@@ -5,7 +5,7 @@ name: Python package
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, python_metal ]
   pull_request:
     branches: [ master ]
 
@@ -40,21 +40,15 @@ jobs:
     needs: validate
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
         - os: ubuntu-latest
           archs: x86_64 aarch64
-          before_build: .github/dependencies/install-vulkan-linux.sh
-          vulkan_sdk: /usr
         - os: macos-latest
           archs: x86_64 arm64
-          prepare_vulkan_sdk: . .github/dependencies/build-vulkan-macos.sh
-          vulkan_sdk: vulkan-sdk
         - os: windows-latest
           archs: AMD64
-          prepare_vulkan_sdk: . .github/dependencies/build-vulkan-windows.sh
-          vulkan_sdk: vulkan-sdk
 
     steps:
     - uses: actions/checkout@v3
@@ -66,25 +60,41 @@ jobs:
         sudo apt-get update -y
         sudo apt-get install qemu-user-static
     - name: Cache Vulkan SDK
-      if: matrix.os != 'ubuntu-latest'
+      if: matrix.os == 'windows-latest'
       id: cache-vulkan-sdk
       uses: actions/cache@v3
       with:
         path: vulkan-sdk
-        key: ${{ matrix.os }}-${{ hashFiles('.github/dependencies/build-vulkan-*.sh') }}-vulkan-sdk
-    - name: Prepare Vulkan SDK
-      if: matrix.os != 'ubuntu-latest' && steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
+        key: ${{ matrix.os }}-vulkan-sdk
+    - name: Build Vulkan SDK
+      if: matrix.os == 'windows-latest' && steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
       shell: sh
-      run: ${{ matrix.prepare_vulkan_sdk }}
+      run: |
+        mkdir vulkan-loader vulkan-sdk
+        cd vulkan-loader
+        curl -L -o - https://github.com/KhronosGroup/Vulkan-Loader/archive/refs/tags/v1.3.213.tar.gz | tar -xz --strip-components=1
+
+        cmake -A x64 -S. -Bbuild -DUPDATE_DEPS=On -DCMAKE_INSTALL_PREFIX=../vulkan-sdk
+        cmake --build build --config Release --target install
+
+        cp -rf external/Vulkan-Headers/build/install/include ../vulkan-sdk/
     - name: Build wheels
       env:
         CIBW_BUILD_VERBOSITY: 1
         CIBW_ARCHS: ${{ matrix.archs }}
-        CIBW_BEFORE_BUILD: ${{ matrix.before_build }}
-        CIBW_ENVIRONMENT: VULKAN_SDK=${{ matrix.vulkan_sdk }}
-        CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
-          DYLD_LIBRARY_PATH=vulkan-sdk/lib delocate-listdeps {wheel} &&
-          DYLD_LIBRARY_PATH=vulkan-sdk/lib delocate-wheel --require-archs {delocate_archs} -w {dest_dir} {wheel}
+        CIBW_ENVIRONMENT_LINUX: VULKAN_SDK=/usr
+        CIBW_ENVIRONMENT_WINDOWS: VULKAN_SDK=vulkan-sdk
+        CIBW_BEFORE_BUILD_LINUX: >
+          source /etc/os-release;
+          if [ "$ID" == "centos" ] && [ "$VERSION_ID" == "7" ]; then
+              yum -y install vulkan-devel
+          elif [ "$ID" == "debian" ]; then
+              apt-get update && apt-get install libvulkan-dev
+          elif [ "$ID" == "alpine" ]; then
+              apk add --no-cache vulkan-loader-dev
+          else
+              echo "Cannot detect OS from $ID" && exit 1
+          fi
       run: python3 -m cibuildwheel --output-dir wheelhouse
     - name: Upload wheel artifacts
       uses: actions/upload-artifact@v3

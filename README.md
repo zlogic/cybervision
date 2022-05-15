@@ -45,7 +45,7 @@ To run Cybervision, you will need the Vulkan runtime library:
 
 * In Linux, it's called `libvulkan.so.1` and the package is typically called something like `vulkan`, `vulkan-loader` or `libvulkan`.
 * In Windows, it's the Vulkan Runtime (VulkanRT) should already be installed - it's included with GPU drivers.
-* In macOS, the MoltenVK library is already included with the Python wheel.
+* In macOS, a native Metal implementation is used instead of Vulkan.
 
 More details can be found in [gpu.md](gpu.md).
 
@@ -73,4 +73,3 @@ anything else (like a UI) can be added separately.
 * [fast](https://www.edwardrosten.com/work/fast.html) keypoint detector
 * [scipy](https://scipy.org) and [numpy](https://numpy.org) for point interpolation
 * [Pillow](https://python-pillow.org) image library
-* [MoltenVK](https://github.com/KhronosGroup/MoltenVK) to use Vulkan in macOS

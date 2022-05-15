@@ -9,32 +9,33 @@ sources = [
     'machine/correlation.c'
 ]
 
-include_dirs = []
-library_dirs = []
-libraries = []
-
-sdk_path = os.environ.get('VULKAN_SDK')
-if not sdk_path:
-    raise RuntimeError("VULKAN_SDK is not set")
-else:
-    sources.append('machine/vulkan_correlation.c')
-
 if sys.platform in ['darwin', 'linux']:
     extra_compile_args.append('-pthread')
 elif sys.platform == 'win32':
     sources.append('machine/win32/pthread.c')
 
-sources = sources + glob('machine/fast/*.c')
+include_dirs = []
+library_dirs = []
+libraries = []
 
-library_dirs.append(f'{sdk_path}/lib')
-include_dirs.append(f'{sdk_path}/include')
-if sys.platform == 'darwin':
-    include_dirs.append(f'{sdk_path}/libexec/include')
-    libraries.append('MoltenVK')
-elif sys.platform == 'linux':
-    libraries.append('vulkan')
-elif sys.platform == 'win32':
-    libraries.append('vulkan-1')
+sdk_path = os.environ.get('VULKAN_SDK')
+if sys.platform == 'darwin' and not sdk_path:
+    sources.append('machine/metal_correlation.c')
+elif not sdk_path:
+    raise RuntimeError("VULKAN_SDK is not set")
+else:
+    sources.append('machine/vulkan_correlation.c')
+    library_dirs.append(f'{sdk_path}/lib')
+    include_dirs.append(f'{sdk_path}/include')
+    if sys.platform == 'darwin':
+        include_dirs.append(f'{sdk_path}/libexec/include')
+        libraries.append('MoltenVK')
+    elif sys.platform == 'linux':
+        libraries.append('vulkan')
+    elif sys.platform == 'win32':
+        libraries.append('vulkan-1')
+
+sources = sources + glob('machine/fast/*.c')
 
 machine = Extension(
     'cybervision.machine',

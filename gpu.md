@@ -1,12 +1,16 @@
 # Vulkan
 
+To build with Vulkan, set the `VULKAN_SDK` environment variable.
+
 ## MoltenVK
+
+Note: MoltenVK remains an option, but using Metal is a better option for Apple machines. 
 
 Download [molten-vk](https://formulae.brew.sh/formula/molten-vk) from Homebrew.
 
 To set a custom logging level, use the `MVK_CONFIG_LOG_LEVEL` evironment variable (e.g. `export MVK_CONFIG_LOG_LEVEL=NONE`).
 
-## Compile shaders
+# Compile shaders
 
 Download the [glslang](https://github.com/KhronosGroup/glslang) compiler from [Homebrew](https://formulae.brew.sh/formula/glslang).
 
@@ -22,4 +26,5 @@ Or with the MoltenVKShaderConverter:
 
 ```shell
 MoltenVKShaderConverter -gi shaders/correlation.glsl -oh -t c -so machine/shaders_spv.h
+xxd -i shaders/correlation.metal > machine/shaders_metal.h
 ```
