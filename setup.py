@@ -6,16 +6,8 @@ from glob import glob
 extra_compile_args = []
 sources = [
     'machine/cybervision.c',
-    'machine/correlation.c',
-    'machine/gpu_correlation.c'
+    'machine/correlation.c'
 ]
-
-if sys.platform in ['darwin', 'linux']:
-    extra_compile_args.append('-pthread')
-elif sys.platform == 'win32':
-    sources.append('machine/win32/pthread.c')
-
-sources = sources + glob('machine/fast/*.c')
 
 include_dirs = []
 library_dirs = []
@@ -24,6 +16,15 @@ libraries = []
 sdk_path = os.environ.get('VULKAN_SDK')
 if not sdk_path:
     raise RuntimeError("VULKAN_SDK is not set")
+else:
+    sources.append('machine/vulkan_correlation.c')
+
+if sys.platform in ['darwin', 'linux']:
+    extra_compile_args.append('-pthread')
+elif sys.platform == 'win32':
+    sources.append('machine/win32/pthread.c')
+
+sources = sources + glob('machine/fast/*.c')
 
 library_dirs.append(f'{sdk_path}/lib')
 include_dirs.append(f'{sdk_path}/include')
@@ -46,7 +47,7 @@ machine = Extension(
 
 setup(
     name='cybervision',
-    version='0.0.1',
+    version='0.1.0',
     python_requires='>=3.8',
     author='Dmitrii Zolotukhin',
     author_email='zlogic@gmail.com',
