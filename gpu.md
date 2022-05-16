@@ -10,6 +10,12 @@ Download [molten-vk](https://formulae.brew.sh/formula/molten-vk) from Homebrew.
 
 To set a custom logging level, use the `MVK_CONFIG_LOG_LEVEL` evironment variable (e.g. `export MVK_CONFIG_LOG_LEVEL=NONE`).
 
+## Metal
+
+The Metal option was only tested on an M1 Macbook Air.
+
+Set the `OBJC_DEBUG_MISSING_POOLS` environment variable to `YES` to confirm that pointer autoreleases are working as expected.
+
 # Compile shaders
 
 Download the [glslang](https://github.com/KhronosGroup/glslang) compiler from [Homebrew](https://formulae.brew.sh/formula/glslang).

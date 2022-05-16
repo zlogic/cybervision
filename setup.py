@@ -17,10 +17,13 @@ elif sys.platform == 'win32':
 include_dirs = []
 library_dirs = []
 libraries = []
+extra_link_args = []
 
 sdk_path = os.environ.get('VULKAN_SDK')
 if sys.platform == 'darwin' and not sdk_path:
     sources.append('machine/metal_correlation.c')
+    extra_link_args += ['-framework', 'CoreGraphics', '-framework', 'Metal']
+
 elif not sdk_path:
     raise RuntimeError("VULKAN_SDK is not set")
 else:
@@ -43,7 +46,8 @@ machine = Extension(
     extra_compile_args=extra_compile_args,
     include_dirs=include_dirs,
     library_dirs=library_dirs,
-    libraries=libraries
+    libraries=libraries,
+    extra_link_args=extra_link_args
 )
 
 setup(

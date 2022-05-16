@@ -43,7 +43,6 @@ typedef struct {
 
     vulkan_device dev;
 
-    pthread_mutex_t lock;
     pthread_t thread;
 } vulkan_context;
 

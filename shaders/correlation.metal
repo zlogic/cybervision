@@ -15,7 +15,6 @@ struct Parameters
     float dir_y;
     int corridor_offset;
     int corridor_segment;
-    int initial_run;
     int kernel_size;
     float threshold;
 };
@@ -35,10 +34,7 @@ struct Images
     float images[1];
 };
 
-constant uint3 gl_WorkGroupSize [[maybe_unused]] = uint3(16u, 16u, 1u);
-
-static inline __attribute__((always_inline))
-void prepare_initialdata(thread uint3& gl_GlobalInvocationID, const device Parameters& v_29, device Internals& v_104, device Result& v_121, const device Images& v_200)
+kernel void prepare_initialdata(const device Parameters& v_29 [[buffer(0)]], device Internals& v_104 [[buffer(1)]], device Result& v_121 [[buffer(2)]], const device Images& v_200 [[buffer(3)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
 {
     uint x = gl_GlobalInvocationID.x;
     uint y = gl_GlobalInvocationID.y;
@@ -182,13 +178,8 @@ void prepare_initialdata(thread uint3& gl_GlobalInvocationID, const device Param
     }
 }
 
-kernel void main0(const device Parameters& v_29 [[buffer(0)]], device Internals& v_104 [[buffer(1)]], device Result& v_121 [[buffer(2)]], const device Images& v_200 [[buffer(3)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+kernel void cross_correlate(const device Parameters& v_29 [[buffer(0)]], device Internals& v_104 [[buffer(1)]], device Result& v_121 [[buffer(2)]], const device Images& v_200 [[buffer(3)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
 {
-    if (v_29.initial_run == 1)
-    {
-        prepare_initialdata(gl_GlobalInvocationID, v_29, v_104, v_121, v_200);
-        return;
-    }
     uint x1 = gl_GlobalInvocationID.x;
     uint y1 = gl_GlobalInvocationID.y;
     float kernel_point_count = float(((2 * v_29.kernel_size) + 1) * ((2 * v_29.kernel_size) + 1));
