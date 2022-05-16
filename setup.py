@@ -47,7 +47,7 @@ machine = Extension(
 
 setup(
     name='cybervision',
-    version='0.1.0',
+    version='0.1.1',
     python_requires='>=3.8',
     author='Dmitrii Zolotukhin',
     author_email='zlogic@gmail.com',

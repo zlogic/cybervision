@@ -87,7 +87,7 @@ class Visualiser:
                 f.write(f'v {xy[0]} {xy[1]} {z_values[i]}\n')
 
             for t in mesh.simplices:
-                point_list = ' '.join([str(tv) for tv in t])
+                point_list = ' '.join([str(tv+1) for tv in t])
                 f.write(f'f {point_list}\n')
 
     def __init__(self, img1: Image, img2: Image, points3d):
