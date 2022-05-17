@@ -19,25 +19,10 @@ struct Parameters
     float threshold;
 };
 
-struct Internals
+kernel void prepare_initialdata(const device Parameters& v_29 [[buffer(0)]], const device float* v_200[[buffer(1)]], device float* v_104[[buffer(2)]], device float* v_121[[buffer(3)]], uint2 index [[thread_position_in_grid]])
 {
-    float internals[1];
-};
-
-struct Result
-{
-    float result[1];
-};
-
-struct Images
-{
-    float images[1];
-};
-
-kernel void prepare_initialdata(const device Parameters& v_29 [[buffer(0)]], device Internals& v_104 [[buffer(1)]], device Result& v_121 [[buffer(2)]], const device Images& v_200 [[buffer(3)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
-{
-    uint x = gl_GlobalInvocationID.x;
-    uint y = gl_GlobalInvocationID.y;
+    uint x = index.x;
+    uint y = index.y;
     float kernel_point_count = float(((2 * v_29.kernel_size) + 1) * ((2 * v_29.kernel_size) + 1));
     uint img1_offset = 0u;
     uint img2_offset = uint(v_29.img1_width * v_29.img1_height);
@@ -57,8 +42,8 @@ kernel void prepare_initialdata(const device Parameters& v_29 [[buffer(0)]], dev
     }
     if (_98)
     {
-        v_104.internals[(uint(correlation_offset) + (uint(v_29.img1_width) * y)) + x] = 0.0;
-        v_121.result[(uint(v_29.img1_width) * y) + x] = as_type<float>(0x7fc00000u /* nan */);
+        v_104[(uint(correlation_offset) + (uint(v_29.img1_width) * y)) + x] = 0.0;
+        v_121[(uint(v_29.img1_width) * y) + x] = as_type<float>(0x7fc00000u /* nan */);
     }
     bool _135 = x >= uint(v_29.kernel_size);
     bool _146;
@@ -98,7 +83,7 @@ kernel void prepare_initialdata(const device Parameters& v_29 [[buffer(0)]], dev
             int _186 = -v_29.kernel_size;
             for (int i = _186; i <= v_29.kernel_size; i++)
             {
-                float value = v_200.images[(img1_offset + ((y + uint(j)) * uint(v_29.img1_width))) + (x + uint(i))];
+                float value = v_200[(img1_offset + ((y + uint(j)) * uint(v_29.img1_width))) + (x + uint(i))];
                 avg += value;
             }
         }
@@ -109,14 +94,14 @@ kernel void prepare_initialdata(const device Parameters& v_29 [[buffer(0)]], dev
             int _244 = -v_29.kernel_size;
             for (int i_1 = _244; i_1 <= v_29.kernel_size; i_1++)
             {
-                float value_1 = v_200.images[(img1_offset + ((y + uint(j_1)) * uint(v_29.img1_width))) + (x + uint(i_1))];
+                float value_1 = v_200[(img1_offset + ((y + uint(j_1)) * uint(v_29.img1_width))) + (x + uint(i_1))];
                 float delta = value_1 - avg;
                 stdev += (delta * delta);
             }
         }
         stdev = sqrt(stdev / kernel_point_count);
-        v_104.internals[(0u + (uint(v_29.img1_width) * y)) + x] = avg;
-        v_104.internals[(uint(img1_stdev_offset) + (uint(v_29.img1_width) * y)) + x] = stdev;
+        v_104[(0u + (uint(v_29.img1_width) * y)) + x] = avg;
+        v_104[(uint(img1_stdev_offset) + (uint(v_29.img1_width) * y)) + x] = stdev;
     }
     bool _315 = x >= uint(v_29.kernel_size);
     bool _326;
@@ -156,7 +141,7 @@ kernel void prepare_initialdata(const device Parameters& v_29 [[buffer(0)]], dev
             int _366 = -v_29.kernel_size;
             for (int i_2 = _366; i_2 <= v_29.kernel_size; i_2++)
             {
-                float value_2 = v_200.images[(img2_offset + ((y + uint(j_2)) * uint(v_29.img2_width))) + (x + uint(i_2))];
+                float value_2 = v_200[(img2_offset + ((y + uint(j_2)) * uint(v_29.img2_width))) + (x + uint(i_2))];
                 avg_1 += value_2;
             }
         }
@@ -167,21 +152,21 @@ kernel void prepare_initialdata(const device Parameters& v_29 [[buffer(0)]], dev
             int _420 = -v_29.kernel_size;
             for (int i_3 = _420; i_3 <= v_29.kernel_size; i_3++)
             {
-                float value_3 = v_200.images[(img2_offset + ((y + uint(j_3)) * uint(v_29.img2_width))) + (x + uint(i_3))];
+                float value_3 = v_200[(img2_offset + ((y + uint(j_3)) * uint(v_29.img2_width))) + (x + uint(i_3))];
                 float delta_1 = value_3 - avg_1;
                 stdev_1 += (delta_1 * delta_1);
             }
         }
         stdev_1 = sqrt(stdev_1 / kernel_point_count);
-        v_104.internals[(uint(img2_avg_offset) + (uint(v_29.img2_width) * y)) + x] = avg_1;
-        v_104.internals[(uint(img2_stdev_offset) + (uint(v_29.img2_width) * y)) + x] = stdev_1;
+        v_104[(uint(img2_avg_offset) + (uint(v_29.img2_width) * y)) + x] = avg_1;
+        v_104[(uint(img2_stdev_offset) + (uint(v_29.img2_width) * y)) + x] = stdev_1;
     }
 }
 
-kernel void cross_correlate(const device Parameters& v_29 [[buffer(0)]], device Internals& v_104 [[buffer(1)]], device Result& v_121 [[buffer(2)]], const device Images& v_200 [[buffer(3)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+kernel void cross_correlate(const device Parameters& v_29 [[buffer(0)]], const device float* v_200[[buffer(1)]], device float* v_104[[buffer(2)]], device float* v_121[[buffer(3)]], uint2 index [[thread_position_in_grid]])
 {
-    uint x1 = gl_GlobalInvocationID.x;
-    uint y1 = gl_GlobalInvocationID.y;
+    uint x1 = index.x;
+    uint y1 = index.y;
     float kernel_point_count = float(((2 * v_29.kernel_size) + 1) * ((2 * v_29.kernel_size) + 1));
     bool _518 = x1 < uint(v_29.kernel_size);
     bool _530;
@@ -221,8 +206,8 @@ kernel void cross_correlate(const device Parameters& v_29 [[buffer(0)]], device 
     int img2_avg_offset = img1_stdev_offset + (v_29.img1_width * v_29.img1_height);
     int img2_stdev_offset = img2_avg_offset + (v_29.img2_width * v_29.img2_height);
     int correlation_offset = img2_stdev_offset + (v_29.img2_width * v_29.img2_height);
-    float avg1 = v_104.internals[(0u + (uint(v_29.img1_width) * y1)) + x1];
-    float stdev1 = v_104.internals[(uint(img1_stdev_offset) + (uint(v_29.img1_width) * y1)) + x1];
+    float avg1 = v_104[(0u + (uint(v_29.img1_width) * y1)) + x1];
+    float stdev1 = v_104[(uint(img1_stdev_offset) + (uint(v_29.img1_width) * y1)) + x1];
     float best_corr = 0.0;
     float best_distance = as_type<float>(0x7fc00000u /* nan */);
     bool corridor_vertical = abs(v_29.dir_y) > abs(v_29.dir_x);
@@ -290,8 +275,8 @@ kernel void cross_correlate(const device Parameters& v_29 [[buffer(0)]], device 
                 continue;
             }
         }
-        float avg2 = v_104.internals[(img2_avg_offset + (v_29.img2_width * y2)) + x2];
-        float stdev2 = v_104.internals[(img2_stdev_offset + (v_29.img2_width * y2)) + x2];
+        float avg2 = v_104[(img2_avg_offset + (v_29.img2_width * y2)) + x2];
+        float stdev2 = v_104[(img2_stdev_offset + (v_29.img2_width * y2)) + x2];
         float corr = 0.0;
         int _787 = -v_29.kernel_size;
         for (int j = _787; j <= v_29.kernel_size; j++)
@@ -299,8 +284,8 @@ kernel void cross_correlate(const device Parameters& v_29 [[buffer(0)]], device 
             int _800 = -v_29.kernel_size;
             for (int i = _800; i <= v_29.kernel_size; i++)
             {
-                float delta1 = v_200.images[(img1_offset + ((y1 + uint(j)) * uint(v_29.img1_width))) + (x1 + uint(i))] - avg1;
-                float delta2 = v_200.images[(img2_offset + uint((y2 + j) * v_29.img2_width)) + uint(x2 + i)] - avg2;
+                float delta1 = v_200[(img1_offset + ((y1 + uint(j)) * uint(v_29.img1_width))) + (x1 + uint(i))] - avg1;
+                float delta2 = v_200[(img2_offset + uint((y2 + j) * v_29.img2_width)) + uint(x2 + i)] - avg2;
                 corr += (delta1 * delta2);
             }
         }
@@ -314,7 +299,7 @@ kernel void cross_correlate(const device Parameters& v_29 [[buffer(0)]], device 
             best_corr = corr;
         }
     }
-    float current_corr = v_104.internals[(uint(correlation_offset) + (uint(v_29.img1_width) * y1)) + x1];
+    float current_corr = v_104[(uint(correlation_offset) + (uint(v_29.img1_width) * y1)) + x1];
     bool _909 = best_corr > current_corr;
     bool _917;
     if (_909)
@@ -327,8 +312,8 @@ kernel void cross_correlate(const device Parameters& v_29 [[buffer(0)]], device 
     }
     if (_917)
     {
-        v_104.internals[(uint(correlation_offset) + (uint(v_29.img1_width) * y1)) + x1] = best_corr;
-        v_121.result[(uint(v_29.img1_width) * y1) + x1] = -sqrt(best_distance);
+        v_104[(uint(correlation_offset) + (uint(v_29.img1_width) * y1)) + x1] = best_corr;
+        v_121[(uint(v_29.img1_width) * y1) + x1] = -sqrt(best_distance);
     }
 }
 
