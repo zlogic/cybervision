@@ -47,7 +47,7 @@ typedef struct {
     pthread_t thread;
 } metal_context;
 
-#define CORRIDOR_SEGMENT_LENGTH 256
+#define CORRIDOR_SEGMENT_LENGTH 1024
 
 typedef struct {
     int32_t img1_width;
