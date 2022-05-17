@@ -46,8 +46,6 @@ typedef struct {
     pthread_t thread;
 } vulkan_context;
 
-#define CORRIDOR_SEGMENT_LENGTH 256
-
 typedef struct {
     int32_t img1_width;
     int32_t img1_height;
@@ -55,7 +53,8 @@ typedef struct {
     int32_t img2_height;
     float dir_x, dir_y;
     int32_t corridor_offset;
-    int32_t corridor_segment;
+    int32_t corridor_start;
+    int32_t corridor_end;
     int32_t initial_run;
     int32_t kernel_size;
     float threshold;
@@ -454,7 +453,7 @@ int gpu_transfer_in_images(correlation_image img1, correlation_image img2, VkDev
     return 1;
 }
 
-int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev, int corridor_offset, int corridor_segment, int initial_run)
+int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev, int corridor_offset, int corridor_start, int corridor_end, int initial_run)
 {
     shader_params *payload;
 
@@ -468,7 +467,8 @@ int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev, int corr
     payload->dir_x = t->dir_x;
     payload->dir_y = t->dir_y;
     payload->corridor_offset = corridor_offset;
-    payload->corridor_segment = corridor_segment;
+    payload->corridor_start = corridor_start;
+    payload->corridor_end = corridor_end;
     payload->initial_run = initial_run;
     payload->kernel_size = t->kernel_size;
     payload->threshold = t->threshold;
@@ -498,10 +498,10 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
     int corridor_stripes = 2*t->corridor_size+1;
     int max_width = t->img1.width > t->img2.width ? t->img1.width:t->img2.width;
     int max_height = t->img1.height > t->img2.height ? t->img1.height:t->img2.height;
-    int corridor_length = (fabs(t->dir_y)>fabs(t->dir_x)? t->img2.height:t->img2.width) - 2*kernel_size;
-    int corridor_segments = corridor_length/CORRIDOR_SEGMENT_LENGTH + 1;
+    int corridor_length = (fabs(t->dir_y)>fabs(t->dir_x)? t->img2.height:t->img2.width);
+    int corridor_segments = corridor_length/t->corridor_segment_length + 1;
 
-    if (!gpu_transfer_in_params(t, &ctx->dev, 0, 0, 1))
+    if (!gpu_transfer_in_params(t, &ctx->dev, 0, 0, 0, 1))
     {
         t-> error = "Failed to transfer input parameters (initialization stage)";
         return THREAD_RETURN_VALUE;
@@ -518,8 +518,11 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
     {
         for (int l=0;l<corridor_segments;l++)
         {
-            float corridor_complete = (float)(l)*CORRIDOR_SEGMENT_LENGTH/corridor_length;
-            if (!gpu_transfer_in_params(t, &ctx->dev, c, l, 0))
+            int corridor_start = kernel_size + l*t->corridor_segment_length;
+            int corridor_end = kernel_size + (l+1)*t->corridor_segment_length;
+            if (corridor_end> corridor_length-kernel_size)
+                corridor_end = corridor_length-kernel_size;
+            if (!gpu_transfer_in_params(t, &ctx->dev, c, corridor_start, corridor_end, 0))
             {
                 t-> error = "Failed to transfer input parameters";
                 break;
@@ -530,6 +533,7 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
                 break;
             }
 
+            float corridor_complete = (float)(corridor_end - kernel_size) / (corridor_length-2*kernel_size);
             t->percent_complete = 2.0F + 98.0F*(c+corridor_size + corridor_complete)/corridor_stripes;
         }
     }

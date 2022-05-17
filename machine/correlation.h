@@ -46,6 +46,7 @@ typedef struct {
     int kernel_size;
     float threshold;
     int num_threads;
+    int corridor_segment_length;
 
     float percent_complete;
     int completed;

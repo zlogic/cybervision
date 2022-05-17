@@ -317,13 +317,14 @@ machine_correlate_start(PyObject *self, PyObject *args)
     int kernel_size;
     float threshold;
     int num_threads;
+    int corridor_segment_length;
     PyObject *img1, *img2;
     Py_buffer img_buffer;
     cross_correlate_task *task;
 
     PyObject *out = NULL;
 
-    if (!PyArg_ParseTuple(args, "sOOffiifi", &correlation_mode_str, &img1, &img2, &dir_x, &dir_y, &corridor_size, &kernel_size, &threshold, &num_threads))
+    if (!PyArg_ParseTuple(args, "sOOffiifii", &correlation_mode_str, &img1, &img2, &dir_x, &dir_y, &corridor_size, &kernel_size, &threshold, &num_threads, &corridor_segment_length))
     {
         PyErr_SetString(CybervisionError, "Failed to parse args");
         return NULL;
@@ -336,6 +337,7 @@ machine_correlate_start(PyObject *self, PyObject *args)
     task->kernel_size = kernel_size;
     task->threshold = threshold;
     task->num_threads = num_threads;
+    task->corridor_segment_length = corridor_segment_length;
     task->img1.img = NULL;
     task->img2.img = NULL;
     task->out_points = NULL;

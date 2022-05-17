@@ -90,7 +90,7 @@ class Reconstructor:
         correlate_task = machine.correlate_start(self.triangulation_mode, self.img1, self.img2, self.dir_x, self.dir_y,
                                                  self.triangulation_corridor, self.triangulation_kernel_size,
                                                  self.triangulation_threshold,
-                                                 self.num_threads)
+                                                 self.num_threads, self.triangulation_corridor_segment_length)
         progressbar = Progressbar()
         while True:
             (completed, percent_complete) = machine.correlate_status(correlate_task)
@@ -194,6 +194,8 @@ class Reconstructor:
         self.triangulation_threshold = 0.8
         self.triangulation_corridor = 5
         self.triangulation_mode = 'gpu'
+        # Decrease when using a low-powered GPU
+        self.triangulation_corridor_segment_length = 256
         # self.triangulation_corridor = 7
         self.ransac_min_length = 3
         self.ransac_k = 1000

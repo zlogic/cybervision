@@ -14,7 +14,8 @@ struct Parameters
     float dir_x;
     float dir_y;
     int corridor_offset;
-    int corridor_segment;
+    int corridor_start;
+    int corridor_end;
     int kernel_size;
     float threshold;
 };
@@ -220,9 +221,6 @@ kernel void cross_correlate(const device Parameters& v_29 [[buffer(0)]], const d
     {
         _633 = v_29.img2_width;
     }
-    int corridor_max = _633 - v_29.kernel_size;
-    int min_l = min((v_29.kernel_size + (v_29.corridor_segment * 256)), corridor_max);
-    int max_l = min((min_l + 256), corridor_max);
     float _663;
     if (corridor_vertical)
     {
@@ -235,7 +233,7 @@ kernel void cross_correlate(const device Parameters& v_29 [[buffer(0)]], const d
     float corridor_coeff = _663;
     int y2;
     int x2;
-    for (int corridor_pos = min_l; corridor_pos < max_l; corridor_pos++)
+    for (int corridor_pos = v_29.corridor_start; corridor_pos < v_29.corridor_end; corridor_pos++)
     {
         if (corridor_vertical)
         {

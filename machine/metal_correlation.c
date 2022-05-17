@@ -44,8 +44,6 @@ typedef struct {
     pthread_t thread;
 } metal_context;
 
-#define CORRIDOR_SEGMENT_LENGTH 1024
-
 typedef struct {
     int32_t img1_width;
     int32_t img1_height;
@@ -53,7 +51,8 @@ typedef struct {
     int32_t img2_height;
     float dir_x, dir_y;
     int32_t corridor_offset;
-    int32_t corridor_segment;
+    int32_t corridor_start;
+    int32_t corridor_end;
     int32_t kernel_size;
     float threshold;
 } shader_params;
@@ -112,9 +111,9 @@ int gpu_init_functions(metal_device *dev)
 
     id error = NULL;
     dev->library = ((id (*)(id, SEL, id, id, id*))objc_msgSend)(dev->device, sel_registerName("newLibraryWithSource:options:error:"), sourceString, compileOptions, &error);
-    if (dev->library == NULL)
-        return 0;
     if (error != NULL)
+        return 0;
+    if (dev->library == NULL)
         return 0;
 
     id prepare_initialdataFunctionName = ((id (*)(Class, SEL, char*, NSUInteger))objc_msgSend)(NSStringClass, sel_registerName("stringWithCString:encoding:"), "prepare_initialdata", 5);
@@ -264,8 +263,8 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
     int corridor_stripes = 2*t->corridor_size+1;
     int max_width = t->img1.width > t->img2.width ? t->img1.width:t->img2.width;
     int max_height = t->img1.height > t->img2.height ? t->img1.height:t->img2.height;
-    int corridor_length = (fabs(t->dir_y)>fabs(t->dir_x)? t->img2.height:t->img2.width) - 2*kernel_size;
-    int corridor_segments = corridor_length/CORRIDOR_SEGMENT_LENGTH + 1;
+    int corridor_length = (fabs(t->dir_y)>fabs(t->dir_x)? t->img2.height:t->img2.width);
+    int corridor_segments = corridor_length/t->corridor_segment_length + 1;
 
     metal_device dev = {0};
     shader_params params = {0};
@@ -276,8 +275,6 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
     params.img2_height = t->img2.height;
     params.dir_x = t->dir_x;
     params.dir_y = t->dir_y;
-    params.corridor_offset = 0;
-    params.corridor_segment = 0;
     params.kernel_size = t->kernel_size;
     params.threshold = t->threshold;
 
@@ -309,9 +306,11 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
     {
         for (int l=0;l<corridor_segments;l++)
         {
-            float corridor_complete = (float)(l)*CORRIDOR_SEGMENT_LENGTH/corridor_length;
             params.corridor_offset = c;
-            params.corridor_segment = l;
+            params.corridor_start = kernel_size + l*t->corridor_segment_length;
+            params.corridor_end = kernel_size + (l+1)*t->corridor_segment_length;
+            if (params.corridor_end > corridor_length-kernel_size)
+                params.corridor_end = corridor_length-kernel_size;
 
             if (!gpu_run_command(&dev, t->img1.width, t->img1.height, &params, 0))
             {
@@ -319,6 +318,7 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
                 goto cleanup;
             }
 
+            float corridor_complete = (float)(params.corridor_end - kernel_size) / (corridor_length-2*kernel_size);
             t->percent_complete = 2.0F + 98.0F*(c+corridor_size + corridor_complete)/corridor_stripes;
         }
     }
