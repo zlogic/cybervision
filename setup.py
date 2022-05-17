@@ -52,7 +52,7 @@ machine = Extension(
 
 setup(
     name='cybervision',
-    version='0.1.1',
+    version='0.2.0',
     python_requires='>=3.8',
     author='Dmitrii Zolotukhin',
     author_email='zlogic@gmail.com',
