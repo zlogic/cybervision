@@ -15,6 +15,7 @@ To set a custom logging level, use the `MVK_CONFIG_LOG_LEVEL` evironment variabl
 The Metal option was only tested on an M1 Macbook Air.
 
 Set the `OBJC_DEBUG_MISSING_POOLS` environment variable to `YES` to confirm that pointer autoreleases are working as expected.
+⚠️ Sending `commit` to `commandBuffer` will generate *autoreleased with no pool in place* errors - this appears to be an issue with calling Metal from C code; MoltenVK generates the same errors.
 
 # Compile shaders
 

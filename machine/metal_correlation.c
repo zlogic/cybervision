@@ -5,8 +5,6 @@
 #include <math.h>
 #include <string.h>
 
-#include <stdio.h>
-
 #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
 # include <pthread.h>
 # define THREAD_FUNCTION void*
@@ -37,7 +35,6 @@ typedef struct {
     id pool;
     id device;
     id library;
-    id function_prepare_initialdata, function_cross_correlate;
     id pso_prepare_initialdata, pso_cross_correlate;
     id command_queue;
     id buffer_img, buffer_internal, buffer_out;
@@ -68,26 +65,34 @@ const char* nserror_localized_description(id error)
     return errorCStr;
 }
 
-int gpu_init_device(metal_device *dev)
+id init_autoreleasepool()
 {
 	SEL allocSel = sel_registerName("alloc");
     SEL initSel = sel_registerName("init");
-
     Class NSAutoreleasePoolClass = objc_getClass("NSAutoreleasePool");
 	id poolAlloc = ((id (*)(Class, SEL))objc_msgSend)(NSAutoreleasePoolClass, allocSel);
-	dev->pool = ((id (*)(id, SEL))objc_msgSend)(poolAlloc, initSel);
+	return ((id (*)(id, SEL))objc_msgSend)(poolAlloc, initSel);
+}
 
+void drain_autoreleasepool(id pool)
+{
+    ((void (*)(id, SEL))objc_msgSend)(pool, sel_registerName("release"));
+}
+
+int gpu_init_device(metal_device *dev)
+{
+    SEL autoreleaseSel = sel_registerName("autorelease");
     dev->device = MTLCreateSystemDefaultDevice();
     if (dev->device == NULL)
         return 0;
-
+    ((void (*)(id, SEL))objc_msgSend)(dev->device, autoreleaseSel);
     return 1;
 }
 
 int gpu_init_functions(metal_device *dev)
 {
 	SEL allocSel = sel_registerName("alloc");
-    SEL releaseSel = sel_registerName("release");
+    SEL autoreleaseSel = sel_registerName("autorelease");
     char *shaders_str = malloc(sizeof(char)*shaders_correlation_metal_len+1);
     memcpy(shaders_str, shaders_correlation_metal, shaders_correlation_metal_len);
     shaders_str[shaders_correlation_metal_len] = 0;
@@ -103,35 +108,43 @@ int gpu_init_functions(metal_device *dev)
     Class MTLCompileOptions = objc_getClass("MTLCompileOptions");
     id compileOptions = ((id (*)(Class, SEL))objc_msgSend)(MTLCompileOptions, allocSel);
     ((void (*)(id, SEL, NSUInteger))objc_msgSend)(compileOptions, sel_registerName("setLanguageVersion:"), METAL_2_2);
+    ((void (*)(id, SEL))objc_msgSend)(compileOptions, autoreleaseSel);
 
     id error = NULL;
     dev->library = ((id (*)(id, SEL, id, id, id*))objc_msgSend)(dev->device, sel_registerName("newLibraryWithSource:options:error:"), sourceString, compileOptions, &error);
-    ((void (*)(id, SEL))objc_msgSend)(compileOptions, releaseSel);
-    if (error != NULL)
-        return 0;
     if (dev->library == NULL)
+        return 0;
+    if (error != NULL)
         return 0;
 
     id prepare_initialdataFunctionName = ((id (*)(Class, SEL, char*, NSUInteger))objc_msgSend)(NSStringClass, sel_registerName("stringWithCString:encoding:"), "prepare_initialdata", 5);
+    if (prepare_initialdataFunctionName == NULL)
+        return 0;
     id cross_correlateFunctionName = ((id (*)(Class, SEL, char*, NSUInteger))objc_msgSend)(NSStringClass, sel_registerName("stringWithCString:encoding:"), "cross_correlate", 5);
-    if (prepare_initialdataFunctionName == NULL || cross_correlateFunctionName == NULL)
+    if (cross_correlateFunctionName == NULL)
         return 0;
 
-    dev->function_prepare_initialdata = ((id (*)(id, SEL, id))objc_msgSend)(dev->library, sel_registerName("newFunctionWithName:"), prepare_initialdataFunctionName);
-    dev->function_cross_correlate = ((id (*)(id, SEL, id))objc_msgSend)(dev->library, sel_registerName("newFunctionWithName:"), cross_correlateFunctionName);
-    if (dev->function_prepare_initialdata == NULL || dev->function_cross_correlate == NULL)
+    id function_prepare_initialdata = ((id (*)(id, SEL, id))objc_msgSend)(dev->library, sel_registerName("newFunctionWithName:"), prepare_initialdataFunctionName);
+    if (function_prepare_initialdata == NULL)
         return 0;
+    ((void (*)(id, SEL))objc_msgSend)(function_prepare_initialdata, autoreleaseSel);
+    id function_cross_correlate = ((id (*)(id, SEL, id))objc_msgSend)(dev->library, sel_registerName("newFunctionWithName:"), cross_correlateFunctionName);
+    if (function_cross_correlate == NULL)
+        return 0;
+    ((void (*)(id, SEL))objc_msgSend)(function_cross_correlate, autoreleaseSel);
 
-    dev->pso_prepare_initialdata = ((id (*)(id, SEL, id, id*))objc_msgSend)(dev->device, sel_registerName("newComputePipelineStateWithFunction:error:"), dev->function_prepare_initialdata, &error);
-    if (error != NULL)
-        return 0;
+    dev->pso_prepare_initialdata = ((id (*)(id, SEL, id, id*))objc_msgSend)(dev->device, sel_registerName("newComputePipelineStateWithFunction:error:"), function_prepare_initialdata, &error);
     if (dev->pso_prepare_initialdata == NULL)
         return 0;
-
-    dev->pso_cross_correlate = ((id (*)(id, SEL, id, id*))objc_msgSend)(dev->device, sel_registerName("newComputePipelineStateWithFunction:error:"), dev->function_cross_correlate, &error);
+    ((void (*)(id, SEL))objc_msgSend)(dev->pso_prepare_initialdata, autoreleaseSel);
     if (error != NULL)
         return 0;
+
+    dev->pso_cross_correlate = ((id (*)(id, SEL, id, id*))objc_msgSend)(dev->device, sel_registerName("newComputePipelineStateWithFunction:error:"), function_cross_correlate, &error);
     if (dev->pso_cross_correlate == NULL)
+        return 0;
+    ((void (*)(id, SEL))objc_msgSend)(dev->pso_cross_correlate, autoreleaseSel);
+    if (error != NULL)
         return 0;
 
     return 1;
@@ -139,17 +152,24 @@ int gpu_init_functions(metal_device *dev)
 
 int gpu_init_queue(metal_device *dev)
 {
+    SEL autoreleaseSel = sel_registerName("autorelease");
     dev->command_queue = ((id (*)(id, SEL))objc_msgSend)(dev->device, sel_registerName("newCommandQueue"));
-    return dev->command_queue != NULL;
+    if (dev->command_queue == NULL)
+        return 0;
+    ((void (*)(id, SEL))objc_msgSend)(dev->command_queue, autoreleaseSel);
+    return 1;
 }
 
 id gpu_create_buffer(metal_device *dev, NSUInteger size, int gpuonly)
 {
+    SEL autoreleaseSel = sel_registerName("autorelease");
     const NSUInteger STORAGE_MODE_SHARED = 0 << 4;
     const NSUInteger STORAGE_MODE_PRIVATE = 2 << 4;
     
     NSUInteger mode = gpuonly? STORAGE_MODE_PRIVATE : STORAGE_MODE_SHARED;
-    return ((id (*)(id, SEL, NSUInteger, NSUInteger))objc_msgSend)(dev->device, sel_registerName("newBufferWithLength:options:"), size, mode);
+    id buffer = ((id (*)(id, SEL, NSUInteger, NSUInteger))objc_msgSend)(dev->device, sel_registerName("newBufferWithLength:options:"), size, mode);
+    ((void (*)(id, SEL))objc_msgSend)(buffer, autoreleaseSel);
+    return buffer;
 }
 
 int gpu_prepare_device(cross_correlate_task *t, metal_device *dev, const char** error)
@@ -236,32 +256,6 @@ int gpu_transfer_out_image(cross_correlate_task *t, metal_device *dev)
     return 1;
 }
 
-void gpu_free_device(metal_device *dev)
-{
-    if (dev->device != NULL)
-        ((void (*)(id, SEL))objc_msgSend)(dev->device, sel_registerName("release"));
-    if (dev->library != NULL)
-        ((void (*)(id, SEL))objc_msgSend)(dev->function_cross_correlate, sel_registerName("release"));
-    if (dev->function_prepare_initialdata != NULL)
-        ((void (*)(id, SEL))objc_msgSend)(dev->function_prepare_initialdata, sel_registerName("release"));
-    if (dev->function_cross_correlate != NULL)
-        ((void (*)(id, SEL))objc_msgSend)(dev->function_cross_correlate, sel_registerName("release"));
-    if (dev->pso_prepare_initialdata != NULL)
-        ((void (*)(id, SEL))objc_msgSend)(dev->pso_prepare_initialdata, sel_registerName("release"));
-    if (dev->pso_cross_correlate != NULL)
-        ((void (*)(id, SEL))objc_msgSend)(dev->pso_cross_correlate, sel_registerName("release"));
-    if (dev->command_queue != NULL)
-        ((void (*)(id, SEL))objc_msgSend)(dev->command_queue, sel_registerName("release"));
-    if (dev->buffer_img != NULL)
-        ((void (*)(id, SEL))objc_msgSend)(dev->buffer_img, sel_registerName("release"));
-    if (dev->buffer_internal != NULL)
-        ((void (*)(id, SEL))objc_msgSend)(dev->buffer_internal, sel_registerName("release"));
-    if (dev->buffer_out != NULL)
-        ((void (*)(id, SEL))objc_msgSend)(dev->buffer_out, sel_registerName("release"));
-
-    ((void (*)(id, SEL))objc_msgSend)(dev->pool, sel_registerName("drain"));
-}
-
 THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
 {
     cross_correlate_task *t = args;
@@ -287,6 +281,7 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
     params.kernel_size = t->kernel_size;
     params.threshold = t->threshold;
 
+    id autoreleasepool = init_autoreleasepool();
     if (!gpu_init_device(&dev))
     {
         t->error = "Failed to initialize Metal device";
@@ -301,7 +296,7 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
         t->error = "Failed to transfer images into device buffer";
         goto cleanup;
     }
-    
+
     if (!gpu_run_command(&dev, max_width, max_height, &params, 1))
     {
         t->error = "Failed to run initialization kernel";
@@ -331,9 +326,8 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
     if (!gpu_transfer_out_image(t, &dev))
         t-> error = "Failed to read output image";
 
-    gpu_free_device(&dev);
-
 cleanup:
+    drain_autoreleasepool(autoreleasepool);
     t->completed = 1;
     return THREAD_RETURN_VALUE;
 }
