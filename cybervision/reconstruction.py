@@ -158,10 +158,6 @@ class Reconstructor:
         if not self.points3d:
             raise NoMatchesFound('No reliable correlation points found')
 
-        self.points3d = self.filter_peaks(width=w1, height=h1)
-
-        time_completed_filter = datetime.now()
-        self.log.info(f'Completed peak filtering in {time_completed_filter-time_completed_surface}')
         self.log.info(f'Surface contains {len(self.points3d)} points')
 
         time_completed = datetime.now()

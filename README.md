@@ -25,10 +25,10 @@ pip3 install <filename>.whl
 Run cybervision:
 
 ```shell
-python3 -m cybervision <img1.tif> <img2.tif> --output-file=<out.png> [--no-interpolate]
+python3 -m cybervision <img1.tif> <img2.tif> --output-file=<out.obj> [--no-interpolate]
 ```
 
-To output a 3D [Wavefront OBJ file](https://en.wikipedia.org/wiki/Wavefront_.obj_file), use an `.obj` filename extension, e.g. `--output-file=out.obj`.
+This will save a 3D [Wavefront OBJ file](https://en.wikipedia.org/wiki/Wavefront_.obj_file).
 
 ⚠️ The ideal image size is 1024x1024 (or similar). Using larger images might result in increased processing times, and might cause the GPU to time out ("Device Lost" errors). Smaller images might not have enough details.
 
@@ -71,5 +71,5 @@ anything else (like a UI) can be added separately.
 ## External libraries
 
 * [fast](https://www.edwardrosten.com/work/fast.html) keypoint detector
-* [scipy](https://scipy.org) and [numpy](https://numpy.org) for point interpolation
+* [qhull](http://www.qhull.org) for Delaunay triangulation
 * [Pillow](https://python-pillow.org) image library

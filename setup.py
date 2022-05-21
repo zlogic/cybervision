@@ -39,6 +39,7 @@ else:
         libraries.append('vulkan-1')
 
 sources = sources + glob('machine/fast/*.c')
+sources = sources + glob('machine/libqhull_r/*.c')
 
 machine = Extension(
     'cybervision.machine',
@@ -76,8 +77,6 @@ setup(
     ],
     setup_requires=['wheel'],
     install_requires=[
-        "Pillow>=9.1.0",
-        "scipy>=1.8.0",
-        "numpy>=1.22.3"
+        "Pillow>=9.1.0"
     ]
 )

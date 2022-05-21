@@ -13,8 +13,6 @@ def main():
     parser.add_argument('img1')
     parser.add_argument('img2')
     parser.add_argument('--resize-scale', type=float, default=1.0)
-    parser.add_argument('--interpolate', dest='interpolate', action='store_true')
-    parser.add_argument('--no-interpolate', dest='interpolate', action='store_false')
     parser.set_defaults(interpolate=True)
     parser.add_argument('--output-file', required=True)
     args = parser.parse_args()
@@ -29,14 +27,8 @@ def main():
     except NoMatchesFound as err:
         sys.exit(err)
 
-    v = Visualiser(img1.img, img2.img, reconstructor.points3d)
-    if args.output_file.endswith('obj'):
-        v.save_surface_mesh(args.output_file)
-    else:
-        if args.interpolate:
-            v.save_surface_image_interpolated(args.output_file)
-        else:
-            v.save_surface_image(args.output_file)
+    # v = Visualiser(reconstructor.points3d)
+    # v.save_surface_mesh(args.output_file)
 
 
 if __name__ == '__main__':
