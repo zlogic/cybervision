@@ -145,14 +145,12 @@ class Reconstructor:
             raise NoMatchesFound('No reliable matches found')
 
         self.triangulation_data = self.create_surface()
-        w1 = self.img1.width
-        h1 = self.img1.height
         del(self.img1)
         del(self.img2)
 
         time_completed_surface = datetime.now()
         self.log.info(f'Completed surface generation in {time_completed_surface-time_completed_ransac}')
-        
+
         self.triangulation_data = machine.triangulate_points(self.triangulation_data)
 
         time_completed_triangulation = datetime.now()
