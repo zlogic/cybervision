@@ -158,10 +158,10 @@ class Reconstructor:
         time_completed_triangulation = datetime.now()
         self.log.info(f'Completed triangulation in {time_completed_triangulation-time_completed_surface}')
 
-        if not self.points3d:
-            raise NoMatchesFound('No reliable correlation points found')
+        # if not self.points3d:
+        #     raise NoMatchesFound('No reliable correlation points found')
 
-        self.log.info(f'Surface contains {len(self.points3d)} points')
+        # self.log.info(f'Surface contains {len(self.points3d)} points')
 
         time_completed = datetime.now()
         self.log.info(f'Completed reconstruction in {time_completed-time_started}')

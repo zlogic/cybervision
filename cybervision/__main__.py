@@ -3,7 +3,6 @@ import logging
 import sys
 from cybervision.image import SEMImage
 from cybervision.reconstruction import Reconstructor, NoMatchesFound
-from cybervision.visualisation import Visualiser
 
 
 def main():
@@ -26,9 +25,6 @@ def main():
         reconstructor.reconstruct()
     except NoMatchesFound as err:
         sys.exit(err)
-
-    # v = Visualiser(reconstructor.points3d)
-    # v.save_surface_mesh(args.output_file)
 
 
 if __name__ == '__main__':

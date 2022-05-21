@@ -1,7 +1,6 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
-#include <math.h>
 #include "correlation.h"
 #include "gpu_correlation.h"
 #include "triangulation.h"
@@ -88,16 +87,6 @@ void free_match_task(PyObject *task_object)
     free(task);
 }
 
-void free_triangulation_data(PyObject *data_object)
-{
-    triangulation_data *data = PyCapsule_GetPointer(data_object, NULL);
-    if (data == NULL)
-        return;
-    if (data->points != NULL)
-        free(data->points);
-    free(data);
-}
-
 void free_cross_correlate_task(PyObject *task_object)
 {
     cross_correlate_task *task = PyCapsule_GetPointer(task_object, NULL);
@@ -113,6 +102,16 @@ void free_cross_correlate_task(PyObject *task_object)
     if (task->out_points != NULL)
         free(task->out_points);
     free(task);
+}
+
+void free_triangulation_data(PyObject *data_object)
+{
+    triangulation_data *data = PyCapsule_GetPointer(data_object, NULL);
+    if (data == NULL)
+        return;
+    if (data->depth != NULL)
+        free(data->depth);
+    free(data);
 }
 
 /*
@@ -450,7 +449,6 @@ machine_correlate_result(PyObject *self, PyObject *args)
     cross_correlate_task *task;
 
     triangulation_data *out = NULL;
-    triangulation_point *current_point = NULL;
 
     if (!PyArg_ParseTuple(args, "O", &task_object))
     {
@@ -477,35 +475,10 @@ machine_correlate_result(PyObject *self, PyObject *args)
     }
 
     out = malloc(sizeof(triangulation_data));
-    out->num_points = 0;
-
-    for (int y=0;y<task->img1.height;y++)
-    {
-        for (int x=0;x<task->img1.width;x++)
-        {
-            float depth = task->out_points[y*task->img1.width + x];
-            if (isfinite(depth))
-                out->num_points++;
-        }
-    }
-
-    out->points = malloc(sizeof(triangulation_point)*out->num_points);
-    current_point = out->points;
-
-    for (int y=0;y<task->img1.height;y++)
-    {
-        for (int x=0;x<task->img1.width;x++)
-        {
-            float depth = task->out_points[y*task->img1.width + x];
-            triangulation_point point;
-            if (!isfinite(depth))
-                continue;
-            point.x = x;
-            point.y = y;
-            point.z = depth;
-            *(current_point++) = point;
-        }
-    }
+    out->width = task->img1.width;
+    out->height = task->img1.height;
+    out->depth = task->out_points;
+    task->out_points = NULL;
 
     return PyCapsule_New(out, NULL, free_triangulation_data);
 }
