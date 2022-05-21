@@ -6,7 +6,8 @@ from glob import glob
 extra_compile_args = []
 sources = [
     'machine/cybervision.c',
-    'machine/correlation.c'
+    'machine/correlation.c',
+    'machine/triangulation.c'
 ]
 
 if sys.platform in ['darwin', 'linux']:

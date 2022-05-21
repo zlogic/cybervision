@@ -4,6 +4,7 @@
 #include <math.h>
 #include "correlation.h"
 #include "gpu_correlation.h"
+#include "triangulation.h"
 
 #include "fast/fast.h"
 
@@ -85,6 +86,16 @@ void free_match_task(PyObject *task_object)
     if (task->matches != NULL)
         free(task->matches);
     free(task);
+}
+
+void free_triangulation_data(PyObject *data_object)
+{
+    triangulation_data *data = PyCapsule_GetPointer(data_object, NULL);
+    if (data == NULL)
+        return;
+    if (data->points != NULL)
+        free(data->points);
+    free(data);
 }
 
 void free_cross_correlate_task(PyObject *task_object)
@@ -438,7 +449,8 @@ machine_correlate_result(PyObject *self, PyObject *args)
     PyObject *task_object;
     cross_correlate_task *task;
 
-    PyObject *out = NULL;
+    triangulation_data *out = NULL;
+    triangulation_point *current_point = NULL;
 
     if (!PyArg_ParseTuple(args, "O", &task_object))
     {
@@ -464,21 +476,38 @@ machine_correlate_result(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    out = PyList_New(0);
+    out = malloc(sizeof(triangulation_data));
+    out->num_points = 0;
+
     for (int y=0;y<task->img1.height;y++)
     {
         for (int x=0;x<task->img1.width;x++)
         {
             float depth = task->out_points[y*task->img1.width + x];
-            if (!isfinite(depth))
-                continue;
-            PyObject *point = Py_BuildValue("(iif)", x, y, depth);
-            PyList_Append(out, point);
-            Py_DECREF(point);
+            if (isfinite(depth))
+                out->num_points++;
         }
     }
 
-    return out;
+    out->points = malloc(sizeof(triangulation_point)*out->num_points);
+    current_point = out->points;
+
+    for (int y=0;y<task->img1.height;y++)
+    {
+        for (int x=0;x<task->img1.width;x++)
+        {
+            float depth = task->out_points[y*task->img1.width + x];
+            triangulation_point point;
+            if (!isfinite(depth))
+                continue;
+            point.x = x;
+            point.y = y;
+            point.z = depth;
+            *(current_point++) = point;
+        }
+    }
+
+    return PyCapsule_New(out, NULL, free_triangulation_data);
 }
 
 static PyMethodDef MachineMethods[] = {

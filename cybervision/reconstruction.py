@@ -98,8 +98,7 @@ class Reconstructor:
                 progressbar.update(percent_complete)
                 time.sleep(0.5)
             else:
-                points3d = machine.correlate_result(correlate_task)
-                return [(p[0], p[1], p[2]) for p in points3d]
+                return machine.correlate_result(correlate_task)
 
     def filter_peaks(self, width, height):
         filter = PeakFilter(self.points3d, width, height)
@@ -145,7 +144,7 @@ class Reconstructor:
         if matches_count == 0:
             raise NoMatchesFound('No reliable matches found')
 
-        self.points3d = self.create_surface()
+        self.triangulation_data = self.create_surface()
         w1 = self.img1.width
         h1 = self.img1.height
         del(self.img1)
@@ -153,7 +152,6 @@ class Reconstructor:
 
         time_completed_surface = datetime.now()
         self.log.info(f'Completed surface generation in {time_completed_surface-time_completed_ransac}')
-        self.log.info(f'Surface contains {len(self.points3d)} points')
 
         if not self.points3d:
             raise NoMatchesFound('No reliable correlation points found')
