@@ -152,6 +152,11 @@ class Reconstructor:
 
         time_completed_surface = datetime.now()
         self.log.info(f'Completed surface generation in {time_completed_surface-time_completed_ransac}')
+        
+        self.triangulation_data = machine.triangulate_points(self.triangulation_data)
+
+        time_completed_triangulation = datetime.now()
+        self.log.info(f'Completed triangulation in {time_completed_triangulation-time_completed_surface}')
 
         if not self.points3d:
             raise NoMatchesFound('No reliable correlation points found')

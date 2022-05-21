@@ -510,6 +510,34 @@ machine_correlate_result(PyObject *self, PyObject *args)
     return PyCapsule_New(out, NULL, free_triangulation_data);
 }
 
+static PyObject *
+machine_triangulate_points(PyObject *self, PyObject *args)
+{
+    PyObject *triangulation_object;
+    triangulation_data *data;
+
+    if (!PyArg_ParseTuple(args, "O", &triangulation_object))
+    {
+        PyErr_SetString(CybervisionError, "Failed to parse args");
+        return NULL;
+    }
+
+    data = PyCapsule_GetPointer(triangulation_object, NULL);
+    if (data == NULL)
+    {
+        PyErr_SetString(CybervisionError, "Failed to get data from args");
+        return NULL;
+    }
+
+    if (!triangulation_triangulate(data))
+    {
+        PyErr_SetString(CybervisionError, "Failed to triangulate points");
+        return NULL;
+    }
+
+    return triangulation_object;
+}
+
 static PyMethodDef MachineMethods[] = {
     {"detect", machine_detect, METH_VARARGS, "Detect keypoints with FAST."},
     {"match_start", machine_match_start, METH_VARARGS, "Start a task to find correlation between image points."},
@@ -518,6 +546,7 @@ static PyMethodDef MachineMethods[] = {
     {"correlate_start", machine_correlate_start, METH_VARARGS, "Start a task to find cross-correlation between images."},
     {"correlate_status", machine_correlate_status, METH_VARARGS, "Status of a task to find cross-correlation between images."},
     {"correlate_result", machine_correlate_result, METH_VARARGS, "Result of a task to find cross-correlation between images."},
+    {"triangulate_points", machine_triangulate_points, METH_VARARGS, "Triangulate points to create a mesh."},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
