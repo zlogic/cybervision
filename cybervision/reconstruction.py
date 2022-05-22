@@ -86,7 +86,7 @@ class Reconstructor:
         return (best_matches, best_dir_x, best_dir_y)
 
     def filter_peaks(self):
-        return machine.filter_peaks(self.triangulation_data, 
+        return machine.filter_peaks(self.triangulation_data,
                                     self.filter_sigma, self.filter_min_points, self.filter_threshold)
 
     def create_surface(self):
@@ -102,7 +102,6 @@ class Reconstructor:
                 time.sleep(0.5)
             else:
                 return machine.correlate_result(correlate_task)
-
 
     def reconstruct(self):
         time_started = datetime.now()

@@ -122,8 +122,8 @@ THREAD_FUNCTION correlate_points_task(void *args)
             if (corr >= t->threshold)
             {
                 correlation_match m;
-                m.point1 = p1;
-                m.point2 = p2;
+                m.point1 = (int)p1;
+                m.point2 = (int)p2;
                 m.corr = corr;
                 if (pthread_mutex_lock(&ctx->lock) != 0)
                     goto cleanup;
