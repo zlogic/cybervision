@@ -7,7 +7,8 @@ extra_compile_args = []
 sources = [
     'machine/cybervision.c',
     'machine/correlation.c',
-    'machine/triangulation.c'
+    'machine/triangulation.c',
+    'machine/filter.c'
 ]
 
 if sys.platform in ['darwin', 'linux']:
@@ -78,6 +79,6 @@ setup(
     ],
     setup_requires=['wheel'],
     install_requires=[
-        "Pillow>=9.1.0"
+        "Pillow>=9.1.1"
     ]
 )

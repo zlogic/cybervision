@@ -8,7 +8,6 @@ from PIL import Image, ImageOps
 
 import cybervision.machine as machine
 from cybervision.progressbar import Progressbar
-from cybervision.filter import PeakFilter
 
 
 class NoMatchesFound(Exception):
@@ -86,6 +85,10 @@ class Reconstructor:
                     best_matches = current_matches
         return (best_matches, best_dir_x, best_dir_y)
 
+    def filter_peaks(self):
+        return machine.filter_peaks(self.triangulation_data, 
+                                    self.filter_sigma, self.filter_min_points, self.filter_threshold)
+
     def create_surface(self):
         correlate_task = machine.correlate_start(self.triangulation_mode, self.img1, self.img2, self.dir_x, self.dir_y,
                                                  self.triangulation_corridor, self.triangulation_kernel_size,
@@ -100,9 +103,6 @@ class Reconstructor:
             else:
                 return machine.correlate_result(correlate_task)
 
-    def filter_peaks(self, width, height):
-        filter = PeakFilter(self.points3d, width, height)
-        return filter.filter_peaks()
 
     def reconstruct(self):
         time_started = datetime.now()
@@ -115,9 +115,9 @@ class Reconstructor:
         del(img2_adjusted)
 
         time_completed_fast = datetime.now()
-        self.log.info(f'Extracted points reconstruction in {time_completed_fast-time_started}')
-        self.log.info(f'Image 1 has {len(self.points1)} points')
-        self.log.info(f'Image 2 has {len(self.points2)} points')
+        self.log.info(f'Extracted feature points in {time_completed_fast-time_started}')
+        self.log.info(f'Image 1 has {len(self.points1)} feature points')
+        self.log.info(f'Image 2 has {len(self.points2)} feature points')
 
         self.matches = self.match_points()
 
@@ -151,15 +151,16 @@ class Reconstructor:
         time_completed_surface = datetime.now()
         self.log.info(f'Completed surface generation in {time_completed_surface-time_completed_ransac}')
 
-        self.triangulation_data = machine.triangulate_points(self.triangulation_data)
+        self.filter_peaks()
+
+        time_completed_filter = datetime.now()
+        self.log.info(f'Completed peak filtering in {time_completed_filter-time_completed_surface}')
+
+        machine.triangulate_points(self.triangulation_data)
+        del(self.triangulation_data)
 
         time_completed_triangulation = datetime.now()
-        self.log.info(f'Completed triangulation in {time_completed_triangulation-time_completed_surface}')
-
-        # if not self.points3d:
-        #     raise NoMatchesFound('No reliable correlation points found')
-
-        # self.log.info(f'Surface contains {len(self.points3d)} points')
+        self.log.info(f'Completed triangulation in {time_completed_triangulation-time_completed_filter}')
 
         time_completed = datetime.now()
         self.log.info(f'Completed reconstruction in {time_completed-time_started}')
@@ -199,3 +200,6 @@ class Reconstructor:
         self.ransac_n = 10
         self.ransac_t = 0.01
         self.ransac_d = 10
+        self.filter_sigma = 4.0
+        self.filter_min_points = 7
+        self.filter_threshold = 0.5

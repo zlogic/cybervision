@@ -3,6 +3,7 @@
 
 #include "correlation.h"
 #include "gpu_correlation.h"
+#include "filter.h"
 #include "triangulation.h"
 
 #include "fast/fast.h"
@@ -104,9 +105,9 @@ void free_cross_correlate_task(PyObject *task_object)
     free(task);
 }
 
-void free_triangulation_data(PyObject *data_object)
+void free_surface_data(PyObject *data_object)
 {
-    triangulation_data *data = PyCapsule_GetPointer(data_object, NULL);
+    surface_data *data = PyCapsule_GetPointer(data_object, NULL);
     if (data == NULL)
         return;
     if (data->depth != NULL)
@@ -448,7 +449,7 @@ machine_correlate_result(PyObject *self, PyObject *args)
     PyObject *task_object;
     cross_correlate_task *task;
 
-    triangulation_data *out = NULL;
+    surface_data *out = NULL;
 
     if (!PyArg_ParseTuple(args, "O", &task_object))
     {
@@ -474,28 +475,59 @@ machine_correlate_result(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    out = malloc(sizeof(triangulation_data));
+    out = malloc(sizeof(surface_data));
     out->width = task->img1.width;
     out->height = task->img1.height;
     out->depth = task->out_points;
     task->out_points = NULL;
 
-    return PyCapsule_New(out, NULL, free_triangulation_data);
+    return PyCapsule_New(out, NULL, free_surface_data);
 }
 
 static PyObject *
-machine_triangulate_points(PyObject *self, PyObject *args)
+machine_filter_peaks(PyObject *self, PyObject *args)
 {
-    PyObject *triangulation_object;
-    triangulation_data *data;
+    PyObject *surface_object;
+    surface_data *data;
+    float sigma;
+    int min_points;
+    float threshold;
 
-    if (!PyArg_ParseTuple(args, "O", &triangulation_object))
+    if (!PyArg_ParseTuple(args, "Ofif", &surface_object, &sigma, &min_points, &threshold))
     {
         PyErr_SetString(CybervisionError, "Failed to parse args");
         return NULL;
     }
 
-    data = PyCapsule_GetPointer(triangulation_object, NULL);
+    data = PyCapsule_GetPointer(surface_object, NULL);
+    if (data == NULL)
+    {
+        PyErr_SetString(CybervisionError, "Failed to get data from args");
+        return NULL;
+    }
+
+    if (!filter_peaks(data, sigma, min_points, threshold))
+    {
+        PyErr_SetString(CybervisionError, "Failed to filter peaks");
+        return NULL;
+    }
+
+    return Py_None;
+}
+
+static PyObject *
+machine_triangulate_points(PyObject *self, PyObject *args)
+{
+    PyObject *surface_object;
+    surface_data *data;
+
+    if (!PyArg_ParseTuple(args, "O", &surface_object))
+    {
+        PyErr_SetString(CybervisionError, "Failed to parse args");
+        return NULL;
+    }
+
+    data = PyCapsule_GetPointer(surface_object, NULL);
     if (data == NULL)
     {
         PyErr_SetString(CybervisionError, "Failed to get data from args");
@@ -508,7 +540,7 @@ machine_triangulate_points(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    return triangulation_object;
+    return Py_None;
 }
 
 static PyMethodDef MachineMethods[] = {
@@ -519,6 +551,7 @@ static PyMethodDef MachineMethods[] = {
     {"correlate_start", machine_correlate_start, METH_VARARGS, "Start a task to find cross-correlation between images."},
     {"correlate_status", machine_correlate_status, METH_VARARGS, "Status of a task to find cross-correlation between images."},
     {"correlate_result", machine_correlate_result, METH_VARARGS, "Result of a task to find cross-correlation between images."},
+    {"filter_peaks", machine_filter_peaks, METH_VARARGS, "Remove peaks and false matches from the depth grid."},
     {"triangulate_points", machine_triangulate_points, METH_VARARGS, "Triangulate points to create a mesh."},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };

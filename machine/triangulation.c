@@ -2,10 +2,11 @@
 #include <math.h>
 
 #include "libqhull_r/libqhull_r.h"
+#include "libqhull_r/poly_r.h"
 
 #include "triangulation.h"
 
-coordT* convert_points(triangulation_data* data, size_t *num_points)
+coordT* convert_points(surface_data* data, size_t *num_points)
 {
     coordT *points;
     coordT *current_point = NULL;
@@ -37,31 +38,48 @@ coordT* convert_points(triangulation_data* data, size_t *num_points)
     return points;
 }
 
-int output_obj(qhT *qh, triangulation_data* data)
+int output_obj(qhT *qh, surface_data* data)
 {
     // TODO: rewrite this to interact better with Python
     FILE *outfile = fopen("out.obj", "w");
     facetT *facet;
-    vertexT *vertex;
-    FORALLvertices {
-        int x = (int)vertex->point[0], y = (int)vertex->point[1];
+    coordT *point, *pointtemp;
+    vertexT *vertex, **vertexp;
+    FORALLpoints
+    {
+        int x = (int)point[0], y = (int)point[1];
         float z;
+        if(qh_pointid(qh, point) == qh->num_points-1)
+            break;
         if (x<0 || x>=data->width || y<0 || y>=data->height)
             return 0;
         z = data->depth[y*data->width+x];
         if (!isfinite(z))
             return 0;
-        fprintf(outfile, "v %i %i %f\n", x, y, z);
+        fprintf(outfile, "v %i %i %f\n", x, data->height-y, z);
     }
-    FORALLfacets {
-        vertexT *v1 = facet->vertices->e[0].p, *v2 = facet->vertices->e[1].p, *v3 = facet->vertices->e[2].p;
-        fprintf(outfile, "f %i %i %i\n", qh_pointid(qh, v1->point)+1, qh_pointid(qh, v2->point)+1, qh_pointid(qh, v3->point)+1);
+    FORALLfacets
+    {
+        fprintf(outfile, "f");
+        if (facet->upperdelaunay)
+            continue;
+        if ((facet->toporient ^ qh_ORIENTclock))
+        {
+            FOREACHvertex_(facet->vertices)
+                fprintf(outfile, " %d", qh_pointid(qh, vertex->point)+1);
+        }
+        else
+        {
+            FOREACHvertexreverse12_(facet->vertices)
+                fprintf(outfile, " %d", qh_pointid(qh, vertex->point)+1);
+        }
+        fprintf(outfile, "\n");
     }
     fclose(outfile);
     return 1;
 }
 
-int triangulation_triangulate(triangulation_data* data)
+int triangulation_triangulate(surface_data* data)
 {
     coordT *points;
     qhT qh = {0};
@@ -71,7 +89,7 @@ int triangulation_triangulate(triangulation_data* data)
 
     points = convert_points(data, &num_points);
     
-    result = qh_new_qhull(&qh, 2, num_points, points, True, "qhull d Qt", NULL, NULL) == 0;
+    result = qh_new_qhull(&qh, 2, num_points, points, True, "qhull d Qt Qbb Qc Qz Q12", NULL, NULL) == 0;
     result = result && output_obj(&qh, data);
 
     qh_freeqhull(&qh, qh_ALL);
