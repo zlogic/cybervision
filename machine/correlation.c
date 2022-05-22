@@ -7,7 +7,7 @@
 # define THREAD_RETURN_VALUE NULL
 #elif defined(_WIN32)
 # include "win32/pthread.h"
-#define THREAD_FUNCTION DWORD WINAPI
+# define THREAD_FUNCTION DWORD WINAPI
 # define THREAD_RETURN_VALUE 1
 #else
 # error "pthread is required"

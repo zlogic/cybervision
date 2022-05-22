@@ -520,6 +520,7 @@ machine_triangulate_points(PyObject *self, PyObject *args)
 {
     PyObject *surface_object;
     surface_data *data;
+    PyObject *out_points, *out_simplices;
 
     if (!PyArg_ParseTuple(args, "O", &surface_object))
     {
@@ -534,13 +535,17 @@ machine_triangulate_points(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    if (!triangulation_triangulate(data))
+    out_points = PyList_New(0);
+    out_simplices = PyList_New(0);
+    if (!triangulation_triangulate(data, out_points, out_simplices))
     {
         PyErr_SetString(CybervisionError, "Failed to triangulate points");
+        Py_DECREF(out_points);
+        Py_DECREF(out_simplices);
         return NULL;
     }
 
-    return Py_None;
+    return Py_BuildValue("(OO)", out_points, out_simplices);
 }
 
 static PyMethodDef MachineMethods[] = {

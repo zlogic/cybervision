@@ -1,3 +1,6 @@
+#define PY_SSIZE_T_CLEAN
+#include <Python.h>
+
 #include <stdlib.h>
 #include <math.h>
 
@@ -38,13 +41,9 @@ coordT* convert_points(surface_data* data, size_t *num_points)
     return points;
 }
 
-int output_obj(qhT *qh, surface_data* data)
+int output_points(qhT *qh, surface_data* data, PyObject *out)
 {
-    // TODO: rewrite this to interact better with Python
-    FILE *outfile = fopen("out.obj", "w");
-    facetT *facet;
     coordT *point, *pointtemp;
-    vertexT *vertex, **vertexp;
     FORALLpoints
     {
         int x = (int)point[0], y = (int)point[1];
@@ -56,30 +55,48 @@ int output_obj(qhT *qh, surface_data* data)
         z = data->depth[y*data->width+x];
         if (!isfinite(z))
             return 0;
-        fprintf(outfile, "v %i %i %f\n", x, data->height-y, z);
+
+        PyObject *new_point = Py_BuildValue("(iif)", x, y, z);
+        PyList_Append(out, new_point);
+        Py_DECREF(new_point);
     }
+    return 1;
+}
+
+void output_simplices(qhT *qh, surface_data* data, PyObject *out)
+{
+    facetT *facet;
+    vertexT *vertex, **vertexp;
     FORALLfacets
     {
-        fprintf(outfile, "f");
+        PyObject *simplex;
         if (facet->upperdelaunay)
             continue;
+        simplex = PyList_New(0);
+        PyList_Append(out, simplex);
+        Py_DECREF(simplex);
         if ((facet->toporient ^ qh_ORIENTclock))
         {
             FOREACHvertexreverse12_(facet->vertices)
-                fprintf(outfile, " %d", qh_pointid(qh, vertex->point)+1);
+            {
+                PyObject *value = Py_BuildValue("i", qh_pointid(qh, vertex->point));
+                PyList_Append(simplex, value);
+                Py_DECREF(value);
+            }
         }
         else
         {
             FOREACHvertex_(facet->vertices)
-                fprintf(outfile, " %d", qh_pointid(qh, vertex->point)+1);
+            {
+                PyObject *value = Py_BuildValue("i", qh_pointid(qh, vertex->point));
+                PyList_Append(simplex, value);
+                Py_DECREF(value);
+            }
         }
-        fprintf(outfile, "\n");
     }
-    fclose(outfile);
-    return 1;
 }
 
-int triangulation_triangulate(surface_data* data)
+int triangulation_triangulate(surface_data* data, PyObject *out_points, PyObject *out_simplices)
 {
     coordT *points;
     qhT qh = {0};
@@ -90,7 +107,9 @@ int triangulation_triangulate(surface_data* data)
     points = convert_points(data, &num_points);
     
     result = qh_new_qhull(&qh, 2, num_points, points, True, "qhull d Qt Qbb Qc Qz Q12", NULL, NULL) == 0;
-    result = result && output_obj(&qh, data);
+    result = result && output_points(&qh, data, out_points);
+    if (result)
+        output_simplices(&qh, data, out_simplices);
 
     qh_freeqhull(&qh, qh_ALL);
     qh_memfreeshort(&qh, &curlong, &totlong);

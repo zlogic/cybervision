@@ -3,6 +3,6 @@
 
 #include "surface.h"
 
-int triangulation_triangulate(surface_data*);
+int triangulation_triangulate(surface_data*, PyObject *out_points, PyObject *out_simplices);
 
 #endif

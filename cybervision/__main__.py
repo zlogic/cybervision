@@ -19,7 +19,7 @@ def main():
     img1 = SEMImage(args.img1, args.resize_scale)
     img2 = SEMImage(args.img2, args.resize_scale)
 
-    reconstructor = Reconstructor(img1.img, img2.img)
+    reconstructor = Reconstructor(img1.img, img2.img, args.output_file)
 
     try:
         reconstructor.reconstruct()

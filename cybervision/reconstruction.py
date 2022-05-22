@@ -103,6 +103,15 @@ class Reconstructor:
             else:
                 return machine.correlate_result(correlate_task)
 
+    def save_surface_obj(self, height):
+        with open(self.out_filename, 'w') as f:
+            for p in self.points3d:
+                f.write(f'v {p[0]} {height-p[1]} {p[2]}\n')
+
+            for t in self.simplices:
+                point_list = ' '.join([str(tv+1) for tv in t])
+                f.write(f'f {point_list}\n')
+
     def reconstruct(self):
         time_started = datetime.now()
 
@@ -144,6 +153,7 @@ class Reconstructor:
             raise NoMatchesFound('No reliable matches found')
 
         self.triangulation_data = self.create_surface()
+        h1 = self.img1.height
         del(self.img1)
         del(self.img2)
 
@@ -155,11 +165,16 @@ class Reconstructor:
         time_completed_filter = datetime.now()
         self.log.info(f'Completed peak filtering in {time_completed_filter-time_completed_surface}')
 
-        machine.triangulate_points(self.triangulation_data)
+        self.points3d, self.simplices = machine.triangulate_points(self.triangulation_data)
         del(self.triangulation_data)
 
         time_completed_triangulation = datetime.now()
         self.log.info(f'Completed triangulation in {time_completed_triangulation-time_completed_filter}')
+
+        self.save_surface_obj(h1)
+
+        time_completed_output = datetime.now()
+        self.log.info(f'Completed output in {time_completed_output-time_completed_triangulation}')
 
         time_completed = datetime.now()
         self.log.info(f'Completed reconstruction in {time_completed-time_started}')
@@ -173,9 +188,10 @@ class Reconstructor:
             matches.append((p1[0], p1[1], p2[0], p2[1], corr))
         return matches
 
-    def __init__(self, img1: Image, img2: Image):
+    def __init__(self, img1: Image, img2: Image, out_filename):
         self.img1 = img1.convert('L')
         self.img2 = img2.convert('L')
+        self.out_filename = out_filename
         self.log = logging.getLogger("reconstructor")
         self.num_threads = os.cpu_count()
 
