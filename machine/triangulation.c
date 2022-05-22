@@ -65,12 +65,12 @@ int output_obj(qhT *qh, surface_data* data)
             continue;
         if ((facet->toporient ^ qh_ORIENTclock))
         {
-            FOREACHvertex_(facet->vertices)
+            FOREACHvertexreverse12_(facet->vertices)
                 fprintf(outfile, " %d", qh_pointid(qh, vertex->point)+1);
         }
         else
         {
-            FOREACHvertexreverse12_(facet->vertices)
+            FOREACHvertex_(facet->vertices)
                 fprintf(outfile, " %d", qh_pointid(qh, vertex->point)+1);
         }
         fprintf(outfile, "\n");
