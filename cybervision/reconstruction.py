@@ -90,7 +90,11 @@ class Reconstructor:
                                     self.filter_sigma, self.filter_min_points, self.filter_threshold)
 
     def create_surface(self):
-        correlate_task = machine.correlate_start(self.triangulation_mode, self.img1, self.img2, self.dir_x, self.dir_y,
+        # TODO: use RANSAC matches as starting points?
+        scale = 1/8
+        resized_img1 = ImageOps.scale(self.img1, scale)
+        resized_img2 = ImageOps.scale(self.img2, scale)
+        correlate_task = machine.correlate_start(self.triangulation_mode, resized_img1, resized_img2, self.dir_x, self.dir_y,
                                                  self.triangulation_corridor, self.triangulation_kernel_size,
                                                  self.triangulation_threshold,
                                                  self.num_threads, self.triangulation_corridor_segment_length)
@@ -160,7 +164,7 @@ class Reconstructor:
         time_completed_surface = datetime.now()
         self.log.info(f'Completed surface generation in {time_completed_surface-time_completed_ransac}')
 
-        self.filter_peaks()
+        # self.filter_peaks()
 
         time_completed_filter = datetime.now()
         self.log.info(f'Completed peak filtering in {time_completed_filter-time_completed_surface}')
@@ -206,10 +210,10 @@ class Reconstructor:
         self.triangulation_kernel_size = 5
         self.triangulation_threshold = 0.8
         self.triangulation_corridor = 5
-        self.triangulation_mode = 'gpu'
+        # self.triangulation_corridor = 7
+        self.triangulation_mode = 'cpu'
         # Decrease when using a low-powered GPU
         self.triangulation_corridor_segment_length = 256
-        # self.triangulation_corridor = 7
         self.ransac_min_length = 3
         self.ransac_k = 1000
         self.ransac_n = 10
