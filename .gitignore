@@ -5,6 +5,10 @@
 /build/
 /*.egg-info/
 /dist/
+/.eggs/
+
+# Python cache
+*/__pycache__/
 
 # C extensions
 /cybervision/*.so
