@@ -79,6 +79,6 @@ setup(
     ],
     setup_requires=['wheel'],
     install_requires=[
-        "Pillow>=9.1.1"
+        "Pillow>=9.2.0"
     ]
 )
