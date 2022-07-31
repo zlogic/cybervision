@@ -19,9 +19,6 @@
 #include "correlation.h"
 
 #define MATCH_RESULT_GROW_SIZE 1000
-#define CORRELATION_STRIPE_WIDTH 64
-#define CORRELATION_STRIPE_VERTICAL 0
-#define CORRELATION_STRIPE_HORIZONTAL 1
 
 void compute_correlation_data(correlation_image *image, int kernel_size, int x, int y, float *stdev, float *delta)
 {
@@ -213,7 +210,7 @@ int correlation_match_points_complete(match_task *t)
 
 typedef struct {
     int kernel_point_count;
-    int line;
+    int y;
     int threads_completed;
     size_t processed_points;
     pthread_mutex_t lock;
@@ -244,7 +241,7 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
         int y1;
         if (pthread_mutex_lock(&ctx->lock) != 0)
             goto cleanup;
-        y1 = ctx->line++;
+        y1 = ctx->y++;
         if (pthread_mutex_unlock(&ctx->lock) != 0)
             goto cleanup;
 
@@ -346,7 +343,7 @@ int correlation_cross_correlate_start(cross_correlate_task* task)
 
     ctx->kernel_point_count = kernel_point_count;
 
-    ctx->line = task->kernel_size;
+    ctx->y = task->kernel_size;
 
     for (int i=0;i<w1*h1;i++)
         task->out_points[i] = NAN;
