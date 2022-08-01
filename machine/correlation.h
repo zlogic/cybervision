@@ -42,16 +42,23 @@ typedef struct {
     correlation_mode correlation_mode;
     correlation_image img1, img2;
     float dir_x, dir_y;
+    float scale;
+    int neighbor_distance;
+    float max_neighbor_difference;
     int corridor_size;
     int kernel_size;
     float threshold;
+
     int num_threads;
+    // TODO: remove this line
     int corridor_segment_length;
+    int iteration;
 
     float percent_complete;
     int completed;
     const char *error;
 
+    int out_width, out_height;
     float *out_points;
 
     cross_correlate_task_internal internal;

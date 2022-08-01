@@ -91,21 +91,27 @@ class Reconstructor:
 
     def create_surface(self):
         # TODO: use RANSAC matches as starting points?
-        scale = 1/8
-        resized_img1 = ImageOps.scale(self.img1, scale)
-        resized_img2 = ImageOps.scale(self.img2, scale)
-        correlate_task = machine.correlate_start(self.triangulation_mode, resized_img1, resized_img2, self.dir_x, self.dir_y,
-                                                 self.triangulation_corridor, self.triangulation_kernel_size,
-                                                 self.triangulation_threshold,
-                                                 self.num_threads, self.triangulation_corridor_segment_length)
-        progressbar = Progressbar()
-        while True:
-            (completed, percent_complete) = machine.correlate_status(correlate_task)
-            if not completed:
-                progressbar.update(percent_complete)
-                time.sleep(0.5)
-            else:
-                return machine.correlate_result(correlate_task)
+        correlate_task = machine.correlate_init(self.triangulation_mode, self.img1, self.img2, self.dir_x, self.dir_y,
+                                                self.triangulation_neighbor_distance,
+                                                self.triangulation_max_neighbor_difference,
+                                                self.triangulation_corridor, self.triangulation_kernel_size,
+                                                self.triangulation_threshold,
+                                                self.num_threads, self.triangulation_corridor_segment_length)
+        scales = [1/8, 1/4, 1/2, 1]
+        for scale in scales:
+            resized_img1 = ImageOps.scale(self.img1, scale)
+            resized_img2 = ImageOps.scale(self.img2, scale)
+            machine.correlate_start(correlate_task, resized_img1, resized_img2, scale)
+            # TODO: do not override progressbar
+            progressbar = Progressbar()
+            while True:
+                (completed, percent_complete) = machine.correlate_status(correlate_task)
+                if not completed:
+                    progressbar.update(percent_complete)
+                    time.sleep(0.5)
+                else:
+                    break
+        return machine.correlate_result(correlate_task)
 
     def save_surface_obj(self, height):
         with open(self.out_filename, 'w') as f:
@@ -214,6 +220,8 @@ class Reconstructor:
         self.triangulation_mode = 'cpu'
         # Decrease when using a low-powered GPU
         self.triangulation_corridor_segment_length = 256
+        self.triangulation_neighbor_distance = 25
+        self.triangulation_max_neighbor_difference = 0.75
         self.ransac_min_length = 3
         self.ransac_k = 1000
         self.ransac_n = 10
