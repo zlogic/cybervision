@@ -208,15 +208,15 @@ int correlation_match_points_complete(match_task *t)
     return 1;
 }
 
-int estimate_search_range(cross_correlate_task *t, int x, int y, float *min_distance, float *max_distance)
+int estimate_search_range(cross_correlate_task *t, int x1, int y1, float *min_distance, float *max_distance)
 {
     float min_depth, max_depth;
     int found = 0;
     float inv_scale = 1.0f/t->scale;
-    int x_min = (int)roundf((x-t->neighbor_distance)*inv_scale);
-    int x_max = (int)roundf((x+t->neighbor_distance)*inv_scale);
-    int y_min = (int)roundf((y-t->neighbor_distance)*inv_scale);
-    int y_max = (int)roundf((y+t->neighbor_distance)*inv_scale);
+    int x_min = (int)roundf((x1-t->neighbor_distance)*inv_scale);
+    int x_max = (int)roundf((x1+t->neighbor_distance)*inv_scale);
+    int y_min = (int)roundf((y1-t->neighbor_distance)*inv_scale);
+    int y_max = (int)roundf((y1+t->neighbor_distance)*inv_scale);
     for (int j=y_min;j<y_max;j++)
     {
         if (j<0 || j>=t->out_height)
@@ -224,29 +224,38 @@ int estimate_search_range(cross_correlate_task *t, int x, int y, float *min_dist
         for (int i=x_min;i<x_max;i++)
         {
             int out_pos = j*t->out_width + i;
-            float current_depth;
+            float current_depth, distance;
+            float dx, dy;
+            float min, max;
             if (i<0 || i>=t->out_width)
                 continue;
             current_depth = t->out_points[out_pos];
+
+            dx = (float)i-(float)x1*inv_scale;
+            dy = (float)j-(float)y1*inv_scale;
+            distance = sqrtf(dx*dx + dy*dy);
+            min = current_depth - distance*t->max_slope;
+            max = current_depth + distance*t->max_slope;
+
             if (!isfinite(current_depth))
                 continue;
             if (!found)
             {
-                min_depth = current_depth;
-                max_depth = current_depth;
+                min_depth = min;
+                max_depth = max;
                 found = 1;
             }
             else
             {
-                min_depth = current_depth<min_depth? current_depth:min_depth;
-                max_depth = current_depth>max_depth? current_depth:max_depth;
+                min_depth = min<min_depth? min:min_depth;
+                max_depth = max>max_depth? max:max_depth;
             }
         }
     }
     if (!found)
         return 0;
-    *min_distance = (min_depth*min_depth)*t->max_neighbor_difference;
-    *max_distance = (max_depth*max_depth)/t->max_neighbor_difference;
+    *min_distance = min_depth;
+    *max_distance = max_depth;
     return 1;
 }
 
@@ -335,7 +344,7 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
 
                     dx = (float)(x2-x1)*inv_scale;
                     dy = (float)(y2-y1)*inv_scale;
-                    distance = dx*dx+dy*dy;
+                    distance = sqrtf(dx*dx+dy*dy);
 
                     if (t->iteration > 1 && (distance < min_distance || distance > max_distance))
                         continue;
@@ -357,7 +366,7 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
                 }
                 if (isfinite(best_distance))
                 {
-                    t->out_points[out_pos] = -sqrtf(best_distance);
+                    t->out_points[out_pos] = best_distance;
                 }
             }
             processed_points++;

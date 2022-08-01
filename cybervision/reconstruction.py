@@ -93,7 +93,7 @@ class Reconstructor:
         # TODO: use RANSAC matches as starting points?
         correlate_task = machine.correlate_init(self.triangulation_mode, self.img1, self.img2, self.dir_x, self.dir_y,
                                                 self.triangulation_neighbor_distance,
-                                                self.triangulation_max_neighbor_difference,
+                                                self.triangulation_max_slope,
                                                 self.triangulation_corridor, self.triangulation_kernel_size,
                                                 self.triangulation_threshold,
                                                 self.num_threads, self.triangulation_corridor_segment_length)
@@ -102,7 +102,7 @@ class Reconstructor:
             resized_img1 = ImageOps.scale(self.img1, scale)
             resized_img2 = ImageOps.scale(self.img2, scale)
             machine.correlate_start(correlate_task, resized_img1, resized_img2, scale)
-            # TODO: do not override progressbar
+            # TODO: show complete progressbar (do not replace it)
             progressbar = Progressbar()
             while True:
                 (completed, percent_complete) = machine.correlate_status(correlate_task)
@@ -220,8 +220,8 @@ class Reconstructor:
         self.triangulation_mode = 'cpu'
         # Decrease when using a low-powered GPU
         self.triangulation_corridor_segment_length = 256
-        self.triangulation_neighbor_distance = 25
-        self.triangulation_max_neighbor_difference = 0.75
+        self.triangulation_neighbor_distance = 4
+        self.triangulation_max_slope = 0.25
         self.ransac_min_length = 3
         self.ransac_k = 1000
         self.ransac_n = 10

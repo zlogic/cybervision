@@ -44,7 +44,7 @@ typedef struct {
     float dir_x, dir_y;
     float scale;
     int neighbor_distance;
-    float max_neighbor_difference;
+    float max_slope;
     int corridor_size;
     int kernel_size;
     float threshold;

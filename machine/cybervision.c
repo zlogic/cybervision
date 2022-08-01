@@ -325,7 +325,7 @@ machine_correlate_init(PyObject *self, PyObject *args)
     const char* correlation_mode_str;
     float dir_x, dir_y;
     int neighbor_distance;
-    float max_neighbor_difference;
+    float max_slope;
     int corridor_size;
     int kernel_size;
     PyObject *img1, *img2;
@@ -337,7 +337,7 @@ machine_correlate_init(PyObject *self, PyObject *args)
 
     PyObject *out = NULL;
 
-    if (!PyArg_ParseTuple(args, "sOOffifiifii", &correlation_mode_str, &img1, &img2, &dir_x, &dir_y, &neighbor_distance, &max_neighbor_difference,
+    if (!PyArg_ParseTuple(args, "sOOffifiifii", &correlation_mode_str, &img1, &img2, &dir_x, &dir_y, &neighbor_distance, &max_slope,
         &corridor_size, &kernel_size, &threshold, &num_threads, &corridor_segment_length))
     {
         PyErr_SetString(CybervisionError, "Failed to parse args");
@@ -348,7 +348,7 @@ machine_correlate_init(PyObject *self, PyObject *args)
     task->dir_x = dir_x;
     task->dir_y = dir_y;
     task->neighbor_distance = neighbor_distance;
-    task->max_neighbor_difference = max_neighbor_difference;
+    task->max_slope = max_slope;
     task->corridor_size = corridor_size;
     task->kernel_size = kernel_size;
     task->threshold = threshold;
@@ -525,6 +525,9 @@ machine_correlate_result(PyObject *self, PyObject *args)
         return NULL;
     }
 
+    for (int i=0;i<task->out_width*task->out_height;i++)
+        task->out_points[i] = -task->out_points[i];
+    
     out = malloc(sizeof(surface_data));
     out->width = task->out_width;
     out->height = task->out_height;
