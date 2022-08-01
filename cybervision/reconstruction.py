@@ -85,18 +85,14 @@ class Reconstructor:
                     best_matches = current_matches
         return (best_matches, best_dir_x, best_dir_y)
 
-    def filter_peaks(self):
-        return machine.filter_peaks(self.triangulation_data,
-                                    self.filter_sigma, self.filter_min_points, self.filter_threshold)
-
     def create_surface(self):
         # TODO: use RANSAC matches as starting points?
-        correlate_task = machine.correlate_init(self.triangulation_mode, self.img1, self.img2, self.dir_x, self.dir_y,
+        correlate_task = machine.correlate_init(self.img1, self.img2, self.dir_x, self.dir_y,
                                                 self.triangulation_neighbor_distance,
                                                 self.triangulation_max_slope,
                                                 self.triangulation_corridor, self.triangulation_kernel_size,
                                                 self.triangulation_threshold,
-                                                self.num_threads, self.triangulation_corridor_segment_length)
+                                                self.num_threads)
         scales = [1/8, 1/4, 1/2, 1]
         for scale in scales:
             resized_img1 = ImageOps.scale(self.img1, scale)
@@ -170,16 +166,11 @@ class Reconstructor:
         time_completed_surface = datetime.now()
         self.log.info(f'Completed surface generation in {time_completed_surface-time_completed_ransac}')
 
-        # self.filter_peaks()
-
-        time_completed_filter = datetime.now()
-        self.log.info(f'Completed peak filtering in {time_completed_filter-time_completed_surface}')
-
         self.points3d, self.simplices = machine.triangulate_points(self.triangulation_data)
         del(self.triangulation_data)
 
         time_completed_triangulation = datetime.now()
-        self.log.info(f'Completed triangulation in {time_completed_triangulation-time_completed_filter}')
+        self.log.info(f'Completed triangulation in {time_completed_triangulation-time_completed_surface}')
 
         self.save_surface_obj(h1)
 
@@ -217,9 +208,6 @@ class Reconstructor:
         self.triangulation_threshold = 0.8
         self.triangulation_corridor = 5
         # self.triangulation_corridor = 7
-        self.triangulation_mode = 'cpu'
-        # Decrease when using a low-powered GPU
-        self.triangulation_corridor_segment_length = 256
         self.triangulation_neighbor_distance = 4
         self.triangulation_max_slope = 0.25
         self.ransac_min_length = 3
@@ -227,6 +215,3 @@ class Reconstructor:
         self.ransac_n = 10
         self.ransac_t = 0.01
         self.ransac_d = 10
-        self.filter_sigma = 4.0
-        self.filter_min_points = 7
-        self.filter_threshold = 0.5

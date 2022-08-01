@@ -7,8 +7,7 @@ extra_compile_args = []
 sources = [
     'machine/cybervision.c',
     'machine/correlation.c',
-    'machine/triangulation.c',
-    'machine/filter.c'
+    'machine/triangulation.c'
 ]
 
 if sys.platform in ['darwin', 'linux']:
@@ -20,25 +19,6 @@ include_dirs = []
 library_dirs = []
 libraries = []
 extra_link_args = []
-
-sdk_path = os.environ.get('VULKAN_SDK')
-if sys.platform == 'darwin' and not sdk_path:
-    sources.append('machine/metal_correlation.c')
-    extra_link_args += ['-framework', 'CoreGraphics', '-framework', 'Metal']
-
-elif not sdk_path:
-    raise RuntimeError("VULKAN_SDK is not set")
-else:
-    sources.append('machine/vulkan_correlation.c')
-    library_dirs.append(f'{sdk_path}/lib')
-    include_dirs.append(f'{sdk_path}/include')
-    if sys.platform == 'darwin':
-        include_dirs.append(f'{sdk_path}/libexec/include')
-        libraries.append('MoltenVK')
-    elif sys.platform == 'linux':
-        libraries.append('vulkan')
-    elif sys.platform == 'win32':
-        libraries.append('vulkan-1')
 
 sources = sources + glob('machine/fast/*.c')
 sources = sources + glob('machine/libqhull_r/*.c')

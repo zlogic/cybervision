@@ -39,7 +39,6 @@ typedef enum
     CORRELATION_MODE_GPU = 1
 } correlation_mode;
 typedef struct {
-    correlation_mode correlation_mode;
     correlation_image img1, img2;
     float dir_x, dir_y;
     float scale;
@@ -50,8 +49,6 @@ typedef struct {
     float threshold;
 
     int num_threads;
-    // TODO: remove this line
-    int corridor_segment_length;
     int iteration;
 
     float percent_complete;

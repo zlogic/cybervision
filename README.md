@@ -30,24 +30,16 @@ python3 -m cybervision <img1.tif> <img2.tif> --output-file=<out.obj> [--no-inter
 
 This will save a 3D [Wavefront OBJ file](https://en.wikipedia.org/wiki/Wavefront_.obj_file).
 
-⚠️ The ideal image size is 1024x1024 (or similar). Using larger images might result in increased processing times, and might cause the GPU to time out ("Device Lost" errors). Smaller images might not have enough details.
+⚠️ The ideal image size is 1024x1024 (or similar). Using larger images might result in increased processing times. Smaller images might not have enough details.
 
 ### GPU details
 
-Compiling a GPU-accelerated (Vulkan) version requires additional libraries and build tools.
+Previous versions of Cybervision were relying on a GPU as a way to brute force and correlate as many points as possible.
 
-Cybervision was tested on:
+Thanks to optimizations, this is no longer necessary and the CPU-based version runs well enough.
+Removing Vulkan and Metal makes Cybervision a lot more portable.
 
-* Apple Macbook Air M1 (2020)
-* Windows 11, i7-8750H, Geforce GTX 1050 (mobile)
-
-To run Cybervision, you will need the Vulkan runtime library:
-
-* In Linux, it's called `libvulkan.so.1` and the package is typically called something like `vulkan`, `vulkan-loader` or `libvulkan`.
-* In Windows, it's the Vulkan Runtime (VulkanRT) should already be installed - it's included with GPU drivers.
-* In macOS, a native Metal implementation is used instead of Vulkan.
-
-More details can be found in [gpu.md](gpu.md).
+For more details how the GPU version used to work, see the [tag_python_gpu](../../tree/tag_python_gpu) tag.
 
 ## Python version
 

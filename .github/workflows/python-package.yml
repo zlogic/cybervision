@@ -5,7 +5,7 @@ name: Python package
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, pyramid-triangulation ]
   pull_request:
     branches: [ master ]
 
@@ -59,42 +59,10 @@ jobs:
       run: |
         sudo apt-get update -y
         sudo apt-get install qemu-user-static
-    - name: Cache Vulkan SDK
-      if: matrix.os == 'windows-latest'
-      id: cache-vulkan-sdk
-      uses: actions/cache@v3
-      with:
-        path: vulkan-sdk
-        key: ${{ matrix.os }}-vulkan-sdk
-    - name: Build Vulkan SDK
-      if: matrix.os == 'windows-latest' && steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
-      shell: sh
-      run: |
-        mkdir vulkan-loader vulkan-sdk
-        cd vulkan-loader
-        curl -L -o - https://github.com/KhronosGroup/Vulkan-Loader/archive/refs/tags/v1.3.213.tar.gz | tar -xz --strip-components=1
-
-        cmake -A x64 -S. -Bbuild -DUPDATE_DEPS=On -DCMAKE_INSTALL_PREFIX=../vulkan-sdk
-        cmake --build build --config Release --target install
-
-        cp -rf external/Vulkan-Headers/build/install/include ../vulkan-sdk/
     - name: Build wheels
       env:
         CIBW_BUILD_VERBOSITY: 1
         CIBW_ARCHS: ${{ matrix.archs }}
-        CIBW_ENVIRONMENT_LINUX: VULKAN_SDK=/usr
-        CIBW_ENVIRONMENT_WINDOWS: VULKAN_SDK=vulkan-sdk
-        CIBW_BEFORE_BUILD_LINUX: >
-          source /etc/os-release;
-          if [ "$ID" == "centos" ] && [ "$VERSION_ID" == "7" ]; then
-              yum -y install vulkan-devel
-          elif [ "$ID" == "debian" ]; then
-              apt-get update && apt-get install libvulkan-dev
-          elif [ "$ID" == "alpine" ]; then
-              apk add --no-cache vulkan-loader-dev
-          else
-              echo "Cannot detect OS from $ID" && exit 1
-          fi
       run: python3 -m cibuildwheel --output-dir wheelhouse
     - name: Upload wheel artifacts
       uses: actions/upload-artifact@v3

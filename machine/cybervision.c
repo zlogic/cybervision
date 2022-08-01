@@ -2,8 +2,6 @@
 #include <Python.h>
 
 #include "correlation.h"
-#include "gpu_correlation.h"
-#include "filter.h"
 #include "triangulation.h"
 
 #include "fast/fast.h"
@@ -322,7 +320,6 @@ machine_match_result(PyObject *self, PyObject *args)
 static PyObject *
 machine_correlate_init(PyObject *self, PyObject *args)
 {
-    const char* correlation_mode_str;
     float dir_x, dir_y;
     int neighbor_distance;
     float max_slope;
@@ -332,13 +329,12 @@ machine_correlate_init(PyObject *self, PyObject *args)
     int w1, h1;
     float threshold;
     int num_threads;
-    int corridor_segment_length;
     cross_correlate_task *task;
 
     PyObject *out = NULL;
 
-    if (!PyArg_ParseTuple(args, "sOOffifiifii", &correlation_mode_str, &img1, &img2, &dir_x, &dir_y, &neighbor_distance, &max_slope,
-        &corridor_size, &kernel_size, &threshold, &num_threads, &corridor_segment_length))
+    if (!PyArg_ParseTuple(args, "OOffifiifi", &img1, &img2, &dir_x, &dir_y, &neighbor_distance, &max_slope,
+        &corridor_size, &kernel_size, &threshold, &num_threads))
     {
         PyErr_SetString(CybervisionError, "Failed to parse args");
         return NULL;
@@ -353,18 +349,10 @@ machine_correlate_init(PyObject *self, PyObject *args)
     task->kernel_size = kernel_size;
     task->threshold = threshold;
     task->num_threads = num_threads;
-    task->corridor_segment_length = corridor_segment_length;
     task->img1.img = NULL;
     task->img2.img = NULL;
     task->iteration = 0;
     task->internal = NULL;
-
-    if (strcmp("cpu", correlation_mode_str)==0)
-        task->correlation_mode = CORRELATION_MODE_CPU;
-    else if (strcmp("gpu", correlation_mode_str)==0)
-        task->correlation_mode = CORRELATION_MODE_GPU;
-    else
-        task->correlation_mode = -1;
 
     out = PyCapsule_New(task, NULL, free_cross_correlate_task);
 
@@ -444,27 +432,10 @@ machine_correlate_start(PyObject *self, PyObject *args)
     memcpy(task->img2.img, img_buffer.buf, img_buffer.len);
     PyBuffer_Release(&img_buffer);
 
-    if (task->correlation_mode == CORRELATION_MODE_CPU)
+    correlation_cross_correlate_complete(task);
+    if(!correlation_cross_correlate_start(task))
     {
-        correlation_cross_correlate_complete(task);
-        if(!correlation_cross_correlate_start(task))
-        {
-            PyErr_SetString(CybervisionError, "Failed to start cross correlation task");
-            return NULL;
-        }
-    }
-    else if (task->correlation_mode == CORRELATION_MODE_GPU)
-    {
-        gpu_correlation_cross_correlate_complete(task);
-        if(!gpu_correlation_cross_correlate_start(task))
-        {
-            PyErr_SetString(CybervisionError, "Failed to start cross correlation task");
-            return NULL;
-        }
-    }
-    else
-    {
-        PyErr_SetString(CybervisionError, "Unsupported correlation mode");
+        PyErr_SetString(CybervisionError, "Failed to start cross correlation task");
         return NULL;
     }
 
@@ -514,10 +485,7 @@ machine_correlate_result(PyObject *self, PyObject *args)
         return NULL;
     }
     
-    if (task->correlation_mode==CORRELATION_MODE_CPU)
-        correlation_cross_correlate_complete(task);
-    else if (task->correlation_mode==CORRELATION_MODE_GPU)
-        gpu_correlation_cross_correlate_complete(task);
+    correlation_cross_correlate_complete(task);
 
     if (task->error != NULL)
     {
@@ -535,37 +503,6 @@ machine_correlate_result(PyObject *self, PyObject *args)
     task->out_points = NULL;
 
     return PyCapsule_New(out, NULL, free_surface_data);
-}
-
-static PyObject *
-machine_filter_peaks(PyObject *self, PyObject *args)
-{
-    PyObject *surface_object;
-    surface_data *data;
-    float sigma;
-    int min_points;
-    float threshold;
-
-    if (!PyArg_ParseTuple(args, "Ofif", &surface_object, &sigma, &min_points, &threshold))
-    {
-        PyErr_SetString(CybervisionError, "Failed to parse args");
-        return NULL;
-    }
-
-    data = PyCapsule_GetPointer(surface_object, NULL);
-    if (data == NULL)
-    {
-        PyErr_SetString(CybervisionError, "Failed to get data from args");
-        return NULL;
-    }
-
-    if (!filter_peaks(data, sigma, min_points, threshold))
-    {
-        PyErr_SetString(CybervisionError, "Failed to filter peaks");
-        return NULL;
-    }
-
-    return Py_None;
 }
 
 static PyObject *
@@ -610,7 +547,6 @@ static PyMethodDef MachineMethods[] = {
     {"correlate_start", machine_correlate_start, METH_VARARGS, "Start a task to find cross-correlation between images."},
     {"correlate_status", machine_correlate_status, METH_VARARGS, "Status of a task to find cross-correlation between images."},
     {"correlate_result", machine_correlate_result, METH_VARARGS, "Result of a task to find cross-correlation between images."},
-    {"filter_peaks", machine_filter_peaks, METH_VARARGS, "Remove peaks and false matches from the depth grid."},
     {"triangulate_points", machine_triangulate_points, METH_VARARGS, "Triangulate points to create a mesh."},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
