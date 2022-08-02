@@ -208,28 +208,41 @@ int correlation_match_points_complete(match_task *t)
     return 1;
 }
 
+inline int fit_range(int val, int min, int max)
+{
+    if (val<min)
+        return min;
+    if (val>max)
+        return max;
+    return val;
+}
+
 int estimate_search_range(cross_correlate_task *t, int x1, int y1, float *min_distance, float *max_distance)
 {
     float min_depth, max_depth;
     int found = 0;
     float inv_scale = 1.0f/t->scale;
-    int x_min = (int)roundf((x1-t->neighbor_distance)*inv_scale);
-    int x_max = (int)roundf((x1+t->neighbor_distance)*inv_scale);
-    int y_min = (int)roundf((y1-t->neighbor_distance)*inv_scale);
-    int y_max = (int)roundf((y1+t->neighbor_distance)*inv_scale);
+    int x_min = (int)floorf((x1-t->neighbor_distance)*inv_scale);
+    int x_max = (int)ceilf((x1+t->neighbor_distance)*inv_scale);
+    int y_min = (int)floorf((y1-t->neighbor_distance)*inv_scale);
+    int y_max = (int)ceilf((y1+t->neighbor_distance)*inv_scale);
+
+    x_min = fit_range(x_min, 0, t->out_width-1);
+    x_max = fit_range(x_max, 0, t->out_width-1);
+    y_min = fit_range(y_min, 0, t->out_height-1);
+    y_max = fit_range(y_max, 0, t->out_height-1);
     for (int j=y_min;j<y_max;j++)
     {
-        if (j<0 || j>=t->out_height)
-            continue;
         for (int i=x_min;i<x_max;i++)
         {
             int out_pos = j*t->out_width + i;
             float current_depth, distance;
             float dx, dy;
             float min, max;
-            if (i<0 || i>=t->out_width)
-                continue;
             current_depth = t->out_points[out_pos];
+
+            if (!isfinite(current_depth))
+                continue;
 
             dx = (float)i-(float)x1*inv_scale;
             dy = (float)j-(float)y1*inv_scale;
@@ -237,8 +250,6 @@ int estimate_search_range(cross_correlate_task *t, int x1, int y1, float *min_di
             min = current_depth - distance*t->max_slope;
             max = current_depth + distance*t->max_slope;
 
-            if (!isfinite(current_depth))
-                continue;
             if (!found)
             {
                 min_depth = min;
@@ -260,7 +271,72 @@ int estimate_search_range(cross_correlate_task *t, int x1, int y1, float *min_di
 }
 
 typedef struct {
-    int kernel_point_count;
+    int corridor_vertical;
+    float corridor_coeff;
+    float kernel_point_count;
+    int x1, y1;
+    int w2, h2;
+
+    float stdev1;
+    float *delta1;
+    float *delta2;
+
+    int corridor_offset;
+    float best_corr;
+    float best_distance;
+} corridor_area_ctx;
+
+inline void correlate_corridor_area(cross_correlate_task *t, corridor_area_ctx* c, int corridor_start, int corridor_end)
+{
+    const int kernel_size = t->kernel_size;
+    const int kernel_point_count = c->kernel_point_count;
+    const int x1 = c->x1, y1 = c->y1;
+    const int w2 = c->w2, h2 = c->h2;
+    const float stdev1 = c->stdev1;
+    for (int i=corridor_start;i<corridor_end;i++)
+    {
+        int x2, y2;
+        float stdev2;
+        float corr = 0;
+        float dx, dy;
+        float distance;
+        if (c->corridor_vertical)
+        {
+            y2 = i;
+            x2 = x1+c->corridor_offset + (int)((y2-y1)*c->corridor_coeff);
+            if (x2 < kernel_size || x2 >= w2-kernel_size)
+                continue;
+        }
+        else
+        {
+            x2 = i;
+            y2 = y1+c->corridor_offset + (int)((x2-x1)*c->corridor_coeff);
+            if (y2 < kernel_size || y2 >= h2-kernel_size)
+                continue;
+        }
+
+        compute_correlation_data(&t->img2, kernel_size, x2, y2, &stdev2, c->delta2);
+
+        if (!isfinite(stdev2))
+            continue;
+
+        dx = (float)(x2-x1)/t->scale;
+        dy = (float)(y2-y1)/t->scale;
+        distance = sqrtf(dx*dx+dy*dy);
+
+        for (int l=0;l<kernel_point_count;l++)
+            corr += c->delta1[l] * c->delta2[l];
+        corr = corr/(c->stdev1*stdev2*(float)kernel_point_count);
+        
+        if (corr >= t->threshold && corr > c->best_corr)
+        {
+            c->best_distance = distance;
+            c->best_corr = corr;
+        }
+    }
+}
+
+typedef struct {
     int y;
     int threads_completed;
     size_t processed_points;
@@ -273,23 +349,33 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
     cross_correlate_task *t = args;
     cross_correlation_task_ctx *ctx = t->internal;
 
+    corridor_area_ctx corr_ctx;
+
     int kernel_size = t->kernel_size;
-    int kernel_point_count = ctx->kernel_point_count;
+    int kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
     int w1 = t->img1.width, h1 = t->img1.height;
     int w2 = t->img2.width, h2 = t->img2.height;
     int processed_points = 0;
     int points_to_process = (w1-2*kernel_size)*(h1-2*kernel_size);
 
-    int corridor_vertical = fabs(t->dir_y)>fabs(t->dir_x);
-    float corridor_coeff = corridor_vertical? t->dir_x/t->dir_y : t->dir_y/t->dir_x;
+    int corridor_vertical = fabsf(t->dir_y)>fabsf(t->dir_x);
     int corridor_start = kernel_size;
     int corridor_end = corridor_vertical? h2-kernel_size : w2-kernel_size;
-
-    float *delta1 = malloc(sizeof(float)*kernel_point_count);
-    float *delta2 = malloc(sizeof(float)*kernel_point_count);
-
     float inv_scale = 1.0f/t->scale;
 
+    float dir_length = sqrtf(t->dir_x*t->dir_x + t->dir_y*t->dir_y);
+    float distance_coeff = fabsf(corridor_vertical? t->dir_y/dir_length : t->dir_x/dir_length)*t->scale;
+    float corridor_cot = fabsf(t->dir_x/dir_length);
+
+    corr_ctx.corridor_vertical = corridor_vertical;
+    corr_ctx.corridor_coeff = corridor_vertical? t->dir_x/t->dir_y : t->dir_y/t->dir_x;
+    corr_ctx.kernel_point_count = kernel_point_count;
+    corr_ctx.w2 = w2;
+    corr_ctx.h2 = h2;
+
+    corr_ctx.delta1 = malloc(sizeof(float)*kernel_point_count);
+    corr_ctx.delta2 = malloc(sizeof(float)*kernel_point_count);
+    
     for(;;){
         int y1;
         if (pthread_mutex_lock(&ctx->lock) != 0)
@@ -303,15 +389,17 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
 
         for (int x1=kernel_size;x1<w1-kernel_size;x1++)
         {
-            float stdev1;
-            float best_distance = NAN;
-            float best_corr = 0;
             int out_pos = ((int)roundf(inv_scale*y1))*t->out_width + (int)roundf(inv_scale*x1);
             float min_distance, max_distance;
 
-            compute_correlation_data(&t->img1, kernel_size, x1, y1, &stdev1, delta1);
+            corr_ctx.best_distance = NAN;
+            corr_ctx.best_corr = 0;
+            corr_ctx.x1 = x1;
+            corr_ctx.y1 = y1;
 
-            if (!isfinite(stdev1))
+            compute_correlation_data(&t->img1, kernel_size, x1, y1, &corr_ctx.stdev1, corr_ctx.delta1);
+
+            if (!isfinite(corr_ctx.stdev1))
                 continue;
 
             if (t->iteration > 1)
@@ -320,53 +408,31 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
 
             for (int corridor_offset=-t->corridor_size;corridor_offset<=t->corridor_size;corridor_offset++)
             {
-                for (int corridor_pos=corridor_start;corridor_pos<corridor_end;corridor_pos++)
+                corr_ctx.corridor_offset = corridor_offset;
+                if (t->iteration > 1)
                 {
-                    int x2, y2;
-                    float stdev2;
-                    float corr = 0;
-                    float dx, dy;
-                    float distance;
+                    int current_pos, min_pos, max_pos;
+                    int start, end;
                     if (corridor_vertical)
-                    {
-                        y2 = corridor_pos;
-                        x2 = x1+corridor_offset + (int)((y2-y1)*corridor_coeff);
-                        if (x2 < kernel_size || x2 >= w2-kernel_size)
-                            continue;
-                    }
+                        current_pos = y1;
                     else
-                    {
-                        x2 = corridor_pos;
-                        y2 = y1+corridor_offset + (int)((x2-x1)*corridor_coeff);
-                        if (y2 < kernel_size || y2 >= h2-kernel_size)
-                            continue;
-                    }
-
-                    dx = (float)(x2-x1)*inv_scale;
-                    dy = (float)(y2-y1)*inv_scale;
-                    distance = sqrtf(dx*dx+dy*dy);
-
-                    if (t->iteration > 1 && (distance < min_distance || distance > max_distance))
-                        continue;
-
-                    compute_correlation_data(&t->img2, kernel_size, x2, y2, &stdev2, delta2);
-
-                    if (!isfinite(stdev2))
-                        continue;
-
-                    for (int l=0;l<kernel_point_count;l++)
-                        corr += delta1[l] * delta2[l];
-                    corr = corr/(stdev1*stdev2*(float)kernel_point_count);
-                    
-                    if (corr >= t->threshold && corr > best_corr)
-                    {
-                        best_distance = distance;
-                        best_corr = corr;
-                    }
+                        current_pos = x1;
+                    min_pos = (int)floorf(min_distance*distance_coeff);
+                    max_pos = (int)ceilf(max_distance*distance_coeff);
+                    start = fit_range(current_pos+min_pos, corridor_start, corridor_end);
+                    end = fit_range(current_pos+max_pos, corridor_start, corridor_end);
+                    correlate_corridor_area(t, &corr_ctx, start, end);
+                    start = fit_range(current_pos-max_pos, corridor_start, corridor_end);
+                    end = fit_range(current_pos-min_pos, corridor_start, corridor_end);
+                    correlate_corridor_area(t, &corr_ctx, start, end);
                 }
-                if (isfinite(best_distance))
+                else
                 {
-                    t->out_points[out_pos] = best_distance;
+                    correlate_corridor_area(t, &corr_ctx, corridor_start, corridor_end);
+                }
+                if (isfinite(corr_ctx.best_distance))
+                {
+                    t->out_points[out_pos] = corr_ctx.best_distance;
                 }
             }
             processed_points++;
@@ -382,8 +448,8 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
     }
 
 cleanup:
-    free(delta1);
-    free(delta2);
+    free(corr_ctx.delta1);
+    free(corr_ctx.delta2);
     pthread_mutex_lock(&ctx->lock);
     ctx->threads_completed++;
     pthread_mutex_unlock(&ctx->lock);
@@ -394,7 +460,6 @@ cleanup:
 
 int correlation_cross_correlate_start(cross_correlate_task* task)
 {
-    int kernel_point_count = (2*task->kernel_size+1)*(2*task->kernel_size+1);
     cross_correlation_task_ctx *ctx = malloc(sizeof(cross_correlation_task_ctx));
     
     task->internal = ctx;
@@ -405,8 +470,6 @@ int correlation_cross_correlate_start(cross_correlate_task* task)
     ctx->threads_completed = 0;
     task->completed = 0;
     task->error = NULL;
-
-    ctx->kernel_point_count = kernel_point_count;
 
     ctx->y = task->kernel_size;
 
