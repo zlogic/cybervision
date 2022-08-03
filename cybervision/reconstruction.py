@@ -209,7 +209,7 @@ class Reconstructor:
         self.triangulation_corridor = 5
         # self.triangulation_corridor = 7
         self.triangulation_neighbor_distance = 4
-        self.triangulation_max_slope = 0.25
+        self.triangulation_max_slope = 0.5
         self.ransac_min_length = 3
         self.ransac_k = 1000
         self.ransac_n = 10
