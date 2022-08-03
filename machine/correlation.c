@@ -273,7 +273,7 @@ int estimate_search_range(cross_correlate_task *t, int x1, int y1, float *min_di
 typedef struct {
     int corridor_vertical;
     float corridor_coeff;
-    float kernel_point_count;
+    int kernel_point_count;
     int x1, y1;
     int w2, h2;
 
@@ -292,7 +292,6 @@ inline void correlate_corridor_area(cross_correlate_task *t, corridor_area_ctx* 
     const int kernel_point_count = c->kernel_point_count;
     const int x1 = c->x1, y1 = c->y1;
     const int w2 = c->w2, h2 = c->h2;
-    const float stdev1 = c->stdev1;
     for (int i=corridor_start;i<corridor_end;i++)
     {
         int x2, y2;
@@ -365,7 +364,6 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
 
     float dir_length = sqrtf(t->dir_x*t->dir_x + t->dir_y*t->dir_y);
     float distance_coeff = fabsf(corridor_vertical? t->dir_y/dir_length : t->dir_x/dir_length)*t->scale;
-    float corridor_cot = fabsf(t->dir_x/dir_length);
 
     corr_ctx.corridor_vertical = corridor_vertical;
     corr_ctx.corridor_coeff = corridor_vertical? t->dir_x/t->dir_y : t->dir_y/t->dir_x;
