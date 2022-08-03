@@ -46,14 +46,14 @@ jobs:
         - os: ubuntu-latest
           archs: x86_64 aarch64
         - os: macos-latest
-          archs: x86_64 arm64
+          archs: x86_64 arm64 universal2
         - os: windows-latest
           archs: AMD64
 
     steps:
     - uses: actions/checkout@v3
     - name: Install cibuildwheel
-      run: python3 -m pip install cibuildwheel==2.4.0
+      run: python3 -m pip install cibuildwheel==2.8.1
     - name: Install qemu
       if: matrix.os == 'ubuntu-latest'
       run: |
