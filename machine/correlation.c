@@ -208,7 +208,7 @@ int correlation_match_points_complete(match_task *t)
     return 1;
 }
 
-inline int fit_range(int val, int min, int max)
+static inline int fit_range(int val, int min, int max)
 {
     if (val<min)
         return min;
@@ -286,12 +286,12 @@ typedef struct {
     float best_distance;
 } corridor_area_ctx;
 
-inline void correlate_corridor_area(cross_correlate_task *t, corridor_area_ctx* c, int corridor_start, int corridor_end)
+static inline void correlate_corridor_area(cross_correlate_task *t, corridor_area_ctx* c, int corridor_start, int corridor_end)
 {
-    const int kernel_size = t->kernel_size;
-    const int kernel_point_count = c->kernel_point_count;
-    const int x1 = c->x1, y1 = c->y1;
-    const int w2 = c->w2, h2 = c->h2;
+    int kernel_size = t->kernel_size;
+    int kernel_point_count = c->kernel_point_count;
+    int x1 = c->x1, y1 = c->y1;
+    int w2 = c->w2, h2 = c->h2;
     for (int i=corridor_start;i<corridor_end;i++)
     {
         int x2, y2;
