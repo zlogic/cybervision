@@ -61,7 +61,12 @@ class Reconstructor:
         best_dir_x, best_dir_y = math.nan, math.nan
         best_error = math.inf
         best_matches = []
-        for _ in range(self.ransac_k):
+        progressbar = Progressbar()
+        percent_step = self.ransac_k/20
+        for i in range(self.ransac_k):
+            if i%percent_step == 0:
+                progressbar.update(100.0 * i/self.ransac_k)
+
             inliers = random.choices(suitable_matches, k=self.ransac_n)
             dir_x, dir_y = self.calculate_model(inliers)
             extended_inliers = []
@@ -86,26 +91,29 @@ class Reconstructor:
         return (best_matches, best_dir_x, best_dir_y)
 
     def create_surface(self):
-        # TODO: use RANSAC matches as starting points?
+        total_percent = 0.0
+        for scale in self.triangulation_scales:
+            total_percent = total_percent + scale*scale
         correlate_task = machine.correlate_init(self.img1, self.img2, self.dir_x, self.dir_y,
                                                 self.triangulation_neighbor_distance,
                                                 self.triangulation_max_slope,
                                                 self.triangulation_corridor, self.triangulation_kernel_size,
                                                 self.triangulation_threshold,
                                                 self.num_threads)
-        scales = [1/8, 1/4, 1/2, 1]
-        for scale in scales:
+        total_percent_complete = 0.0
+        progressbar = Progressbar()
+        for scale in self.triangulation_scales:
             resized_img1 = ImageOps.scale(self.img1, scale)
             resized_img2 = ImageOps.scale(self.img2, scale)
             machine.correlate_start(correlate_task, resized_img1, resized_img2, scale)
-            # TODO: show complete progressbar (do not replace it)
-            progressbar = Progressbar()
             while True:
                 (completed, percent_complete) = machine.correlate_status(correlate_task)
                 if not completed:
+                    percent_complete = total_percent_complete + percent_complete*scale*scale/total_percent
                     progressbar.update(percent_complete)
                     time.sleep(0.5)
                 else:
+                    total_percent_complete = total_percent_complete + 100.0*scale*scale/total_percent
                     break
         return machine.correlate_result(correlate_task)
 
@@ -204,6 +212,7 @@ class Reconstructor:
         self.correlation_kernel_size = 7
         # slower, but more effective
         # self.correlation_kernel_size = 10
+        self.triangulation_scales = [1/8, 1/4, 1/2, 1]
         self.triangulation_kernel_size = 5
         self.triangulation_threshold = 0.8
         self.triangulation_corridor = 5
