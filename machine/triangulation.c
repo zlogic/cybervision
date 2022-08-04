@@ -9,11 +9,11 @@
 
 #include "triangulation.h"
 
-coordT* convert_points(surface_data* data, size_t *num_points)
+coordT* convert_points(surface_data* data, int *num_points)
 {
     coordT *points;
     coordT *current_point = NULL;
-    size_t np = 0;
+    int np = 0;
     for (int y=0;y<data->height;y++)
     {
         for (int x=0;x<data->width;x++)
@@ -101,7 +101,7 @@ int triangulation_triangulate(surface_data* data, PyObject *out_points, PyObject
     coordT *points;
     qhT qh = {0};
     int result = 0;
-    size_t num_points = 0;
+    int num_points = 0;
     int curlong, totlong;
 
     points = convert_points(data, &num_points);

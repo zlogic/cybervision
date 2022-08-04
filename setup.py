@@ -13,7 +13,7 @@ sources = [
 if sys.platform in ['darwin', 'linux']:
     extra_compile_args.append('-pthread')
 elif sys.platform == 'win32':
-    sources.append('machine/win32/pthread.c')
+    sources = sources + glob('machine/win32/*.c')
 
 include_dirs = []
 library_dirs = []

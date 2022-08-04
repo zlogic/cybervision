@@ -32,6 +32,35 @@ int correlation_match_points_start(match_task*);
 void correlation_match_points_cancel(match_task*);
 int correlation_match_points_complete(match_task*);
 
+typedef struct { 
+    int x1,y1;
+    int x2,y2;
+} ransac_match;
+typedef void* ransac_task_internal;
+typedef struct {
+    ransac_match *matches;
+    size_t matches_count;
+
+    size_t ransac_k;
+    size_t ransac_n;
+    float ransac_t;
+    size_t ransac_d;
+
+    int num_threads;
+    const char *error;
+
+    float percent_complete;
+    int completed;
+
+    float dir_x, dir_y;
+    size_t result_matches_count;
+
+    ransac_task_internal internal;
+} ransac_task;
+int correlation_ransac_start(ransac_task*);
+void correlation_ransac_cancel(ransac_task*);
+int correlation_ransac_complete(ransac_task*);
+
 typedef void* cross_correlate_task_internal;
 typedef enum 
 { 

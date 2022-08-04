@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
 # include <pthread.h>
@@ -9,6 +10,7 @@
 # include "win32/pthread.h"
 # define THREAD_FUNCTION DWORD WINAPI
 # define THREAD_RETURN_VALUE 1
+# include "win32/rand.h"
 #else
 # error "pthread is required"
 #endif
@@ -208,6 +210,208 @@ int correlation_match_points_complete(match_task *t)
     return 1;
 }
 
+typedef struct {
+    size_t iteration;
+
+    float best_error;
+
+    int threads_completed;
+    pthread_mutex_t lock;
+    pthread_t *threads;
+} ransac_task_ctx;
+
+static inline void ransac_calculate_model(ransac_task *t, size_t *selected_matches, size_t selected_matches_count, float* dir_x, float *dir_y)
+{
+    // TODO: use least squares fitting?
+    float sum_dx = 0.0F, sum_dy = 0.0F;
+    for(size_t i=0;i<selected_matches_count;i++)
+    {
+        size_t selected_match = selected_matches[i];
+        ransac_match *match = &t->matches[selected_match];
+        float dx = (float)(match->x2 - match->x1);
+        float dy = (float)(match->y2 - match->y1);
+        float length = sqrtf(dx*dx + dy*dy);
+        sum_dx += dx/length;
+        sum_dy += dy/length;
+    }
+    *dir_x = sum_dx/(float)(selected_matches_count);
+    *dir_y = sum_dy/(float)(selected_matches_count);
+}
+
+THREAD_FUNCTION correlate_ransac_task(void *args)
+{
+    ransac_task *t = args;
+    ransac_task_ctx *ctx = t->internal;
+    size_t *inliers = malloc(sizeof(size_t)*t->ransac_n);
+    size_t *extended_inliers = malloc(sizeof(size_t)*t->matches_count);
+    size_t extended_inliers_count = 0;
+    unsigned int rand_seed;
+    
+    if (pthread_mutex_lock(&ctx->lock) != 0)
+        goto cleanup;
+    rand_seed = rand();
+    if (pthread_mutex_unlock(&ctx->lock) != 0)
+        goto cleanup;
+
+    while (!t->completed)
+    {
+        size_t iteration;
+        if (pthread_mutex_lock(&ctx->lock) != 0)
+            goto cleanup;
+        iteration = ctx->iteration++;
+        if (pthread_mutex_unlock(&ctx->lock) != 0)
+            goto cleanup;
+
+        if (iteration > t->ransac_k)
+            break;
+
+        extended_inliers_count = 0;
+        
+        for(size_t i=0;i<t->ransac_n;i++)
+        {
+            size_t m;
+            int unique = 0;
+            while(!unique)
+            {
+                m = rand_r(&rand_seed)%t->matches_count;
+                unique = 1;
+                for (size_t j=0;j<i;j++)
+                {
+                    if (inliers[j] == m)
+                    {
+                        unique = 0;
+                        break;
+                    }
+                }
+            }
+            inliers[i] = m;
+        }
+
+        float dir_x, dir_y;
+        ransac_calculate_model(t, inliers, t->ransac_n, &dir_x, &dir_y);
+
+        for (size_t i=0;i<t->matches_count;i++)
+        {
+            int already_exists = 0;
+            for (size_t j=0;j<t->ransac_n;j++)
+            {
+                if (inliers[j] == i)
+                {
+                    already_exists = 1;
+                    break;
+                }
+            }
+            if (already_exists)
+                continue;
+            
+            float match_dir_x, match_dir_y;
+            ransac_calculate_model(t, &i, 1, &match_dir_x, &match_dir_y);
+            match_dir_x -= dir_x;
+            match_dir_y -= dir_y;
+
+            float error = sqrtf(match_dir_x*match_dir_x + match_dir_y*match_dir_y);
+            if (error > t->ransac_t)
+                continue;
+
+            extended_inliers[extended_inliers_count++] = i;
+        }
+
+        if (extended_inliers_count < t->ransac_d)
+            continue;
+        
+        for (size_t i=0;i<t->ransac_n;i++)
+            extended_inliers[extended_inliers_count++] = inliers[i];
+        
+        float current_dir_x, current_dir_y;
+        ransac_calculate_model(t, extended_inliers, extended_inliers_count, &current_dir_x, &current_dir_y);
+
+        float error = 0.0F;
+        for (size_t i=0;i<extended_inliers_count;i++)
+        {
+            float match_dir_x, match_dir_y;
+            ransac_calculate_model(t, &i, 1, &match_dir_x, &match_dir_y);
+            match_dir_x -= current_dir_x;
+            match_dir_y -= current_dir_y;
+
+            error += sqrtf(match_dir_x*match_dir_x + match_dir_y*match_dir_y);
+        }
+
+        if (pthread_mutex_lock(&ctx->lock) != 0)
+            goto cleanup;
+        if (error < ctx->best_error)
+        {
+            t->dir_x = current_dir_x;
+            t->dir_y = current_dir_y;
+            ctx->best_error = error;
+            t->result_matches_count = extended_inliers_count;
+        }
+        t->percent_complete = 100.0F*(float)iteration/t->ransac_k;
+        if (pthread_mutex_unlock(&ctx->lock) != 0)
+            goto cleanup;
+    }
+cleanup:
+    free(inliers);
+    free(extended_inliers);
+    pthread_mutex_lock(&ctx->lock);
+    ctx->threads_completed++;
+    pthread_mutex_unlock(&ctx->lock);
+    if (ctx->threads_completed >= t->num_threads)
+        t->completed = 1;
+    return THREAD_RETURN_VALUE;
+}
+
+int correlation_ransac_start(ransac_task *task)
+{
+    ransac_task_ctx *ctx = malloc(sizeof(ransac_task_ctx));
+
+    srand((unsigned int)time(NULL));
+    
+    task->internal = ctx;
+    ctx->threads= malloc(sizeof(pthread_t)*task->num_threads);
+
+    ctx->iteration = 0;
+    task->percent_complete = 0.0;
+    ctx->threads_completed = 0;
+    task->completed = 0;
+    task->error = NULL;
+
+    ctx->best_error = INFINITY;
+    task->dir_x = NAN;
+    task->dir_y = NAN;
+    task->result_matches_count = 0;
+
+    if (pthread_mutex_init(&ctx->lock, NULL) != 0)
+        return 0;
+
+    for (int i = 0; i < task->num_threads; i++)
+        pthread_create(&ctx->threads[i], NULL, correlate_ransac_task, task);
+
+    return 1;
+}
+
+void correlation_ransac_cancel(ransac_task *t)
+{
+    if (t == NULL)
+        return;
+    t->completed = 1;
+}
+
+int correlation_ransac_complete(ransac_task *t)
+{
+    ransac_task_ctx *ctx;
+    if (t == NULL || t->internal == NULL)
+        return 1;
+    ctx = t->internal;
+    for (int i = 0; i < t->num_threads; i++)
+        pthread_join(ctx->threads[i], NULL);
+
+    pthread_mutex_destroy(&ctx->lock);
+    free(ctx->threads);
+    free(t->internal);
+    t->internal = NULL;
+    return 1;
+}
+
 static inline int fit_range(int val, int min, int max)
 {
     if (val<min)
@@ -221,7 +425,7 @@ int estimate_search_range(cross_correlate_task *t, int x1, int y1, float *min_di
 {
     float min_depth, max_depth;
     int found = 0;
-    float inv_scale = 1.0f/t->scale;
+    float inv_scale = 1.0F/t->scale;
     int x_min = (int)floorf((x1-t->neighbor_distance)*inv_scale);
     int x_max = (int)ceilf((x1+t->neighbor_distance)*inv_scale);
     int y_min = (int)floorf((y1-t->neighbor_distance)*inv_scale);
@@ -343,7 +547,7 @@ typedef struct {
     pthread_t *threads;
 } cross_correlation_task_ctx;
 
-THREAD_FUNCTION correlate_cross_correlation_task(void *args)
+THREAD_FUNCTION cross_correlation_task(void *args)
 {
     cross_correlate_task *t = args;
     cross_correlation_task_ctx *ctx = t->internal;
@@ -360,7 +564,7 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
     int corridor_vertical = fabsf(t->dir_y)>fabsf(t->dir_x);
     int corridor_start = kernel_size;
     int corridor_end = corridor_vertical? h2-kernel_size : w2-kernel_size;
-    float inv_scale = 1.0f/t->scale;
+    float inv_scale = 1.0F/t->scale;
 
     float dir_length = sqrtf(t->dir_x*t->dir_x + t->dir_y*t->dir_y);
     float distance_coeff = fabsf(corridor_vertical? t->dir_y/dir_length : t->dir_x/dir_length)*t->scale;
@@ -374,7 +578,8 @@ THREAD_FUNCTION correlate_cross_correlation_task(void *args)
     corr_ctx.delta1 = malloc(sizeof(float)*kernel_point_count);
     corr_ctx.delta2 = malloc(sizeof(float)*kernel_point_count);
     
-    for(;;){
+    while (!t->completed)
+    {
         int y1;
         if (pthread_mutex_lock(&ctx->lock) != 0)
             goto cleanup;
@@ -475,7 +680,7 @@ int correlation_cross_correlate_start(cross_correlate_task* task)
         return 0;
 
     for (int i = 0; i < task->num_threads; i++)
-        pthread_create(&ctx->threads[i], NULL, correlate_cross_correlation_task, task);
+        pthread_create(&ctx->threads[i], NULL, cross_correlation_task, task);
 
     return 1;
 }

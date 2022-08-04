@@ -86,6 +86,58 @@ void free_match_task(PyObject *task_object)
     free(task);
 }
 
+int read_matches(PyObject *points1, PyObject *points2, PyObject *matches, float ransac_min_length, ransac_match **converted_matches, size_t *converted_matches_count)
+{
+    Py_ssize_t matches_size = PyList_Size(matches);
+    *converted_matches = malloc(sizeof(ransac_match)*matches_size);
+    *converted_matches_count = 0;
+    for (Py_ssize_t m=0;m<matches_size;m++)
+    {
+        PyObject *match = PyList_GetItem(matches, m);
+        int p1, p2;
+        float corr;
+        PyObject *point1, *point2;
+        float dx, dy, length;
+
+        ransac_match *converted_match = &((*converted_matches)[*converted_matches_count]);
+        if (!PyArg_ParseTuple(match, "iif", &p1, &p2, &corr))
+        {
+            PyErr_SetString(CybervisionError, "Failed to parse match");
+            free(*converted_matches);
+            *converted_matches = NULL;
+            return 0;
+        }
+
+        point1 = PyList_GetItem(points1, p1);
+        if (!PyArg_ParseTuple(point1, "ii", &converted_match->x1, &converted_match->y1))
+        {
+            PyErr_SetString(CybervisionError, "Failed to parse point 1");
+            free(*converted_matches);
+            *converted_matches = NULL;
+            return 0;
+        }
+
+        point2 = PyList_GetItem(points2, p2);
+        if (!PyArg_ParseTuple(point2, "ii", &converted_match->x2, &converted_match->y2))
+        {
+            PyErr_SetString(CybervisionError, "Failed to parse point 2");
+            free(*converted_matches);
+            *converted_matches = NULL;
+            return 0;
+        }
+
+        dx = (float)(converted_match->x2 - converted_match->x1);
+        dy = (float)(converted_match->y2 - converted_match->y1);
+        length = sqrtf(dx*dx + dy*dy);
+
+        if (length >= ransac_min_length)
+        {
+            (*converted_matches_count)++;
+        }
+    }
+    return 1;
+}
+
 void free_cross_correlate_task(PyObject *task_object)
 {
     cross_correlate_task *task = PyCapsule_GetPointer(task_object, NULL);
@@ -100,6 +152,19 @@ void free_cross_correlate_task(PyObject *task_object)
         free(task->img2.img);
     if (task->out_points != NULL)
         free(task->out_points);
+    free(task);
+}
+
+void free_ransac_task(PyObject *task_object)
+{
+    ransac_task *task = PyCapsule_GetPointer(task_object, NULL);
+    if (task == NULL)
+        return;
+    correlation_ransac_cancel(task);
+    correlation_ransac_complete(task);
+
+    if (task->matches != NULL)
+        free(task->matches);
     free(task);
 }
 
@@ -315,6 +380,99 @@ machine_match_result(PyObject *self, PyObject *args)
     }
 
     return out;
+}
+
+static PyObject *
+machine_ransac_start(PyObject *self, PyObject *args)
+{
+    PyObject *points1, *points2, *matches;
+    float ransac_min_length;
+    int ransac_k;
+    int ransac_n;
+    float ransac_t;
+    int ransac_d;
+    int num_threads;
+    ransac_task *task;
+
+    PyObject *out = NULL;
+
+    if (!PyArg_ParseTuple(args, "OOOfiifii", &points1, &points2, &matches, &ransac_min_length, &ransac_k, &ransac_n, &ransac_t, &ransac_d, &num_threads))
+    {
+        PyErr_SetString(CybervisionError, "Failed to parse args");
+        return NULL;
+    }
+
+    task = malloc(sizeof(ransac_task));
+    task->ransac_k = ransac_k;
+    task->ransac_n = ransac_n;
+    task->ransac_t = ransac_t;
+    task->ransac_d = ransac_d;
+    task->num_threads = num_threads;
+    task->matches = NULL;
+    task->internal = NULL;
+
+    out = PyCapsule_New(task, NULL, free_ransac_task);
+
+    if(!read_matches(points1, points2, matches, ransac_min_length, &task->matches, &task->matches_count))
+    {
+        Py_DECREF(out);
+        return NULL;
+    }
+
+    if(!correlation_ransac_start(task))
+    {
+        PyErr_SetString(CybervisionError, "Failed to start RANSAC task");
+        Py_DECREF(out);
+        return NULL;
+    }
+
+    return out;
+}
+
+static PyObject *
+machine_ransac_status(PyObject *self, PyObject *args)
+{
+    PyObject *task_object;
+    ransac_task *task;
+
+    if (!PyArg_ParseTuple(args, "O", &task_object))
+    {
+        PyErr_SetString(CybervisionError, "Failed to parse args");
+        return NULL;
+    }
+
+    task = PyCapsule_GetPointer(task_object, NULL);
+    if (task == NULL)
+    {
+        PyErr_SetString(CybervisionError, "Failed to get task from args");
+        return NULL;
+    }
+
+    return Py_BuildValue("(Of)", task->completed?Py_True:Py_False, task->percent_complete);
+}
+
+static PyObject *
+machine_ransac_result(PyObject *self, PyObject *args)
+{
+    PyObject *task_object;
+    ransac_task *task;
+
+    if (!PyArg_ParseTuple(args, "O", &task_object))
+    {
+        PyErr_SetString(CybervisionError, "Failed to parse args");
+        return NULL;
+    }
+
+    task = PyCapsule_GetPointer(task_object, NULL);
+    if (task == NULL)
+    {
+        PyErr_SetString(CybervisionError, "Failed to get task from args");
+        return NULL;
+    }
+    
+    correlation_ransac_complete(task);
+    
+    return Py_BuildValue("(iff)", task->result_matches_count, task->dir_x, task->dir_y);
 }
 
 static PyObject *
@@ -543,6 +701,9 @@ static PyMethodDef MachineMethods[] = {
     {"match_start", machine_match_start, METH_VARARGS, "Start a task to find correlation between image points."},
     {"match_status", machine_match_status, METH_VARARGS, "Status of a task to find correlation between image points."},
     {"match_result", machine_match_result, METH_VARARGS, "Result of a task to find correlation between image points."},
+    {"ransac_start", machine_ransac_start, METH_VARARGS, "Start a task to find a common point direction using RANSAC."},
+    {"ransac_status", machine_ransac_status, METH_VARARGS, "Status a task to find a common point direction using RANSAC."},
+    {"ransac_result", machine_ransac_result, METH_VARARGS, "Result a task to find a common point direction using RANSAC."},
     {"correlate_init", machine_correlate_init, METH_VARARGS, "Initialize a task to find cross-correlation between images."},
     {"correlate_start", machine_correlate_start, METH_VARARGS, "Start a task to find cross-correlation between images."},
     {"correlate_status", machine_correlate_status, METH_VARARGS, "Status of a task to find cross-correlation between images."},

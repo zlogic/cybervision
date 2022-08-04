@@ -1,7 +1,5 @@
 import logging
 import os
-import random
-import math
 import time
 from datetime import datetime
 from PIL import Image, ImageOps
@@ -33,62 +31,19 @@ class Reconstructor:
             else:
                 return machine.match_result(matcher_task)
 
-    def calculate_model(self, matches):
-        sum_dx = 0
-        sum_dy = 0
-        # TODO: use least squares fitting?
-        for match in matches:
-            p1 = self.points1[match[0]]
-            p2 = self.points2[match[1]]
-            dx = p2[0] - p1[0]
-            dy = p2[1] - p1[1]
-            length = math.sqrt(dx**2 + dy**2)
-            sum_dx += dx/length
-            sum_dy += dy/length
-        return sum_dx/len(matches), sum_dy/len(matches)
-
     def ransac_fit(self):
-        suitable_matches = []
-        for match in self.matches:
-            p1 = self.points1[match[0]]
-            p2 = self.points2[match[1]]
-            dx = p2[0] - p1[0]
-            dy = p2[1] - p1[1]
-            legth = math.sqrt(dx**2 + dy**2)
-            if legth > self.ransac_min_length:
-                suitable_matches.append(match)
-
-        best_dir_x, best_dir_y = math.nan, math.nan
-        best_error = math.inf
-        best_matches = []
+        ransac_task = machine.ransac_start(self.points1, self.points2, self.matches,
+                                           self.ransac_min_length,
+                                           self.ransac_k, self.ransac_n, self.ransac_t, self.ransac_d,
+                                           self.num_threads)
         progressbar = Progressbar()
-        percent_step = self.ransac_k/20
-        for i in range(self.ransac_k):
-            if i%percent_step == 0:
-                progressbar.update(100.0 * i/self.ransac_k)
-
-            inliers = random.choices(suitable_matches, k=self.ransac_n)
-            dir_x, dir_y = self.calculate_model(inliers)
-            extended_inliers = []
-            for match in suitable_matches:
-                if match not in inliers:
-                    match_dir_x, match_dir_y = self.calculate_model([match])
-                    error = math.sqrt((match_dir_x - dir_x)**2 + (match_dir_y - dir_y)**2)
-                    if error < self.ransac_t:
-                        extended_inliers.append(match)
-
-            if len(extended_inliers) > self.ransac_d:
-                current_matches = inliers + extended_inliers
-                current_dir_x, current_dir_y = self.calculate_model(current_matches)
-                error = 0
-                for match in current_matches:
-                    match_dir_x, match_dir_y = self.calculate_model([match])
-                    error += math.sqrt((match_dir_x - dir_x)**2 + (match_dir_y - dir_y)**2)/len(current_matches)
-                if error < best_error:
-                    best_dir_x, best_dir_y = current_dir_x, current_dir_y
-                    best_error = error
-                    best_matches = current_matches
-        return (best_matches, best_dir_x, best_dir_y)
+        while True:
+            (completed, percent_complete) = machine.ransac_status(ransac_task)
+            if not completed:
+                progressbar.update(percent_complete)
+                time.sleep(0.5)
+            else:
+                return machine.ransac_result(ransac_task)
 
     def create_surface(self):
         total_percent = 0.0
@@ -150,12 +105,10 @@ class Reconstructor:
         self.log.info(f'Matched keypoints in {time_completed_matching-time_completed_fast}')
         self.log.info(f'Found {len(self.matches)} matches')
 
-        self.matches, self.dir_x, self.dir_y = self.ransac_fit()
-        if not self.matches:
+        matches_count, self.dir_x, self.dir_y = self.ransac_fit()
+        if matches_count == 0:
             raise NoMatchesFound('Failed to fit the model')
 
-        matches_count = len(self.matches)
-        del(self.matches)
         del(self.points1)
         del(self.points2)
 
@@ -220,7 +173,7 @@ class Reconstructor:
         self.triangulation_neighbor_distance = 4
         self.triangulation_max_slope = 0.5
         self.ransac_min_length = 3
-        self.ransac_k = 1000
+        self.ransac_k = 10000
         self.ransac_n = 10
         self.ransac_t = 0.01
         self.ransac_d = 10
