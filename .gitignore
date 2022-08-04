@@ -1,17 +1,5 @@
-# Python venv
-/.venv
-
-# Python distribution
+# CMake build directory
 /build/
-/*.egg-info/
-/dist/
-/.eggs/
-
-# Python cache
-*/__pycache__/
-
-# C extensions
-/cybervision/*.so
 
 # Visual Studio Code configuration
 /.vscode/

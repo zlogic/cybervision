@@ -1,11 +1,8 @@
-#define PY_SSIZE_T_CLEAN
-#include <Python.h>
-
 #include <stdlib.h>
 #include <math.h>
 
-#include "libqhull_r/libqhull_r.h"
-#include "libqhull_r/poly_r.h"
+#include <libqhull_r/libqhull_r.h>
+#include <libqhull_r/poly_r.h>
 
 #include "triangulation.h"
 

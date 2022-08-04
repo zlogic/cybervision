@@ -1,0 +1,77 @@
+name: CMake
+
+on:
+  push:
+    branches: [ "master", "rewrite_to_c" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    # The CMake configure and build commands are platform agnostic and should work equally well on Windows or Mac.
+    # You can convert this to a matrix build if you need cross-platform coverage.
+    # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # fail-fast: true
+      fail-fast: false
+      matrix:
+        include:
+        - os: ubuntu-latest
+          #archs: x86_64 aarch64
+        - os: macos-latest
+          #archs: x86_64 arm64 universal2
+        - os: windows-latest
+          #archs: AMD64
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install YASM (Linux)
+      if: runner.os == 'Linux'
+      run: sudo apt-get install yasm
+
+    - name: Install YASM (macOS)
+      if: runner.os == 'macOS'
+      run: brew install yasm
+    
+    - name: Install NASM (Windows)
+      if: runner.os == 'Windows'
+      run: choco install nasm
+
+    - name: Configure vcpkg (*nix)
+      if: runner.os == 'Linux' || runner.os == 'macOS'
+      run: echo "CMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
+
+    - name: Configure vcpkg (Windows)
+      if: runner.os == 'Windows'
+      run: echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
+
+    - name: Configure CMake
+      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Package application (*nix)
+      if: runner.os == 'Linux' || runner.os == 'macOS'
+      run: |
+        cd build && \
+        tar cvjf cybervision.tar.bz2 cybervision
+  
+    - name: Package application (Windows)
+      if: runner.os == 'Windows'
+      run: >
+        dir build
+
+    - name: Upload application
+      uses: actions/upload-artifact@v3
+      with:
+        name: cybervision-${{ matrix.os }}
+        path: build/cybervision.tar.bz2

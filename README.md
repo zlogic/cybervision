@@ -1,6 +1,6 @@
 # Cybervision
 
-![Build status](https://github.com/zlogic/cybervision/actions/workflows/python-package.yml/badge.svg)
+![Build status](https://github.com/zlogic/cybervision/actions/workflows/cmake-build.yml/badge.svg)
 
 Cybervision is a 3D reconstruction software for Scanning Electron Microscope images.
 
@@ -14,18 +14,12 @@ More information is available in the [Wiki](https://github.com/zlogic/cybervisio
 
 ## How to use it
 
-Download a release .whl file for your platform from [releases](/zlogic/cybervision/releases).
-
-Install the .whl file by running:
-
-```sheell
-pip3 install <filename>.whl
-```
+Download a release distribution from [releases](/zlogic/cybervision/releases).
 
 Run cybervision:
 
 ```shell
-python3 -m cybervision <img1.tif> <img2.tif> --output-file=<out.obj> [--no-interpolate]
+cybervision<img1.tif> <img2.tif> <out.obj>
 ```
 
 This will save a 3D [Wavefront OBJ file](https://en.wikipedia.org/wiki/Wavefront_.obj_file).
@@ -41,15 +35,15 @@ Removing Vulkan and Metal makes Cybervision a lot more portable.
 
 For more details how the GPU version used to work, see the [tag_python_gpu](../../tree/tag_python_gpu) tag.
 
-## Python version
+## C version
 
-Cybervision was rewritten in Python (with C extensions).
+Cybervision was rewritten in C.
 
 Originally, it was a full all-in-one tool built based on Qt and using a different approach.
 For more details about the C++ version, see [Releases](/zlogic/cybervision/releases).
 The source code is available in the [branch_qt_sift](../../tree/branch_qt_sift) branch.
 
-The Python rewrite focuses on the primary goal - generating a 3D surface from an image stereopair;
+The C rewrite focuses on the primary goal - generating a 3D surface from an image stereopair;
 anything else (like a UI) can be added separately.
 
 * Using a much simpler model, while collecting a lot more detail
@@ -64,4 +58,5 @@ anything else (like a UI) can be added separately.
 
 * [fast](https://www.edwardrosten.com/work/fast.html) keypoint detector
 * [qhull](http://www.qhull.org) for Delaunay triangulation
-* [Pillow](https://python-pillow.org) image library
+* [libtiff](http://libtiff.maptools.org/) to load `tiff` files
+* [libjpeg-turbo](https://libjpeg-turbo.org) to load `jpeg` files
