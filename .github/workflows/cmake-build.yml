@@ -31,16 +31,29 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Cache vcpkg dependencies
+      id: cache-vcpkg
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/vcpkg 
+          ./build/vcpkg_installed
+          ${{ env.HOME }}/.cache/vcpkg/archives
+          ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
+          ${{ env.LOCALAPPDATA }}\vcpkg\archives
+          ${{ env.APPDATA }}\vcpkg\archives
+        key: ${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+
     - name: Install YASM (Linux)
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && steps.cache-vcpkg.outputs.cache-hit != 'true'
       run: sudo apt-get install yasm
 
     - name: Install YASM (macOS)
-      if: runner.os == 'macOS'
+      if: runner.os == 'macOS' && steps.cache-vcpkg.outputs.cache-hit != 'true'
       run: brew install yasm
     
     - name: Install NASM (Windows)
-      if: runner.os == 'Windows'
+      if: runner.os == 'Windows' && steps.cache-vcpkg.outputs.cache-hit != 'true'
       run: choco install nasm
 
     - name: Configure vcpkg (*nix)
