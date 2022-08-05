@@ -74,17 +74,16 @@ jobs:
 
     - name: Package application (*nix)
       if: runner.os == 'Linux' || runner.os == 'macOS'
-      run: |
-        cd build && \
-        tar cvjf cybervision.tar.bz2 cybervision
+      run: tar -cvjf cybervision-release.tar.bz2 -C build cybervision
   
     - name: Package application (Windows)
       if: runner.os == 'Windows'
-      run: >
-        dir build
+      run: Compress-Archive -Path build\Release\cybervision.exe -DestinationPath cybervision-release.zip
 
     - name: Upload application
       uses: actions/upload-artifact@v3
       with:
         name: cybervision-${{ matrix.os }}
-        path: build/cybervision.tar.bz2
+        path: |
+          cybervision-release.tar.bz2
+          cybervision-release.zip
