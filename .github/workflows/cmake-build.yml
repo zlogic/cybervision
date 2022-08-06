@@ -78,7 +78,7 @@ jobs:
   
     - name: Package application (Windows)
       if: runner.os == 'Windows'
-      run: Compress-Archive -Path build\Release\cybervision.exe -DestinationPath cybervision-release.zip
+      run: Compress-Archive -Path .\build\Release\cybervision.exe,.\build\Release\*.dll  -DestinationPath cybervision-release.zip
 
     - name: Upload application
       uses: actions/upload-artifact@v3
