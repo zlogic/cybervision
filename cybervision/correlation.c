@@ -19,11 +19,13 @@
 #include <math.h>
 
 #include "correlation.h"
+#include "configuration.h"
 
 #define MATCH_RESULT_GROW_SIZE 1000
 
-void compute_correlation_data(correlation_image *image, int kernel_size, int x, int y, float *stdev, float *delta)
+void compute_correlation_data(correlation_image *image, int x, int y, float *stdev, float *delta)
 {
+    int kernel_size = cybervision_correlation_kernel_size;
     int kernel_width = 2*kernel_size + 1;
     int kernel_point_count = kernel_width*kernel_width;
     int width = image->width, height = image->height;
@@ -74,7 +76,7 @@ THREAD_FUNCTION correlate_points_task(void *args)
     match_task *t = args;
     match_task_ctx *ctx = t->internal;
 
-    int kernel_size = t->kernel_size;
+    int kernel_size = cybervision_correlation_kernel_size;
     int kernel_point_count = ctx->kernel_point_count;
     size_t points1_size = t->points1_size;
     size_t points2_size = t->points2_size;
@@ -104,7 +106,7 @@ THREAD_FUNCTION correlate_points_task(void *args)
         if (x1-kernel_size<0 || x1+kernel_size>=w1 || y1-kernel_size<0 || y1+kernel_size>=h1)
             continue;
         
-        compute_correlation_data(&t->img1, kernel_size, x1, y1, &stdev1, delta1);
+        compute_correlation_data(&t->img1, x1, y1, &stdev1, delta1);
         for (size_t p2=0;p2<points2_size;p2++)
         {
             int x2 = points2[p2].x, y2 = points2[p2].y;
@@ -118,7 +120,7 @@ THREAD_FUNCTION correlate_points_task(void *args)
                 corr += delta1[i] * delta2[i];
             corr = corr/(stdev1*stdev2*(float)kernel_point_count);
             
-            if (corr >= t->threshold)
+            if (corr >= cybervision_correlation_threshold)
             {
                 correlation_match m;
                 m.point1 = (int)p1;
@@ -151,7 +153,7 @@ cleanup:
 
 int correlation_match_points_start(match_task *task)
 {
-    int kernel_size = task->kernel_size;
+    int kernel_size = cybervision_correlation_kernel_size;
     int kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
     match_task_ctx *ctx = malloc(sizeof(match_task_ctx));
     
@@ -173,7 +175,7 @@ int correlation_match_points_start(match_task *task)
         int x = task->points2[p].x, y = task->points2[p].y;
         float *delta2 = &ctx->delta2[p*kernel_point_count];
         float *stdev2 = &ctx->stdev2[p];
-        compute_correlation_data(&task->img2, kernel_size, x, y, stdev2, delta2);
+        compute_correlation_data(&task->img2, x, y, stdev2, delta2);
     }
 
     if (pthread_mutex_init(&ctx->lock, NULL) != 0)
@@ -242,7 +244,8 @@ THREAD_FUNCTION correlate_ransac_task(void *args)
 {
     ransac_task *t = args;
     ransac_task_ctx *ctx = t->internal;
-    size_t *inliers = malloc(sizeof(size_t)*t->ransac_n);
+    size_t ransac_n = cybervision_ransac_n;
+    size_t *inliers = malloc(sizeof(size_t)*ransac_n);
     size_t *extended_inliers = malloc(sizeof(size_t)*t->matches_count);
     size_t extended_inliers_count = 0;
     unsigned int rand_seed;
@@ -262,12 +265,12 @@ THREAD_FUNCTION correlate_ransac_task(void *args)
         if (pthread_mutex_unlock(&ctx->lock) != 0)
             goto cleanup;
 
-        if (iteration > t->ransac_k)
+        if (iteration > cybervision_ransac_k)
             break;
 
         extended_inliers_count = 0;
         
-        for(size_t i=0;i<t->ransac_n;i++)
+        for(size_t i=0;i<ransac_n;i++)
         {
             size_t m;
             int unique = 0;
@@ -288,12 +291,12 @@ THREAD_FUNCTION correlate_ransac_task(void *args)
         }
 
         float dir_x, dir_y;
-        ransac_calculate_model(t, inliers, t->ransac_n, &dir_x, &dir_y);
+        ransac_calculate_model(t, inliers, ransac_n, &dir_x, &dir_y);
 
         for (size_t i=0;i<t->matches_count;i++)
         {
             int already_exists = 0;
-            for (size_t j=0;j<t->ransac_n;j++)
+            for (size_t j=0;j<ransac_n;j++)
             {
                 if (inliers[j] == i)
                 {
@@ -310,16 +313,16 @@ THREAD_FUNCTION correlate_ransac_task(void *args)
             match_dir_y -= dir_y;
 
             float error = sqrtf(match_dir_x*match_dir_x + match_dir_y*match_dir_y);
-            if (error > t->ransac_t)
+            if (error > cybervision_ransac_t)
                 continue;
 
             extended_inliers[extended_inliers_count++] = i;
         }
 
-        if (extended_inliers_count < t->ransac_d)
+        if (extended_inliers_count < cybervision_ransac_d)
             continue;
         
-        for (size_t i=0;i<t->ransac_n;i++)
+        for (size_t i=0;i<ransac_n;i++)
             extended_inliers[extended_inliers_count++] = inliers[i];
         
         float current_dir_x, current_dir_y;
@@ -345,7 +348,7 @@ THREAD_FUNCTION correlate_ransac_task(void *args)
             ctx->best_error = error;
             t->result_matches_count = extended_inliers_count;
         }
-        t->percent_complete = 100.0F*(float)iteration/t->ransac_k;
+        t->percent_complete = 100.0F*(float)iteration/cybervision_ransac_k;
         if (pthread_mutex_unlock(&ctx->lock) != 0)
             goto cleanup;
     }
@@ -518,7 +521,7 @@ static inline void correlate_corridor_area(cross_correlate_task *t, corridor_are
                 continue;
         }
 
-        compute_correlation_data(&t->img2, kernel_size, x2, y2, &stdev2, c->delta2);
+        compute_correlation_data(&t->img2, x2, y2, &stdev2, c->delta2);
 
         if (!isfinite(stdev2))
             continue;
@@ -600,7 +603,7 @@ THREAD_FUNCTION cross_correlation_task(void *args)
             corr_ctx.x1 = x1;
             corr_ctx.y1 = y1;
 
-            compute_correlation_data(&t->img1, kernel_size, x1, y1, &corr_ctx.stdev1, corr_ctx.delta1);
+            compute_correlation_data(&t->img1, x1, y1, &corr_ctx.stdev1, corr_ctx.delta1);
 
             if (!isfinite(corr_ctx.stdev1))
                 continue;

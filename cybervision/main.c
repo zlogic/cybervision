@@ -2,9 +2,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
+
 #include <tiffio.h>
 
-#include "cybervision.h"
+#include "fast_detector.h"
+#include "system.h"
+#include "correlation.h"
+#include "configuration.h"
 
 /*
  * FEI tags containing image details
@@ -128,16 +133,55 @@ correlation_image* load_image(char *filename)
     return img;
 }
 
+const int progressbar_width = 60;
+char* progressbar_str = NULL;
+
+static inline int progressbar_str_width()
+{
+    return 1+progressbar_width+2+7;
+}
+
+void reset_progressbar()
+{
+    char *progressbar_curr = progressbar_str;
+    if (*progressbar_str != '\0')
+        printf("\r");
+    for (int i=0;i<progressbar_str_width();i++)
+        progressbar_str[i] = ' ';
+    progressbar_str[progressbar_str_width()] = '\0';
+    printf("%s\r", progressbar_curr);
+    fflush(stdout);
+    progressbar_str[0] = '\0';
+}
+
+void show_progressbar(float percent)
+{
+    int x = (int)(percent/100.0*progressbar_width);
+    char* progressbar_curr = progressbar_str;
+    
+    if (*progressbar_str != '\0')
+        printf("\r");
+    progressbar_str[0] = '\0';
+
+    *(progressbar_curr++) = '[';
+    for (int i=0;i<progressbar_width;i++)
+        *(progressbar_curr++) = i<=x? '#':' ';
+    sprintf(progressbar_curr, "] %2.1f%%", percent);
+    printf("%s", progressbar_str);
+    fflush(stdout);
+}
+
 int do_reconstruction(char *img1_filename, char *img2_filename, char *output_filename)
 {
     int result_code = 0;
     correlation_image *img1 = load_image(img1_filename);
     correlation_image *img2 = load_image(img2_filename);
-    clock_t start_time = clock();
-    clock_t last_operation_time = clock();
-    clock_t current_operation_time = clock();
-
-
+    time_t start_time, last_operation_time, current_operation_time;
+    int num_threads = cpu_cores();
+    progressbar_str = malloc(sizeof(char)*(progressbar_str_width()+1));
+    progressbar_str[0] = '\0';
+    
+    time(&start_time);
 
     if (img1 == NULL)
     {
@@ -152,37 +196,116 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         goto cleanup;
     }
 
-    correlation_point *img1_points = NULL, *img2_points = NULL;
-    size_t img1_points_count, img2_points_count;
-    last_operation_time = clock();
-    img1_points = fast_detect(img1, &img1_points_count);
-    if (img1_points == NULL)
+    correlation_point *points1 = NULL, *points2 = NULL;
+    size_t points1_size, points2_size;
+    time(&last_operation_time);
+    points1 = fast_detect(img1, &points1_size);
+    if (points1 == NULL)
     {
         fprintf(stderr, "Failed to extract points from image %s\n", img1_filename);
         result_code = 1;
         goto cleanup;
     }
-    img2_points = fast_detect(img2, &img2_points_count);
-    if (img2_points == NULL)
+    points2 = fast_detect(img2, &points2_size);
+    if (points2 == NULL)
     {
         fprintf(stderr, "Failed to extract points from image %s\n", img2_filename);
         result_code = 1;
         goto cleanup;
     }
-    current_operation_time = clock();
-    printf("Extracted feature points in %f seconds\n", 1E-6F*(current_operation_time-last_operation_time));
-    printf("Image %s has %li feature points\n", img1_filename, img1_points_count);
-    printf("Image %s has %li feature points\n", img2_filename, img2_points_count);
+    time(&current_operation_time);
+    printf("Extracted feature points in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
+    printf("Image %s has %zi feature points\n", img1_filename, points1_size);
+    printf("Image %s has %zi feature points\n", img2_filename, points2_size);
 
+    match_task m_task = {0};
+    m_task.num_threads = num_threads;
+    m_task.img1 = *img1;
+    m_task.img2 = *img2;
+    m_task.points1 = points1;
+    m_task.points2 = points2;
+    m_task.points1_size = points1_size;
+    m_task.points2_size = points2_size;
+
+    time(&last_operation_time);
+    if (!correlation_match_points_start(&m_task))
+    {
+        fprintf(stderr, "Failed to start point matching task");
+        result_code = 1;
+        goto cleanup;
+    }
+    while(!m_task.completed)
+    {
+        sleep_ms(200);
+        show_progressbar(m_task.percent_complete);
+    }
+    reset_progressbar();
+    correlation_match_points_complete(&m_task);
+    time(&current_operation_time);
+    printf("Matched keypoints in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
+    printf("Found %zi matches\n", m_task.matches_count);
+
+    ransac_task r_task = {0};
+    r_task.num_threads = num_threads;
+    r_task.matches = malloc(sizeof(ransac_match)*m_task.matches_count);
+    r_task.matches_count = 0;
+    for (size_t i=0;i<m_task.matches_count;i++)
+    {
+        correlation_match m = m_task.matches[i];
+        int p1 = m.point1, p2 = m.point2;
+        float corr;
+        float dx, dy, length;
+
+        ransac_match *converted_match = &(r_task.matches[r_task.matches_count]);
+        converted_match->x1 = points1[p1].x;
+        converted_match->y1 = points1[p1].y;
+        converted_match->x2 = points2[p2].x;
+        converted_match->y2 = points2[p2].y;
+
+        dx = (float)(converted_match->x2 - converted_match->x1);
+        dy = (float)(converted_match->y2 - converted_match->y1);
+        length = sqrtf(dx*dx + dy*dy);
+
+        if (length >= cybervision_ransac_min_length)
+            r_task.matches_count++;
+    }
+    free(m_task.matches);
+    m_task.matches = NULL;
+
+    time(&last_operation_time);
+    if (!correlation_ransac_start(&r_task))
+    {
+        fprintf(stderr, "Failed to start point matching task");
+        result_code = 1;
+        goto cleanup;
+    }
+    while(!r_task.completed)
+    {
+        sleep_ms(200);
+        show_progressbar(r_task.percent_complete);
+    }
+    reset_progressbar();
+    correlation_ransac_complete(&r_task);
+    time(&current_operation_time);
+    printf("Completed RANSAC fitting in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
+    printf("Kept %zi matches\n", r_task.result_matches_count);
+
+    free(points1);
+    points1 = NULL;
+    free(points2);
+    points2 = NULL;
+
+    printf("Completed reconstruction in %.1f seconds\n", difftime(current_operation_time, start_time));
 cleanup:
+    free(progressbar_str);
     if (img1 != NULL)
         free(img1);
     if (img2 != NULL)
         free(img2);
-    if (img1_points != NULL)
-        free(img1_points);
-    if (img2_points != NULL)
-        free(img2_points);
+    if (points1 != NULL)
+        free(points1);
+    if (points2 != NULL)
+        free(points2);
     return result_code;
 }
 

@@ -16,8 +16,6 @@ typedef struct {
     correlation_image img1, img2;
     correlation_point *points1, *points2;
     size_t points1_size, points2_size;
-    int kernel_size;
-    float threshold;
     int num_threads;
 
     float percent_complete;
@@ -40,11 +38,6 @@ typedef void* ransac_task_internal;
 typedef struct {
     ransac_match *matches;
     size_t matches_count;
-
-    size_t ransac_k;
-    size_t ransac_n;
-    float ransac_t;
-    size_t ransac_d;
 
     int num_threads;
     const char *error;

@@ -1,5 +1,5 @@
-#ifndef CYBERVISION_H
-#define CYBERVISION_H
+#ifndef FAST_DETECTOR_H
+#define FAST_DETECTOR_H
 
 #include "correlation.h"
 
