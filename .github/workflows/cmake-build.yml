@@ -16,7 +16,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        arch: [x86_64]
+        arch: [amd64, arm64]
+        os: ["ubuntu-bionic"]
 
     steps:
     - uses: actions/checkout@v3
@@ -30,11 +31,18 @@ jobs:
           ./build/vcpkg_installed
           ${{ env.HOME }}/.cache/vcpkg/archives
           ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
-        key: ${{ runner.os }}-${{matrix.arch}}-${{ hashFiles('vcpkg.json') }}
+        key: vcpkgs-${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('vcpkg.json') }}
 
     - name: Install YASM
       if: steps.cache-vcpkg.outputs.cache-hit != 'true'
-      run: sudo apt-get install yasm
+      run: sudo apt-get install -y yasm
+    
+    - name: Install compiler
+      if: matrix.arch  == 'arm64'
+      run: |
+        sudo apt-get install -y g++-aarch64-linux-gnu gcc-aarch64-linux-gnu
+        echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+        echo "CPP=aarch64-linux-gnu-g++" >> $GITHUB_ENV
 
     - name: Configure vcpkg
       run: echo "CMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
@@ -42,7 +50,12 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DVCPKG_LIBRARY_LINKAGE=static
+      run: |
+        VCPKG_ARCH=${{matrix.arch}}
+        if [ "${{matrix.arch}}" == "amd64" ]; then
+          VCPKG_ARCH=x64
+        fi
+        cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DVCPKG_TARGET_TRIPLET=${VCPKG_ARCH}-linux -DCMAKE_SYSTEM_PROCESSOR=${{matrix.arch}}
       
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
@@ -53,7 +66,7 @@ jobs:
     - name: Upload application
       uses: actions/upload-artifact@v3
       with:
-        name: cybervision-${{ runner.os }}-${{ matrix.arch }}
+        name: cybervision-${{ matrix.os }}-${{ matrix.arch }}
         path: cybervision-release.tar.bz2
 
   build-windows:
@@ -89,7 +102,7 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -A ${{matrix.arch}} -DVCPKG_LIBRARY_LINKAGE=static
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -A ${{matrix.arch}}
       
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
