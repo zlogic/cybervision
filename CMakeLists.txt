@@ -10,6 +10,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 SET(CYBERVISION_SOURCES
     cybervision/correlation.c
+    cybervision/cybervision.c
     cybervision/main.c
 )
 

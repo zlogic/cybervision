@@ -1,16 +1,22 @@
-#define PY_SSIZE_T_CLEAN
-#include <Python.h>
+#include <stdlib.h>
+
+#include <fast.h>
 
 #include "correlation.h"
-#include "triangulation.h"
+//#include "triangulation.h"
 
-#include "fast/fast.h"
+/*
+ * Parameters
+ */
 
-static PyObject *CybervisionError;
+const int cybervision_fast_threshold = 15;
+const int cybervision_fast_mode = 12;
+const int cybervision_fast_nonmax = 1;
 
 /*
  * Helper functions
  */
+/*
 long read_long_attr(PyObject *obj, const char* attr_name)
 {
     long value;
@@ -177,71 +183,48 @@ void free_surface_data(PyObject *data_object)
         free(data->depth);
     free(data);
 }
+*/
 
-/*
- * Python exported functions
- */
-static PyObject *
-machine_detect(PyObject *self, PyObject *args)
+correlation_point* fast_detect(correlation_image *img, size_t  *count)
 {
-    PyObject *img;
-    Py_buffer img_buffer;
-    int width, height, threshold, mode, nonmax;
-    xy* corners = NULL;
+    int threshold = cybervision_fast_threshold, mode = cybervision_fast_mode, nonmax = cybervision_fast_nonmax;
     int num_corners;
+    xy* corners;
+    correlation_point *out = NULL;
 
-    PyObject *out = NULL;
-
-    if (!PyArg_ParseTuple(args, "Oiib", &img, &threshold, &mode, &nonmax))
-    {
-        PyErr_SetString(CybervisionError, "Failed to parse args");
-        return NULL;
-    }
-
-    width = read_long_attr(img, "width");
-    if (width == -1)
-        return NULL;
-    height = read_long_attr(img, "height");
-    if (height == -1)
-        return NULL;
-
-    if (!read_img_bytes(img, &img_buffer))
-        return NULL;
+    *count = 0;
     
     if (nonmax && mode == 9)
-        corners = fast9_detect_nonmax(img_buffer.buf, width, height, width, threshold, &num_corners);
+        corners = fast9_detect_nonmax(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else if (nonmax && mode == 10)
-        corners = fast10_detect_nonmax(img_buffer.buf, width, height, width, threshold, &num_corners);
+        corners = fast10_detect_nonmax(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else if (nonmax && mode == 11)
-        corners = fast11_detect_nonmax(img_buffer.buf, width, height, width, threshold, &num_corners);
+        corners = fast11_detect_nonmax(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else if (nonmax && mode == 12)
-        corners = fast12_detect_nonmax(img_buffer.buf, width, height, width, threshold, &num_corners);
+        corners = fast12_detect_nonmax(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else if (!nonmax && mode == 9)
-        corners = fast9_detect(img_buffer.buf, width, height, width, threshold, &num_corners);
+        corners = fast9_detect(img->img, img->width,img-> height, img->width, threshold, &num_corners);
     else if (!nonmax && mode == 10)
-        corners = fast10_detect(img_buffer.buf, width, height, width, threshold, &num_corners);
+        corners = fast10_detect(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else if (!nonmax && mode == 11)
-        corners = fast11_detect(img_buffer.buf, width, height, width, threshold, &num_corners);
+        corners = fast11_detect(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else if (!nonmax && mode == 12)
-        corners = fast12_detect(img_buffer.buf, width, height, width, threshold, &num_corners);
+        corners = fast12_detect(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else
-    {
-        PyErr_Format(CybervisionError, "Unsupported FAST options nonmax=%i mode=%i", nonmax, mode);
-        PyBuffer_Release(&img_buffer);
-        return NULL;
-    }
-    PyBuffer_Release(&img_buffer);
+        return out;
 
-    out = PyList_New(num_corners);
+    *count = (size_t)num_corners;
+    out = malloc(sizeof(correlation_point)* num_corners);
     for(int i=0;i<num_corners;i++) {
-        PyObject *corner = Py_BuildValue("(ii)", corners[i].x, corners[i].y);
-        PyList_SetItem(out, i, corner);
+        out[i].x = corners[i].x;
+        out[i].y = corners[i].y;
     }
 
     free(corners);
     return out;
 }
 
+/*
 static PyObject *
 machine_match_start(PyObject *self, PyObject *args)
 {
@@ -695,43 +678,4 @@ machine_triangulate_points(PyObject *self, PyObject *args)
 
     return Py_BuildValue("(OO)", out_points, out_simplices);
 }
-
-static PyMethodDef MachineMethods[] = {
-    {"detect", machine_detect, METH_VARARGS, "Detect keypoints with FAST."},
-    {"match_start", machine_match_start, METH_VARARGS, "Start a task to find correlation between image points."},
-    {"match_status", machine_match_status, METH_VARARGS, "Status of a task to find correlation between image points."},
-    {"match_result", machine_match_result, METH_VARARGS, "Result of a task to find correlation between image points."},
-    {"ransac_start", machine_ransac_start, METH_VARARGS, "Start a task to find a common point direction using RANSAC."},
-    {"ransac_status", machine_ransac_status, METH_VARARGS, "Status a task to find a common point direction using RANSAC."},
-    {"ransac_result", machine_ransac_result, METH_VARARGS, "Result a task to find a common point direction using RANSAC."},
-    {"correlate_init", machine_correlate_init, METH_VARARGS, "Initialize a task to find cross-correlation between images."},
-    {"correlate_start", machine_correlate_start, METH_VARARGS, "Start a task to find cross-correlation between images."},
-    {"correlate_status", machine_correlate_status, METH_VARARGS, "Status of a task to find cross-correlation between images."},
-    {"correlate_result", machine_correlate_result, METH_VARARGS, "Result of a task to find cross-correlation between images."},
-    {"triangulate_points", machine_triangulate_points, METH_VARARGS, "Triangulate points to create a mesh."},
-    {NULL, NULL, 0, NULL}        /* Sentinel */
-};
-
-static struct PyModuleDef machinemodule = {
-    PyModuleDef_HEAD_INIT, "cybervision.machine", NULL, -1, MachineMethods
-};
-
-PyMODINIT_FUNC
-PyInit_machine(void)
-{
-    PyObject *m;
-    m = PyModule_Create(&machinemodule);
-    if (m == NULL)
-        return m;
-
-    CybervisionError = PyErr_NewException("cybervision.error", NULL, NULL);
-    Py_XINCREF(CybervisionError);
-    if (PyModule_AddObject(m, "error", CybervisionError) < 0) {
-        Py_XDECREF(CybervisionError);
-        Py_CLEAR(CybervisionError);
-        Py_DECREF(m);
-        return NULL;
-    }
-
-    return m;
-}
+*/

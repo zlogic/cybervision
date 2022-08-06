@@ -3,7 +3,7 @@
 
 typedef struct {
     int width, height;
-    char* img;
+    unsigned char* img;
 } correlation_image;
 
 typedef struct { int x,y; } correlation_point;
