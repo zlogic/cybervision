@@ -11,22 +11,57 @@ env:
   BUILD_TYPE: Release
 
 jobs:
-  build:
-    # The CMake configure and build commands are platform agnostic and should work equally well on Windows or Mac.
-    # You can convert this to a matrix build if you need cross-platform coverage.
-    # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
-    runs-on: ${{ matrix.os }}
+  build-linux:
+    runs-on: ubuntu-latest
     strategy:
-      # fail-fast: true
-      fail-fast: false
+      fail-fast: true
       matrix:
-        include:
-        - os: ubuntu-latest
-          #archs: x86_64 aarch64
-        - os: macos-latest
-          #archs: x86_64 arm64 universal2
-        - os: windows-latest
-          #archs: AMD64
+        arch: [x86_64]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Cache vcpkg dependencies
+      id: cache-vcpkg
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/vcpkg 
+          ./build/vcpkg_installed
+          ${{ env.HOME }}/.cache/vcpkg/archives
+          ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
+        key: ${{ runner.os }}-${{matrix.arch}}-${{ hashFiles('vcpkg.json') }}
+
+    - name: Install YASM
+      if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+      run: sudo apt-get install yasm
+
+    - name: Configure vcpkg
+      run: echo "CMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
+
+    - name: Configure CMake
+      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DVCPKG_LIBRARY_LINKAGE=static
+      
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+  
+    - name: Package application
+      run: tar -cvjf cybervision-release.tar.bz2 -C build cybervision
+  
+    - name: Upload application
+      uses: actions/upload-artifact@v3
+      with:
+        name: cybervision-${{ runner.os }}-${{ matrix.arch }}
+        path: cybervision-release.tar.bz2
+
+  build-windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        arch: [arm64, x64]
 
     steps:
     - uses: actions/checkout@v3
@@ -42,48 +77,78 @@ jobs:
           ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
           ${{ env.LOCALAPPDATA }}\vcpkg\archives
           ${{ env.APPDATA }}\vcpkg\archives
-        key: ${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+        key: ${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('vcpkg.json') }}
 
-    - name: Install YASM (Linux)
-      if: runner.os == 'Linux' && steps.cache-vcpkg.outputs.cache-hit != 'true'
-      run: sudo apt-get install yasm
-
-    - name: Install YASM (macOS)
-      if: runner.os == 'macOS' && steps.cache-vcpkg.outputs.cache-hit != 'true'
-      run: brew install yasm
-    
-    - name: Install NASM (Windows)
-      if: runner.os == 'Windows' && steps.cache-vcpkg.outputs.cache-hit != 'true'
+    - name: Install NASM
+      if: steps.cache-vcpkg.outputs.cache-hit != 'true'
       run: choco install nasm
 
-    - name: Configure vcpkg (*nix)
-      if: runner.os == 'Linux' || runner.os == 'macOS'
-      run: echo "CMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
-
-    - name: Configure vcpkg (Windows)
-      if: runner.os == 'Windows'
+    - name: Configure vcpkg
       run: echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -A ${{matrix.arch}} -DVCPKG_LIBRARY_LINKAGE=static
       
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
-
-    - name: Package application (*nix)
-      if: runner.os == 'Linux' || runner.os == 'macOS'
-      run: tar -cvjf cybervision-release.tar.bz2 -C build cybervision
   
-    - name: Package application (Windows)
-      if: runner.os == 'Windows'
-      run: Compress-Archive -Path .\build\Release\cybervision.exe,.\build\Release\*.dll  -DestinationPath cybervision-release.zip
+    - name: Package application
+      run: Compress-Archive -Path .\build\Release\cybervision.exe,.\build\Release\*.dll -DestinationPath cybervision-release.zip
 
     - name: Upload application
       uses: actions/upload-artifact@v3
       with:
-        name: cybervision-${{ matrix.os }}
+        name: cybervision-${{ runner.os }}-${{ matrix.arch }}
+        path: cybervision-release.zip
+
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        arch: [arm64, x64]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Cache vcpkg dependencies
+      id: cache-vcpkg
+      uses: actions/cache@v3
+      with:
         path: |
-          cybervision-release.tar.bz2
-          cybervision-release.zip
+          ~/vcpkg 
+          ./build/vcpkg_installed
+          ${{ env.HOME }}/.cache/vcpkg/archives
+          ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
+        key: ${{ runner.os }}-${{matrix.arch}}-${{ hashFiles('vcpkg.json') }}
+
+    - name: Install YASM
+      if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+      run: brew install yasm
+
+    - name: Configure vcpkg
+      run: echo "CMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
+
+    - name: Configure CMake
+      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+      run: |
+        OSX_ARCHITECTURES=${{matrix.arch}}
+        if [ "${{matrix.arch}}" == "x64" ]; then
+          OSX_ARCHITECTURES=x86_64
+        fi
+        cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_OSX_ARCHITECTURES=${OSX_ARCHITECTURES} -DVCPKG_TARGET_TRIPLET=${{matrix.arch}}-osx
+      
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Package application
+      run: tar -cvjf cybervision-release.tar.bz2 -C build cybervision
+  
+    - name: Upload application
+      uses: actions/upload-artifact@v3
+      with:
+        name: cybervision-${{ runner.os }}-${{ matrix.arch }}
+        path: cybervision-release.tar.bz2
