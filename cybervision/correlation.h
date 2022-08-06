@@ -64,12 +64,7 @@ typedef struct {
     correlation_image img1, img2;
     float dir_x, dir_y;
     float scale;
-    int neighbor_distance;
-    float max_slope;
-    int corridor_size;
-    int kernel_size;
-    float threshold;
-
+    
     int num_threads;
     int iteration;
 

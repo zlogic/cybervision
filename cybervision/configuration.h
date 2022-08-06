@@ -16,4 +16,12 @@ const size_t cybervision_ransac_n;
 const float cybervision_ransac_t;
 const size_t cybervision_ransac_d;
 
+const float *cybervision_triangulation_scales;
+const int cybervision_triangulation_scales_count;
+const int cybervision_triangulation_kernel_size;
+const float cybervision_triangulation_threshold;
+const int cybervision_triangulation_corridor_size;
+const int cybervision_triangulation_neighbor_distance;
+const float cybervision_triangulation_max_slope;
+
 #endif

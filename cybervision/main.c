@@ -119,7 +119,7 @@ correlation_image* load_image(char *filename)
                 img = malloc(sizeof(correlation_image));
                 img->width = w;
                 img->height = h-databar_height;
-                img->img = malloc(sizeof(char)*w*h);
+                img->img = malloc(sizeof(unsigned)*img->width*img->height);
                 for (size_t i=0;i<img->width*img->height;i++)
                 {
                     uint32_t pixel = raster[i];
@@ -152,6 +152,25 @@ void reset_progressbar()
     printf("%s\r", progressbar_curr);
     fflush(stdout);
     progressbar_str[0] = '\0';
+}
+
+void resize_image(correlation_image *src, correlation_image *dst, float scale)
+{
+    dst->width = (int)floorf(src->width*scale);
+    dst->height = (int)floorf(src->height*scale);
+    dst->img = malloc(sizeof(unsigned char)*dst->width*dst->height);
+    for (int y=0;y<dst->height;y++)
+    {
+        int y_src = (int)roundf((float)y/scale);
+        for (int x=0;x<dst->width;x++)
+        {
+            int x_src = (int)roundf((float)x/scale);
+            unsigned char value = 0;
+            if (y_src < src->height && x_src < src->width)
+                value = src->img[y_src*src->height + x_src];
+            dst->img[y*dst->height + x] = value;
+        }
+    }
 }
 
 void show_progressbar(float percent)
@@ -219,81 +238,149 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     printf("Image %s has %zi feature points\n", img2_filename, points2_size);
 
     match_task m_task = {0};
-    m_task.num_threads = num_threads;
-    m_task.img1 = *img1;
-    m_task.img2 = *img2;
-    m_task.points1 = points1;
-    m_task.points2 = points2;
-    m_task.points1_size = points1_size;
-    m_task.points2_size = points2_size;
+    {
+        m_task.num_threads = num_threads;
+        m_task.img1 = *img1;
+        m_task.img2 = *img2;
+        m_task.points1 = points1;
+        m_task.points2 = points2;
+        m_task.points1_size = points1_size;
+        m_task.points2_size = points2_size;
 
-    time(&last_operation_time);
-    if (!correlation_match_points_start(&m_task))
-    {
-        fprintf(stderr, "Failed to start point matching task");
-        result_code = 1;
-        goto cleanup;
+        time(&last_operation_time);
+        if (!correlation_match_points_start(&m_task))
+        {
+            fprintf(stderr, "Failed to start point matching task");
+            result_code = 1;
+            goto cleanup;
+        }
+        while(!m_task.completed)
+        {
+            sleep_ms(200);
+            show_progressbar(m_task.percent_complete);
+        }
+        reset_progressbar();
+        correlation_match_points_complete(&m_task);
+        time(&current_operation_time);
+        printf("Matched keypoints in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
+        printf("Found %zi matches\n", m_task.matches_count);
     }
-    while(!m_task.completed)
-    {
-        sleep_ms(200);
-        show_progressbar(m_task.percent_complete);
-    }
-    reset_progressbar();
-    correlation_match_points_complete(&m_task);
-    time(&current_operation_time);
-    printf("Matched keypoints in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
-    printf("Found %zi matches\n", m_task.matches_count);
 
     ransac_task r_task = {0};
-    r_task.num_threads = num_threads;
-    r_task.matches = malloc(sizeof(ransac_match)*m_task.matches_count);
-    r_task.matches_count = 0;
-    for (size_t i=0;i<m_task.matches_count;i++)
     {
-        correlation_match m = m_task.matches[i];
-        int p1 = m.point1, p2 = m.point2;
-        float corr;
-        float dx, dy, length;
+        r_task.num_threads = num_threads;
+        r_task.matches = malloc(sizeof(ransac_match)*m_task.matches_count);
+        r_task.matches_count = 0;
+        for (size_t i=0;i<m_task.matches_count;i++)
+        {
+            correlation_match m = m_task.matches[i];
+            int p1 = m.point1, p2 = m.point2;
+            float corr;
+            float dx, dy, length;
 
-        ransac_match *converted_match = &(r_task.matches[r_task.matches_count]);
-        converted_match->x1 = points1[p1].x;
-        converted_match->y1 = points1[p1].y;
-        converted_match->x2 = points2[p2].x;
-        converted_match->y2 = points2[p2].y;
+            ransac_match *converted_match = &(r_task.matches[r_task.matches_count]);
+            converted_match->x1 = points1[p1].x;
+            converted_match->y1 = points1[p1].y;
+            converted_match->x2 = points2[p2].x;
+            converted_match->y2 = points2[p2].y;
 
-        dx = (float)(converted_match->x2 - converted_match->x1);
-        dy = (float)(converted_match->y2 - converted_match->y1);
-        length = sqrtf(dx*dx + dy*dy);
+            dx = (float)(converted_match->x2 - converted_match->x1);
+            dy = (float)(converted_match->y2 - converted_match->y1);
+            length = sqrtf(dx*dx + dy*dy);
 
-        if (length >= cybervision_ransac_min_length)
-            r_task.matches_count++;
+            if (length >= cybervision_ransac_min_length)
+                r_task.matches_count++;
+        }
+        free(m_task.matches);
+        m_task.matches = NULL;
+
+        time(&last_operation_time);
+        if (!correlation_ransac_start(&r_task))
+        {
+            fprintf(stderr, "Failed to start RANSAC task");
+            result_code = 1;
+            goto cleanup;
+        }
+        while(!r_task.completed)
+        {
+            sleep_ms(200);
+            show_progressbar(r_task.percent_complete);
+        }
+        reset_progressbar();
+        correlation_ransac_complete(&r_task);
+        time(&current_operation_time);
+        printf("Completed RANSAC fitting in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
+        printf("Kept %zi matches\n", r_task.result_matches_count);
+
+        if (r_task.result_matches_count == 0)
+        {
+            fprintf(stderr, "No reliable matches found");
+            result_code = 1;
+            goto cleanup;
+        }
+
+        free(points1);
+        points1 = NULL;
+        free(points2);
+        points2 = NULL;
     }
-    free(m_task.matches);
-    m_task.matches = NULL;
 
-    time(&last_operation_time);
-    if (!correlation_ransac_start(&r_task))
+    cross_correlate_task cc_task = {0};
     {
-        fprintf(stderr, "Failed to start point matching task");
-        result_code = 1;
-        goto cleanup;
-    }
-    while(!r_task.completed)
-    {
-        sleep_ms(200);
-        show_progressbar(r_task.percent_complete);
-    }
-    reset_progressbar();
-    correlation_ransac_complete(&r_task);
-    time(&current_operation_time);
-    printf("Completed RANSAC fitting in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
-    printf("Kept %zi matches\n", r_task.result_matches_count);
+        float total_percent = 0.0F;
+        for(int i =0;i<cybervision_triangulation_scales_count;i++)
+        {
+            float scale = cybervision_triangulation_scales[i];
+            total_percent += scale*scale;
+        }
+        cc_task.dir_x = r_task.dir_x;
+        cc_task.dir_y = r_task.dir_y;
+        cc_task.num_threads = num_threads;
+        cc_task.out_width = img1->width;
+        cc_task.out_height = img1->height;
+        cc_task.out_points = malloc(sizeof(float)*cc_task.out_width*cc_task.out_height);
+        for (int i=0;i<img1->width*img1->height;i++)
+            cc_task.out_points[i] = NAN;
 
-    free(points1);
-    points1 = NULL;
-    free(points2);
-    points2 = NULL;
+        time(&last_operation_time);
+        float total_percent_complete = 0.0F;
+        for(int i = 0; i < cybervision_triangulation_scales_count; i++)
+        {
+            float scale = cybervision_triangulation_scales[i];
+            resize_image(img1, &cc_task.img1, scale);
+            resize_image(img2, &cc_task.img2, scale);
+            fflush(stdout);
+            cc_task.iteration = i+1;
+            cc_task.scale = scale;
+            correlation_cross_correlate_complete(&cc_task);
+            if (!correlation_cross_correlate_start(&cc_task))
+            {
+                fprintf(stderr, "Failed to cross correlation task");
+                result_code = 1;
+                goto cleanup;
+            }
+            while(!cc_task.completed)
+            {
+                sleep_ms(200);
+                float percent_complete = total_percent_complete + cc_task.percent_complete*scale*scale/total_percent;
+                show_progressbar(percent_complete);
+            }
+            total_percent_complete = total_percent_complete + 100.0F*scale*scale/total_percent;
+            correlation_cross_correlate_complete(&cc_task);
+            free(cc_task.img1.img);
+            cc_task.img1.img = NULL;
+            free(cc_task.img2.img);
+            cc_task.img2.img = NULL;
+        }
+        reset_progressbar();
+        time(&current_operation_time);
+        printf("Completed surface generation in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
+
+        free(img1);
+        img1 = NULL;
+        free(img2);
+        img2 = NULL;
+    }
 
     printf("Completed reconstruction in %.1f seconds\n", difftime(current_operation_time, start_time));
 cleanup:
@@ -306,6 +393,10 @@ cleanup:
         free(points1);
     if (points2 != NULL)
         free(points2);
+    if (cc_task.img1.img != NULL)
+        free(cc_task.img1.img);
+    if (cc_task.img2.img != NULL)
+        free(cc_task.img2.img);
     return result_code;
 }
 

@@ -23,9 +23,8 @@
 
 #define MATCH_RESULT_GROW_SIZE 1000
 
-void compute_correlation_data(correlation_image *image, int x, int y, float *stdev, float *delta)
+void compute_correlation_data(correlation_image *image, int kernel_size, int x, int y, float *stdev, float *delta)
 {
-    int kernel_size = cybervision_correlation_kernel_size;
     int kernel_width = 2*kernel_size + 1;
     int kernel_point_count = kernel_width*kernel_width;
     int width = image->width, height = image->height;
@@ -106,7 +105,7 @@ THREAD_FUNCTION correlate_points_task(void *args)
         if (x1-kernel_size<0 || x1+kernel_size>=w1 || y1-kernel_size<0 || y1+kernel_size>=h1)
             continue;
         
-        compute_correlation_data(&t->img1, x1, y1, &stdev1, delta1);
+        compute_correlation_data(&t->img1, kernel_size, x1, y1, &stdev1, delta1);
         for (size_t p2=0;p2<points2_size;p2++)
         {
             int x2 = points2[p2].x, y2 = points2[p2].y;
@@ -175,7 +174,7 @@ int correlation_match_points_start(match_task *task)
         int x = task->points2[p].x, y = task->points2[p].y;
         float *delta2 = &ctx->delta2[p*kernel_point_count];
         float *stdev2 = &ctx->stdev2[p];
-        compute_correlation_data(&task->img2, x, y, stdev2, delta2);
+        compute_correlation_data(&task->img2, kernel_size, x, y, stdev2, delta2);
     }
 
     if (pthread_mutex_init(&ctx->lock, NULL) != 0)
@@ -429,10 +428,10 @@ int estimate_search_range(cross_correlate_task *t, int x1, int y1, float *min_di
     float min_depth, max_depth;
     int found = 0;
     float inv_scale = 1.0F/t->scale;
-    int x_min = (int)floorf((x1-t->neighbor_distance)*inv_scale);
-    int x_max = (int)ceilf((x1+t->neighbor_distance)*inv_scale);
-    int y_min = (int)floorf((y1-t->neighbor_distance)*inv_scale);
-    int y_max = (int)ceilf((y1+t->neighbor_distance)*inv_scale);
+    int x_min = (int)floorf((x1-cybervision_triangulation_neighbor_distance)*inv_scale);
+    int x_max = (int)ceilf((x1+cybervision_triangulation_neighbor_distance)*inv_scale);
+    int y_min = (int)floorf((y1-cybervision_triangulation_neighbor_distance)*inv_scale);
+    int y_max = (int)ceilf((y1+cybervision_triangulation_neighbor_distance)*inv_scale);
 
     x_min = fit_range(x_min, 0, t->out_width-1);
     x_max = fit_range(x_max, 0, t->out_width-1);
@@ -454,8 +453,8 @@ int estimate_search_range(cross_correlate_task *t, int x1, int y1, float *min_di
             dx = (float)i-(float)x1*inv_scale;
             dy = (float)j-(float)y1*inv_scale;
             distance = sqrtf(dx*dx + dy*dy);
-            min = current_depth - distance*t->max_slope;
-            max = current_depth + distance*t->max_slope;
+            min = current_depth - distance*cybervision_triangulation_max_slope;
+            max = current_depth + distance*cybervision_triangulation_max_slope;
 
             if (!found)
             {
@@ -495,7 +494,7 @@ typedef struct {
 
 static inline void correlate_corridor_area(cross_correlate_task *t, corridor_area_ctx* c, int corridor_start, int corridor_end)
 {
-    int kernel_size = t->kernel_size;
+    int kernel_size = cybervision_triangulation_kernel_size;
     int kernel_point_count = c->kernel_point_count;
     int x1 = c->x1, y1 = c->y1;
     int w2 = c->w2, h2 = c->h2;
@@ -521,7 +520,7 @@ static inline void correlate_corridor_area(cross_correlate_task *t, corridor_are
                 continue;
         }
 
-        compute_correlation_data(&t->img2, x2, y2, &stdev2, c->delta2);
+        compute_correlation_data(&t->img2, kernel_size, x2, y2, &stdev2, c->delta2);
 
         if (!isfinite(stdev2))
             continue;
@@ -534,7 +533,7 @@ static inline void correlate_corridor_area(cross_correlate_task *t, corridor_are
             corr += c->delta1[l] * c->delta2[l];
         corr = corr/(c->stdev1*stdev2*(float)kernel_point_count);
         
-        if (corr >= t->threshold && corr > c->best_corr)
+        if (corr >= cybervision_triangulation_threshold && corr > c->best_corr)
         {
             c->best_distance = distance;
             c->best_corr = corr;
@@ -557,7 +556,8 @@ THREAD_FUNCTION cross_correlation_task(void *args)
 
     corridor_area_ctx corr_ctx;
 
-    int kernel_size = t->kernel_size;
+    int kernel_size = cybervision_triangulation_kernel_size;
+    int corridor_size = cybervision_triangulation_corridor_size;
     int kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
     int w1 = t->img1.width, h1 = t->img1.height;
     int w2 = t->img2.width, h2 = t->img2.height;
@@ -603,7 +603,7 @@ THREAD_FUNCTION cross_correlation_task(void *args)
             corr_ctx.x1 = x1;
             corr_ctx.y1 = y1;
 
-            compute_correlation_data(&t->img1, x1, y1, &corr_ctx.stdev1, corr_ctx.delta1);
+            compute_correlation_data(&t->img1, kernel_size, x1, y1, &corr_ctx.stdev1, corr_ctx.delta1);
 
             if (!isfinite(corr_ctx.stdev1))
                 continue;
@@ -612,7 +612,7 @@ THREAD_FUNCTION cross_correlation_task(void *args)
                 if (!estimate_search_range(t, x1, y1, &min_distance, &max_distance))
                     continue;
 
-            for (int corridor_offset=-t->corridor_size;corridor_offset<=t->corridor_size;corridor_offset++)
+            for (int corridor_offset=-corridor_size;corridor_offset<=corridor_size;corridor_offset++)
             {
                 corr_ctx.corridor_offset = corridor_offset;
                 if (t->iteration > 1)
@@ -677,7 +677,7 @@ int correlation_cross_correlate_start(cross_correlate_task* task)
     task->completed = 0;
     task->error = NULL;
 
-    ctx->y = task->kernel_size;
+    ctx->y = cybervision_triangulation_kernel_size;
 
     if (pthread_mutex_init(&ctx->lock, NULL) != 0)
         return 0;
