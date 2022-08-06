@@ -479,6 +479,7 @@ int estimate_search_range(cross_correlate_task *t, int x1, int y1, float *min_di
 typedef struct {
     int corridor_vertical;
     float corridor_coeff;
+    int kernel_size;
     int kernel_point_count;
     int x1, y1;
     int w2, h2;
@@ -494,7 +495,7 @@ typedef struct {
 
 static inline void correlate_corridor_area(cross_correlate_task *t, corridor_area_ctx* c, int corridor_start, int corridor_end)
 {
-    int kernel_size = cybervision_triangulation_kernel_size;
+    int kernel_size = c->kernel_size;
     int kernel_point_count = c->kernel_point_count;
     int x1 = c->x1, y1 = c->y1;
     int w2 = c->w2, h2 = c->h2;
@@ -574,6 +575,7 @@ THREAD_FUNCTION cross_correlation_task(void *args)
 
     corr_ctx.corridor_vertical = corridor_vertical;
     corr_ctx.corridor_coeff = corridor_vertical? t->dir_x/t->dir_y : t->dir_y/t->dir_x;
+    corr_ctx.kernel_size = kernel_size;
     corr_ctx.kernel_point_count = kernel_point_count;
     corr_ctx.w2 = w2;
     corr_ctx.h2 = h2;
@@ -608,14 +610,15 @@ THREAD_FUNCTION cross_correlation_task(void *args)
             if (!isfinite(corr_ctx.stdev1))
                 continue;
 
-            if (t->iteration > 1)
+            processed_points++;
+            if (t->iteration > 0)
                 if (!estimate_search_range(t, x1, y1, &min_distance, &max_distance))
                     continue;
 
             for (int corridor_offset=-corridor_size;corridor_offset<=corridor_size;corridor_offset++)
             {
                 corr_ctx.corridor_offset = corridor_offset;
-                if (t->iteration > 1)
+                if (t->iteration > 0)
                 {
                     int current_pos, min_pos, max_pos;
                     int start, end;
@@ -641,7 +644,6 @@ THREAD_FUNCTION cross_correlation_task(void *args)
                     t->out_points[out_pos] = corr_ctx.best_distance;
                 }
             }
-            processed_points++;
         }
         if (pthread_mutex_lock(&ctx->lock) != 0)
             goto cleanup;

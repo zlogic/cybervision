@@ -13,6 +13,7 @@ SET(CYBERVISION_SOURCES
     cybervision/fast_detector.c
     cybervision/configuration.c
     cybervision/system.c
+    cybervision/triangulation.c
     cybervision/main.c
 )
 

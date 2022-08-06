@@ -10,6 +10,7 @@
 #include "system.h"
 #include "correlation.h"
 #include "configuration.h"
+#include "triangulation.h"
 
 /*
  * FEI tags containing image details
@@ -120,10 +121,13 @@ correlation_image* load_image(char *filename)
                 img->width = w;
                 img->height = h-databar_height;
                 img->img = malloc(sizeof(unsigned)*img->width*img->height);
-                for (size_t i=0;i<img->width*img->height;i++)
+                for (size_t y=0;y<img->height;y++)
                 {
-                    uint32_t pixel = raster[i];
-                    img->img[i] = convert_grayscale(TIFFGetR(pixel), TIFFGetB(pixel), TIFFGetB(pixel));
+                    for (size_t x=0;x<img->width;x++)
+                    {
+                        uint32_t pixel = raster[(h-y)*w + x];
+                        img->img[y*w+x] = convert_grayscale(TIFFGetR(pixel), TIFFGetB(pixel), TIFFGetB(pixel));
+                    }
                 }
             }
             _TIFFfree(raster);
@@ -167,8 +171,8 @@ void resize_image(correlation_image *src, correlation_image *dst, float scale)
             int x_src = (int)roundf((float)x/scale);
             unsigned char value = 0;
             if (y_src < src->height && x_src < src->width)
-                value = src->img[y_src*src->height + x_src];
-            dst->img[y*dst->height + x] = value;
+                value = src->img[y_src*src->width + x_src];
+            dst->img[y*dst->width + x] = value;
         }
     }
 }
@@ -328,7 +332,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     cross_correlate_task cc_task = {0};
     {
         float total_percent = 0.0F;
-        for(int i =0;i<cybervision_triangulation_scales_count;i++)
+        for(int i = 0; i < cybervision_triangulation_scales_count; i++)
         {
             float scale = cybervision_triangulation_scales[i];
             total_percent += scale*scale;
@@ -349,8 +353,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             float scale = cybervision_triangulation_scales[i];
             resize_image(img1, &cc_task.img1, scale);
             resize_image(img2, &cc_task.img2, scale);
-            fflush(stdout);
-            cc_task.iteration = i+1;
+            cc_task.iteration = i;
             cc_task.scale = scale;
             correlation_cross_correlate_complete(&cc_task);
             if (!correlation_cross_correlate_start(&cc_task))
@@ -382,6 +385,31 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         img2 = NULL;
     }
 
+    time(&last_operation_time);
+    {
+        surface_data surf = {0};
+        FILE *output_file = fopen(output_filename, "w");
+
+        surf.depth = cc_task.out_points;
+        cc_task.out_points = NULL;
+        surf.width = cc_task.out_width;
+        surf.height = cc_task.out_height;
+        for (int i=0;i<surf.width*surf.height;i++)
+        {
+            surf.depth[i] = -surf.depth[i];
+        }
+    
+        if (!triangulation_triangulate(&surf, output_file))
+        {
+            fprintf(stderr, "Failed to triangulate points");
+            result_code = 1;
+        }
+        fclose(output_file);
+        free(surf.depth);
+    }
+    time(&current_operation_time);
+    printf("Completed triangulation in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
+
     printf("Completed reconstruction in %.1f seconds\n", difftime(current_operation_time, start_time));
 cleanup:
     free(progressbar_str);
@@ -397,6 +425,8 @@ cleanup:
         free(cc_task.img1.img);
     if (cc_task.img2.img != NULL)
         free(cc_task.img2.img);
+    if (cc_task.out_points != NULL)
+        free(cc_task.out_points);
     return result_code;
 }
 
