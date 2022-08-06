@@ -125,7 +125,7 @@ correlation_image* load_image(char *filename)
                 {
                     for (size_t x=0;x<img->width;x++)
                     {
-                        uint32_t pixel = raster[(h-y)*w + x];
+                        uint32_t pixel = raster[(h-y-1)*w + x];
                         img->img[y*w+x] = convert_grayscale(TIFFGetR(pixel), TIFFGetB(pixel), TIFFGetB(pixel));
                     }
                 }
@@ -165,14 +165,27 @@ void resize_image(correlation_image *src, correlation_image *dst, float scale)
     dst->img = malloc(sizeof(unsigned char)*dst->width*dst->height);
     for (int y=0;y<dst->height;y++)
     {
-        int y_src = (int)roundf((float)y/scale);
+        int y0 = (int)floor(y/scale);
+        int y1 = (int)ceil((y+1)/scale);
+        y1 = y1<src->height? y1 : src->height-1;
         for (int x=0;x<dst->width;x++)
         {
-            int x_src = (int)roundf((float)x/scale);
-            unsigned char value = 0;
-            if (y_src < src->height && x_src < src->width)
-                value = src->img[y_src*src->width + x_src];
-            dst->img[y*dst->width + x] = value;
+            int x0 = (int)roundf((float)x/scale);
+            int x1 = (int)ceil((x+1)/scale);
+            x1 = x1<src->width? x1 : src->width-1;
+            float value = 0.0F;
+            float coeffs = 0.0F;
+            for (int j=y0;j<y1;j++)
+            {
+                float y_coeff = 1.0F-(j-y0)*scale;
+                for (int i=x0;i<x1;i++)
+                {
+                    float x_coeff = 1.0F-(i-x0)*scale;
+                    value += y_coeff*x_coeff*src->img[j*src->width + i];
+                    coeffs += y_coeff*x_coeff;
+                }
+            }
+            dst->img[y*dst->width + x] = (int)roundf(value/coeffs);
         }
     }
 }
@@ -204,8 +217,13 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     progressbar_str = malloc(sizeof(char)*(progressbar_str_width()+1));
     progressbar_str[0] = '\0';
     
-    time(&start_time);
+    correlation_point *points1 = NULL, *points2 = NULL;
 
+    match_task m_task = {0};
+    ransac_task r_task = {0};
+    cross_correlate_task cc_task = {0};
+
+    time(&start_time);
     if (img1 == NULL)
     {
         fprintf(stderr, "Failed to load image %s\n", img1_filename);
@@ -219,7 +237,6 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         goto cleanup;
     }
 
-    correlation_point *points1 = NULL, *points2 = NULL;
     size_t points1_size, points2_size;
     time(&last_operation_time);
     points1 = fast_detect(img1, &points1_size);
@@ -241,7 +258,6 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     printf("Image %s has %zi feature points\n", img1_filename, points1_size);
     printf("Image %s has %zi feature points\n", img2_filename, points2_size);
 
-    match_task m_task = {0};
     {
         m_task.num_threads = num_threads;
         m_task.img1 = *img1;
@@ -270,7 +286,6 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         printf("Found %zi matches\n", m_task.matches_count);
     }
 
-    ransac_task r_task = {0};
     {
         r_task.num_threads = num_threads;
         r_task.matches = malloc(sizeof(ransac_match)*m_task.matches_count);
@@ -329,7 +344,6 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         points2 = NULL;
     }
 
-    cross_correlate_task cc_task = {0};
     {
         float total_percent = 0.0F;
         for(int i = 0; i < cybervision_triangulation_scales_count; i++)
