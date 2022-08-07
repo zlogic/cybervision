@@ -16,12 +16,12 @@ const size_t cybervision_ransac_n;
 const float cybervision_ransac_t;
 const size_t cybervision_ransac_d;
 
-const float *cybervision_triangulation_scales;
-const int cybervision_triangulation_scales_count;
-const int cybervision_triangulation_kernel_size;
-const float cybervision_triangulation_threshold;
-const int cybervision_triangulation_corridor_size;
-const int cybervision_triangulation_neighbor_distance;
-const float cybervision_triangulation_max_slope;
+const float *cybervision_crosscorrelation_scales;
+const int cybervision_crosscorrelation_scales_count;
+const int cybervision_crosscorrelation_kernel_size;
+const float cybervision_crosscorrelation_threshold;
+const int cybervision_crosscorrelation_corridor_size;
+const int cybervision_crosscorrelation_neighbor_distance;
+const float cybervision_crosscorrelation_max_slope;
 
 #endif

@@ -85,6 +85,7 @@ void output_simplices(qhT *qh, surface_data* data, FILE *output_file)
         }
         fprintf(output_file, "\n");
     }
+    // TODO: also generate normals? (avg of all edges)
 }
 
 int triangulation_triangulate(surface_data* data, FILE *output_file)

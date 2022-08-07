@@ -71,7 +71,8 @@ int read_tiff_tags(TIFF* tif, int* databar_height)
                 printf("height=%f\n", pixel_height);
             }
         }
-        // TODO: use rotation
+        // TODO: use rotation (see "Real scale (Tomasi) stuff.pdf")
+        // or allow to specify a custom depth scale (e.g. a negative one)
         if (strcmp(section, "[Stage]") == 0)
         {
             if (strncmp(line, "StageT=", 7) == 0)
@@ -253,6 +254,7 @@ void show_progressbar(float percent)
 
 int do_reconstruction(char *img1_filename, char *img2_filename, char *output_filename)
 {
+    // TODO: print error messages from failed threads
     int result_code = 0;
     correlation_image *img1 = load_image(img1_filename);
     correlation_image *img2 = load_image(img2_filename);
@@ -390,9 +392,9 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
 
     {
         float total_percent = 0.0F;
-        for(int i = 0; i < cybervision_triangulation_scales_count; i++)
+        for(int i = 0; i < cybervision_crosscorrelation_scales_count; i++)
         {
-            float scale = cybervision_triangulation_scales[i];
+            float scale = cybervision_crosscorrelation_scales[i];
             total_percent += scale*scale;
         }
         cc_task.dir_x = r_task.dir_x;
@@ -406,9 +408,9 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
 
         timespec_get(&last_operation_time, TIME_UTC);
         float total_percent_complete = 0.0F;
-        for(int i = 0; i < cybervision_triangulation_scales_count; i++)
+        for(int i = 0; i < cybervision_crosscorrelation_scales_count; i++)
         {
-            float scale = cybervision_triangulation_scales[i];
+            float scale = cybervision_crosscorrelation_scales[i];
             resize_image(img1, &cc_task.img1, scale);
             resize_image(img2, &cc_task.img2, scale);
             cc_task.iteration = i;
