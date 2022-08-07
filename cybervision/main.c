@@ -5,6 +5,7 @@
 #include <math.h>
 
 #include <tiffio.h>
+#include <jpeglib.h>
 
 #include "fast_detector.h"
 #include "system.h"
@@ -94,7 +95,7 @@ correlation_image* load_image(char *filename)
 {
     char *file_ext = file_extension(filename);
     correlation_image *img = NULL;
-    if (strcmp(file_ext, "tif") == 0 || strcmp(file_ext, "tiff") == 0)
+    if (strcasecmp(file_ext, "tif") == 0 || strcasecmp(file_ext, "tiff") == 0)
     {
         TIFFSetWarningHandler(NULL);
         TIFF* tif = TIFFOpen(filename, "r");
@@ -133,6 +134,44 @@ correlation_image* load_image(char *filename)
             _TIFFfree(raster);
         }
         TIFFClose(tif);
+    }
+    else if (strcasecmp(file_ext, "jpg") == 0 || strcasecmp(file_ext, "jpeg") == 0) 
+    {
+        FILE *jpegFile = NULL;
+        int row_stride;
+        JSAMPARRAY buffer;
+        struct jpeg_decompress_struct cinfo;
+        struct jpeg_error_mgr jerr;
+        
+        if ((jpegFile = fopen(filename, "rb")) == NULL)
+            return NULL;
+
+        cinfo.err = jpeg_std_error(&jerr);
+        jpeg_create_decompress(&cinfo);
+        cinfo.out_color_space = JCS_RGB;
+        jpeg_stdio_src(&cinfo, jpegFile);
+        (void)jpeg_read_header(&cinfo, TRUE);
+        (void)jpeg_start_decompress(&cinfo);
+        row_stride = cinfo.output_width * cinfo.output_components;
+        buffer = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, row_stride, 1);
+
+        img = malloc(sizeof(correlation_image));
+        img->width = cinfo.output_width;
+        img->height = cinfo.output_height;
+        img->img = malloc(sizeof(unsigned)*img->width*img->height);
+
+        while (cinfo.output_scanline < cinfo.output_height) {
+            int y = cinfo.output_scanline;
+            (void)jpeg_read_scanlines(&cinfo, buffer, 1);
+            for (int i=0;i<img->width;i++)
+            {
+                JSAMPLE *pixel = &buffer[0][i*cinfo.output_components];
+                img->img[y*img->width+i] = convert_grayscale(*pixel, *(pixel+1), *(pixel+2));
+            }
+        }
+        (void)jpeg_finish_decompress(&cinfo);
+        jpeg_destroy_decompress(&cinfo);
+        fclose(jpegFile);
     }
     return img;
 }

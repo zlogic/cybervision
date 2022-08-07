@@ -39,6 +39,7 @@ find_library(FASTFEAT_LIBRARY fastfeat)
 
 target_link_libraries(cybervision PRIVATE Qhull::qhull_r)
 target_include_directories(cybervision PRIVATE ${JPEG_INCLUDE_DIR})
+target_link_libraries(cybervision PRIVATE JPEG::JPEG)
 target_link_libraries(cybervision PRIVATE TIFF::TIFF)
 target_link_libraries(cybervision PRIVATE ${FASTFEAT_LIBRARY})
 

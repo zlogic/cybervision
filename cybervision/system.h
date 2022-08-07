@@ -4,4 +4,8 @@
 int cpu_cores();
 void sleep_ms();
 
+#ifdef _MSC_VER
+#define strcasecmp _stricmp
+#endif
+
 #endif
