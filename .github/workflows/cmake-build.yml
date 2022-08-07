@@ -2,7 +2,7 @@ name: CMake
 
 on:
   push:
-    branches: [ "master", "rewrite_to_c" ]
+    branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
 
