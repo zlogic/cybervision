@@ -137,6 +137,11 @@ correlation_image* load_image(char *filename)
     return img;
 }
 
+double diff_seconds(struct timespec end, struct timespec start)
+{
+    return (double)(end.tv_nsec-start.tv_nsec)*1E-9 + (double)(end.tv_sec-start.tv_sec);
+}
+
 const int progressbar_width = 60;
 char* progressbar_str = NULL;
 
@@ -212,7 +217,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     int result_code = 0;
     correlation_image *img1 = load_image(img1_filename);
     correlation_image *img2 = load_image(img2_filename);
-    time_t start_time, last_operation_time, current_operation_time;
+    struct timespec start_time, last_operation_time, current_operation_time;
     int num_threads = cpu_cores();
     progressbar_str = malloc(sizeof(char)*(progressbar_str_width()+1));
     progressbar_str[0] = '\0';
@@ -223,7 +228,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     ransac_task r_task = {0};
     cross_correlate_task cc_task = {0};
 
-    time(&start_time);
+    timespec_get(&start_time, TIME_UTC);
     if (img1 == NULL)
     {
         fprintf(stderr, "Failed to load image %s\n", img1_filename);
@@ -238,7 +243,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     }
 
     size_t points1_size, points2_size;
-    time(&last_operation_time);
+    timespec_get(&last_operation_time, TIME_UTC);
     points1 = fast_detect(img1, &points1_size);
     if (points1 == NULL)
     {
@@ -253,8 +258,8 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         result_code = 1;
         goto cleanup;
     }
-    time(&current_operation_time);
-    printf("Extracted feature points in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
+    timespec_get(&current_operation_time, TIME_UTC);
+    printf("Extracted feature points in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
     printf("Image %s has %zi feature points\n", img1_filename, points1_size);
     printf("Image %s has %zi feature points\n", img2_filename, points2_size);
 
@@ -267,7 +272,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         m_task.points1_size = points1_size;
         m_task.points2_size = points2_size;
 
-        time(&last_operation_time);
+        timespec_get(&last_operation_time, TIME_UTC);
         if (!correlation_match_points_start(&m_task))
         {
             fprintf(stderr, "Failed to start point matching task");
@@ -281,8 +286,8 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         }
         reset_progressbar();
         correlation_match_points_complete(&m_task);
-        time(&current_operation_time);
-        printf("Matched keypoints in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
+        timespec_get(&current_operation_time, TIME_UTC);
+        printf("Matched keypoints in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
         printf("Found %zi matches\n", m_task.matches_count);
     }
 
@@ -313,7 +318,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         free(m_task.matches);
         m_task.matches = NULL;
 
-        time(&last_operation_time);
+        timespec_get(&last_operation_time, TIME_UTC);
         if (!correlation_ransac_start(&r_task))
         {
             fprintf(stderr, "Failed to start RANSAC task");
@@ -327,8 +332,8 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         }
         reset_progressbar();
         correlation_ransac_complete(&r_task);
-        time(&current_operation_time);
-        printf("Completed RANSAC fitting in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
+        timespec_get(&current_operation_time, TIME_UTC);
+        printf("Completed RANSAC fitting in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
         printf("Kept %zi matches\n", r_task.result_matches_count);
 
         if (r_task.result_matches_count == 0)
@@ -360,7 +365,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         for (int i=0;i<img1->width*img1->height;i++)
             cc_task.out_points[i] = NAN;
 
-        time(&last_operation_time);
+        timespec_get(&last_operation_time, TIME_UTC);
         float total_percent_complete = 0.0F;
         for(int i = 0; i < cybervision_triangulation_scales_count; i++)
         {
@@ -390,8 +395,8 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             cc_task.img2.img = NULL;
         }
         reset_progressbar();
-        time(&current_operation_time);
-        printf("Completed surface generation in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
+        timespec_get(&current_operation_time, TIME_UTC);
+        printf("Completed surface generation in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
 
         free(img1);
         img1 = NULL;
@@ -399,7 +404,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         img2 = NULL;
     }
 
-    time(&last_operation_time);
+    timespec_get(&last_operation_time, TIME_UTC);
     {
         surface_data surf = {0};
         FILE *output_file = fopen(output_filename, "w");
@@ -421,10 +426,10 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         fclose(output_file);
         free(surf.depth);
     }
-    time(&current_operation_time);
-    printf("Completed triangulation in %.1f seconds\n", difftime(current_operation_time, last_operation_time));
+    timespec_get(&current_operation_time, TIME_UTC);
+    printf("Completed triangulation in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
 
-    printf("Completed reconstruction in %.1f seconds\n", difftime(current_operation_time, start_time));
+    printf("Completed reconstruction in %.1f seconds\n", diff_seconds(current_operation_time, start_time));
 cleanup:
     free(progressbar_str);
     if (img1 != NULL)

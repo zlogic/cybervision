@@ -48,7 +48,7 @@ void sleep_ms(int milliseconds)
     nanosleep(&ts, NULL);
 #else
     if (milliseconds >= 1000)
-      sleep(milliseconds / 1000);
+        sleep(milliseconds / 1000);
     usleep((milliseconds % 1000) * 1000);
 #endif
 }
