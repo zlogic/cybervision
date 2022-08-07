@@ -54,6 +54,15 @@ anything else (like a UI) can be added separately.
   * Legacy or non-portable APIs and standards (OpenCL, OpenMP, SSE)
   * C++ template code that crashed Qt Creator's clang
 
+## How to build it
+
+Cybervision uses CMake and should work on Linux, macOS and Windows.
+
+To build it:
+
+1. Install [vcpkg](https://vcpkg.io/en/index.html) - used to download and build all external dependencies.
+2. Configure and build the project with CMake.
+
 ## External libraries
 
 * [fast](https://www.edwardrosten.com/work/fast.html) keypoint detector
