@@ -388,6 +388,8 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         points1 = NULL;
         free(points2);
         points2 = NULL;
+        free(r_task.matches);
+        r_task.matches = NULL;
     }
 
     {
@@ -439,6 +441,10 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         timespec_get(&current_operation_time, TIME_UTC);
         printf("Completed surface generation in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
 
+        free(img1->img);
+        img1->img = NULL;
+        free(img2->img);
+        img2->img = NULL;
         free(img1);
         img1 = NULL;
         free(img2);
@@ -473,10 +479,18 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     printf("Completed reconstruction in %.1f seconds\n", diff_seconds(current_operation_time, start_time));
 cleanup:
     free(progressbar_str);
+    if (img1 != NULL && img1->img != NULL)
+        free(img1->img);
+    if (img2 != NULL && img2->img != NULL)
+        free(img2->img);
     if (img1 != NULL)
         free(img1);
     if (img2 != NULL)
         free(img2);
+    if (m_task.matches != NULL)
+        free(m_task.matches);
+    if (r_task.matches != NULL)
+        free(r_task.matches);
     if (points1 != NULL)
         free(points1);
     if (points2 != NULL)
