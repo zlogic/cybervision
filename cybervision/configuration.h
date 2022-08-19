@@ -17,8 +17,7 @@ const float cybervision_ransac_t;
 const size_t cybervision_ransac_d;
 const size_t cybervision_ransac_check_interval;
 
-const float *cybervision_crosscorrelation_scales;
-const int cybervision_crosscorrelation_scales_count;
+const int cybervision_crosscorrelation_scale_min_size;
 const int cybervision_crosscorrelation_kernel_size;
 const float cybervision_crosscorrelation_threshold;
 const int cybervision_crosscorrelation_corridor_size;

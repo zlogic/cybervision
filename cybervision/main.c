@@ -252,6 +252,15 @@ void show_progressbar(float percent)
     fflush(stdout);
 }
 
+int optimal_scale_steps(correlation_image *img)
+{
+    int min_dimension = img->width<img->height? img->width:img->height;
+    int scale = 1;
+    while(min_dimension/(1<<scale)>cybervision_crosscorrelation_scale_min_size)
+        scale++;
+    return scale-1;
+}
+
 int do_reconstruction(char *img1_filename, char *img2_filename, char *output_filename)
 {
     // TODO: print error messages from failed threads
@@ -394,9 +403,10 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
 
     {
         float total_percent = 0.0F;
-        for(int i = 0; i < cybervision_crosscorrelation_scales_count; i++)
+        int scale_steps = optimal_scale_steps(img1);
+        for(int i = 0; i<=scale_steps; i++)
         {
-            float scale = cybervision_crosscorrelation_scales[i];
+            float scale = 1.0F/(float)(1<<(scale_steps-i));
             total_percent += scale*scale;
         }
         cc_task.dir_x = r_task.dir_x;
@@ -410,9 +420,9 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
 
         timespec_get(&last_operation_time, TIME_UTC);
         float total_percent_complete = 0.0F;
-        for(int i = 0; i < cybervision_crosscorrelation_scales_count; i++)
+        for(int i = 0; i<=scale_steps; i++)
         {
-            float scale = cybervision_crosscorrelation_scales[i];
+            float scale = 1.0F/(float)(1<<(scale_steps-i));
             resize_image(img1, &cc_task.img1, scale);
             resize_image(img2, &cc_task.img2, scale);
             cc_task.iteration = i;
