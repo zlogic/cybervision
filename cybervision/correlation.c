@@ -261,11 +261,15 @@ THREAD_FUNCTION correlate_ransac_task(void *args)
         if (pthread_mutex_lock(&ctx->lock) != 0)
             goto cleanup;
         iteration = ctx->iteration++;
+        t->percent_complete = 100.0F*(float)iteration/cybervision_ransac_k;
         if (pthread_mutex_unlock(&ctx->lock) != 0)
             goto cleanup;
 
         if (iteration > cybervision_ransac_k)
             break;
+
+        if (iteration % cybervision_ransac_check_interval == 0 && t->result_matches_count > 0)
+            t->completed = 1;
 
         extended_inliers_count = 0;
         
@@ -347,7 +351,6 @@ THREAD_FUNCTION correlate_ransac_task(void *args)
             ctx->best_error = error;
             t->result_matches_count = extended_inliers_count;
         }
-        t->percent_complete = 100.0F*(float)iteration/cybervision_ransac_k;
         if (pthread_mutex_unlock(&ctx->lock) != 0)
             goto cleanup;
     }
