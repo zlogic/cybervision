@@ -4,6 +4,7 @@
 
 #include <tiffio.h>
 #include <jpeglib.h>
+#include <png.h>
 
 #include "system.h"
 #include "image.h"
@@ -13,6 +14,8 @@
  */
 #define TIFFTAG_META_PHENOM 34683
 #define TIFFTAG_META_QUANTA 34682
+
+#define PNG_BYTES_TO_CHECK 8
 
 char *file_extension(char *filename)
 {
@@ -169,9 +172,63 @@ correlation_image* load_image(char *filename)
         jpeg_destroy_decompress(&cinfo);
         fclose(jpegFile);
     }
+    else if (strcasecmp(file_ext, "png") == 0) 
+    {
+        FILE *pngFile;
+        png_byte header[PNG_BYTES_TO_CHECK];
+        png_infop info_ptr;
+        png_bytep *row_pointers;
+        png_byte color_type;
+        int w, h;
+        if ((pngFile = fopen(filename, "rb")) == NULL)
+            return NULL;
+        if (fread(header, 1, PNG_BYTES_TO_CHECK, pngFile) != PNG_BYTES_TO_CHECK)
+        {
+            fclose(pngFile);
+            return NULL;
+        }
+        if (png_sig_cmp(header, 0, PNG_BYTES_TO_CHECK) != 0)
+        {
+            fclose(pngFile);
+            return NULL;
+        }
+        fseek(pngFile, 0, SEEK_SET);
+        png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+        info_ptr = png_create_info_struct(png_ptr);
+        png_init_io(png_ptr, pngFile);
+        png_read_info(png_ptr, info_ptr);
+        color_type = png_get_color_type(png_ptr, info_ptr);
+        if (color_type & PNG_COLOR_TYPE_GRAY_ALPHA)
+            png_set_strip_alpha(png_ptr);
+        if (color_type == PNG_COLOR_TYPE_RGB || color_type == PNG_COLOR_TYPE_RGB_ALPHA)
+            png_set_rgb_to_gray_fixed(png_ptr, PNG_ERROR_ACTION_NONE, PNG_RGB_TO_GRAY_DEFAULT, PNG_RGB_TO_GRAY_DEFAULT);
+        png_read_update_info(png_ptr, info_ptr);
+
+        img = malloc(sizeof(correlation_image));
+        img->width = png_get_image_width(png_ptr, info_ptr);
+        img->height = png_get_image_height(png_ptr, info_ptr);
+        img->img = malloc(sizeof(unsigned)*img->width*img->height);
+
+        row_pointers = malloc(sizeof(png_bytep)*img->height);
+        for(size_t i=0;i<img->height;i++) {
+            row_pointers[i] = (png_byte*)malloc(png_get_rowbytes(png_ptr, info_ptr));
+        }
+        png_read_image(png_ptr, row_pointers);
+
+        for(size_t y=0;y<img->height;y++) {
+            png_byte* row = row_pointers[y];
+            for (size_t x=0;x<img->width;x++)
+            {
+                png_byte pixel = row[x];
+                img->img[y*img->width+x] = pixel;
+            }
+        }
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL); 
+        free(row_pointers);
+        fclose(pngFile);
+    }
     return img;
 }
-
 
 void resize_image(correlation_image *src, correlation_image *dst, float scale)
 {

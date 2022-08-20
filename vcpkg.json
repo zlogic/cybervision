@@ -4,6 +4,7 @@
     "dependencies": [
         {"name": "libjpeg-turbo", "default-features": false},
         {"name": "tiff", "default-features": false},
+        {"name": "libpng", "default-features": false},
         {"name": "qhull", "default-features": false},
         {"name": "fastfeat", "default-features": false}
     ]
