@@ -37,32 +37,27 @@ correlation_point* fast_detect(correlation_image *img, size_t  *count)
     int num_corners;
     xy* corners = NULL;
     correlation_point *out = NULL;
-    correlation_image adjusted_img;
-    adjusted_img.img = malloc(sizeof(unsigned char)*img->width*img->height);
-    adjusted_img.width = img->width;
-    adjusted_img.height = img->height;
 
-    memcpy(adjusted_img.img, img->img, sizeof(unsigned char)*img->width*img->height);
-    increase_contrast(&adjusted_img);
+    increase_contrast(img);
 
     *count = 0;
     
     if (nonmax && mode == 9)
-        corners = fast9_detect_nonmax(adjusted_img.img, img->width, img->height, img->width, threshold, &num_corners);
+        corners = fast9_detect_nonmax(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else if (nonmax && mode == 10)
-        corners = fast10_detect_nonmax(adjusted_img.img, img->width, img->height, img->width, threshold, &num_corners);
+        corners = fast10_detect_nonmax(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else if (nonmax && mode == 11)
-        corners = fast11_detect_nonmax(adjusted_img.img, img->width, img->height, img->width, threshold, &num_corners);
+        corners = fast11_detect_nonmax(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else if (nonmax && mode == 12)
-        corners = fast12_detect_nonmax(adjusted_img.img, img->width, img->height, img->width, threshold, &num_corners);
+        corners = fast12_detect_nonmax(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else if (!nonmax && mode == 9)
-        corners = fast9_detect(adjusted_img.img, img->width,img-> height, img->width, threshold, &num_corners);
+        corners = fast9_detect(img->img, img->width,img-> height, img->width, threshold, &num_corners);
     else if (!nonmax && mode == 10)
-        corners = fast10_detect(adjusted_img.img, img->width, img->height, img->width, threshold, &num_corners);
+        corners = fast10_detect(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else if (!nonmax && mode == 11)
-        corners = fast11_detect(adjusted_img.img, img->width, img->height, img->width, threshold, &num_corners);
+        corners = fast11_detect(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else if (!nonmax && mode == 12)
-        corners = fast12_detect(adjusted_img.img, img->width, img->height, img->width, threshold, &num_corners);
+        corners = fast12_detect(img->img, img->width, img->height, img->width, threshold, &num_corners);
     else
         goto cleanup;
 
@@ -75,8 +70,6 @@ correlation_point* fast_detect(correlation_image *img, size_t  *count)
 cleanup:
     if (corners != NULL)
         free(corners);
-    if (adjusted_img.img != NULL)
-        free(adjusted_img.img);
     
     return out;
 }

@@ -14,6 +14,7 @@ SET(CYBERVISION_SOURCES
     cybervision/configuration.c
     cybervision/system.c
     cybervision/triangulation.c
+    cybervision/image.c
     cybervision/main.c
 )
 
