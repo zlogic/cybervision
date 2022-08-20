@@ -19,12 +19,16 @@ Download a release distribution from [releases](/zlogic/cybervision/releases).
 Run cybervision:
 
 ```shell
-cybervision<img1.tif> <img2.tif> <out.obj>
+cybervision <img1> <img2> <output>
 ```
 
-This will save a 3D [Wavefront OBJ file](https://en.wikipedia.org/wiki/Wavefront_.obj_file).
+`<img1>` and `<img2>` are input filenames for image 1 and 2; supported formats are `jpg`, `tif` and `png`.
 
-⚠️ The ideal image size is 1024x1024 (or similar). Using larger images might result in increased processing times. Smaller images might not have enough details.
+`<output>` is the output filename:
+* If the filename ends with `.obj`, this will save a 3D [Wavefront OBJ file](https://en.wikipedia.org/wiki/Wavefront_.obj_file).
+* If the filename ends with `.png`, this will save a PNG depth map file.
+
+⚠️ The optimal image size is 1024x1024 (or similar). Using larger images will result in increased processing times. Smaller images might not have enough details.
 
 ### GPU details
 
@@ -69,3 +73,4 @@ To build it:
 * [qhull](http://www.qhull.org) for Delaunay triangulation
 * [libtiff](http://libtiff.maptools.org/) to load `tiff` files
 * [libjpeg-turbo](https://libjpeg-turbo.org) to load `jpeg` files
+* [libpng](http://libpng.org/pub/png/libpng.html) to load and save `png` files

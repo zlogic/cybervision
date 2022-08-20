@@ -290,23 +290,46 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     timespec_get(&last_operation_time, TIME_UTC);
     {
         surface_data surf = {0};
-        FILE *output_file = fopen(output_filename, "w");
+        FILE *output_file = NULL;
+        char* output_fileextension = file_extension(output_filename);
 
         surf.depth = cc_task.out_points;
         cc_task.out_points = NULL;
         surf.width = cc_task.out_width;
-        surf.height = cc_task.out_height;
+        surf.height = cc_task.out_height;        
         for (int i=0;i<surf.width*surf.height;i++)
         {
             surf.depth[i] = -surf.depth[i];
         }
-    
-        if (!triangulation_triangulate(&surf, output_file))
+
+        if (strcasecmp(output_fileextension, "obj") == 0)
         {
-            fprintf(stderr, "Failed to triangulate points");
+            output_file = fopen(output_filename, "w");
+            if (!triangulation_triangulate(&surf, output_file))
+            {
+                fprintf(stderr, "Failed to triangulate points");
+                result_code = 1;
+            }
+            fclose(output_file);
+        }
+        else if (strcasecmp(output_fileextension, "png") == 0)
+        {
+            if (!triangulation_interpolate(&surf))
+            {
+                fprintf(stderr, "Failed to interpolate points");
+                result_code = 1;
+            }
+            if (!save_surface(&surf, output_filename))
+            {
+                fprintf(stderr, "Failed to save output image");
+                result_code = 1;
+            }
+        }
+        else
+        {
+            fprintf(stderr, "Unsupported output file extension %s", output_fileextension);
             result_code = 1;
         }
-        fclose(output_file);
         free(surf.depth);
     }
     timespec_get(&current_operation_time, TIME_UTC);
@@ -348,7 +371,7 @@ int main(int argc, char *argv[])
 {
     if (argc != 4)
     {
-        printf("Unsupported arguments %i, please run: cybervision <image1> <image2> <output.obj>\n", argc);
+        printf("Unsupported arguments %i, please run: cybervision <image1> <image2> <output>\n", argc);
         return 1;
     }
     return do_reconstruction(argv[1], argv[2], argv[3]);

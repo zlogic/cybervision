@@ -176,6 +176,7 @@ correlation_image* load_image(char *filename)
     {
         FILE *pngFile;
         png_byte header[PNG_BYTES_TO_CHECK];
+        png_structp png_ptr;
         png_infop info_ptr;
         png_bytep *row_pointers;
         png_byte color_type;
@@ -193,7 +194,7 @@ correlation_image* load_image(char *filename)
             return NULL;
         }
         fseek(pngFile, 0, SEEK_SET);
-        png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+        png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
         info_ptr = png_create_info_struct(png_ptr);
         png_init_io(png_ptr, pngFile);
         png_read_info(png_ptr, info_ptr);
@@ -210,12 +211,14 @@ correlation_image* load_image(char *filename)
         img->img = malloc(sizeof(unsigned)*img->width*img->height);
 
         row_pointers = malloc(sizeof(png_bytep)*img->height);
-        for(size_t i=0;i<img->height;i++) {
+        for (size_t i=0;i<img->height;i++)
+        {
             row_pointers[i] = (png_byte*)malloc(png_get_rowbytes(png_ptr, info_ptr));
         }
         png_read_image(png_ptr, row_pointers);
 
-        for(size_t y=0;y<img->height;y++) {
+        for(size_t y=0;y<img->height;y++)
+        {
             png_byte* row = row_pointers[y];
             for (size_t x=0;x<img->width;x++)
             {
@@ -223,7 +226,11 @@ correlation_image* load_image(char *filename)
                 img->img[y*img->width+x] = pixel;
             }
         }
-        png_destroy_read_struct(&png_ptr, &info_ptr, NULL); 
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        for (size_t i=0;i<img->height;i++)
+        {
+            free(row_pointers[i]);
+        }
         free(row_pointers);
         fclose(pngFile);
     }
@@ -260,4 +267,104 @@ void resize_image(correlation_image *src, correlation_image *dst, float scale)
             dst->img[y*dst->width + x] = (int)roundf(value/coeffs);
         }
     }
+}
+
+static inline png_byte map_color(float value, const png_byte *colormap, size_t colormap_size)
+{
+    if (value < 0)
+        return colormap[0];
+    if (value > 1.0F)
+        return colormap[colormap_size-1];
+    float step = 1.0F/(colormap_size-2);
+    size_t box = (size_t)floorf(value/step);
+    float ratio = (value-step*box)/step;
+    png_byte c1 = colormap[box];
+    png_byte c2 = colormap[box+1];
+    int color = (int)roundf((float)c2*ratio+(float)c1*(1.0F-ratio));
+    if (color>0xFF)
+        return 0xFF;
+    if (color<0)
+        return 0;
+    return (png_byte)color;
+}
+
+int save_surface(surface_data *surface, char *filename)
+{
+    FILE *pngFile;
+    png_structp png_ptr;
+    png_infop info_ptr;
+    png_bytep *row_pointers;
+
+    // Sunset from https://jiffyclub.github.io/palettable/cartocolors/sequential/
+    static const png_byte colormap_r[] = {252, 250, 240, 227, 220, 185, 124};
+    static const png_byte colormap_g[] = {222, 164, 116,  79,  57,  37,  29};
+    static const png_byte colormap_b[] = {156, 118, 110, 111, 119, 122, 111};
+    static const size_t colormap_size = 7;
+
+    float min_depth = INFINITY, max_depth = -INFINITY;
+    int w, h;
+    if ((pngFile = fopen(filename, "wb")) == NULL)
+        return 0;
+    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!png_ptr)
+    {
+        fclose(pngFile);
+        return 0;
+    }
+    info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr)
+    {
+        fclose(pngFile);
+        return 0;
+    }
+    png_init_io(png_ptr, pngFile);
+    png_set_IHDR(png_ptr, info_ptr, surface->width, surface->height, 8, PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+    png_write_info(png_ptr, info_ptr);
+
+    row_pointers = malloc(sizeof(png_bytep)*surface->height);
+    for (size_t i=0;i<surface->height;i++)
+    {
+        row_pointers[i] = (png_byte*)malloc(png_get_rowbytes(png_ptr, info_ptr));
+    }
+
+    for(size_t i=0;i<surface->width*surface->height;i++)
+    {
+        float depth = surface->depth[i];
+        min_depth = depth<min_depth? depth:min_depth;
+        max_depth = depth>max_depth? depth:max_depth;
+    }
+
+    for(size_t y=0;y<surface->height;y++)
+    {
+        png_byte* row = row_pointers[y];
+        for (size_t x=0;x<surface->width;x++)
+        {
+            float depth = (surface->depth[y*surface->width+x]-min_depth)/(max_depth-min_depth);
+            if (!isfinite(depth))
+            {
+                row[x*4] = 0; row[x*4+1] = 0; row[x*4+2] = 0;
+                row[x*4+3] = 0;
+            }
+            else
+            {
+                int depth_int = (int)floorf(depth*255.0F);
+                depth_int = depth_int>0xFF? 0xFF:depth_int;
+                depth_int = depth_int<0? 0:depth_int;
+                row[x*4] = map_color(depth, colormap_r, colormap_size);
+                row[x*4+1] = map_color(depth, colormap_g, colormap_size);
+                row[x*4+2] = map_color(depth, colormap_b, colormap_size);
+                row[x*4+3] = 0xFF;
+            }
+        }
+    }
+    png_write_image(png_ptr, row_pointers);
+    png_write_end(png_ptr, NULL);
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+    for (size_t i=0;i<surface->height;i++)
+    {
+        free(row_pointers[i]);
+    }
+    free(row_pointers);
+    fclose(pngFile);
+    return 1;
 }

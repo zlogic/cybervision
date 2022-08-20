@@ -7,5 +7,6 @@ typedef struct {
 } surface_data;
 
 int triangulation_triangulate(surface_data*, FILE*);
+int triangulation_interpolate(surface_data* data);
 
 #endif

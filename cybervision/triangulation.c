@@ -107,3 +107,21 @@ int triangulation_triangulate(surface_data* data, FILE *output_file)
     qh_memfreeshort(&qh, &curlong, &totlong);
     return result;
 }
+
+int triangulation_interpolate(surface_data* data)
+{
+    coordT *points;
+    qhT qh = {0};
+    int result = 0;
+    int num_points = 0;
+    int curlong, totlong;
+
+    points = convert_points(data, &num_points);
+    
+    result = qh_new_qhull(&qh, 2, num_points, points, True, "qhull d Qt Qbb Qc Qz Q12", NULL, NULL) == 0;
+    // TODO: interpolate missing points
+
+    qh_freeqhull(&qh, qh_ALL);
+    qh_memfreeshort(&qh, &curlong, &totlong);
+    return result;
+}
