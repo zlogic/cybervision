@@ -5,6 +5,7 @@
 #include <libqhull_r/poly_r.h>
 
 #include "triangulation.h"
+#include "configuration.h"
 
 coordT* convert_points(surface_data* data, int *num_points)
 {
@@ -108,6 +109,69 @@ int triangulation_triangulate(surface_data* data, FILE *output_file)
     return result;
 }
 
+void interpolate_points(qhT *qh, surface_data* data)
+{
+    facetT *facet;
+    vertexT *vertex, **vertexp;
+    pointT p[2];
+    int vx[3];
+    int vy[3];
+    float vz[3];
+    const float epsilon = cybervision_interpolation_epsilon;
+    FORALLfacets
+    {
+        if (facet->upperdelaunay)
+            continue;
+        int min_x=data->width, min_y=data->height, max_x=0, max_y=0;
+        {
+            int i = 0;
+            FOREACHvertex_(facet->vertices)
+            {
+                if (i>2)
+                {
+                    i = 0;
+                    break;
+                }
+                vx[i] = (int)vertex->point[0];
+                vy[i] = (int)vertex->point[1];
+                vz[i] = data->depth[data->width*vy[i]+vx[i]];
+                if (!isfinite(vz[i]))
+                    break;
+                    
+                min_x = min_x<vx[i]? min_x:vx[i];
+                min_y = min_y<vy[i]? min_y:vy[i];
+                max_x = max_x>vx[i]? max_x:vx[i];
+                max_y = max_y>vy[i]? max_y:vy[i];
+                i++;
+            }
+            if (i!=3)
+            {
+                continue;
+            }
+        }
+
+        for (int y=min_y;y<=max_y;y++)
+        {
+            for (int x=min_x;x<=max_x;x++)
+            {
+                if (x<0 || y<0 || x>=data->width || y>=data->height)
+                    continue;
+                float *depth = &data->depth[y*data->width+x];
+                if (isfinite(*depth))
+                    continue;
+                // Linear barycentric interpolation, see https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Edge_approach
+                float detT = (float)(vy[1]-vy[2])*(vx[0]-vx[2]) + (float)(vx[2]-vx[1])*(vy[0]-vy[2]);
+                float lambda1 = ((float)(vy[1]-vy[2])*(x-vx[2]) + (float)(vx[2]-vx[1])*(y-vy[2])) / detT;
+                float lambda2 = ((float)(vy[2]-vy[0])*(x-vx[2]) + (float)(vx[0]-vx[2])*(y-vy[2])) / detT;
+                float lambda3 = 1.0F - lambda1 - lambda2;
+                if (lambda1>(1.0F+epsilon) || lambda1<(0.0F-epsilon) || lambda2>(1.0F+epsilon) || lambda2<(0.0-epsilon) || lambda3>(1.0+epsilon) || lambda3<(0.0-epsilon))
+                    continue;
+                *depth = (float)(lambda1*vz[0] + lambda2*vz[1] + lambda3*vz[2]);
+            }
+        }
+    }
+}
+
 int triangulation_interpolate(surface_data* data)
 {
     coordT *points;
@@ -119,7 +183,8 @@ int triangulation_interpolate(surface_data* data)
     points = convert_points(data, &num_points);
     
     result = qh_new_qhull(&qh, 2, num_points, points, True, "qhull d Qt Qbb Qc Qz Q12", NULL, NULL) == 0;
-    // TODO: interpolate missing points
+    if (result)
+        interpolate_points(&qh, data);
 
     qh_freeqhull(&qh, qh_ALL);
     qh_memfreeshort(&qh, &curlong, &totlong);

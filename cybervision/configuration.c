@@ -26,3 +26,5 @@ const int cybervision_crosscorrelation_corridor_size = 5;
 // const int cybervision_crosscorrelation_corridor = 7;
 const int cybervision_crosscorrelation_neighbor_distance = 4;
 const float cybervision_crosscorrelation_max_slope = 0.5F;
+
+const float cybervision_interpolation_epsilon = 1E-5;

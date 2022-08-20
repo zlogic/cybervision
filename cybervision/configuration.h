@@ -26,4 +26,6 @@ const int cybervision_crosscorrelation_corridor_size;
 const int cybervision_crosscorrelation_neighbor_distance;
 const float cybervision_crosscorrelation_max_slope;
 
+const float cybervision_interpolation_epsilon;
+
 #endif
