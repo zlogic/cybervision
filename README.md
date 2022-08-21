@@ -19,8 +19,10 @@ Download a release distribution from [releases](/zlogic/cybervision/releases).
 Run cybervision:
 
 ```shell
-cybervision <img1> <img2> <output>
+cybervision [--scale=<scale>] <img1> <img2> <output>
 ```
+
+`--scale=<scale>` is an optional argument to specify a depth scale, for example `--scale=-10.0`.
 
 `<img1>` and `<img2>` are input filenames for image 1 and 2; supported formats are `jpg`, `tif` and `png`.
 

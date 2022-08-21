@@ -74,7 +74,7 @@ int optimal_scale_steps(correlation_image *img)
     return scale-1;
 }
 
-int do_reconstruction(char *img1_filename, char *img2_filename, char *output_filename)
+int do_reconstruction(char *img1_filename, char *img2_filename, char *output_filename, float depth_scale)
 {
     // TODO: print error messages from failed threads
     int result_code = 0;
@@ -299,7 +299,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         surf.height = cc_task.out_height;        
         for (int i=0;i<surf.width*surf.height;i++)
         {
-            surf.depth[i] = -surf.depth[i];
+            surf.depth[i] = surf.depth[i]*depth_scale;
         }
 
         if (strcasecmp(output_fileextension, "obj") == 0)
@@ -369,10 +369,29 @@ cleanup:
 
 int main(int argc, char *argv[])
 {
-    if (argc != 4)
+    char *image1_filename, *image2_filename, *output_filename;
+    float scale = -1.0F;
+    if (argc < 4)
     {
-        printf("Unsupported arguments %i, please run: cybervision <image1> <image2> <output>\n", argc);
+        fprintf(stderr, "Unsupported arguments %i, please run: cybervision [--scale=<scale>] <image1> <image2> <output>\n", argc);
         return 1;
     }
-    return do_reconstruction(argv[1], argv[2], argv[3]);
+    for (int i=1; i<argc-3; i++)
+    {
+        char* arg = argv[i];
+        if (strncmp("--scale=", argv[i], 8) == 0)
+        {
+            scale = strtof(arg+8, NULL);
+            printf("Using scale %f from commandline\n", scale);
+        }
+        else
+        {
+            fprintf(stderr, "Unknown argument: %s\n", arg);
+            return 1;
+        }
+    }
+    image1_filename = argv[argc-3];
+    image2_filename = argv[argc-2];
+    output_filename = argv[argc-1];
+    return do_reconstruction(image1_filename, image2_filename, output_filename, scale);
 }
