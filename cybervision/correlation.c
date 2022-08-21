@@ -367,7 +367,6 @@ cleanup:
 
 int correlation_ransac_start(ransac_task *task)
 {
-    // TODO: do not dispatch threads and run directly?
     ransac_task_ctx *ctx = malloc(sizeof(ransac_task_ctx));
 
     srand((unsigned int)time(NULL));
@@ -495,6 +494,7 @@ typedef struct {
     int corridor_offset;
     float best_corr;
     float best_distance;
+    int match_count;
 } corridor_area_ctx;
 
 static inline void correlate_corridor_area(cross_correlate_task *t, corridor_area_ctx* c, int corridor_start, int corridor_end)
@@ -542,6 +542,7 @@ static inline void correlate_corridor_area(cross_correlate_task *t, corridor_are
         {
             c->best_distance = distance;
             c->best_corr = corr;
+            c->match_count++;
         }
     }
 }
@@ -608,6 +609,7 @@ THREAD_FUNCTION cross_correlation_task(void *args)
             corr_ctx.best_corr = 0;
             corr_ctx.x1 = x1;
             corr_ctx.y1 = y1;
+            corr_ctx.match_count = 0;
 
             compute_correlation_data(&t->img1, kernel_size, x1, y1, &corr_ctx.stdev1, corr_ctx.delta1);
 
@@ -643,10 +645,16 @@ THREAD_FUNCTION cross_correlation_task(void *args)
                 {
                     correlate_corridor_area(t, &corr_ctx, corridor_start, corridor_end);
                 }
-                if (isfinite(corr_ctx.best_distance))
+                if (corr_ctx.match_count>cybervision_crosscorrelation_match_limit)
                 {
-                    t->out_points[out_pos] = corr_ctx.best_distance;
+                    corr_ctx.best_distance = NAN;
+                    corr_ctx.best_corr = 0;
+                    break;
                 }
+            }
+            if (isfinite(corr_ctx.best_distance))
+            {
+                t->out_points[out_pos] = corr_ctx.best_distance;
             }
         }
         if (pthread_mutex_lock(&ctx->lock) != 0)
