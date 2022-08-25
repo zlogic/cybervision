@@ -19,10 +19,12 @@ Download a release distribution from [releases](/zlogic/cybervision/releases).
 Run cybervision:
 
 ```shell
-cybervision [--scale=<scale>] <img1> <img2> <output>
+cybervision [--scale=<scale>] [--mode=<cpu|gpu>] <img1> <img2> <output>
 ```
 
 `--scale=<scale>` is an optional argument to specify a depth scale, for example `--scale=-10.0`.
+
+`--mode=<cpu|gpu>` is an optional argument to specify a depth scale, for example `--mode=cpu` or `--mode=gpu`. Results might be slightly different between modes because the implementation is not completely identical.
 
 `<img1>` and `<img2>` are input filenames for image 1 and 2; supported formats are `jpg`, `tif` and `png`.
 
@@ -30,7 +32,9 @@ cybervision [--scale=<scale>] <img1> <img2> <output>
 * If the filename ends with `.obj`, this will save a 3D [Wavefront OBJ file](https://en.wikipedia.org/wiki/Wavefront_.obj_file).
 * If the filename ends with `.png`, this will save a PNG depth map file.
 
-⚠️ The optimal image size is 1024x1024 (or similar). Using larger images will result in increased processing times. Smaller images might not have enough details.
+⚠️ The optimal image size is 1024x1024 (or similar).
+Using larger images will result in increased processing times, and run into GPU hardware limitations.
+Smaller images might not have enough details.
 
 ### GPU details
 

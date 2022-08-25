@@ -273,10 +273,15 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             resize_image(img2, &cc_task.img2, scale);
             cc_task.iteration = i;
             cc_task.scale = scale;
-            (*cross_correlate_complete)(&cc_task);
+            if (!(*cross_correlate_complete)(&cc_task))
+            {
+                fprintf(stderr, "Failed to complete cross correlation task: %s", cc_task.error!=NULL? cc_task.error : "unknown error");
+                result_code = 1;
+                goto cleanup;
+            }
             if (!(*cross_correlate_start)(&cc_task))
             {
-                fprintf(stderr, "Failed to cross correlation task");
+                fprintf(stderr, "Failed to start cross correlation task: %s", cc_task.error!=NULL? cc_task.error : "unknown error");
                 result_code = 1;
                 goto cleanup;
             }
@@ -287,7 +292,12 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
                 show_progressbar(percent_complete);
             }
             total_percent_complete = total_percent_complete + 100.0F*scale*scale/total_percent;
-            (*cross_correlate_complete)(&cc_task);
+            if (!(*cross_correlate_complete)(&cc_task))
+            {
+                fprintf(stderr, "Failed to complete cross correlation task: %s", cc_task.error!=NULL? cc_task.error : "unknown error");
+                result_code = 1;
+                goto cleanup;
+            }
             free(cc_task.img1.img);
             cc_task.img1.img = NULL;
             free(cc_task.img2.img);

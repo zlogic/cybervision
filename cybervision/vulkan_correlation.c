@@ -52,7 +52,11 @@ typedef struct {
     int32_t img1_height;
     int32_t img2_width;
     int32_t img2_height;
+    int32_t output_width;
+    int32_t output_height;
     float dir_x, dir_y;
+    float scale;
+    int32_t iteration;
     int32_t corridor_offset;
     int32_t corridor_start;
     int32_t corridor_end;
@@ -468,16 +472,35 @@ int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev, int corr
     payload->img1_height = t->img1.height;
     payload->img2_width = t->img2.width;
     payload->img2_height = t->img2.height;
+    payload->output_width = t->out_width;
+    payload->output_height = t->out_height;
     payload->dir_x = t->dir_x;
     payload->dir_y = t->dir_y;
+    payload->scale = t->scale;
+    payload->iteration = t->iteration;
     payload->corridor_offset = corridor_offset;
     payload->corridor_start = corridor_start;
     payload->corridor_end = corridor_end;
     payload->initial_run = initial_run;
-    payload->kernel_size = cybervision_correlation_kernel_size;
-    payload->threshold = cybervision_correlation_threshold;
+    payload->kernel_size = cybervision_crosscorrelation_kernel_size;
+    payload->threshold = cybervision_crosscorrelation_threshold;
+    payload->neighbor_distance = cybervision_crosscorrelation_neighbor_distance;
+    payload->max_slope = cybervision_crosscorrelation_max_slope;
+    payload->match_limit = cybervision_crosscorrelation_match_limit;
 
     vkUnmapMemory(dev->device, dev->params_bufferMemory);
+    return 1;
+}
+
+int gpu_transfer_in_output(cross_correlate_task *t, vulkan_device *dev)
+{
+    float *output_points;
+    if (vkMapMemory(dev->device, dev->out_bufferMemory, 0, VK_WHOLE_SIZE, 0, (void*)&output_points) != VK_SUCCESS)
+        return 0;
+    for (int i=0;i<t->out_width*t->out_height;i++)
+        output_points[i] = t->out_points[i];
+    
+    vkUnmapMemory(dev->device, dev->out_bufferMemory);
     return 1;
 }
 
@@ -486,7 +509,7 @@ int gpu_transfer_out_image(cross_correlate_task *t, vulkan_device *dev)
     float *output_points;
     if (vkMapMemory(dev->device, dev->out_bufferMemory, 0, VK_WHOLE_SIZE, 0, (void*)&output_points) != VK_SUCCESS)
         return 0;
-    for (int i=0;i<t->img1.width*t->img1.height;i++)
+    for (int i=0;i<t->out_width*t->out_height;i++)
         t->out_points[i] = output_points[i];
     
     vkUnmapMemory(dev->device, dev->out_bufferMemory);
@@ -507,12 +530,12 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
 
     if (!gpu_transfer_in_params(t, &ctx->dev, 0, 0, 0, 1))
     {
-        t-> error = "Failed to transfer input parameters (initialization stage)";
+        t->error = "Failed to transfer input parameters (initialization stage)";
         return THREAD_RETURN_VALUE;
     }
     if (!gpu_run_command_buffer(&ctx->dev, max_width, max_height))
     {
-        t-> error = "Failed to run command buffer (initialization stage)";
+        t->error = "Failed to run command buffer (initialization stage)";
         return THREAD_RETURN_VALUE;
     }
 
@@ -528,12 +551,12 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
                 corridor_end = corridor_length-kernel_size;
             if (!gpu_transfer_in_params(t, &ctx->dev, c, corridor_start, corridor_end, 0))
             {
-                t-> error = "Failed to transfer input parameters";
+                t->error = "Failed to transfer input parameters";
                 break;
             }
             if (!gpu_run_command_buffer(&ctx->dev, t->img1.width, t->img1.height))
             {
-                t-> error = "Failed to run command buffer";
+                t->error = "Failed to run command buffer";
                 break;
             }
 
@@ -543,7 +566,7 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
     }
 
     if (!gpu_transfer_out_image(t, &ctx->dev))
-        t-> error = "Failed to read output image";
+        t->error = "Failed to read output image";
     t->completed = 1;
     return THREAD_RETURN_VALUE;
 }
@@ -558,61 +581,67 @@ int gpu_correlation_cross_correlate_start(cross_correlate_task *t)
 
     if (gpu_vk_create(ctx) != VK_SUCCESS)
     {
-        t-> error = "Failed to create device";
+        t->error = "Failed to create device";
         return 0;
     }
     if (!gpu_find_device(ctx))
     {
-        t-> error = "Failed to find suitable device";
+        t->error = "Failed to find suitable device";
         return 0;
     }
 
     if (!gpu_create_buffer(&ctx->dev, sizeof(shader_params), &ctx->dev.params_buffer, &ctx->dev.params_bufferMemory, 0))
     {
-        t-> error = "Failed to create buffer (parameters)";
+        t->error = "Failed to create buffer (parameters)";
         return 0;
     }
     if (!gpu_create_buffer(&ctx->dev, sizeof(float)*(t->img1.width*t->img1.height + t->img2.width*t->img2.height), &ctx->dev.img_buffer, &ctx->dev.img_bufferMemory, 0))
     {
-        t-> error = "Failed to create buffer (images)";
+        t->error = "Failed to create buffer (images)";
         return 0;
     }
     if (!gpu_create_buffer(&ctx->dev, sizeof(float)*(t->img1.width*t->img1.height*3 + t->img2.width*t->img2.height*2), &ctx->dev.internal_buffer, &ctx->dev.internal_bufferMemory, 1))
     {
-        t-> error = "Failed to create buffer (internal)";
+        t->error = "Failed to create buffer (internal)";
         return 0;
     }
-    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*t->img1.width*t->img1.height, &ctx->dev.out_buffer, &ctx->dev.out_bufferMemory, 0))
+    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*t->out_width*t->out_height, &ctx->dev.out_buffer, &ctx->dev.out_bufferMemory, 0))
     {
-        t-> error = "Failed to create buffer (output)";
+        t->error = "Failed to create buffer (output)";
         return 0;
     }
 
     if (!gpu_transfer_in_images(t->img1, t->img2, ctx->dev.device, ctx->dev.img_bufferMemory))
     {
-        t-> error = "Failed to transfer input images";
+        t->error = "Failed to transfer input images";
+        return 0;
+    }
+
+    if (!gpu_transfer_in_output(t, &ctx->dev))
+    {
+        t->error = "Failed to transfer input images";
         return 0;
     }
 
     if (!gpu_create_descriptor_set_layout(&ctx->dev))
     {
-        t-> error = "Failed to create descriptor set layout";
+        t->error = "Failed to create descriptor set layout";
         return 0;
     }
     if (!gpu_create_descriptor_set(&ctx->dev))
     {
-        t-> error = "Failed to create descriptor set";
+        t->error = "Failed to create descriptor set";
         return 0;
     }
 
     if (!gpu_create_compute_pipeline(&ctx->dev))
     {
-        t-> error = "Failed to create compute pipeline";
+        t->error = "Failed to create compute pipeline";
         return 0;
     }
     if (!gpu_create_command_pool(&ctx->dev))
     {
-        t-> error = "Failed to create command pool";
+        t->error = "Failed to create command pool";
         return 0;
     }
     pthread_create(&ctx->thread, NULL, gpu_correlate_cross_correlation_task, t);
