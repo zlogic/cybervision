@@ -76,7 +76,8 @@ Cybervision uses CMake and should work on Linux, macOS and Windows.
 To build it:
 
 1. Install [vcpkg](https://vcpkg.io/en/index.html) - used to download and build all external dependencies.
-2. Configure and build the project with CMake.
+2. Install Vulkan SDK (Windows and Linux only), see [gpu.md](gpu.md) for mode details.
+3. Configure and build the project with CMake.
 
 ## External libraries
 
