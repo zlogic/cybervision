@@ -34,12 +34,21 @@ cybervision [--scale=<scale>] <img1> <img2> <output>
 
 ### GPU details
 
-Previous versions of Cybervision were relying on a GPU as a way to brute force and correlate as many points as possible.
+Compiling a GPU-accelerated (Vulkan) version requires additional libraries and build tools.
 
-Thanks to optimizations, this is no longer necessary and the CPU-based version runs well enough.
-Removing Vulkan and Metal makes Cybervision a lot more portable.
+Cybervision was tested on:
 
-For more details how the GPU version used to work, see the [tag_python_gpu](../../tree/tag_python_gpu) tag.
+* Apple Macbook Air M1 (2020)
+* Apple Macbook Pro M1 Max (2021)
+* Windows 11, i7-8750H, Geforce GTX 1050 (mobile)
+
+To run Cybervision, you will need the Vulkan runtime library:
+
+* In Linux, it's called `libvulkan.so.1` and the package is typically called something like `vulkan`, `vulkan-loader`, `libvulkan` or `libvulkan1`.
+* In Windows, it's the Vulkan Runtime (VulkanRT) should already be installed - it's included with GPU drivers.
+* In macOS, a native Metal implementation is used instead of Vulkan, no extra libraries are needed.
+
+More details can be found in [gpu.md](gpu.md).
 
 ## C version
 

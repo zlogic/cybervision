@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(cybervision VERSION 0.5)
+project(cybervision VERSION 0.6)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -8,7 +8,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-SET(CYBERVISION_SOURCES
+set(CYBERVISION_SOURCES
     cybervision/correlation.c
     cybervision/fast_detector.c
     cybervision/configuration.c
@@ -48,4 +48,20 @@ target_link_libraries(cybervision PRIVATE ${FASTFEAT_LIBRARY})
 
 if(NOT MSVC)
     target_link_libraries(cybervision PUBLIC m)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    target_link_libraries(cybervision PRIVATE "-framework CoreGraphics" "-framework Metal")
+else()
+    find_library(Vulkan_LIBRARIES NAMES vulkan vulkan-1 HINTS "$ENV{VULKAN_SDK}/lib" REQUIRED)
+    target_link_libraries(cybervision PRIVATE ${Vulkan_LIBRARIES})
+endif()
+
+if(CMAKE_SYSROOT)
+    set(CMAKE_CROSSCOMPILING TRUE)
+
+    set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+    set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+    set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+    set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 endif()

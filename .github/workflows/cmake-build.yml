@@ -2,7 +2,7 @@ name: CMake
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "bring-back-gpu" ]
   pull_request:
     branches: [ "master" ]
 
@@ -36,13 +36,29 @@ jobs:
     - name: Install YASM
       if: steps.cache-vcpkg.outputs.cache-hit != 'true'
       run: sudo apt-get install -y yasm
-    
+
     - name: Install compiler
       if: matrix.arch  == 'arm64'
       run: |
-        sudo apt-get install -y g++-aarch64-linux-gnu gcc-aarch64-linux-gnu
+        sudo apt-get install -y g++-aarch64-linux-gnu gcc-aarch64-linux-gnu qemu-user-static
         echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
         echo "CPP=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+
+    - name: Cache sysroot
+      id: cache-sysroot
+      uses: actions/cache@v3
+      with:
+        path: ${{github.workspace}}/sysroot
+        key: ${{ runner.os }}-${{ matrix.arch }}-sysroot
+
+    - name: Prepare sysroot
+      if: steps.cache-sysroot.outputs.cache-hit != 'true'
+      run: |
+        mkdir ${{github.workspace}}/sysroot
+        SYSROOT_CONTAINER=$(podman create --arch ${{ matrix.arch }} --interactive ubuntu:focal sh -c "apt-get update && apt-get install -y libc6-dev libvulkan-dev")
+        podman start --attach $SYSROOT_CONTAINER
+        podman cp $SYSROOT_CONTAINER:/usr ${{github.workspace}}/sysroot
+        cd ${{github.workspace}}/sysroot/usr/lib/*-linux-gnu && mv * ..
 
     - name: Configure vcpkg
       run: echo "CMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
@@ -55,8 +71,8 @@ jobs:
         if [ "${{matrix.arch}}" == "amd64" ]; then
           VCPKG_ARCH=x64
         fi
-        cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DVCPKG_TARGET_TRIPLET=${VCPKG_ARCH}-linux -DCMAKE_SYSTEM_PROCESSOR=${{matrix.arch}}
-      
+        cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DVCPKG_TARGET_TRIPLET=${VCPKG_ARCH}-linux -DCMAKE_SYSTEM_PROCESSOR=${{matrix.arch}} -DCMAKE_FIND_ROOT_PATH=${{github.workspace}}/sysroot -DCMAKE_SYSROOT=${{github.workspace}}/sysroot
+
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
   
@@ -71,10 +87,14 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
+    env:
+      VULKAN_LOADER_VERSION: 1.3.225
+      VULKAN_SDK: "${{github.workspace}}\\vulkan-sdk"
     strategy:
       fail-fast: true
       matrix:
-        arch: [arm64, x64]
+        # TODO: Add arm64 when Vulkan Loader starts supporting it
+        arch: [x64]
 
     steps:
     - uses: actions/checkout@v3
@@ -88,13 +108,31 @@ jobs:
           ./build/vcpkg_installed
           ${{ env.HOME }}/.cache/vcpkg/archives
           ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
-          ${{ env.LOCALAPPDATA }}\vcpkg\archives
-          ${{ env.APPDATA }}\vcpkg\archives
+          ~\AppData\Local\vcpkg\archives
+          ~\AppData\Roaming\vcpkg\archives
         key: ${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('vcpkg.json') }}
 
     - name: Install NASM
       if: steps.cache-vcpkg.outputs.cache-hit != 'true'
       run: choco install nasm
+
+    - name: Cache Vulkan SDK
+      id: cache-vulkan-sdk
+      uses: actions/cache@v3
+      with:
+        path: vulkan-sdk
+        key: ${{ runner.os }}-${{ matrix.arch }}-vulkan-sdk-${{ env.VULKAN_LOADER_VERSION }}
+
+    - name: Build Vulkan SDK
+      if: steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
+      run: |
+        Invoke-WebRequest -Uri https://github.com/KhronosGroup/Vulkan-Loader/archive/refs/tags/v${{ env.VULKAN_LOADER_VERSION }}.zip -OutFile Vulkan-Loader.zip
+        Expand-Archive Vulkan-Loader.zip
+        $InstallPath = Join-Path $(Get-Location) -ChildPath vulkan-sdk
+        Set-Location -Path "Vulkan-Loader\Vulkan-Loader-${{ env.VULKAN_LOADER_VERSION }}"
+        cmake -A ${{ matrix.arch }} -S. -Bbuild -DUPDATE_DEPS=On -DCMAKE_INSTALL_PREFIX="$InstallPath" -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        cmake --build build --config Release --target install
+        Copy-Item -Path "external\Vulkan-Headers\build\install\include" -Destination "$InstallPath" -Recurse
 
     - name: Configure vcpkg
       run: echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
@@ -102,7 +140,7 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -A ${{matrix.arch}}
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DVCPKG_TARGET_TRIPLET=${{matrix.arch}}-windows-static-md
       
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
@@ -153,13 +191,13 @@ jobs:
           OSX_ARCHITECTURES=x86_64
         fi
         cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_OSX_ARCHITECTURES=${OSX_ARCHITECTURES} -DVCPKG_TARGET_TRIPLET=${{matrix.arch}}-osx
-      
+
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
 
     - name: Package application
       run: tar -cvjf cybervision-${{ runner.os }}-${{ matrix.arch }}.tar.bz2 -C build cybervision
-  
+
     - name: Upload application
       uses: actions/upload-artifact@v3
       with:
