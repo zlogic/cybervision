@@ -7,6 +7,7 @@
 #include "fast_detector.h"
 #include "system.h"
 #include "correlation.h"
+#include "gpu_correlation.h"
 #include "configuration.h"
 #include "triangulation.h"
 #include "image.h"
@@ -36,7 +37,6 @@ void reset_progressbar()
     fflush(stdout);
     progressbar_str[0] = '\0';
 }
-
 
 void show_progressbar(float percent)
 {
@@ -74,7 +74,7 @@ int optimal_scale_steps(correlation_image *img)
     return scale-1;
 }
 
-int do_reconstruction(char *img1_filename, char *img2_filename, char *output_filename, float depth_scale)
+int do_reconstruction(char *img1_filename, char *img2_filename, char *output_filename, float depth_scale, correlation_mode mode)
 {
     // TODO: print error messages from failed threads
     int result_code = 0;
@@ -90,6 +90,26 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     match_task m_task = {0};
     ransac_task r_task = {0};
     cross_correlate_task cc_task = {0};
+
+    int (*cross_correlate_start)(cross_correlate_task*);
+    int (*cross_correlate_complete)(cross_correlate_task*);
+
+    if (mode == CORRELATION_MODE_CPU)
+    {
+        cross_correlate_start = &cpu_correlation_cross_correlate_start;
+        cross_correlate_complete = &cpu_correlation_cross_correlate_complete;
+    }
+    else if (mode == CORRELATION_MODE_GPU)
+    {
+        cross_correlate_start = &gpu_correlation_cross_correlate_start;
+        cross_correlate_complete = &gpu_correlation_cross_correlate_complete;
+    }
+    else
+    {
+        fprintf(stderr, "Unsupported correlation mode %i\n", mode);
+        result_code = 1;
+        goto cleanup;
+    }
 
     timespec_get(&start_time, TIME_UTC);
     if (img1 == NULL)
@@ -253,8 +273,8 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             resize_image(img2, &cc_task.img2, scale);
             cc_task.iteration = i;
             cc_task.scale = scale;
-            correlation_cross_correlate_complete(&cc_task);
-            if (!correlation_cross_correlate_start(&cc_task))
+            (*cross_correlate_complete)(&cc_task);
+            if (!(*cross_correlate_start)(&cc_task))
             {
                 fprintf(stderr, "Failed to cross correlation task");
                 result_code = 1;
@@ -267,7 +287,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
                 show_progressbar(percent_complete);
             }
             total_percent_complete = total_percent_complete + 100.0F*scale*scale/total_percent;
-            correlation_cross_correlate_complete(&cc_task);
+            (*cross_correlate_complete)(&cc_task);
             free(cc_task.img1.img);
             cc_task.img1.img = NULL;
             free(cc_task.img2.img);
@@ -371,9 +391,10 @@ int main(int argc, char *argv[])
 {
     char *image1_filename, *image2_filename, *output_filename;
     float scale = -1.0F;
+    correlation_mode mode = CORRELATION_MODE_GPU;
     if (argc < 4)
     {
-        fprintf(stderr, "Unsupported arguments %i, please run: cybervision [--scale=<scale>] <image1> <image2> <output>\n", argc);
+        fprintf(stderr, "Unsupported arguments %i, please run: cybervision [--scale=<scale>] [--mode=<cpu|gpu>] <image1> <image2> <output>\n", argc);
         return 1;
     }
     for (int i=1; i<argc-3; i++)
@@ -384,6 +405,24 @@ int main(int argc, char *argv[])
             scale = strtof(arg+8, NULL);
             printf("Using scale %f from commandline\n", scale);
         }
+        else if (strncmp("--mode=", argv[i], 7) == 0)
+        {
+            char* mode_param = arg+7;
+            if (strcmp(mode_param, "cpu")==0)
+            {
+                mode = CORRELATION_MODE_CPU;
+            }
+            else if (strcmp(mode_param, "gpu")==0)
+            {
+                mode = CORRELATION_MODE_GPU;
+            }
+            else
+            {
+                fprintf(stderr, "Unsupported correlation mode %s, please use --mode=cpu or --mode=gpu\n", mode_param);
+                return 1;
+            }
+            printf("Using %s correlation mode from commandline\n", mode_param);
+        }
         else
         {
             fprintf(stderr, "Unknown argument: %s\n", arg);
@@ -393,5 +432,5 @@ int main(int argc, char *argv[])
     image1_filename = argv[argc-3];
     image2_filename = argv[argc-2];
     output_filename = argv[argc-1];
-    return do_reconstruction(image1_filename, image2_filename, output_filename, scale);
+    return do_reconstruction(image1_filename, image2_filename, output_filename, scale, mode);
 }

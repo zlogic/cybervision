@@ -77,8 +77,8 @@ typedef struct {
 
     cross_correlate_task_internal internal;
 } cross_correlate_task;
-int correlation_cross_correlate_start(cross_correlate_task*);
-void correlation_cross_correlate_cancel(cross_correlate_task*);
-int correlation_cross_correlate_complete(cross_correlate_task*);
+int cpu_correlation_cross_correlate_start(cross_correlate_task*);
+void cpu_correlation_cross_correlate_cancel(cross_correlate_task*);
+int cpu_correlation_cross_correlate_complete(cross_correlate_task*);
 
 #endif

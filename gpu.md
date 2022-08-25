@@ -33,17 +33,8 @@ In macOS, download the [glslang](https://github.com/KhronosGroup/glslang) compil
 
 In Ubuntu, install the `glslang-tools` paskage.
 
-Compile the shader and convert it into a C source that can be embedded into the binary.
+Compile the shader and convert it into a C source that can be embedded into the binary by building the `shaders` CMake target:
 
 ```shell
-glslangValidator -V shaders/correlation.glsl -o shaders/correlation.spv
-xxd -i shaders/correlation.spv > machine/shaders_spv.h
-rm shaders/correlation.spv
-```
-
-Or with the MoltenVKShaderConverter:
-
-```shell
-MoltenVKShaderConverter -gi shaders/correlation.glsl -oh -t c -so machine/shaders_spv.h
-xxd -i shaders/correlation.metal > machine/shaders_metal.h
+cmake --build build --target shaders
 ```

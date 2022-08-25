@@ -678,7 +678,7 @@ cleanup:
     return THREAD_RETURN_VALUE;
 }
 
-int correlation_cross_correlate_start(cross_correlate_task* task)
+int cpu_correlation_cross_correlate_start(cross_correlate_task* task)
 {
     cross_correlation_task_ctx *ctx = malloc(sizeof(cross_correlation_task_ctx));
     
@@ -702,14 +702,14 @@ int correlation_cross_correlate_start(cross_correlate_task* task)
     return 1;
 }
 
-void correlation_cross_correlate_cancel(cross_correlate_task *t)
+void cpu_correlation_cross_correlate_cancel(cross_correlate_task *t)
 {
     if (t == NULL)
         return;
     t->completed = 1;
 }
 
-int correlation_cross_correlate_complete(cross_correlate_task *t)
+int cpu_correlation_cross_correlate_complete(cross_correlate_task *t)
 {
     cross_correlation_task_ctx *ctx;
     if (t == NULL || t->internal == NULL)

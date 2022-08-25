@@ -55,6 +55,18 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 else()
     find_library(Vulkan_LIBRARIES NAMES vulkan libvulkan.so.1 vulkan-1 HINTS "$ENV{VULKAN_SDK}/lib" REQUIRED)
     target_link_libraries(cybervision PRIVATE ${Vulkan_LIBRARIES})
+    if(DEFINED ENV{VULKAN_SDK})
+        target_include_directories(cybervision PRIVATE "$ENV{VULKAN_SDK}/include")
+    endif()
+    add_custom_command(
+        OUTPUT cybervision/shaders_spv.h
+        COMMAND glslangValidator -V ${CMAKE_CURRENT_SOURCE_DIR}/shaders/correlation.comp.glsl -o correlation.spv
+        COMMAND xxd -i correlation.spv ${CMAKE_CURRENT_SOURCE_DIR}/cybervision/shaders_spv.h
+        VERBATIM
+    )
+    add_custom_target(shaders DEPENDS cybervision/shaders_spv.h)
+
+    target_sources(cybervision PRIVATE cybervision/vulkan_correlation.c)
 endif()
 
 if(CMAKE_SYSROOT)

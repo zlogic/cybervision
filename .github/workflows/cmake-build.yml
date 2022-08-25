@@ -74,7 +74,7 @@ jobs:
         cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DVCPKG_TARGET_TRIPLET=${VCPKG_ARCH}-linux -DCMAKE_SYSTEM_PROCESSOR=${{matrix.arch}} -DCMAKE_FIND_ROOT_PATH=${{github.workspace}}/sysroot -DCMAKE_SYSROOT=${{github.workspace}}/sysroot
 
     - name: Build
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target cybervision
   
     - name: Package application
       run: tar -cvjf cybervision-${{ matrix.os }}-${{ matrix.arch }}.tar.bz2 -C build cybervision
@@ -143,7 +143,7 @@ jobs:
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DVCPKG_TARGET_TRIPLET=${{matrix.arch}}-windows-static-md
       
     - name: Build
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target cybervision
   
     - name: Package application
       run: Compress-Archive -Path .\build\Release\cybervision.exe,.\build\Release\*.dll -DestinationPath cybervision-${{ runner.os }}-${{ matrix.arch }}.zip
@@ -156,6 +156,7 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    if: ${{ false }}
     strategy:
       fail-fast: true
       matrix:
@@ -193,7 +194,7 @@ jobs:
         cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_OSX_ARCHITECTURES=${OSX_ARCHITECTURES} -DVCPKG_TARGET_TRIPLET=${{matrix.arch}}-osx
 
     - name: Build
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target cybervision
 
     - name: Package application
       run: tar -cvjf cybervision-${{ runner.os }}-${{ matrix.arch }}.tar.bz2 -C build cybervision
