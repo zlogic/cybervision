@@ -55,7 +55,7 @@ jobs:
       if: steps.cache-sysroot.outputs.cache-hit != 'true'
       run: |
         mkdir ${{github.workspace}}/sysroot
-        SYSROOT_CONTAINER=$(podman create --arch ${{ matrix.arch }} --interactive ubuntu:focal sh -c "apt-get update && apt-get install -y libc6-dev libvulkan-dev")
+        SYSROOT_CONTAINER=$(podman create --arch ${{ matrix.arch }} --interactive ubuntu:jammy sh -c "apt-get update && apt-get install -y libc6-dev libvulkan-dev")
         podman start --attach $SYSROOT_CONTAINER
         podman cp $SYSROOT_CONTAINER:/usr ${{github.workspace}}/sysroot
         cd ${{github.workspace}}/sysroot/usr/lib/*-linux-gnu && mv * ..
