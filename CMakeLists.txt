@@ -53,7 +53,7 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     target_link_libraries(cybervision PRIVATE "-framework CoreGraphics" "-framework Metal")
 else()
-    find_library(Vulkan_LIBRARIES NAMES vulkan vulkan-1 HINTS "$ENV{VULKAN_SDK}/lib" REQUIRED)
+    find_library(Vulkan_LIBRARIES NAMES vulkan libvulkan.so.1 vulkan-1 HINTS "$ENV{VULKAN_SDK}/lib" REQUIRED)
     target_link_libraries(cybervision PRIVATE ${Vulkan_LIBRARIES})
 endif()
 
