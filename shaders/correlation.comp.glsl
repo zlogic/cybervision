@@ -32,27 +32,35 @@ layout(std430, binding = 2) buffer readonly Image2
 {
     float img2[];
 };
-layout(std430, binding = 3) buffer Image1_Avg
+layout(std430, binding = 3) buffer readonly Previous_Scale
+{
+    float output_previous[];
+};
+layout(std430, binding = 4) buffer Image1_Avg
 {
     float img1_avg[];
 };
-layout(std430, binding = 4) buffer Image1_Stdev
+layout(std430, binding = 5) buffer Image1_Stdev
 {
     float img1_stdev[];
 };
-layout(std430, binding = 5) buffer Image2_Avg
+layout(std430, binding = 6) buffer Image2_Avg
 {
     float img2_avg[];
 };
-layout(std430, binding = 6) buffer Image2_Stdev
+layout(std430, binding = 7) buffer Image2_Stdev
 {
     float img2_stdev[];
 };
-layout(std430, binding = 7) buffer Best_Correlation
+layout(std430, binding = 8) buffer Best_Correlation
 {
     float best_correlation[];
 };
-layout(std430, binding = 8) buffer Result
+layout(std430, binding = 9) buffer Match_Count
+{
+    int match_count[];
+};
+layout(std430, binding = 10) buffer writeonly Result
 {
     float result[];
 };
@@ -67,6 +75,8 @@ void prepare_initialdata() {
     if (x < img1_width && y < img1_height)
     {
         best_correlation[img1_width*y + x] = 0;
+        result[img1_width*y + x] = NAN;
+        match_count[img1_width*y + x] = 0;
     }
     
     if(x >= kernel_size && x < img1_width-kernel_size && y >= kernel_size && y < img1_height-kernel_size)
@@ -179,7 +189,7 @@ bool estimate_search_range(in uint x1, in uint y1, out float min_distance, out f
         for (int i=x_min;i<x_max;i++)
         {
             int out_pos = j*out_width + i;
-            float current_depth = result[out_pos];
+            float current_depth = output_previous[out_pos];
 
             if (isnan(current_depth))
                 continue;
@@ -187,6 +197,8 @@ bool estimate_search_range(in uint x1, in uint y1, out float min_distance, out f
             float dx = float(i)-float(x1)*inv_scale;
             float dy = float(j)-float(y1)*inv_scale;
             float point_distance = sqrt(dx*dx + dy*dy);
+            if (point_distance < 1.0)
+                continue;
             float min_value = current_depth - point_distance*max_slope;
             float max_value = current_depth + point_distance*max_slope;
 
@@ -287,13 +299,22 @@ void main() {
             best_corr = corr;
         }
     }
-    float current_corr = best_correlation[img1_width*y1 + x1];
+
+    uint out_pos = img1_width*y1 + x1;
+    float current_corr = best_correlation[out_pos];
     // TODO: count + limit number of matches
-    if (best_corr > current_corr && best_corr >= threshold)
+    if (best_corr >= threshold)
     {
-        const float inv_scale = 1.0/scale;
-        const int out_pos = int(round(inv_scale*y1))*out_width + int(round(inv_scale*x1));
-        best_correlation[img1_width*y1 + x1] = best_corr;
-        result[out_pos] = sqrt(best_distance);
+        match_count[out_pos]++;
+        if (match_count[out_pos] > match_limit)
+        {
+            result[out_pos] = NAN;
+        }
+        else if (best_corr > current_corr)
+        {
+            const float inv_scale = 1.0/scale;
+            best_correlation[out_pos] = best_corr;
+            result[out_pos] = sqrt(best_distance);
+        }
     }
 }
