@@ -50,9 +50,11 @@ if(NOT MSVC)
     target_link_libraries(cybervision PUBLIC m)
 endif()
 
+option(CYBERVISION_DISABLE_GPU "disable GPU features" OFF)
+
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     target_link_libraries(cybervision PRIVATE "-framework CoreGraphics" "-framework Metal")
-else()
+elseif(NOT CYBERVISION_DISABLE_GPU)
     find_library(Vulkan_LIBRARIES NAMES vulkan libvulkan.so.1 vulkan-1 HINTS "$ENV{VULKAN_SDK}/lib" REQUIRED)
     target_link_libraries(cybervision PRIVATE ${Vulkan_LIBRARIES})
     if(DEFINED ENV{VULKAN_SDK})
@@ -67,6 +69,8 @@ else()
     add_custom_target(shaders DEPENDS cybervision/shaders_spv.h)
 
     target_sources(cybervision PRIVATE cybervision/vulkan_correlation.c)
+else()
+    target_compile_definitions(cybervision PRIVATE -DCYBERVISION_DISABLE_GPU)
 endif()
 
 if(CMAKE_SYSROOT)

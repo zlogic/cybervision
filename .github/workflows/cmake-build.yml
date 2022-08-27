@@ -13,12 +13,22 @@ env:
 jobs:
   build-linux:
     runs-on: ubuntu-latest
-    if: ${{ false }}
     strategy:
       fail-fast: true
       matrix:
-        arch: [amd64, arm64]
-        os: ["ubuntu-bionic"]
+        include:
+        - arch: amd64
+          mode: gpu
+          os: ubuntu-jammy
+        - arch: amd64
+          mode: cpu
+          os: ubuntu-jammy
+        - arch: arm64
+          mode: gpu
+          os: ubuntu-jammy
+        - arch: arm64
+          mode: cpu
+          os: ubuntu-jammy
 
     steps:
     - uses: actions/checkout@v3
@@ -72,19 +82,19 @@ jobs:
         if [ "${{matrix.arch}}" == "amd64" ]; then
           VCPKG_ARCH=x64
         fi
-        cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DVCPKG_TARGET_TRIPLET=${VCPKG_ARCH}-linux -DCMAKE_SYSTEM_PROCESSOR=${{matrix.arch}} -DCMAKE_FIND_ROOT_PATH=${{github.workspace}}/sysroot -DCMAKE_SYSROOT=${{github.workspace}}/sysroot
+        cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCYBERVISION_DISABLE_GPU=${{matrix.mode != 'gpu'}} -DVCPKG_TARGET_TRIPLET=${VCPKG_ARCH}-linux -DCMAKE_SYSTEM_PROCESSOR=${{matrix.arch}} -DCMAKE_FIND_ROOT_PATH=${{github.workspace}}/sysroot -DCMAKE_SYSROOT=${{github.workspace}}/sysroot
 
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target cybervision
   
     - name: Package application
-      run: tar -cvjf cybervision-${{ matrix.os }}-${{ matrix.arch }}.tar.bz2 -C build cybervision
+      run: tar -cvjf cybervision-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}.tar.bz2 -C build cybervision
   
     - name: Upload application
       uses: actions/upload-artifact@v3
       with:
-        name: cybervision-${{ matrix.os }}-${{ matrix.arch }}
-        path: cybervision-${{ matrix.os }}-${{ matrix.arch }}.tar.bz2
+        name: cybervision-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}
+        path: cybervision-*.tar.bz2
 
   build-windows:
     runs-on: windows-latest
@@ -94,8 +104,13 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        # TODO: Add arm64 when Vulkan Loader starts supporting it
-        arch: [x64]
+        include:
+        - arch: x64
+          mode: gpu
+        - arch: x64
+          mode: cpu
+        - arch: arm64
+          mode: cpu
 
     steps:
     - uses: actions/checkout@v3
@@ -119,13 +134,14 @@ jobs:
 
     - name: Cache Vulkan SDK
       id: cache-vulkan-sdk
+      if: matrix.mode == 'gpu'
       uses: actions/cache@v3
       with:
         path: vulkan-sdk
         key: ${{ runner.os }}-${{ matrix.arch }}-vulkan-sdk-${{ env.VULKAN_LOADER_VERSION }}
 
     - name: Build Vulkan SDK
-      if: steps.cache-vulkan-sdk.outputs.cache-hit != 'true'
+      if: steps.cache-vulkan-sdk.outputs.cache-hit != 'true' && matrix.mode == 'gpu'
       run: |
         Invoke-WebRequest -Uri https://github.com/KhronosGroup/Vulkan-Loader/archive/refs/tags/v${{ env.VULKAN_LOADER_VERSION }}.zip -OutFile Vulkan-Loader.zip
         Expand-Archive Vulkan-Loader.zip
@@ -141,19 +157,19 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DVCPKG_TARGET_TRIPLET=${{matrix.arch}}-windows-static-md
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCYBERVISION_DISABLE_GPU=${{matrix.mode != 'gpu'}} -A ${{matrix.arch}} -DVCPKG_TARGET_TRIPLET=${{matrix.arch}}-windows-static-md
       
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target cybervision
   
     - name: Package application
-      run: Compress-Archive -Path .\build\Release\cybervision.exe,.\build\Release\*.dll -DestinationPath cybervision-${{ runner.os }}-${{ matrix.arch }}.zip
+      run: Compress-Archive -Path .\build\Release\cybervision.exe -DestinationPath cybervision-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}.zip
 
     - name: Upload application
       uses: actions/upload-artifact@v3
       with:
-        name: cybervision-${{ runner.os }}-${{ matrix.arch }}
-        path: cybervision-${{ runner.os }}-${{ matrix.arch }}.zip
+        name: cybervision-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}
+        path: cybervision-*.zip
 
   build-macos:
     runs-on: macos-latest
@@ -204,4 +220,4 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: cybervision-${{ runner.os }}-${{ matrix.arch }}
-        path: cybervision-${{ runner.os }}-${{ matrix.arch }}.tar.bz2
+        path: cybervision-*.tar.bz2

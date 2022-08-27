@@ -32,4 +32,10 @@ const int cybervision_crosscorrelation_neighbor_distance = 6;
 const float cybervision_crosscorrelation_max_slope = 0.5F;
 const int cybervision_crosscorrelation_match_limit = 16;
 
+#ifndef CYBERVISION_DISABLE_GPU
+const correlation_mode cybervision_crosscorrelation_default_mode = CORRELATION_MODE_GPU;
+#else
+const correlation_mode cybervision_crosscorrelation_default_mode = CORRELATION_MODE_CPU;
+#endif
+
 const float cybervision_interpolation_epsilon = 1E-5;

@@ -742,3 +742,32 @@ int cpu_correlation_cross_correlate_complete(cross_correlate_task *t)
     t->internal = NULL;
     return 1;
 }
+
+#ifdef CYBERVISION_DISABLE_GPU
+
+int gpu_correlation_cross_correlate_init(cross_correlate_task *t, size_t img1_pixels, size_t img2_pixels)
+{
+    t->error = "Compiled without GPU support";
+    return 0;
+}
+int gpu_correlation_cross_correlate_start(cross_correlate_task *t)
+{
+    t->error = "Compiled without GPU support";
+    return 0;
+}
+void gpu_correlation_cross_correlate_cancel(cross_correlate_task *t)
+{
+    t->error = "Compiled without GPU support";
+}
+int gpu_correlation_cross_correlate_complete(cross_correlate_task *t)
+{
+    t->error = "Compiled without GPU support";
+    return 0;
+}
+int gpu_correlation_cross_correlate_cleanup(cross_correlate_task *t)
+{
+    t->error = "Compiled without GPU support";
+    return 0;
+}
+
+#endif

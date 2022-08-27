@@ -55,11 +55,6 @@ void correlation_ransac_cancel(ransac_task*);
 int correlation_ransac_complete(ransac_task*);
 
 typedef void* cross_correlate_task_internal;
-typedef enum 
-{ 
-    CORRELATION_MODE_CPU = 0,
-    CORRELATION_MODE_GPU = 1
-} correlation_mode;
 typedef struct {
     correlation_image img1, img2;
     float dir_x, dir_y;

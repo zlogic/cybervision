@@ -29,6 +29,13 @@ const int cybervision_crosscorrelation_neighbor_distance;
 const float cybervision_crosscorrelation_max_slope;
 const int cybervision_crosscorrelation_match_limit;
 
+typedef enum 
+{ 
+    CORRELATION_MODE_CPU = 0,
+    CORRELATION_MODE_GPU = 1
+} correlation_mode;
+const correlation_mode cybervision_crosscorrelation_default_mode;
+
 const float cybervision_interpolation_epsilon;
 
 #endif

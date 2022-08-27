@@ -413,7 +413,7 @@ int main(int argc, char *argv[])
 {
     char *image1_filename, *image2_filename, *output_filename;
     float scale = -1.0F;
-    correlation_mode mode = CORRELATION_MODE_GPU;
+    correlation_mode mode = cybervision_crosscorrelation_default_mode;
     if (argc < 4)
     {
         fprintf(stderr, "Unsupported arguments %i, please run: cybervision [--scale=<scale>] [--mode=<cpu|gpu>] <image1> <image2> <output>\n", argc);
