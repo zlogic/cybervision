@@ -436,10 +436,10 @@ int estimate_search_range(cross_correlate_task *t, int x1, int y1, float *min_di
     int y_min = (int)floorf((y1-cybervision_crosscorrelation_neighbor_distance)*inv_scale);
     int y_max = (int)ceilf((y1+cybervision_crosscorrelation_neighbor_distance)*inv_scale);
 
-    x_min = fit_range(x_min, 0, t->out_width-1);
-    x_max = fit_range(x_max, 0, t->out_width-1);
-    y_min = fit_range(y_min, 0, t->out_height-1);
-    y_max = fit_range(y_max, 0, t->out_height-1);
+    x_min = fit_range(x_min, 0, t->out_width);
+    x_max = fit_range(x_max, 0, t->out_width);
+    y_min = fit_range(y_min, 0, t->out_height);
+    y_max = fit_range(y_max, 0, t->out_height);
     for (int j=y_min;j<y_max;j++)
     {
         for (int i=x_min;i<x_max;i++)
@@ -551,6 +551,7 @@ typedef struct {
     int y;
     int threads_completed;
     size_t processed_points;
+    float *out_points;
     pthread_mutex_t lock;
     pthread_t *threads;
 } cross_correlation_task_ctx;
@@ -602,7 +603,6 @@ THREAD_FUNCTION cross_correlation_task(void *args)
 
         for (int x1=kernel_size;x1<w1-kernel_size;x1++)
         {
-            int out_pos = ((int)roundf(inv_scale*y1))*t->out_width + (int)roundf(inv_scale*x1);
             float min_distance, max_distance;
 
             corr_ctx.best_distance = NAN;
@@ -654,7 +654,7 @@ THREAD_FUNCTION cross_correlation_task(void *args)
             }
             if (isfinite(corr_ctx.best_distance))
             {
-                t->out_points[out_pos] = corr_ctx.best_distance;
+                ctx->out_points[y1*t->img1.width + x1] = corr_ctx.best_distance;
             }
         }
         if (pthread_mutex_lock(&ctx->lock) != 0)
@@ -685,6 +685,9 @@ int cpu_correlation_cross_correlate_start(cross_correlate_task* task)
     task->internal = ctx;
     ctx->threads= malloc(sizeof(pthread_t)*task->num_threads);
 
+    ctx->out_points = malloc(sizeof(float)*task->img1.width*task->img1.height);
+    for(int i = 0; i < task->img1.width*task->img1.height; i++)
+        ctx->out_points[i] = NAN;
     ctx->processed_points = 0;
     task->percent_complete = 0.0;
     ctx->threads_completed = 0;
@@ -718,8 +721,23 @@ int cpu_correlation_cross_correlate_complete(cross_correlate_task *t)
     for (int i = 0; i < t->num_threads; i++)
         pthread_join(ctx->threads[i], NULL);
 
+    float inv_scale = 1/t->scale;
+    for (int y=0;y<t->img1.height;y++)
+    {
+        for (int x=0;x<t->img1.width;x++)
+        {
+            float value = ctx->out_points[y*t->img1.width + x];
+            int out_point_pos = ((int)roundf(inv_scale*y))*t->out_width + (int)roundf(inv_scale*x);
+            if(isfinite(value))
+            {
+                t->out_points[out_point_pos] = value;
+            }
+        }
+    }
+            
     pthread_mutex_destroy(&ctx->lock);
     free(ctx->threads);
+    free(ctx->out_points);
     free(t->internal);
     t->internal = NULL;
     return 1;

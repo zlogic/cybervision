@@ -33,7 +33,7 @@ cybervision [--scale=<scale>] [--mode=<cpu|gpu>] <img1> <img2> <output>
 * If the filename ends with `.png`, this will save a PNG depth map file.
 
 ⚠️ The optimal image size is 1024x1024 (or similar).
-Using larger images will result in increased processing times, and run into GPU hardware limitations.
+Using larger images will result in increased processing times, increased memory usage, and run into GPU hardware limitations.
 Smaller images might not have enough details.
 
 ### GPU details

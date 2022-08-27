@@ -24,6 +24,7 @@ const int cybervision_crosscorrelation_kernel_size;
 const float cybervision_crosscorrelation_threshold;
 const int cybervision_crosscorrelation_corridor_size;
 const int cybervision_crosscorrelation_corridor_segment_length;
+const int cybervision_crosscorrelation_search_area_segment_length;
 const int cybervision_crosscorrelation_neighbor_distance;
 const float cybervision_crosscorrelation_max_slope;
 const int cybervision_crosscorrelation_match_limit;

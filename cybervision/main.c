@@ -265,6 +265,12 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             cc_task.out_points[i] = NAN;
 
         timespec_get(&last_operation_time, TIME_UTC);
+        if (mode == CORRELATION_MODE_GPU && !gpu_correlation_cross_correlate_init(&cc_task, img1->width*img1->height, img2->width*img2->height))
+        {
+            fprintf(stderr, "Failed to initialize GPU: %s", cc_task.error!=NULL? cc_task.error : "unknown error");
+            result_code = 1;
+            goto cleanup;
+        }
         float total_percent_complete = 0.0F;
         for(int i = 0; i<=scale_steps; i++)
         {
@@ -302,6 +308,12 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             cc_task.img1.img = NULL;
             free(cc_task.img2.img);
             cc_task.img2.img = NULL;
+        }
+        if (mode == CORRELATION_MODE_GPU && !gpu_correlation_cross_correlate_cleanup(&cc_task))
+        {
+            fprintf(stderr, "Failed to cleanup GPU: %s", cc_task.error!=NULL? cc_task.error : "unknown error");
+            result_code = 1;
+            goto cleanup;
         }
         reset_progressbar();
         timespec_get(&current_operation_time, TIME_UTC);
