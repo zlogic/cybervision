@@ -292,14 +292,13 @@ void main() {
     if (best_corr >= threshold)
     {
         match_count++;
-        internals[match_count_offset+out_pos] = match_count;
+        internals_int[match_count_offset+out_pos] = match_count;
         if (match_count > match_limit)
         {
             result[out_pos] = NAN;
         }
         else if (best_corr > current_corr)
         {
-            const float inv_scale = 1.0/scale;
             internals[correlation_offset + img1_width*y1 + x1] = best_corr;
             result[out_pos] = sqrt(best_distance);
         }

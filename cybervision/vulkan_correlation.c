@@ -531,6 +531,7 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
     vulkan_context *ctx = t->internal;
     int kernel_size = cybervision_crosscorrelation_kernel_size;
     int corridor_size = cybervision_crosscorrelation_corridor_size;
+    int corridor_segment_length = cybervision_crosscorrelation_corridor_segment_length;
     int corridor_stripes = 2*corridor_size+1;
     int max_width = t->img1.width > t->img2.width ? t->img1.width:t->img2.width;
     int max_height = t->img1.height > t->img2.height ? t->img1.height:t->img2.height;
@@ -579,8 +580,8 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
     {
         for (int l=0;l<corridor_segments;l++)
         {
-            int corridor_start = kernel_size + l*cybervision_crosscorrelation_corridor_segment_length;
-            int corridor_end = kernel_size + (l+1)*cybervision_crosscorrelation_corridor_segment_length;
+            int corridor_start = kernel_size + l*corridor_segment_length;
+            int corridor_end = kernel_size + (l+1)*corridor_segment_length;
             if (corridor_end> corridor_length-kernel_size)
                 corridor_end = corridor_length-kernel_size;
             if (!gpu_transfer_in_params(t, &ctx->dev, c, corridor_start, corridor_end, 3))
