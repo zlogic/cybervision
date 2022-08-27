@@ -5,9 +5,6 @@
 #include <math.h>
 #include <string.h>
 
-// TODO: remove this
-#include <stdio.h>
-
 #include <pthread.h>
 #define THREAD_FUNCTION void*
 #define THREAD_RETURN_VALUE NULL
@@ -97,12 +94,6 @@ int gpu_init_functions(metal_device *dev)
 {
     SEL allocSel = sel_registerName("alloc");
     SEL autoreleaseSel = sel_registerName("autorelease");
-    // Begin: delete from here
-    FILE *fd = fopen("correlation.metal", "rb");
-    void *correlation_metallib = malloc(1000000);
-    int correlation_metallib_len = fread(correlation_metallib, 1, 1000000, fd);
-    fclose(fd);
-    // end: delete to here
     char *shaders_str = malloc(sizeof(char)*correlation_metallib_len+1);
     memcpy(shaders_str, correlation_metallib, correlation_metallib_len);
     shaders_str[correlation_metallib_len] = 0;
