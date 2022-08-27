@@ -304,10 +304,16 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
                 result_code = 1;
                 goto cleanup;
             }
-            free(cc_task.img1.img);
-            cc_task.img1.img = NULL;
-            free(cc_task.img2.img);
-            cc_task.img2.img = NULL;
+            if (cc_task.img1.img != NULL)
+            {
+                free(cc_task.img1.img);
+                cc_task.img1.img = NULL;
+            }
+            if (cc_task.img2.img != NULL)
+            {
+                free(cc_task.img2.img);
+                cc_task.img2.img = NULL;
+            }
         }
         if (mode == CORRELATION_MODE_GPU && !gpu_correlation_cross_correlate_cleanup(&cc_task))
         {

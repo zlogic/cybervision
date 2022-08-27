@@ -461,8 +461,14 @@ int gpu_transfer_in_images(cross_correlate_task *t, VkDevice device, VkDeviceMem
     payload += t->img2.width*t->img2.height;
     for (int i=0;i<t->out_width*t->out_height;i++)
         payload[i] = t->out_points[i];
-    
+
     vkUnmapMemory(device, bufferMemory);
+
+    free(t->img1.img);
+    t->img1.img = NULL;
+    free(t->img2.img);
+    t->img2.img = NULL;
+
     return 1;
 }
 
