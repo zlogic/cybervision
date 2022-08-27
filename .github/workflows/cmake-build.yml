@@ -13,6 +13,7 @@ env:
 jobs:
   build-linux:
     runs-on: ubuntu-latest
+    if: ${{ false }}
     strategy:
       fail-fast: true
       matrix:
@@ -98,6 +99,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
+    if: ${{ false }}
     env:
       VULKAN_LOADER_VERSION: 1.3.225
       VULKAN_SDK: "${{github.workspace}}\\vulkan-sdk"
@@ -126,7 +128,7 @@ jobs:
           ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
           ~\AppData\Local\vcpkg\archives
           ~\AppData\Roaming\vcpkg\archives
-        key: ${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('vcpkg.json') }}
+        key: vcpkgs-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('vcpkg.json') }}
 
     - name: Install NASM
       if: steps.cache-vcpkg.outputs.cache-hit != 'true'
@@ -173,11 +175,11 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
-    if: ${{ false }}
     strategy:
       fail-fast: true
       matrix:
-        arch: [arm64, x64]
+        #arch: [arm64, x64]
+        arch: [arm64]
 
     steps:
     - uses: actions/checkout@v3
@@ -191,7 +193,7 @@ jobs:
           ./build/vcpkg_installed
           ${{ env.HOME }}/.cache/vcpkg/archives
           ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
-        key: ${{ runner.os }}-${{matrix.arch}}-${{ hashFiles('vcpkg.json') }}
+        key: vcpkgs-${{ runner.os }}-${{matrix.arch}}-${{ hashFiles('vcpkg.json') }}
 
     - name: Install YASM
       if: steps.cache-vcpkg.outputs.cache-hit != 'true'
@@ -209,6 +211,17 @@ jobs:
           OSX_ARCHITECTURES=x86_64
         fi
         cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_OSX_ARCHITECTURES=${OSX_ARCHITECTURES} -DVCPKG_TARGET_TRIPLET=${{matrix.arch}}-osx
+
+    - name: Cache shaders
+      id: cache-shaders
+      uses: actions/cache@v3
+      with:
+        path: cybervision/shaders_metal.h
+        key: shaders-${{ runner.os }}-${{matrix.arch}}-${{ hashFiles('shaders/correlation.metal') }}
+  
+    - name: Compile shaders
+      if: steps.cache-shaders.outputs.cache-hit != 'true'
+      run: cmake --build ${{github.workspace}}/build --target shaders
 
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target cybervision

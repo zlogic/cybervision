@@ -53,7 +53,17 @@ endif()
 option(CYBERVISION_DISABLE_GPU "disable GPU features" OFF)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    target_link_libraries(cybervision PRIVATE "-framework CoreGraphics" "-framework Metal")
+    target_link_libraries(cybervision PRIVATE "-framework Foundation" "-framework CoreGraphics" "-framework Metal" )
+    add_custom_command(
+        OUTPUT cybervision/shaders_metal.h
+        COMMAND xcrun -sdk macosx metal -c ${CMAKE_CURRENT_SOURCE_DIR}/shaders/correlation.metal -o correlation.air
+        COMMAND xcrun -sdk macosx metallib correlation.air -o correlation.metallib
+        COMMAND xxd -i correlation.metallib ${CMAKE_CURRENT_SOURCE_DIR}/cybervision/shaders_metal.h
+        VERBATIM
+    )
+    add_custom_target(shaders DEPENDS cybervision/shaders_metal.h)
+
+    target_sources(cybervision PRIVATE cybervision/metal_correlation.c)
 elseif(NOT CYBERVISION_DISABLE_GPU)
     find_library(Vulkan_LIBRARIES NAMES vulkan libvulkan.so.1 vulkan-1 HINTS "$ENV{VULKAN_SDK}/lib" REQUIRED)
     target_link_libraries(cybervision PRIVATE ${Vulkan_LIBRARIES})
