@@ -1,5 +1,6 @@
 #include <objc/objc.h>
 #include <objc/objc-runtime.h>
+#include <dispatch/dispatch.h>
 
 #include <stdlib.h>
 #include <math.h>
@@ -99,20 +100,11 @@ int gpu_init_functions(metal_device *dev)
     shaders_str[correlation_metallib_len] = 0;
 
     Class NSStringClass = objc_getClass("NSString");
-    
-    id sourceString = ((id (*)(Class, SEL, char*, NSUInteger))objc_msgSend)(NSStringClass, sel_registerName("stringWithCString:encoding:"), shaders_str, 5);
-    free(shaders_str);
-    if (sourceString == NULL)
-        return 0;
-    
-    const NSUInteger METAL_2_2 = 131074;
-    Class MTLCompileOptions = objc_getClass("MTLCompileOptions");
-    id compileOptions = ((id (*)(Class, SEL))objc_msgSend)(MTLCompileOptions, allocSel);
-    ((void (*)(id, SEL, NSUInteger))objc_msgSend)(compileOptions, sel_registerName("setLanguageVersion:"), METAL_2_2);
-    ((void (*)(id, SEL))objc_msgSend)(compileOptions, autoreleaseSel);
 
+    dispatch_data_t dispatch_library = dispatch_data_create(correlation_metallib, correlation_metallib_len, NULL, DISPATCH_DATA_DESTRUCTOR_FREE);
     id error = NULL;
-    dev->library = ((id (*)(id, SEL, id, id, id*))objc_msgSend)(dev->device, sel_registerName("newLibraryWithSource:options:error:"), sourceString, compileOptions, &error);
+    dev->library = ((id (*)(id, SEL, id, id*))objc_msgSend)(dev->device, sel_registerName("newLibraryWithData:error:"), dispatch_library, &error);
+    dispatch_release(dispatch_library);
     if (error != NULL)
         return 0;
     if (dev->library == NULL)
