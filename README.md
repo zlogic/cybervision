@@ -30,6 +30,7 @@ cybervision [--scale=<scale>] [--mode=<cpu|gpu>] <img1> <img2> <output>
 
 `<output>` is the output filename:
 * If the filename ends with `.obj`, this will save a 3D [Wavefront OBJ file](https://en.wikipedia.org/wiki/Wavefront_.obj_file).
+* If the filename ends with `.ply`, this will save a 3D [PLY binary file](https://en.wikipedia.org/wiki/PLY_(file_format)).
 * If the filename ends with `.png`, this will save a PNG depth map file.
 
 ⚠️ The optimal image size is 1024x1024 (or similar).

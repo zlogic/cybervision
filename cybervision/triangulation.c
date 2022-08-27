@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <math.h>
+#include <stdint.h>
 
 #include <libqhull_r/libqhull_r.h>
 #include <libqhull_r/poly_r.h>
@@ -39,7 +40,7 @@ coordT* convert_points(surface_data* data, int *num_points)
     return points;
 }
 
-int output_points(qhT *qh, surface_data* data, FILE *output_file)
+int output_points_obj(qhT *qh, surface_data* data, FILE *output_file)
 {
     coordT *point, *pointtemp;
     FORALLpoints
@@ -59,7 +60,7 @@ int output_points(qhT *qh, surface_data* data, FILE *output_file)
     return 1;
 }
 
-void output_simplices(qhT *qh, surface_data* data, FILE *output_file)
+void output_simplices_obj(qhT *qh, surface_data* data, FILE *output_file)
 {
     facetT *facet;
     vertexT *vertex, **vertexp;
@@ -89,7 +90,82 @@ void output_simplices(qhT *qh, surface_data* data, FILE *output_file)
     // TODO: also generate normals? (avg of all edges)
 }
 
-int triangulation_triangulate(surface_data* data, FILE *output_file)
+void output_header_ply(qhT *qh, surface_data* data, FILE *output_file)
+{
+    facetT *facet;
+    int num_facets = 0;
+    char *endianess;
+    unsigned int x = 1;
+    if (*((char*)&x) == 1)
+        endianess = "little";
+    else
+        endianess = "big";
+    FORALLfacets
+    {
+        if (!facet->upperdelaunay)
+            num_facets++;
+    }
+    fprintf(output_file, "ply\nformat binary_%s_endian 1.0\n", endianess);
+    fprintf(output_file, "comment Cybervision 3D surface\n");
+    fprintf(output_file, "element vertex %i\n", qh->num_points);
+    fprintf(output_file, "property float x\nproperty float y\nproperty float z\n");
+    fprintf(output_file, "element face %i\n", num_facets);
+    fprintf(output_file, "property list uchar int vertex_indices\n");
+    fprintf(output_file, "end_header\n");
+}
+
+int output_points_ply(qhT *qh, surface_data* data, FILE *output_file)
+{
+    coordT *point, *pointtemp;
+    FORALLpoints
+    {
+        int x = (int)point[0], y = (int)point[1];
+        float x_out = x, y_out = data->height-y, z;
+        if(qh_pointid(qh, point) == qh->num_points-1)
+            break;
+        if (x<0 || x>=data->width || y<0 || y>=data->height)
+            return 0;
+        z = data->depth[y*data->width+x];
+        if (!isfinite(z))
+            return 0;
+        fwrite(&x_out, sizeof(x_out), 1, output_file);
+        fwrite(&y_out, sizeof(y_out), 1, output_file);
+        fwrite(&z, sizeof(z), 1, output_file);
+    }
+    return 1;
+}
+
+void output_simplices_ply(qhT *qh, surface_data* data, FILE *output_file)
+{
+    facetT *facet;
+    vertexT *vertex, **vertexp;
+    const unsigned char point_count = 3;
+    FORALLfacets
+    {
+        if (facet->upperdelaunay)
+            continue;
+        fwrite(&point_count, sizeof(point_count), 1, output_file);
+        if ((facet->toporient ^ qh_ORIENTclock))
+        {
+            FOREACHvertexreverse12_(facet->vertices)
+            {
+                int32_t point_index = qh_pointid(qh, vertex->point);
+                fwrite(&point_index, sizeof(point_index), 1, output_file);
+            }
+        }
+        else
+        {
+            FOREACHvertex_(facet->vertices)
+            {
+                int32_t point_index = qh_pointid(qh, vertex->point);
+                fwrite(&point_index, sizeof(point_index), 1, output_file);
+            }
+        }
+    }
+    // TODO: also generate normals? (avg of all edges)
+}
+
+int triangulation_triangulate(surface_data* data, FILE *output_file, output_surface_format format)
 {
     coordT *points;
     qhT qh = {0};
@@ -100,9 +176,23 @@ int triangulation_triangulate(surface_data* data, FILE *output_file)
     points = convert_points(data, &num_points);
     
     result = qh_new_qhull(&qh, 2, num_points, points, True, "qhull d Qt Qbb Qc Qz Q12", NULL, NULL) == 0;
-    result = result && output_points(&qh, data, output_file);
-    if (result)
-        output_simplices(&qh, data, output_file);
+    if (format == OUTPUT_SURFACE_OBJ)
+    {
+        result = result && output_points_obj(&qh, data, output_file);
+        if (result)
+            output_simplices_obj(&qh, data, output_file);
+    }
+    else if (format == OUTPUT_SURFACE_PLY)
+    {
+        output_header_ply(&qh, data, output_file);
+        result = result && output_points_ply(&qh, data, output_file);
+        if (result)
+            output_simplices_ply(&qh, data, output_file);
+    }
+    else
+    {
+        return 0;
+    }
 
     qh_freeqhull(&qh, qh_ALL);
     qh_memfreeshort(&qh, &curlong, &totlong);

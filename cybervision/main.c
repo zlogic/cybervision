@@ -353,7 +353,17 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         if (strcasecmp(output_fileextension, "obj") == 0)
         {
             output_file = fopen(output_filename, "w");
-            if (!triangulation_triangulate(&surf, output_file))
+            if (!triangulation_triangulate(&surf, output_file, OUTPUT_SURFACE_OBJ))
+            {
+                fprintf(stderr, "Failed to triangulate points");
+                result_code = 1;
+            }
+            fclose(output_file);
+        }
+        else if (strcasecmp(output_fileextension, "ply") == 0)
+        {
+            output_file = fopen(output_filename, "wb");
+            if (!triangulation_triangulate(&surf, output_file, OUTPUT_SURFACE_PLY))
             {
                 fprintf(stderr, "Failed to triangulate points");
                 result_code = 1;
