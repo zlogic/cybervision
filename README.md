@@ -41,11 +41,12 @@ Smaller images might not have enough details.
 
 Compiling a GPU-accelerated (Vulkan) version requires additional libraries and build tools.
 
-Cybervision was tested on:
+Cybervision was tested to support CPU-only and GPU-accelerated processing on:
 
 * Apple Macbook Air M1 (2020)
 * Apple Macbook Pro M1 Max (2021)
 * Windows 11, i7-8750H, Geforce GTX 1050 (mobile)
+* Fedora CoreOS 36, Celeron N3350 (digital signage appliance)
 
 To run Cybervision, you will need the Vulkan runtime library:
 
