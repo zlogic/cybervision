@@ -2,7 +2,7 @@ name: CMake
 
 on:
   push:
-    branches: [ "master", "bring-back-gpu" ]
+    branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
 
@@ -12,23 +12,23 @@ env:
 
 jobs:
   build-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: true
       matrix:
         include:
         - arch: amd64
           mode: gpu
-          os: ubuntu-jammy
+          os: ubuntu-focal
         - arch: amd64
           mode: cpu
-          os: ubuntu-jammy
+          os: ubuntu-focal
         - arch: arm64
           mode: gpu
-          os: ubuntu-jammy
+          os: ubuntu-focal
         - arch: arm64
           mode: cpu
-          os: ubuntu-jammy
+          os: ubuntu-focal
 
     steps:
     - uses: actions/checkout@v3
@@ -60,16 +60,16 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ${{github.workspace}}/sysroot
-        key: ${{ runner.os }}-${{ matrix.arch }}-sysroot
+        key: ${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-sysroot
 
     - name: Prepare sysroot
       if: steps.cache-sysroot.outputs.cache-hit != 'true'
       run: |
         mkdir ${{github.workspace}}/sysroot
-        SYSROOT_CONTAINER=$(podman create --arch ${{ matrix.arch }} --interactive ubuntu:jammy sh -c "apt-get update && apt-get install -y libc6-dev libvulkan-dev")
+        SYSROOT_CONTAINER=$(podman create --arch ${{ matrix.arch }} --interactive ubuntu:focal sh -c "apt-get update && apt-get install -y libc6-dev libvulkan-dev")
         podman start --attach $SYSROOT_CONTAINER
         podman cp $SYSROOT_CONTAINER:/usr ${{github.workspace}}/sysroot
-        cd ${{github.workspace}}/sysroot/usr/lib/*-linux-gnu && mv * ..
+        mv ${{github.workspace}}/sysroot/usr/lib/*-linux-gnu/* ${{github.workspace}}/sysroot/usr/lib
 
     - name: Configure vcpkg
       run: echo "CMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
