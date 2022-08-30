@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(cybervision VERSION 0.6)
+project(cybervision VERSION 0.8)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -13,7 +13,7 @@ set(CYBERVISION_SOURCES
     cybervision/fast_detector.c
     cybervision/configuration.c
     cybervision/system.c
-    cybervision/triangulation.c
+    cybervision/surface.c
     cybervision/image.c
     cybervision/main.c
 )

@@ -9,7 +9,7 @@
 #include "correlation.h"
 #include "gpu_correlation.h"
 #include "configuration.h"
-#include "triangulation.h"
+#include "surface.h"
 #include "image.h"
 
 double diff_seconds(struct timespec end, struct timespec start)
@@ -74,7 +74,7 @@ int optimal_scale_steps(correlation_image *img)
     return scale-1;
 }
 
-int do_reconstruction(char *img1_filename, char *img2_filename, char *output_filename, float depth_scale, correlation_mode mode)
+int do_reconstruction(char *img1_filename, char *img2_filename, char *output_filename, float depth_scale, correlation_mode corr_mode, interpolation_mode interp_mode)
 {
     // TODO: print error messages from failed threads
     int result_code = 0;
@@ -94,19 +94,19 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     int (*cross_correlate_start)(cross_correlate_task*);
     int (*cross_correlate_complete)(cross_correlate_task*);
 
-    if (mode == CORRELATION_MODE_CPU)
+    if (corr_mode == CORRELATION_MODE_CPU)
     {
         cross_correlate_start = &cpu_correlation_cross_correlate_start;
         cross_correlate_complete = &cpu_correlation_cross_correlate_complete;
     }
-    else if (mode == CORRELATION_MODE_GPU)
+    else if (corr_mode == CORRELATION_MODE_GPU)
     {
         cross_correlate_start = &gpu_correlation_cross_correlate_start;
         cross_correlate_complete = &gpu_correlation_cross_correlate_complete;
     }
     else
     {
-        fprintf(stderr, "Unsupported correlation mode %i\n", mode);
+        fprintf(stderr, "Unsupported correlation mode %i\n", corr_mode);
         result_code = 1;
         goto cleanup;
     }
@@ -167,7 +167,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         timespec_get(&last_operation_time, TIME_UTC);
         if (!correlation_match_points_start(&m_task))
         {
-            fprintf(stderr, "Failed to start point matching task");
+            fprintf(stderr, "Failed to start point matching task\n");
             result_code = 1;
             goto cleanup;
         }
@@ -217,7 +217,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         timespec_get(&last_operation_time, TIME_UTC);
         if (!correlation_ransac_start(&r_task))
         {
-            fprintf(stderr, "Failed to start RANSAC task");
+            fprintf(stderr, "Failed to start RANSAC task\n");
             result_code = 1;
             goto cleanup;
         }
@@ -234,7 +234,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
 
         if (r_task.result_matches_count == 0)
         {
-            fprintf(stderr, "No reliable matches found");
+            fprintf(stderr, "No reliable matches found\n");
             result_code = 1;
             goto cleanup;
         }
@@ -265,9 +265,9 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             cc_task.out_points[i] = NAN;
 
         timespec_get(&last_operation_time, TIME_UTC);
-        if (mode == CORRELATION_MODE_GPU && !gpu_correlation_cross_correlate_init(&cc_task, img1->width*img1->height, img2->width*img2->height))
+        if (corr_mode == CORRELATION_MODE_GPU && !gpu_correlation_cross_correlate_init(&cc_task, img1->width*img1->height, img2->width*img2->height))
         {
-            fprintf(stderr, "Failed to initialize GPU: %s", cc_task.error!=NULL? cc_task.error : "unknown error");
+            fprintf(stderr, "Failed to initialize GPU: %s\n", cc_task.error!=NULL? cc_task.error : "unknown error");
             result_code = 1;
             goto cleanup;
         }
@@ -281,13 +281,13 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             cc_task.scale = scale;
             if (!(*cross_correlate_complete)(&cc_task))
             {
-                fprintf(stderr, "Failed to complete cross correlation task: %s", cc_task.error!=NULL? cc_task.error : "unknown error");
+                fprintf(stderr, "Failed to complete cross correlation task: %s\n", cc_task.error!=NULL? cc_task.error : "unknown error");
                 result_code = 1;
                 goto cleanup;
             }
             if (!(*cross_correlate_start)(&cc_task))
             {
-                fprintf(stderr, "Failed to start cross correlation task: %s", cc_task.error!=NULL? cc_task.error : "unknown error");
+                fprintf(stderr, "Failed to start cross correlation task: %s\n", cc_task.error!=NULL? cc_task.error : "unknown error");
                 result_code = 1;
                 goto cleanup;
             }
@@ -300,7 +300,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             total_percent_complete = total_percent_complete + 100.0F*scale*scale/total_percent;
             if (!(*cross_correlate_complete)(&cc_task))
             {
-                fprintf(stderr, "Failed to complete cross correlation task: %s", cc_task.error!=NULL? cc_task.error : "unknown error");
+                fprintf(stderr, "Failed to complete cross correlation task: %s\n", cc_task.error!=NULL? cc_task.error : "unknown error");
                 result_code = 1;
                 goto cleanup;
             }
@@ -315,9 +315,9 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
                 cc_task.img2.img = NULL;
             }
         }
-        if (mode == CORRELATION_MODE_GPU && !gpu_correlation_cross_correlate_cleanup(&cc_task))
+        if (corr_mode == CORRELATION_MODE_GPU && !gpu_correlation_cross_correlate_cleanup(&cc_task))
         {
-            fprintf(stderr, "Failed to cleanup GPU: %s", cc_task.error!=NULL? cc_task.error : "unknown error");
+            fprintf(stderr, "Failed to cleanup GPU: %s\n", cc_task.error!=NULL? cc_task.error : "unknown error");
             result_code = 1;
             goto cleanup;
         }
@@ -338,8 +338,6 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     timespec_get(&last_operation_time, TIME_UTC);
     {
         surface_data surf = {0};
-        FILE *output_file = NULL;
-        char* output_fileextension = file_extension(output_filename);
 
         surf.depth = cc_task.out_points;
         cc_task.out_points = NULL;
@@ -350,43 +348,11 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             surf.depth[i] = surf.depth[i]*depth_scale;
         }
 
-        if (strcasecmp(output_fileextension, "obj") == 0)
+        if (!surface_output(&surf, output_filename, interp_mode))
         {
-            output_file = fopen(output_filename, "w");
-            if (!triangulation_triangulate(&surf, output_file, OUTPUT_SURFACE_OBJ))
-            {
-                fprintf(stderr, "Failed to triangulate points");
-                result_code = 1;
-            }
-            fclose(output_file);
-        }
-        else if (strcasecmp(output_fileextension, "ply") == 0)
-        {
-            output_file = fopen(output_filename, "wb");
-            if (!triangulation_triangulate(&surf, output_file, OUTPUT_SURFACE_PLY))
-            {
-                fprintf(stderr, "Failed to triangulate points");
-                result_code = 1;
-            }
-            fclose(output_file);
-        }
-        else if (strcasecmp(output_fileextension, "png") == 0)
-        {
-            if (!triangulation_interpolate(&surf))
-            {
-                fprintf(stderr, "Failed to interpolate points");
-                result_code = 1;
-            }
-            if (!save_surface(&surf, output_filename))
-            {
-                fprintf(stderr, "Failed to save output image");
-                result_code = 1;
-            }
-        }
-        else
-        {
-            fprintf(stderr, "Unsupported output file extension %s", output_fileextension);
+            fprintf(stderr, "Failed to output result\n");
             result_code = 1;
+            goto cleanup;
         }
         free(surf.depth);
     }
@@ -429,10 +395,11 @@ int main(int argc, char *argv[])
 {
     char *image1_filename, *image2_filename, *output_filename;
     float scale = -1.0F;
-    correlation_mode mode = cybervision_crosscorrelation_default_mode;
+    correlation_mode corr_mode = cybervision_crosscorrelation_default_mode;
+    interpolation_mode interp_mode = INTERPOLATION_DELAUNAY;
     if (argc < 4)
     {
-        fprintf(stderr, "Unsupported arguments %i, please run: cybervision [--scale=<scale>] [--mode=<cpu|gpu>] <image1> <image2> <output>\n", argc);
+        fprintf(stderr, "Unsupported arguments %i, please run: cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay|idw>] <image1> <image2> <output>\n", argc);
         return 1;
     }
     for (int i=1; i<argc-3; i++)
@@ -448,11 +415,11 @@ int main(int argc, char *argv[])
             char* mode_param = arg+7;
             if (strcmp(mode_param, "cpu")==0)
             {
-                mode = CORRELATION_MODE_CPU;
+                corr_mode = CORRELATION_MODE_CPU;
             }
             else if (strcmp(mode_param, "gpu")==0)
             {
-                mode = CORRELATION_MODE_GPU;
+                corr_mode = CORRELATION_MODE_GPU;
             }
             else
             {
@@ -460,6 +427,28 @@ int main(int argc, char *argv[])
                 return 1;
             }
             printf("Using %s correlation mode from commandline\n", mode_param);
+        }
+        else if (strncmp("--interpolation=", argv[i], 16) == 0)
+        {
+            char* mode_param = arg+16;
+            if (strcmp(mode_param, "delaunay")==0)
+            {
+                interp_mode = INTERPOLATION_DELAUNAY;
+            }
+            else if (strcmp(mode_param, "none")==0)
+            {
+                interp_mode = INTERPOLATION_NONE;
+            }
+            else if (strcmp(mode_param, "idw")==0)
+            {
+                interp_mode = INTERPOLATION_IDW;
+            }
+            else
+            {
+                fprintf(stderr, "Unsupported interpolation mode %s, please use --interpolation=none, --interpolation=delaunay or --interpolation=idw\n", mode_param);
+                return 1;
+            }
+            printf("Using %s interpolation mode from commandline\n", mode_param);
         }
         else
         {
@@ -470,5 +459,5 @@ int main(int argc, char *argv[])
     image1_filename = argv[argc-3];
     image2_filename = argv[argc-2];
     output_filename = argv[argc-1];
-    return do_reconstruction(image1_filename, image2_filename, output_filename, scale, mode);
+    return do_reconstruction(image1_filename, image2_filename, output_filename, scale, corr_mode, interp_mode);
 }

@@ -1,11 +1,14 @@
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include <stdint.h>
 
 #include <libqhull_r/libqhull_r.h>
 #include <libqhull_r/poly_r.h>
 
-#include "triangulation.h"
+#include "system.h"
+#include "surface.h"
+#include "image.h"
 #include "configuration.h"
 
 coordT* convert_points(surface_data* data, int *num_points)
@@ -165,29 +168,34 @@ void output_simplices_ply(qhT *qh, surface_data* data, FILE *output_file)
     // TODO: also generate normals? (avg of all edges)
 }
 
-int triangulation_triangulate(surface_data* data, FILE *output_file, output_surface_format format)
+int triangulation_triangulate(surface_data* data, char* output_filename)
 {
     coordT *points;
     qhT qh = {0};
     int result = 0;
     int num_points = 0;
     int curlong, totlong;
+    char* output_fileextension = file_extension(output_filename);
 
     points = convert_points(data, &num_points);
     
     result = qh_new_qhull(&qh, 2, num_points, points, True, "qhull d Qt Qbb Qc Qz Q12", NULL, NULL) == 0;
-    if (format == OUTPUT_SURFACE_OBJ)
+    if (strcasecmp(output_fileextension, "obj") == 0)
     {
+        FILE *output_file = fopen(output_filename, "w");
         result = result && output_points_obj(&qh, data, output_file);
         if (result)
             output_simplices_obj(&qh, data, output_file);
+        fclose(output_file);
     }
-    else if (format == OUTPUT_SURFACE_PLY)
+    else if (strcasecmp(output_fileextension, "ply") == 0)
     {
+        FILE *output_file = fopen(output_filename, "wb");
         output_header_ply(&qh, data, output_file);
         result = result && output_points_ply(&qh, data, output_file);
         if (result)
             output_simplices_ply(&qh, data, output_file);
+        fclose(output_file);
     }
     else
     {
@@ -279,4 +287,36 @@ int triangulation_interpolate(surface_data* data)
     qh_freeqhull(&qh, qh_ALL);
     qh_memfreeshort(&qh, &curlong, &totlong);
     return result;
+}
+
+int surface_output(surface_data* surf, char* output_filename, interpolation_mode mode)
+{
+    char* output_fileextension = file_extension(output_filename);
+    if (mode == INTERPOLATION_DELAUNAY)
+    {
+        if (strcasecmp(output_fileextension, "obj") == 0 || strcasecmp(output_fileextension, "ply") == 0)
+        {
+            return triangulation_triangulate(surf, output_filename);
+        }
+        else if (strcasecmp(output_fileextension, "png") == 0)
+        {
+            return triangulation_interpolate(surf) && save_surface(surf, output_filename);
+        }
+        else
+        {
+            return 0;
+        }
+    }
+    else if (mode == INTERPOLATION_NONE)
+    {
+        if (strcasecmp(output_fileextension, "png") == 0)
+        {
+            return save_surface(surf, output_filename);
+        }
+        else
+        {
+            return 0;
+        }
+    }
+    return 0;
 }

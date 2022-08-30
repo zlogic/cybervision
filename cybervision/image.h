@@ -2,7 +2,7 @@
 #define IMAGE_H
 
 #include "correlation.h"
-#include "triangulation.h"
+#include "surface.h"
 
 char *file_extension(char *filename);
 correlation_image* load_image(char *filename);

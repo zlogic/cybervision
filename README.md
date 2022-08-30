@@ -19,12 +19,15 @@ Download a release distribution from [releases](/zlogic/cybervision/releases).
 Run cybervision:
 
 ```shell
-cybervision [--scale=<scale>] [--mode=<cpu|gpu>] <img1> <img2> <output>
+cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay|idw>] <img1> <img2> <output>
 ```
 
 `--scale=<scale>` is an optional argument to specify a depth scale, for example `--scale=-10.0`.
 
-`--mode=<cpu|gpu>` is an optional argument to specify a depth scale, for example `--mode=cpu` or `--mode=gpu`. Results might be slightly different between modes because the implementation is not completely identical.
+`--mode=<cpu|gpu>` is an optional argument to specify a depth scale, for example `--mode=cpu` or `--mode=gpu`.Results might be slightly different between modes because the implementation is not completely identical.
+
+`--interpolation=<none|delaunay|idw>` is an optional argument to specify a depth scale, for example `--mode=cpu` or `--mode=gpu`. 
+`none` means that interpolation is disabled, `delaunay` uses [Delaunay triangulation](https://en.wikipedia.org/wiki/Delaunay_triangulation), `idw` uses [Inverse distance weighting](https://en.wikipedia.org/wiki/Inverse_distance_weighting) resampling.
 
 `<img1>` and `<img2>` are input filenames for image 1 and 2; supported formats are `jpg`, `tif` and `png`.
 

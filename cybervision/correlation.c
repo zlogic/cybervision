@@ -59,6 +59,42 @@ void compute_correlation_data(correlation_image *image, int kernel_size, int x, 
     *stdev = sqrtf(*stdev/(float)kernel_point_count);
 }
 
+void compute_compact_correlation_data(correlation_image *img, int kernel_size, float *stdev, float *avg)
+{
+    float kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
+    for(int y=kernel_size;y<img->height-kernel_size;y++)
+    {
+        for(int x=kernel_size;x<img->width-kernel_size;x++)
+        {
+            float point_avg = 0.0F;
+            float point_stdev = 0.0F;
+
+            for (int j=-kernel_size;j<=kernel_size;j++)
+            {
+                for (int i=-kernel_size;i<=kernel_size;i++)
+                {
+                    float value = img->img[(y+j)*img->width+(x+i)];
+                    point_avg += value;
+                }
+            }
+            point_avg /= kernel_point_count;
+
+            for (int j=-kernel_size;j<=kernel_size;j++)
+            {
+                for (int i=-kernel_size;i<=kernel_size;i++)
+                {
+                    float value = img->img[(y+j)*img->width+(x+i)];
+                    float delta = value-point_avg;
+                    point_stdev += delta*delta;
+                }
+            }
+            point_stdev = sqrtf(point_stdev/kernel_point_count);
+            avg[y*img->width+x] = point_avg;
+            stdev[y*img->width+x] = point_stdev;
+        }
+    }
+}
+
 typedef struct {
     int kernel_point_count;
     size_t matches_limit;
@@ -485,11 +521,11 @@ typedef struct {
     int kernel_size;
     int kernel_point_count;
     int x1, y1;
-    int w2, h2;
 
     float stdev1;
     float *delta1;
-    float *delta2;
+    float *avg2;
+    float *stdev2;
 
     int corridor_offset;
     float best_corr;
@@ -500,13 +536,14 @@ typedef struct {
 static inline void correlate_corridor_area(cross_correlate_task *t, corridor_area_ctx* c, int corridor_start, int corridor_end)
 {
     int kernel_size = c->kernel_size;
+    int kernel_width = 2*kernel_size + 1;
     int kernel_point_count = c->kernel_point_count;
     int x1 = c->x1, y1 = c->y1;
-    int w2 = c->w2, h2 = c->h2;
+    int w1 = t->img1.width;
+    int w2 = t->img2.width, h2 = t->img2.height;
     for (int i=corridor_start;i<corridor_end;i++)
     {
         int x2, y2;
-        float stdev2;
         float corr = 0;
         float dx, dy;
         float distance;
@@ -525,17 +562,21 @@ static inline void correlate_corridor_area(cross_correlate_task *t, corridor_are
                 continue;
         }
 
-        compute_correlation_data(&t->img2, kernel_size, x2, y2, &stdev2, c->delta2);
-
-        if (!isfinite(stdev2))
-            continue;
-
         dx = (float)(x2-x1)/t->scale;
         dy = (float)(y2-y1)/t->scale;
         distance = sqrtf(dx*dx+dy*dy);
 
-        for (int l=0;l<kernel_point_count;l++)
-            corr += c->delta1[l] * c->delta2[l];
+        float avg2 = c->avg2[y2*w2+x2];
+        float stdev2 = c->stdev2[y2*w2+x2];
+        for (int j=-kernel_size;j<=kernel_size;j++)
+        {
+            for (int k=-kernel_size;k<=kernel_size;k++)
+            {
+                float delta1 = c->delta1[(j+kernel_size)*kernel_width + (k+kernel_size)];
+                float delta2 = t->img2.img[(y2+j)*w2+(x2+k)] - avg2;
+                corr += delta1 * delta2;
+            }
+        }
         corr = corr/(c->stdev1*stdev2*(float)kernel_point_count);
         
         if (corr >= cybervision_crosscorrelation_threshold && corr > c->best_corr)
@@ -551,6 +592,8 @@ typedef struct {
     int y;
     int threads_completed;
     size_t processed_points;
+    float *avg2;
+    float *stdev2;
     float *out_points;
     pthread_mutex_t lock;
     pthread_t *threads;
@@ -583,11 +626,10 @@ THREAD_FUNCTION cross_correlation_task(void *args)
     corr_ctx.corridor_coeff = corridor_vertical? t->dir_x/t->dir_y : t->dir_y/t->dir_x;
     corr_ctx.kernel_size = kernel_size;
     corr_ctx.kernel_point_count = kernel_point_count;
-    corr_ctx.w2 = w2;
-    corr_ctx.h2 = h2;
 
     corr_ctx.delta1 = malloc(sizeof(float)*kernel_point_count);
-    corr_ctx.delta2 = malloc(sizeof(float)*kernel_point_count);
+    corr_ctx.avg2 = ctx->avg2;
+    corr_ctx.stdev2 = ctx->stdev2;
     
     while (!t->completed)
     {
@@ -669,7 +711,6 @@ THREAD_FUNCTION cross_correlation_task(void *args)
 
 cleanup:
     free(corr_ctx.delta1);
-    free(corr_ctx.delta2);
     pthread_mutex_lock(&ctx->lock);
     ctx->threads_completed++;
     pthread_mutex_unlock(&ctx->lock);
@@ -695,6 +736,10 @@ int cpu_correlation_cross_correlate_start(cross_correlate_task* task)
     task->error = NULL;
 
     ctx->y = cybervision_crosscorrelation_kernel_size;
+
+    ctx->avg2 = malloc(sizeof(float)*task->img2.width*task->img2.height);
+    ctx->stdev2 = malloc(sizeof(float)*task->img2.width*task->img2.height);
+    compute_compact_correlation_data(&task->img2, cybervision_crosscorrelation_kernel_size, ctx->stdev2, ctx->avg2);
 
     if (pthread_mutex_init(&ctx->lock, NULL) != 0)
         return 0;
@@ -738,6 +783,8 @@ int cpu_correlation_cross_correlate_complete(cross_correlate_task *t)
     pthread_mutex_destroy(&ctx->lock);
     free(ctx->threads);
     free(ctx->out_points);
+    free(ctx->avg2);
+    free(ctx->stdev2);
     free(t->internal);
     t->internal = NULL;
     return 1;
