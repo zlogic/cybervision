@@ -38,8 +38,4 @@ const correlation_mode cybervision_crosscorrelation_default_mode;
 
 const float cybervision_interpolation_epsilon;
 
-const int cybervision_interpolation_idw_radius;
-const float cybervision_interpolation_idw_power;
-const float cybervision_interpolation_idw_offset;
-
 #endif

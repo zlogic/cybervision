@@ -90,7 +90,6 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     match_task m_task = {0};
     ransac_task r_task = {0};
     cross_correlate_task cc_task = {0};
-    output_surface_task out_task = {0};
 
     int (*cross_correlate_start)(cross_correlate_task*);
     int (*cross_correlate_complete)(cross_correlate_task*);
@@ -338,39 +337,25 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
 
     timespec_get(&last_operation_time, TIME_UTC);
     {
-        out_task.num_threads = num_threads;
-        out_task.surf.depth = cc_task.out_points;
+        surface_data surf = {0};
+
+        surf.depth = cc_task.out_points;
         cc_task.out_points = NULL;
-        out_task.surf.width = cc_task.out_width;
-        out_task.surf.height = cc_task.out_height;        
-        out_task.output_filename = output_filename;
-        out_task.mode = interp_mode;
-        for (int i=0;i<out_task.surf.width*out_task.surf.height;i++)
+        surf.width = cc_task.out_width;
+        surf.height = cc_task.out_height;        
+        for (int i=0;i<surf.width*surf.height;i++)
         {
-            float depth = out_task.surf.depth[i];
-            out_task.surf.depth[i] = isfinite(depth)? depth*depth_scale : NAN;
+            surf.depth[i] = surf.depth[i]*depth_scale;
         }
 
-        if (!surface_output_start(&out_task))
+        if (!surface_output(surf, output_filename, interp_mode))
         {
-            fprintf(stderr, "Failed to start output task\n");
-            result_code = 1;
-            goto cleanup;
-        }
-        while(!out_task.completed)
-        {
-            sleep_ms(200);
-            show_progressbar(out_task.percent_complete);
-        }
-        reset_progressbar();
-        if (!surface_output_complete(&out_task))
-        {
+            free(surf.depth);
             fprintf(stderr, "Failed to output result\n");
             result_code = 1;
             goto cleanup;
         }
-        free(out_task.surf.depth);
-        out_task.surf.depth = NULL;
+        free(surf.depth);
     }
     timespec_get(&current_operation_time, TIME_UTC);
     printf("Completed 3D surface generation in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
@@ -404,8 +389,6 @@ cleanup:
         free(cc_task.img2.img);
     if (cc_task.out_points != NULL)
         free(cc_task.out_points);
-    if (out_task.surf.depth != NULL)
-        free(out_task.surf.depth);
     return result_code;
 }
 
@@ -417,7 +400,7 @@ int main(int argc, char *argv[])
     interpolation_mode interp_mode = INTERPOLATION_DELAUNAY;
     if (argc < 4)
     {
-        fprintf(stderr, "Unsupported arguments %i, please run: cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay|idw>] <image1> <image2> <output>\n", argc);
+        fprintf(stderr, "Unsupported arguments %i, please run: cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] <image1> <image2> <output>\n", argc);
         return 1;
     }
     for (int i=1; i<argc-3; i++)
@@ -457,13 +440,9 @@ int main(int argc, char *argv[])
             {
                 interp_mode = INTERPOLATION_NONE;
             }
-            else if (strcmp(mode_param, "idw")==0)
-            {
-                interp_mode = INTERPOLATION_IDW;
-            }
             else
             {
-                fprintf(stderr, "Unsupported interpolation mode %s, please use --interpolation=none, --interpolation=delaunay or --interpolation=idw\n", mode_param);
+                fprintf(stderr, "Unsupported interpolation mode %s, please use --interpolation=none or --interpolation=delaunay\n", mode_param);
                 return 1;
             }
             printf("Using %s interpolation mode from commandline\n", mode_param);
