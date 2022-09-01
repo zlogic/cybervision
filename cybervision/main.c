@@ -90,6 +90,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     match_task m_task = {0};
     ransac_task r_task = {0};
     cross_correlate_task cc_task = {0};
+    output_surface_task out_task = {0};
 
     int (*cross_correlate_start)(cross_correlate_task*);
     int (*cross_correlate_complete)(cross_correlate_task*);
@@ -337,27 +338,42 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
 
     timespec_get(&last_operation_time, TIME_UTC);
     {
-        surface_data surf = {0};
-
-        surf.depth = cc_task.out_points;
+        out_task.num_threads = num_threads;
+        out_task.surf.depth = cc_task.out_points;
         cc_task.out_points = NULL;
-        surf.width = cc_task.out_width;
-        surf.height = cc_task.out_height;        
-        for (int i=0;i<surf.width*surf.height;i++)
+        out_task.surf.width = cc_task.out_width;
+        out_task.surf.height = cc_task.out_height;        
+        out_task.output_filename = output_filename;
+        out_task.mode = interp_mode;
+        for (int i=0;i<out_task.surf.width*out_task.surf.height;i++)
         {
-            surf.depth[i] = surf.depth[i]*depth_scale;
+            float depth = out_task.surf.depth[i];
+            out_task.surf.depth[i] = isfinite(depth)? depth*depth_scale : NAN;
         }
 
-        if (!surface_output(&surf, output_filename, interp_mode))
+        if (!surface_output_start(&out_task))
+        {
+            fprintf(stderr, "Failed to start output task\n");
+            result_code = 1;
+            goto cleanup;
+        }
+        while(!out_task.completed)
+        {
+            sleep_ms(200);
+            show_progressbar(out_task.percent_complete);
+        }
+        reset_progressbar();
+        if (!surface_output_complete(&out_task))
         {
             fprintf(stderr, "Failed to output result\n");
             result_code = 1;
             goto cleanup;
         }
-        free(surf.depth);
+        free(out_task.surf.depth);
+        out_task.surf.depth = NULL;
     }
     timespec_get(&current_operation_time, TIME_UTC);
-    printf("Completed triangulation in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
+    printf("Completed 3D surface generation in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
 
     printf("Completed reconstruction in %.1f seconds\n", diff_seconds(current_operation_time, start_time));
 cleanup:
@@ -388,6 +404,8 @@ cleanup:
         free(cc_task.img2.img);
     if (cc_task.out_points != NULL)
         free(cc_task.out_points);
+    if (out_task.surf.depth != NULL)
+        free(out_task.surf.depth);
     return result_code;
 }
 

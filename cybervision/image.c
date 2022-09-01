@@ -288,7 +288,7 @@ static inline png_byte map_color(float value, const png_byte *colormap, size_t c
     return (png_byte)color;
 }
 
-int save_surface_image(surface_data *surface, char *filename)
+int save_surface_image(surface_data data, char *filename)
 {
     FILE *pngFile;
     png_structp png_ptr;
@@ -318,28 +318,28 @@ int save_surface_image(surface_data *surface, char *filename)
         return 0;
     }
     png_init_io(png_ptr, pngFile);
-    png_set_IHDR(png_ptr, info_ptr, surface->width, surface->height, 8, PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+    png_set_IHDR(png_ptr, info_ptr, data.width, data.height, 8, PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
     png_write_info(png_ptr, info_ptr);
 
-    row_pointers = malloc(sizeof(png_bytep)*surface->height);
-    for (size_t i=0;i<surface->height;i++)
+    row_pointers = malloc(sizeof(png_bytep)*data.height);
+    for (size_t i=0;i<data.height;i++)
     {
         row_pointers[i] = (png_byte*)malloc(png_get_rowbytes(png_ptr, info_ptr));
     }
 
-    for(size_t i=0;i<surface->width*surface->height;i++)
+    for(size_t i=0;i<data.width*data.height;i++)
     {
-        float depth = surface->depth[i];
+        float depth = data.depth[i];
         min_depth = depth<min_depth? depth:min_depth;
         max_depth = depth>max_depth? depth:max_depth;
     }
 
-    for(size_t y=0;y<surface->height;y++)
+    for(size_t y=0;y<data.height;y++)
     {
         png_byte* row = row_pointers[y];
-        for (size_t x=0;x<surface->width;x++)
+        for (size_t x=0;x<data.width;x++)
         {
-            float depth = (surface->depth[y*surface->width+x]-min_depth)/(max_depth-min_depth);
+            float depth = (data.depth[y*data.width+x]-min_depth)/(max_depth-min_depth);
             if (!isfinite(depth))
             {
                 row[x*4] = 0; row[x*4+1] = 0; row[x*4+2] = 0;
@@ -360,7 +360,7 @@ int save_surface_image(surface_data *surface, char *filename)
     png_write_image(png_ptr, row_pointers);
     png_write_end(png_ptr, NULL);
     png_destroy_write_struct(&png_ptr, &info_ptr);
-    for (size_t i=0;i<surface->height;i++)
+    for (size_t i=0;i<data.height;i++)
     {
         free(row_pointers[i]);
     }

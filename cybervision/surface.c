@@ -3,6 +3,19 @@
 #include <math.h>
 #include <stdint.h>
 
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+# include <pthread.h>
+# define THREAD_FUNCTION void*
+# define THREAD_RETURN_VALUE NULL
+#elif defined(_WIN32)
+# include "win32/pthread.h"
+# define THREAD_FUNCTION DWORD WINAPI
+# define THREAD_RETURN_VALUE 1
+# include "win32/rand.h"
+#else
+# error "pthread is required"
+#endif
+
 #include <libqhull_r/libqhull_r.h>
 #include <libqhull_r/poly_r.h>
 
@@ -11,16 +24,16 @@
 #include "image.h"
 #include "configuration.h"
 
-coordT* convert_points_qhull(surface_data* data, int *num_points)
+coordT* convert_points_qhull(surface_data data, int *num_points)
 {
     coordT *points;
     coordT *current_point = NULL;
     int np = 0;
-    for (int y=0;y<data->height;y++)
+    for (int y=0;y<data.height;y++)
     {
-        for (int x=0;x<data->width;x++)
+        for (int x=0;x<data.width;x++)
         {
-            float depth = data->depth[y*data->width + x];
+            float depth = data.depth[y*data.width + x];
             if (!isfinite(depth))
                 continue;
             np++;
@@ -29,11 +42,11 @@ coordT* convert_points_qhull(surface_data* data, int *num_points)
     points = malloc(sizeof(coordT)*np*2);
     *num_points = np;
     current_point = points;
-    for (int y=0;y<data->height;y++)
+    for (int y=0;y<data.height;y++)
     {
-        for (int x=0;x<data->width;x++)
+        for (int x=0;x<data.width;x++)
         {
-            float depth = data->depth[y*data->width + x];
+            float depth = data.depth[y*data.width + x];
             if (!isfinite(depth))
                 continue;
             *(current_point++) = x;
@@ -57,7 +70,7 @@ void output_point_ply(int x, int y, float z, FILE* output_file)
 }
 
 typedef void (*output_point_fn)(int x, int y, float z, FILE* output_file);
-int output_points_qhull(qhT *qh, surface_data* data, FILE* output_file, output_point_fn output_fn)
+int output_points_qhull(qhT *qh, surface_data data, FILE* output_file, output_point_fn output_fn)
 {
     coordT *point, *pointtemp;
     FORALLpoints
@@ -66,13 +79,13 @@ int output_points_qhull(qhT *qh, surface_data* data, FILE* output_file, output_p
         float z;
         if(qh_pointid(qh, point) == qh->num_points-1)
             break;
-        if (x<0 || x>=data->width || y<0 || y>=data->height)
+        if (x<0 || x>=data.width || y<0 || y>=data.height)
             return 0;
-        z = data->depth[y*data->width+x];
+        z = data.depth[y*data.width+x];
         if (!isfinite(z))
             return 0;
         
-        output_fn(x, data->height-y, z, output_file);
+        output_fn(x, data.height-y, z, output_file);
     }
     return 1;
 }
@@ -93,7 +106,7 @@ void output_simplex_ply(int p1, int p2, int p3, FILE* output_file)
 }
 
 typedef void (*output_simplex_fn)(int p1, int p2, int p3, FILE* output_file);
-void output_simplices_qhull(qhT *qh, surface_data* data, FILE *output_file, output_simplex_fn output_fn)
+void output_simplices_qhull(qhT *qh, FILE *output_file, output_simplex_fn output_fn)
 {
     facetT *facet;
     vertexT *vertex, **vertexp;
@@ -147,41 +160,41 @@ void output_header_ply(int num_points, int num_simplices, FILE *output_file)
     fprintf(output_file, "end_header\n");
 }
 
-int triangulation_triangulate_delaunay(surface_data* data, char* output_filename)
+int triangulation_triangulate_delaunay(output_surface_task *task)
 {
     coordT *points;
     qhT *qh = malloc(sizeof(qhT));
     int result = 0;
     int num_points = 0;
     int curlong, totlong;
-    char* output_fileextension = file_extension(output_filename);
+    char* output_fileextension = file_extension(task->output_filename);
 
-    points = convert_points_qhull(data, &num_points);
+    points = convert_points_qhull(task->surf, &num_points);
     memset(qh, 0, sizeof(qhT));
 
     result = qh_new_qhull(qh, 2, num_points, points, True, "qhull d Qt Qbb Qc Qz Q12", NULL, NULL) == 0;
     if (strcasecmp(output_fileextension, "obj") == 0)
     {
-        FILE *output_file = fopen(output_filename, "w");
-        result = result && output_points_qhull(qh, data, output_file, output_point_obj);
+        FILE *output_file = fopen(task->output_filename, "w");
+        result = result && output_points_qhull(qh, task->surf, output_file, output_point_obj);
         if (result)
-            output_simplices_qhull(qh, data, output_file, output_simplex_obj);
+            output_simplices_qhull(qh, output_file, output_simplex_obj);
         fclose(output_file);
     }
     else if (strcasecmp(output_fileextension, "ply") == 0)
     {
         facetT *facet;
         int num_facets = 0;
-        FILE *output_file = fopen(output_filename, "wb");
+        FILE *output_file = fopen(task->output_filename, "wb");
         FORALLfacets
         {
             if (!facet->upperdelaunay)
                 num_facets++;
         }
         output_header_ply(num_points, num_facets, output_file);
-        result = result && output_points_qhull(qh, data, output_file, output_point_ply);
+        result = result && output_points_qhull(qh, task->surf, output_file, output_point_ply);
         if (result)
-            output_simplices_qhull(qh, data, output_file, output_simplex_ply);
+            output_simplices_qhull(qh, output_file, output_simplex_ply);
         fclose(output_file);
     }
     else
@@ -211,9 +224,9 @@ static inline void add_point_to_index(int *indices, int* point_count)
         *indices = (*point_count)++;
 }
 
-int triangulation_triangulate(surface_data* data, char* output_filename)
+int triangulation_triangulate(surface_data data, char* output_filename)
 {
-    int *indices = malloc(sizeof(int)*data->width*data->height);
+    int *indices = malloc(sizeof(int)*data.width*data.height);
     int point_count = 0;
     int simplex_count = 0;
     int result = 0;
@@ -222,29 +235,29 @@ int triangulation_triangulate(surface_data* data, char* output_filename)
     output_point_fn output_point;
     output_simplex_fn output_simplex;
 
-    for(int i=0;i<data->width*data->height;i++)
+    for(int i=0;i<data.width*data.height;i++)
         indices[i] = -1;
     
-    for(int y=0;y<data->height;y++)
+    for(int y=0;y<data.height;y++)
     {
-        for(int x=0;x<data->width;x++)
+        for(int x=0;x<data.width;x++)
         {
-            if (!isfinite(data->depth[y*data->width+x]))
+            if (!isfinite(data.depth[y*data.width+x]))
             {
                 continue;
             }
-            if (has_forward_neighbor(data, x, y))
+            if (has_forward_neighbor(&data, x, y))
             {
-                add_point_to_index(&indices[y*data->width+x], &point_count);
-                add_point_to_index(&indices[y*data->width+(x+1)], &point_count);
-                add_point_to_index(&indices[(y+1)*data->width+x], &point_count);
+                add_point_to_index(&indices[y*data.width+x], &point_count);
+                add_point_to_index(&indices[y*data.width+(x+1)], &point_count);
+                add_point_to_index(&indices[(y+1)*data.width+x], &point_count);
                 simplex_count++;
             }
-            if (has_back_neighbor(data, x, y))
+            if (has_back_neighbor(&data, x, y))
             {
-                add_point_to_index(&indices[(y-1)*data->width+x], &point_count);
-                add_point_to_index(&indices[y*data->width+(x-1)], &point_count);
-                add_point_to_index(&indices[y*data->width+x], &point_count);
+                add_point_to_index(&indices[(y-1)*data.width+x], &point_count);
+                add_point_to_index(&indices[y*data.width+(x-1)], &point_count);
+                add_point_to_index(&indices[y*data.width+x], &point_count);
                 simplex_count++;
             }
         }
@@ -274,11 +287,11 @@ int triangulation_triangulate(surface_data* data, char* output_filename)
         int x, y;
     } point;
     point *points = malloc(sizeof(point)*point_count);
-    for(int y=0;y<data->height;y++)
+    for(int y=0;y<data.height;y++)
     {
-        for(int x=0;x<data->width;x++)
+        for(int x=0;x<data.width;x++)
         {
-            int pos = indices[y*data->width+x];
+            int pos = indices[y*data.width+x];
             if (pos<0)
             {
                 continue;
@@ -291,26 +304,26 @@ int triangulation_triangulate(surface_data* data, char* output_filename)
     {
         int x = points[i].x;
         int y = points[i].y;
-        float z = data->depth[y*data->width+x];
-        output_point(x, data->height-y, z, output_file);
+        float z = data.depth[y*data.width+x];
+        output_point(x, data.height-y, z, output_file);
     }
     free(points);
 
-    for(int y=0;y<data->height;y++)
+    for(int y=0;y<data.height;y++)
     {
-        for(int x=0;x<data->width;x++)
+        for(int x=0;x<data.width;x++)
         {
-            if (indices[y*data->width+x]<0)
+            if (indices[y*data.width+x]<0)
             {
                 continue;
             }
-            if (has_forward_neighbor(data, x, y))
+            if (has_forward_neighbor(&data, x, y))
             {
-                output_simplex(indices[y*data->width+x], indices[(y+1)*data->width+x], indices[y*data->width+(x+1)], output_file);
+                output_simplex(indices[y*data.width+x], indices[(y+1)*data.width+x], indices[y*data.width+(x+1)], output_file);
             }
-            if (has_back_neighbor(data, x, y))
+            if (has_back_neighbor(&data, x, y))
             {
-                output_simplex(indices[y*data->width+x], indices[(y-1)*data->width+x], indices[y*data->width+(x-1)], output_file);
+                output_simplex(indices[y*data.width+x], indices[(y-1)*data.width+x], indices[y*data.width+(x-1)], output_file);
             }
         }
     }
@@ -323,7 +336,7 @@ cleanup:
     return result;
 }
 
-void interpolate_points_delaunay(qhT *qh, surface_data* data)
+void interpolate_points_delaunay(qhT *qh, surface_data data)
 {
     facetT *facet;
     vertexT *vertex, **vertexp;
@@ -336,7 +349,7 @@ void interpolate_points_delaunay(qhT *qh, surface_data* data)
     {
         if (facet->upperdelaunay)
             continue;
-        int min_x=data->width, min_y=data->height, max_x=0, max_y=0;
+        int min_x=data.width, min_y=data.height, max_x=0, max_y=0;
         {
             int i = 0;
             FOREACHvertex_(facet->vertices)
@@ -348,7 +361,7 @@ void interpolate_points_delaunay(qhT *qh, surface_data* data)
                 }
                 vx[i] = (int)vertex->point[0];
                 vy[i] = (int)vertex->point[1];
-                vz[i] = data->depth[data->width*vy[i]+vx[i]];
+                vz[i] = data.depth[data.width*vy[i]+vx[i]];
                 if (!isfinite(vz[i]))
                     break;
                     
@@ -368,9 +381,9 @@ void interpolate_points_delaunay(qhT *qh, surface_data* data)
         {
             for (int x=min_x;x<=max_x;x++)
             {
-                if (x<0 || y<0 || x>=data->width || y>=data->height)
+                if (x<0 || y<0 || x>=data.width || y>=data.height)
                     continue;
-                float *depth = &data->depth[y*data->width+x];
+                float *depth = &data.depth[y*data.width+x];
                 if (isfinite(*depth))
                     continue;
                 // Linear barycentric interpolation, see https://en.wikipedia.org/wiki/Barycentric_coordinate_system#Edge_approach
@@ -386,27 +399,46 @@ void interpolate_points_delaunay(qhT *qh, surface_data* data)
     }
 }
 
-void interpolate_points_idw(surface_data* data)
+typedef struct {
+    int y;
+    int threads_completed;
+    float *output;
+    pthread_mutex_t lock;
+    pthread_t *threads;
+} output_surface_task_ctx;
+
+THREAD_FUNCTION interpolate_points_idw(void *args)
 {
+    output_surface_task *task = args;
+    output_surface_task_ctx *ctx = task->internal;
     const int idw_search_radius = cybervision_interpolation_idw_radius;
-    float *output = malloc(sizeof(float)*data->width*data->height);
-    // TODO: run in multiple threads
-    for(int y=0;y<data->height;y++)
+    surface_data data = task->surf;
+    
+    while (!task->completed)
     {
-        for(int x=0;x<data->width;x++)
+        int y;
+        if (pthread_mutex_lock(&ctx->lock) != 0)
+            goto cleanup;
+        task->percent_complete = 80.0F*(float)ctx->y/(float)data.width;
+        y = ctx->y++;
+        if (pthread_mutex_unlock(&ctx->lock) != 0)
+            break;
+        if (y>=data.height)
+            break;
+        for(int x=0;x<data.width;x++)
         {
-            output[y*data->width+x] = NAN;
+            ctx->output[y*data.width+x] = NAN;
             float sum_values = 0.0F;
             float divider = 0.0F;
             for(int j=-idw_search_radius;j<=idw_search_radius;j++)
             {
-                if (y+j<0 || y+j>=data->height)
+                if (y+j<0 || y+j>=data.height)
                     continue;
                 for(int i=-idw_search_radius;i<=idw_search_radius;i++)
                 {
-                    if (x+i<0 || x+i>=data->width)
+                    if (x+i<0 || x+i>=data.width)
                         continue;
-                    float depth = data->depth[(y+j)*data->width+(x+i)];
+                    float depth = data.depth[(y+j)*data.width+(x+i)];
                     if (!isfinite(depth))
                         continue;
                     float distance = powf(sqrtf(i*i+j*j), cybervision_interpolation_idw_power)+cybervision_interpolation_idw_offset;
@@ -415,16 +447,20 @@ void interpolate_points_idw(surface_data* data)
                 }
             }
             if (divider != 0.0F)
-                output[y*data->width+x] = sum_values/divider;
+                ctx->output[y*data.width+x] = sum_values/divider;
         }
     }
-    for (int i=0;i<data->width*data->height;i++)
-        if (isfinite(output[i]))
-            data->depth[i] = output[i];
-    free(output);
+
+cleanup:
+    pthread_mutex_lock(&ctx->lock);
+    ctx->threads_completed++;
+    pthread_mutex_unlock(&ctx->lock);
+    if (ctx->threads_completed >= task->num_threads)
+        task->completed = 1;
+    return THREAD_RETURN_VALUE;
 }
 
-int triangulation_interpolate_delaunay(surface_data* data)
+int triangulation_interpolate_delaunay(surface_data data)
 {
     coordT *points;
     qhT qh = {0};
@@ -443,42 +479,96 @@ int triangulation_interpolate_delaunay(surface_data* data)
     return result;
 }
 
-int surface_output(surface_data* surf, char* output_filename, interpolation_mode mode)
+int surface_output_start(output_surface_task *task)
 {
-    char* output_fileextension = file_extension(output_filename);
-    if (mode == INTERPOLATION_DELAUNAY)
+    char* output_fileextension = file_extension(task->output_filename);
+    task->internal = NULL;
+    task->completed = 1;
+
+    if (task->mode == INTERPOLATION_DELAUNAY)
     {
+        task->num_threads = 0;
         if (strcasecmp(output_fileextension, "obj") == 0 || strcasecmp(output_fileextension, "ply") == 0)
         {
-            return triangulation_triangulate_delaunay(surf, output_filename);
+            return triangulation_triangulate_delaunay(task);
         }
         else if (strcasecmp(output_fileextension, "png") == 0)
         {
-            return triangulation_interpolate_delaunay(surf) && save_surface_image(surf, output_filename);
+            return triangulation_interpolate_delaunay(task->surf) && save_surface_image(task->surf, task->output_filename);
         }
         else
         {
             return 0;
         }
     }
-    else if (mode == INTERPOLATION_NONE || mode == INTERPOLATION_IDW)
+    else if (task->mode == INTERPOLATION_IDW)
     {
-        if (mode == INTERPOLATION_IDW)
-        {
-            interpolate_points_idw(surf);
-        }
-        if (strcasecmp(output_fileextension, "obj") == 0 || strcasecmp(output_fileextension, "ply") == 0)
-        {
-            return triangulation_triangulate(surf, output_filename);
-        }
-        else if (strcasecmp(output_fileextension, "png") == 0)
-        {
-            return save_surface_image(surf, output_filename);
-        }
-        else
-        {
+        output_surface_task_ctx *ctx = malloc(sizeof(output_surface_task_ctx));
+        task->internal = ctx;
+        ctx->threads = malloc(sizeof(pthread_t)*task->num_threads);
+        task->completed = 0;
+        task->percent_complete = 0.0F;
+        ctx->output = malloc(sizeof(float)*task->surf.width*task->surf.height);
+        ctx->y = 0;
+        ctx->threads_completed = 0;
+
+        if (pthread_mutex_init(&ctx->lock, NULL) != 0)
             return 0;
-        }
+        for (int i = 0; i < task->num_threads; i++)
+            pthread_create(&ctx->threads[i], NULL, interpolate_points_idw, task);
+        return 1;
+    }
+    else if (task->mode == INTERPOLATION_NONE)
+    {
+        task->num_threads = 0;
+        return 1;
     }
     return 0;
+}
+
+int surface_output_complete(output_surface_task* task)
+{
+    output_surface_task_ctx *ctx;
+    if (task == NULL)
+        return 1;
+    ctx = task->internal;
+    task->internal = NULL;
+    if (ctx != NULL)
+    {
+        for (int i = 0; i < task->num_threads; i++)
+            pthread_join(ctx->threads[i], NULL);
+
+        if (task->mode == INTERPOLATION_IDW)
+        {
+            for (int i=0;i<task->surf.width*task->surf.height;i++)
+                if (isfinite(ctx->output[i]))
+                    task->surf.depth[i] = ctx->output[i];
+        }
+
+        if (ctx->output != NULL)
+            free(ctx->output);
+        
+        pthread_mutex_destroy(&ctx->lock);
+        free(ctx->threads);
+        free(ctx);
+    }
+    
+    if (task->mode == INTERPOLATION_NONE || task->mode == INTERPOLATION_IDW)
+    {
+        char* output_fileextension = file_extension(task->output_filename);
+        if (strcasecmp(output_fileextension, "obj") == 0 || strcasecmp(output_fileextension, "ply") == 0)
+        {
+            return triangulation_triangulate(task->surf, task->output_filename);
+        }
+        else if (strcasecmp(output_fileextension, "png") == 0)
+        {
+            return save_surface_image(task->surf, task->output_filename);
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    return 1;
 }

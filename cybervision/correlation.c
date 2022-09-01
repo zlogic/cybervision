@@ -779,7 +779,7 @@ int cpu_correlation_cross_correlate_complete(cross_correlate_task *t)
             }
         }
     }
-            
+
     pthread_mutex_destroy(&ctx->lock);
     free(ctx->threads);
     free(ctx->out_points);
