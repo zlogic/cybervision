@@ -288,7 +288,7 @@ static inline png_byte map_color(float value, const png_byte *colormap, size_t c
     return (png_byte)color;
 }
 
-int save_surface(surface_data *surface, char *filename)
+int save_surface_image(surface_data *surface, char *filename)
 {
     FILE *pngFile;
     png_structp png_ptr;

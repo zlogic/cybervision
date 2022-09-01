@@ -11,7 +11,7 @@
 #include "image.h"
 #include "configuration.h"
 
-coordT* convert_points(surface_data* data, int *num_points)
+coordT* convert_points_qhull(surface_data* data, int *num_points)
 {
     coordT *points;
     coordT *current_point = NULL;
@@ -57,7 +57,7 @@ void output_point_ply(int x, int y, float z, FILE* output_file)
 }
 
 typedef void (*output_point_fn)(int x, int y, float z, FILE* output_file);
-int output_points(qhT *qh, surface_data* data, FILE* output_file, output_point_fn output_fn)
+int output_points_qhull(qhT *qh, surface_data* data, FILE* output_file, output_point_fn output_fn)
 {
     coordT *point, *pointtemp;
     FORALLpoints
@@ -93,7 +93,7 @@ void output_simplex_ply(int p1, int p2, int p3, FILE* output_file)
 }
 
 typedef void (*output_simplex_fn)(int p1, int p2, int p3, FILE* output_file);
-void output_simplices(qhT *qh, surface_data* data, FILE *output_file, output_simplex_fn output_fn)
+void output_simplices_qhull(qhT *qh, surface_data* data, FILE *output_file, output_simplex_fn output_fn)
 {
     facetT *facet;
     vertexT *vertex, **vertexp;
@@ -130,71 +130,200 @@ void output_simplices(qhT *qh, surface_data* data, FILE *output_file, output_sim
     // TODO: also generate normals? (avg of all edges)
 }
 
-void output_header_ply(qhT *qh, surface_data* data, FILE *output_file)
+void output_header_ply(int num_points, int num_simplices, FILE *output_file)
 {
-    facetT *facet;
-    int num_facets = 0;
     char *endianess;
     unsigned int x = 1;
     if (*((char*)&x) == 1)
         endianess = "little";
     else
         endianess = "big";
-    FORALLfacets
-    {
-        if (!facet->upperdelaunay)
-            num_facets++;
-    }
     fprintf(output_file, "ply\nformat binary_%s_endian 1.0\n", endianess);
     fprintf(output_file, "comment Cybervision 3D surface\n");
-    fprintf(output_file, "element vertex %i\n", qh->num_points);
+    fprintf(output_file, "element vertex %i\n", num_points);
     fprintf(output_file, "property float x\nproperty float y\nproperty float z\n");
-    fprintf(output_file, "element face %i\n", num_facets);
+    fprintf(output_file, "element face %i\n", num_simplices);
     fprintf(output_file, "property list uchar int vertex_indices\n");
     fprintf(output_file, "end_header\n");
 }
 
-
-int triangulation_triangulate(surface_data* data, char* output_filename)
+int triangulation_triangulate_delaunay(surface_data* data, char* output_filename)
 {
     coordT *points;
-    qhT qh = {0};
+    qhT *qh = malloc(sizeof(qhT));
     int result = 0;
     int num_points = 0;
     int curlong, totlong;
     char* output_fileextension = file_extension(output_filename);
 
-    points = convert_points(data, &num_points);
-    
-    result = qh_new_qhull(&qh, 2, num_points, points, True, "qhull d Qt Qbb Qc Qz Q12", NULL, NULL) == 0;
+    points = convert_points_qhull(data, &num_points);
+    memset(qh, 0, sizeof(qhT));
+
+    result = qh_new_qhull(qh, 2, num_points, points, True, "qhull d Qt Qbb Qc Qz Q12", NULL, NULL) == 0;
     if (strcasecmp(output_fileextension, "obj") == 0)
     {
         FILE *output_file = fopen(output_filename, "w");
-        result = result && output_points(&qh, data, output_file, output_point_obj);
+        result = result && output_points_qhull(qh, data, output_file, output_point_obj);
         if (result)
-            output_simplices(&qh, data, output_file, output_simplex_obj);
+            output_simplices_qhull(qh, data, output_file, output_simplex_obj);
         fclose(output_file);
     }
     else if (strcasecmp(output_fileextension, "ply") == 0)
     {
+        facetT *facet;
+        int num_facets = 0;
         FILE *output_file = fopen(output_filename, "wb");
-        output_header_ply(&qh, data, output_file);
-        result = result && output_points(&qh, data, output_file, output_point_ply);
+        FORALLfacets
+        {
+            if (!facet->upperdelaunay)
+                num_facets++;
+        }
+        output_header_ply(num_points, num_facets, output_file);
+        result = result && output_points_qhull(qh, data, output_file, output_point_ply);
         if (result)
-            output_simplices(&qh, data, output_file, output_simplex_ply);
+            output_simplices_qhull(qh, data, output_file, output_simplex_ply);
         fclose(output_file);
     }
     else
     {
-        return 0;
+        result = 0;
     }
 
-    qh_freeqhull(&qh, qh_ALL);
-    qh_memfreeshort(&qh, &curlong, &totlong);
+    qh_freeqhull(qh, qh_ALL);
+    qh_memfreeshort(qh, &curlong, &totlong);
+    free(qh);
     return result;
 }
 
-void interpolate_points(qhT *qh, surface_data* data)
+static inline int has_forward_neighbor(surface_data* data, int x, int y)
+{
+    return (x<data->width-1 && y<data->height-1) && isfinite(data->depth[(y+1)*data->width+x]) && isfinite(data->depth[y*data->width+(x+1)]);
+}
+
+static inline int has_back_neighbor(surface_data* data, int x, int y)
+{
+    return (x>1 && y>1) && isfinite(data->depth[(y-1)*data->width+x]) && isfinite(data->depth[y*data->width+(x-1)]);
+}
+
+static inline void add_point_to_index(int *indices, int* point_count)
+{
+    if (*indices<0)
+        *indices = (*point_count)++;
+}
+
+int triangulation_triangulate(surface_data* data, char* output_filename)
+{
+    int *indices = malloc(sizeof(int)*data->width*data->height);
+    int point_count = 0;
+    int simplex_count = 0;
+    int result = 0;
+    FILE *output_file = NULL;
+    char* output_fileextension = file_extension(output_filename);
+    output_point_fn output_point;
+    output_simplex_fn output_simplex;
+
+    for(int i=0;i<data->width*data->height;i++)
+        indices[i] = -1;
+    
+    for(int y=0;y<data->height;y++)
+    {
+        for(int x=0;x<data->width;x++)
+        {
+            if (!isfinite(data->depth[y*data->width+x]))
+            {
+                continue;
+            }
+            if (has_forward_neighbor(data, x, y))
+            {
+                add_point_to_index(&indices[y*data->width+x], &point_count);
+                add_point_to_index(&indices[y*data->width+(x+1)], &point_count);
+                add_point_to_index(&indices[(y+1)*data->width+x], &point_count);
+                simplex_count++;
+            }
+            if (has_back_neighbor(data, x, y))
+            {
+                add_point_to_index(&indices[(y-1)*data->width+x], &point_count);
+                add_point_to_index(&indices[y*data->width+(x-1)], &point_count);
+                add_point_to_index(&indices[y*data->width+x], &point_count);
+                simplex_count++;
+            }
+        }
+    }
+
+    if (strcasecmp(output_fileextension, "obj") == 0)
+    {
+        output_file = fopen(output_filename, "w");
+        output_point = output_point_obj;
+        output_simplex = output_simplex_obj;
+    }
+    else if (strcasecmp(output_fileextension, "ply") == 0)
+    {
+        output_file = fopen(output_filename, "wb");
+        output_header_ply(point_count, simplex_count, output_file);
+        output_point = output_point_ply;
+        output_simplex = output_simplex_ply;
+    }
+    else
+    {
+        result = 0;
+        goto cleanup;
+    }
+
+    typedef struct 
+    {
+        int x, y;
+    } point;
+    point *points = malloc(sizeof(point)*point_count);
+    for(int y=0;y<data->height;y++)
+    {
+        for(int x=0;x<data->width;x++)
+        {
+            int pos = indices[y*data->width+x];
+            if (pos<0)
+            {
+                continue;
+            }
+            points[pos].x = x;
+            points[pos].y = y;
+        }
+    }
+    for(int i=0;i<point_count;i++)
+    {
+        int x = points[i].x;
+        int y = points[i].y;
+        float z = data->depth[y*data->width+x];
+        output_point(x, data->height-y, z, output_file);
+    }
+    free(points);
+
+    for(int y=0;y<data->height;y++)
+    {
+        for(int x=0;x<data->width;x++)
+        {
+            if (indices[y*data->width+x]<0)
+            {
+                continue;
+            }
+            if (has_forward_neighbor(data, x, y))
+            {
+                output_simplex(indices[y*data->width+x], indices[(y+1)*data->width+x], indices[y*data->width+(x+1)], output_file);
+            }
+            if (has_back_neighbor(data, x, y))
+            {
+                output_simplex(indices[y*data->width+x], indices[(y-1)*data->width+x], indices[y*data->width+(x-1)], output_file);
+            }
+        }
+    }
+
+    fclose(output_file);
+    result = 1;
+
+cleanup:
+    free(indices);
+    return result;
+}
+
+void interpolate_points_delaunay(qhT *qh, surface_data* data)
 {
     facetT *facet;
     vertexT *vertex, **vertexp;
@@ -265,11 +394,11 @@ int triangulation_interpolate_delaunay(surface_data* data)
     int num_points = 0;
     int curlong, totlong;
 
-    points = convert_points(data, &num_points);
+    points = convert_points_qhull(data, &num_points);
     
     result = qh_new_qhull(&qh, 2, num_points, points, True, "qhull d Qt Qbb Qc Qz Q12", NULL, NULL) == 0;
     if (result)
-        interpolate_points(&qh, data);
+        interpolate_points_delaunay(&qh, data);
 
     qh_freeqhull(&qh, qh_ALL);
     qh_memfreeshort(&qh, &curlong, &totlong);
@@ -283,11 +412,11 @@ int surface_output(surface_data* surf, char* output_filename, interpolation_mode
     {
         if (strcasecmp(output_fileextension, "obj") == 0 || strcasecmp(output_fileextension, "ply") == 0)
         {
-            return triangulation_triangulate(surf, output_filename);
+            return triangulation_triangulate_delaunay(surf, output_filename);
         }
         else if (strcasecmp(output_fileextension, "png") == 0)
         {
-            return triangulation_interpolate_delaunay(surf) && save_surface(surf, output_filename);
+            return triangulation_interpolate_delaunay(surf) && save_surface_image(surf, output_filename);
         }
         else
         {
@@ -296,9 +425,13 @@ int surface_output(surface_data* surf, char* output_filename, interpolation_mode
     }
     else if (mode == INTERPOLATION_NONE)
     {
-        if (strcasecmp(output_fileextension, "png") == 0)
+        if (strcasecmp(output_fileextension, "obj") == 0 || strcasecmp(output_fileextension, "ply") == 0)
         {
-            return save_surface(surf, output_filename);
+            return triangulation_triangulate(surf, output_filename);
+        }
+        else if (strcasecmp(output_fileextension, "png") == 0)
+        {
+            return save_surface_image(surf, output_filename);
         }
         else
         {
