@@ -103,7 +103,7 @@ int gpu_init_functions(metal_device *dev)
 
     dispatch_data_t dispatch_library = dispatch_data_create(correlation_metallib, correlation_metallib_len, NULL, DISPATCH_DATA_DESTRUCTOR_FREE);
     id error = NULL;
-    dev->library = ((id (*)(id, SEL, id, id*))objc_msgSend)(dev->device, sel_registerName("newLibraryWithData:error:"), dispatch_library, &error);
+    dev->library = ((id (*)(id, SEL, dispatch_data_t, id*))objc_msgSend)(dev->device, sel_registerName("newLibraryWithData:error:"), dispatch_library, &error);
     dispatch_release(dispatch_library);
     if (error != NULL)
         return 0;
