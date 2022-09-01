@@ -19,7 +19,7 @@ Download a release distribution from [releases](/zlogic/cybervision/releases).
 Run cybervision:
 
 ```shell
-cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] <img1> <img2> <output>
+cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] [--projection=<parallel|perspective>] <img1> <img2> <output>
 ```
 
 `--scale=<scale>` is an optional argument to specify a depth scale, for example `--scale=-10.0`.
@@ -28,6 +28,9 @@ cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay
 
 `--interpolation=<none|delaunay>` is an optional argument to specify a depth scale, for example `--mode=cpu` or `--mode=gpu`. 
 `none` means that interpolation is disabled, `delaunay` uses [Delaunay triangulation](https://en.wikipedia.org/wiki/Delaunay_triangulation).
+
+`--projection=<parallel|perspective>` is an optional argument to specify a projection mode, for example `--projection=parallel` or `--projection=perspective`. 
+`parallel` projection should be used for images from a scanning electron microscope, `perspective` should be used for regular photos.
 
 `<img1>` and `<img2>` are input filenames for image 1 and 2; supported formats are `jpg`, `tif` and `png`.
 

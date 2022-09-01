@@ -400,7 +400,7 @@ int main(int argc, char *argv[])
     interpolation_mode interp_mode = INTERPOLATION_DELAUNAY;
     if (argc < 4)
     {
-        fprintf(stderr, "Unsupported arguments %i, please run: cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] <image1> <image2> <output>\n", argc);
+        fprintf(stderr, "Unsupported arguments %i, please run: cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] [--projection=<parallel|perspective>] <image1> <image2> <output>\n", argc);
         return 1;
     }
     for (int i=1; i<argc-3; i++)
@@ -446,6 +446,22 @@ int main(int argc, char *argv[])
                 return 1;
             }
             printf("Using %s interpolation mode from commandline\n", mode_param);
+        }
+        else if (strncmp("--projection=", argv[i], 13) == 0)
+        {
+            char* projection_param = arg+13;
+            if (strcmp(projection_param, "parallel")==0)
+            {
+            }
+            else if (strcmp(projection_param, "perspective")==0)
+            {
+            }
+            else
+            {
+                fprintf(stderr, "Unsupported projection mode %s, please use --projection=parallel or --projection=perspective\n", projection_param);
+                return 1;
+            }
+            printf("Using %s projection mode from commandline\n", projection_param);
         }
         else
         {

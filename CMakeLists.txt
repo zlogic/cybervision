@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(cybervision VERSION 0.8)
+project(cybervision VERSION 0.9)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
