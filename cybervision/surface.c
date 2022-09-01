@@ -43,7 +43,21 @@ coordT* convert_points(surface_data* data, int *num_points)
     return points;
 }
 
-int output_points_obj(qhT *qh, surface_data* data, FILE *output_file)
+void output_point_obj(int x, int y, float z, FILE* output_file)
+{
+    fprintf(output_file, "v %i %i %f\n", x, y, z);
+}
+
+void output_point_ply(int x, int y, float z, FILE* output_file)
+{
+    float x_out = x, y_out = y;
+    fwrite(&x_out, sizeof(x), 1, output_file);
+    fwrite(&y_out, sizeof(y), 1, output_file);
+    fwrite(&z, sizeof(z), 1, output_file);
+}
+
+typedef void (*output_point_fn)(int x, int y, float z, FILE* output_file);
+int output_points(qhT *qh, surface_data* data, FILE* output_file, output_point_fn output_fn)
 {
     coordT *point, *pointtemp;
     FORALLpoints
@@ -58,26 +72,45 @@ int output_points_obj(qhT *qh, surface_data* data, FILE *output_file)
         if (!isfinite(z))
             return 0;
         
-        fprintf(output_file, "v %i %i %f\n", x, data->height-y, z);
+        output_fn(x, data->height-y, z, output_file);
     }
     return 1;
 }
 
-void output_simplices_obj(qhT *qh, surface_data* data, FILE *output_file)
+void output_simplex_obj(int p1, int p2, int p3, FILE* output_file)
+{
+    fprintf(output_file, "f %i %i %i\n", p1+1, p2+1, p3+1);
+}
+
+void output_simplex_ply(int p1, int p2, int p3, FILE* output_file)
+{
+    const unsigned char point_count = 3;
+    int32_t p1_out = p1, p2_out = p2, p3_out = p3;
+    fwrite(&point_count, sizeof(point_count), 1, output_file);
+    fwrite(&p1_out, sizeof(p1_out), 1, output_file);
+    fwrite(&p2_out, sizeof(p2_out), 1, output_file);
+    fwrite(&p3_out, sizeof(p3_out), 1, output_file);
+}
+
+typedef void (*output_simplex_fn)(int p1, int p2, int p3, FILE* output_file);
+void output_simplices(qhT *qh, surface_data* data, FILE *output_file, output_simplex_fn output_fn)
 {
     facetT *facet;
     vertexT *vertex, **vertexp;
+    int points[3];
+    // TODO: throw error if point count is out of range
     FORALLfacets
     {
+        unsigned char i = 0;
         if (facet->upperdelaunay)
             continue;
-        fprintf(output_file, "f");
         if ((facet->toporient ^ qh_ORIENTclock))
         {
             FOREACHvertexreverse12_(facet->vertices)
             {
                 int point_index = qh_pointid(qh, vertex->point);
-                fprintf(output_file, " %i", point_index+1);
+                if (i>=3) break;
+                points[i++] = point_index;
             }
         }
         else
@@ -85,10 +118,14 @@ void output_simplices_obj(qhT *qh, surface_data* data, FILE *output_file)
             FOREACHvertex_(facet->vertices)
             {
                 int point_index = qh_pointid(qh, vertex->point);
-                fprintf(output_file, " %i", point_index+1);
+                if (i>=3) break;
+                points[i++] = point_index;
             }
         }
-        fprintf(output_file, "\n");
+        if (i==3)
+        {
+            output_fn(points[0], points[1], points[2], output_file);
+        }
     }
     // TODO: also generate normals? (avg of all edges)
 }
@@ -117,56 +154,6 @@ void output_header_ply(qhT *qh, surface_data* data, FILE *output_file)
     fprintf(output_file, "end_header\n");
 }
 
-int output_points_ply(qhT *qh, surface_data* data, FILE *output_file)
-{
-    coordT *point, *pointtemp;
-    FORALLpoints
-    {
-        int x = (int)point[0], y = (int)point[1];
-        float x_out = x, y_out = data->height-y, z;
-        if(qh_pointid(qh, point) == qh->num_points-1)
-            break;
-        if (x<0 || x>=data->width || y<0 || y>=data->height)
-            return 0;
-        z = data->depth[y*data->width+x];
-        if (!isfinite(z))
-            return 0;
-        fwrite(&x_out, sizeof(x_out), 1, output_file);
-        fwrite(&y_out, sizeof(y_out), 1, output_file);
-        fwrite(&z, sizeof(z), 1, output_file);
-    }
-    return 1;
-}
-
-void output_simplices_ply(qhT *qh, surface_data* data, FILE *output_file)
-{
-    facetT *facet;
-    vertexT *vertex, **vertexp;
-    const unsigned char point_count = 3;
-    FORALLfacets
-    {
-        if (facet->upperdelaunay)
-            continue;
-        fwrite(&point_count, sizeof(point_count), 1, output_file);
-        if ((facet->toporient ^ qh_ORIENTclock))
-        {
-            FOREACHvertexreverse12_(facet->vertices)
-            {
-                int32_t point_index = qh_pointid(qh, vertex->point);
-                fwrite(&point_index, sizeof(point_index), 1, output_file);
-            }
-        }
-        else
-        {
-            FOREACHvertex_(facet->vertices)
-            {
-                int32_t point_index = qh_pointid(qh, vertex->point);
-                fwrite(&point_index, sizeof(point_index), 1, output_file);
-            }
-        }
-    }
-    // TODO: also generate normals? (avg of all edges)
-}
 
 int triangulation_triangulate(surface_data* data, char* output_filename)
 {
@@ -183,18 +170,18 @@ int triangulation_triangulate(surface_data* data, char* output_filename)
     if (strcasecmp(output_fileextension, "obj") == 0)
     {
         FILE *output_file = fopen(output_filename, "w");
-        result = result && output_points_obj(&qh, data, output_file);
+        result = result && output_points(&qh, data, output_file, output_point_obj);
         if (result)
-            output_simplices_obj(&qh, data, output_file);
+            output_simplices(&qh, data, output_file, output_simplex_obj);
         fclose(output_file);
     }
     else if (strcasecmp(output_fileextension, "ply") == 0)
     {
         FILE *output_file = fopen(output_filename, "wb");
         output_header_ply(&qh, data, output_file);
-        result = result && output_points_ply(&qh, data, output_file);
+        result = result && output_points(&qh, data, output_file, output_point_ply);
         if (result)
-            output_simplices_ply(&qh, data, output_file);
+            output_simplices(&qh, data, output_file, output_simplex_ply);
         fclose(output_file);
     }
     else
@@ -270,7 +257,7 @@ void interpolate_points(qhT *qh, surface_data* data)
     }
 }
 
-int triangulation_interpolate(surface_data* data)
+int triangulation_interpolate_delaunay(surface_data* data)
 {
     coordT *points;
     qhT qh = {0};
@@ -300,7 +287,7 @@ int surface_output(surface_data* surf, char* output_filename, interpolation_mode
         }
         else if (strcasecmp(output_fileextension, "png") == 0)
         {
-            return triangulation_interpolate(surf) && save_surface(surf, output_filename);
+            return triangulation_interpolate_delaunay(surf) && save_surface(surf, output_filename);
         }
         else
         {
