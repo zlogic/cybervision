@@ -386,6 +386,44 @@ void interpolate_points_delaunay(qhT *qh, surface_data* data)
     }
 }
 
+void interpolate_points_idw(surface_data* data)
+{
+    const int idw_search_radius = cybervision_interpolation_idw_radius;
+    float *output = malloc(sizeof(float)*data->width*data->height);
+    // TODO: run in multiple threads
+    for(int y=0;y<data->height;y++)
+    {
+        for(int x=0;x<data->width;x++)
+        {
+            output[y*data->width+x] = NAN;
+            float sum_values = 0.0F;
+            float divider = 0.0F;
+            for(int j=-idw_search_radius;j<=idw_search_radius;j++)
+            {
+                if (y+j<0 || y+j>=data->height)
+                    continue;
+                for(int i=-idw_search_radius;i<=idw_search_radius;i++)
+                {
+                    if (x+i<0 || x+i>=data->width)
+                        continue;
+                    float depth = data->depth[(y+j)*data->width+(x+i)];
+                    if (!isfinite(depth))
+                        continue;
+                    float distance = powf(sqrtf(i*i+j*j), cybervision_interpolation_idw_power)+cybervision_interpolation_idw_offset;
+                    sum_values += depth/distance;
+                    divider += 1.0F/distance;
+                }
+            }
+            if (divider != 0.0F)
+                output[y*data->width+x] = sum_values/divider;
+        }
+    }
+    for (int i=0;i<data->width*data->height;i++)
+        if (isfinite(output[i]))
+            data->depth[i] = output[i];
+    free(output);
+}
+
 int triangulation_interpolate_delaunay(surface_data* data)
 {
     coordT *points;
@@ -423,8 +461,12 @@ int surface_output(surface_data* surf, char* output_filename, interpolation_mode
             return 0;
         }
     }
-    else if (mode == INTERPOLATION_NONE)
+    else if (mode == INTERPOLATION_NONE || mode == INTERPOLATION_IDW)
     {
+        if (mode == INTERPOLATION_IDW)
+        {
+            interpolate_points_idw(surf);
+        }
         if (strcasecmp(output_fileextension, "obj") == 0 || strcasecmp(output_fileextension, "ply") == 0)
         {
             return triangulation_triangulate(surf, output_filename);

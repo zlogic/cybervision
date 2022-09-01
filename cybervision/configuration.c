@@ -39,3 +39,6 @@ const correlation_mode cybervision_crosscorrelation_default_mode = CORRELATION_M
 #endif
 
 const float cybervision_interpolation_epsilon = 1E-5;
+const int cybervision_interpolation_idw_radius = 32;
+const float cybervision_interpolation_idw_power = 2.0F;
+const float cybervision_interpolation_idw_offset = 2.0F;
