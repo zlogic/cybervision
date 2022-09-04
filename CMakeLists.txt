@@ -18,20 +18,19 @@ set(CYBERVISION_SOURCES
     cybervision/main.c
 )
 
+add_executable(cybervision ${CYBERVISION_SOURCES})
+
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
 if(CMAKE_USE_PTHREADS_INIT)
-    set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
     set(THREADS_PREFER_PTHREAD_FLAG TRUE)
     set(CMAKE_C_FLAGS ${CMAKE_C_FLAGS} "-pthread")
 elseif(CMAKE_USE_WIN32_THREADS_INIT)
-    file(GLOB CYBERVISION_SOURCES_WIN32 "cybervision/win32/*.c")
-    list(APPEND CYBERVISION_SOURCES ${CYBERVISION_SOURCES_WIN32})
+    find_package(PThreads4W REQUIRED)
+    target_link_libraries(cybervision PRIVATE PThreads4W::PThreads4W)
 else()
     message(FATAL_ERROR "Unsupported threads library ${CMAKE_THREAD_LIBS_INIT}")
 endif()
-
-add_executable(cybervision ${CYBERVISION_SOURCES})
 
 find_package(Qhull CONFIG REQUIRED)
 find_package(JPEG REQUIRED)

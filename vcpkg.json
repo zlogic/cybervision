@@ -1,11 +1,12 @@
 {
     "name": "cybervision",
-    "version-string": "0.6.0",
+    "version-string": "0.8.0",
     "dependencies": [
         {"name": "libjpeg-turbo", "default-features": false},
         {"name": "tiff", "default-features": false},
         {"name": "libpng", "default-features": false},
         {"name": "qhull", "default-features": false},
-        {"name": "fastfeat", "default-features": false}
+        {"name": "fastfeat", "default-features": false},
+        {"name": "pthreads", "default-features": false, "platform": "windows"}
     ]
 }

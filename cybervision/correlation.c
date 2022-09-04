@@ -1,19 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-
-#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
-# include <pthread.h>
-# define THREAD_FUNCTION void*
-# define THREAD_RETURN_VALUE NULL
-#elif defined(_WIN32)
-# include "win32/pthread.h"
-# define THREAD_FUNCTION DWORD WINAPI
-# define THREAD_RETURN_VALUE 1
-# include "win32/rand.h"
-#else
-# error "pthread is required"
-#endif
+#include <pthread.h>
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -106,7 +94,7 @@ typedef struct {
     pthread_t *threads;
 } match_task_ctx;
 
-THREAD_FUNCTION correlate_points_task(void *args)
+void* correlate_points_task(void *args)
 {
     match_task *t = args;
     match_task_ctx *ctx = t->internal;
@@ -183,7 +171,7 @@ cleanup:
     pthread_mutex_unlock(&ctx->lock);
     if (ctx->threads_completed >= t->num_threads)
         t->completed = 1;
-    return THREAD_RETURN_VALUE;
+    return NULL;
 }
 
 int correlation_match_points_start(match_task *task)
@@ -275,7 +263,7 @@ static inline void ransac_calculate_model(ransac_task *t, size_t *selected_match
     *dir_y = sum_dy/(float)(selected_matches_count);
 }
 
-THREAD_FUNCTION correlate_ransac_task(void *args)
+void* correlate_ransac_task(void *args)
 {
     ransac_task *t = args;
     ransac_task_ctx *ctx = t->internal;
@@ -398,7 +386,7 @@ cleanup:
     pthread_mutex_unlock(&ctx->lock);
     if (ctx->threads_completed >= t->num_threads)
         t->completed = 1;
-    return THREAD_RETURN_VALUE;
+    return NULL;
 }
 
 int correlation_ransac_start(ransac_task *task)
@@ -599,7 +587,7 @@ typedef struct {
     pthread_t *threads;
 } cross_correlation_task_ctx;
 
-THREAD_FUNCTION cross_correlation_task(void *args)
+void* cross_correlation_task(void *args)
 {
     cross_correlate_task *t = args;
     cross_correlation_task_ctx *ctx = t->internal;
@@ -716,7 +704,7 @@ cleanup:
     pthread_mutex_unlock(&ctx->lock);
     if (ctx->threads_completed >= t->num_threads)
         t->completed = 1;
-    return THREAD_RETURN_VALUE;
+    return NULL;
 }
 
 int cpu_correlation_cross_correlate_start(cross_correlate_task* task)

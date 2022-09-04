@@ -8,4 +8,8 @@ void sleep_ms();
 #define strcasecmp _stricmp
 #endif
 
+#ifdef WIN32
+int rand_r(unsigned int *seedp);
+#endif
+
 #endif

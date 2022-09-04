@@ -52,3 +52,10 @@ void sleep_ms(int milliseconds)
     usleep((milliseconds % 1000) * 1000);
 #endif
 }
+
+#ifdef WIN32
+int rand_r(unsigned int *seedp)
+{
+    return (int)rand();
+}
+#endif

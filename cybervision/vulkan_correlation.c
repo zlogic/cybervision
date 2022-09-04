@@ -2,18 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
-
-#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
-# include <pthread.h>
-# define THREAD_FUNCTION void*
-# define THREAD_RETURN_VALUE NULL
-#elif defined(_WIN32)
-# include "win32/pthread.h"
-#define THREAD_FUNCTION DWORD WINAPI
-# define THREAD_RETURN_VALUE 1
-#else
-# error "pthread is required"
-#endif
+#include <pthread.h>
 
 #include "configuration.h"
 #include "gpu_correlation.h"
@@ -525,7 +514,7 @@ int gpu_transfer_out_image(cross_correlate_task *t, vulkan_device *dev)
     return 1;
 }
 
-THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
+void* gpu_correlate_cross_correlation_task(void *args)
 {
     cross_correlate_task *t = args;
     vulkan_context *ctx = t->internal;
@@ -547,12 +536,12 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
     if (!gpu_transfer_in_params(t, &ctx->dev, 0, 0, 0, 1))
     {
         t->error = "Failed to transfer input parameters (initialization stage)";
-        return THREAD_RETURN_VALUE;
+        return NULL;
     }
     if (!gpu_run_command_buffer(&ctx->dev, max_width, max_height))
     {
         t->error = "Failed to run command buffer (initialization stage)";
-        return THREAD_RETURN_VALUE;
+        return NULL;
     }
 
     if (t->iteration > 0)
@@ -564,12 +553,12 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
             if (!gpu_transfer_in_params(t, &ctx->dev, 0, y, y+batch_size, 2))
             {
                 t->error = "Failed to transfer input parameters (search area estimation stage)";
-                return THREAD_RETURN_VALUE;
+                return NULL;
             }
             if (!gpu_run_command_buffer(&ctx->dev, t->img1.width, t->img1.height))
             {
                 t->error = "Failed to run command buffer (search area estimation stage)";
-                return THREAD_RETURN_VALUE;
+                return NULL;
             }
         }
     }
@@ -603,7 +592,7 @@ THREAD_FUNCTION gpu_correlate_cross_correlation_task(void *args)
     if (!gpu_transfer_out_image(t, &ctx->dev))
         t->error = "Failed to read output image";
     t->completed = 1;
-    return THREAD_RETURN_VALUE;
+    return NULL;
 }
 
 int gpu_correlation_cross_correlate_init(cross_correlate_task *t, size_t img1_pixels, size_t img2_pixels)
