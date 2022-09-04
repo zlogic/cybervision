@@ -10,6 +10,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 set(CYBERVISION_SOURCES
     cybervision/correlation.c
+    cybervision/linmath.c
     cybervision/fast_detector.c
     cybervision/configuration.c
     cybervision/system.c
@@ -36,6 +37,7 @@ find_package(Qhull CONFIG REQUIRED)
 find_package(JPEG REQUIRED)
 find_package(TIFF REQUIRED)
 find_package(PNG REQUIRED)
+find_package(LAPACK CONFIG REQUIRED)
 find_library(FASTFEAT_LIBRARY fastfeat)
 
 target_link_libraries(cybervision PRIVATE Qhull::qhull_r)
@@ -43,6 +45,7 @@ target_include_directories(cybervision PRIVATE ${JPEG_INCLUDE_DIR})
 target_link_libraries(cybervision PRIVATE JPEG::JPEG)
 target_link_libraries(cybervision PRIVATE TIFF::TIFF)
 target_link_libraries(cybervision PRIVATE PNG::PNG)
+target_link_libraries(cybervision PRIVATE ${CLAPACK_LIBRARIES})
 target_link_libraries(cybervision PRIVATE ${FASTFEAT_LIBRARY})
 
 if(NOT MSVC)

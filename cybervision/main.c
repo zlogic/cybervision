@@ -74,7 +74,7 @@ int optimal_scale_steps(correlation_image *img)
     return scale-1;
 }
 
-int do_reconstruction(char *img1_filename, char *img2_filename, char *output_filename, float depth_scale, correlation_mode corr_mode, interpolation_mode interp_mode)
+int do_reconstruction(char *img1_filename, char *img2_filename, char *output_filename, float depth_scale, projection_mode proj_mode, correlation_mode corr_mode, interpolation_mode interp_mode)
 {
     // TODO: print error messages from failed threads
     int result_code = 0;
@@ -189,6 +189,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
 
     {
         r_task.num_threads = num_threads;
+        r_task.fundamental_matrix = malloc(sizeof(float)*9);
         r_task.matches = malloc(sizeof(ransac_match)*m_task.matches_count);
         r_task.matches_count = 0;
         for (size_t i=0;i<m_task.matches_count;i++)
@@ -379,6 +380,8 @@ cleanup:
         free(m_task.img2.img);
     if (r_task.matches != NULL)
         free(r_task.matches);
+    if(r_task.fundamental_matrix != NULL)
+        free(r_task.fundamental_matrix);
     if (points1 != NULL)
         free(points1);
     if (points2 != NULL)
@@ -396,6 +399,7 @@ int main(int argc, char *argv[])
 {
     char *image1_filename, *image2_filename, *output_filename;
     float scale = -1.0F;
+    projection_mode proj_mode = PROJECTION_MODE_PARALLEL;
     correlation_mode corr_mode = cybervision_crosscorrelation_default_mode;
     interpolation_mode interp_mode = INTERPOLATION_DELAUNAY;
     if (argc < 4)
@@ -452,9 +456,11 @@ int main(int argc, char *argv[])
             char* projection_param = arg+13;
             if (strcmp(projection_param, "parallel")==0)
             {
+                proj_mode = PROJECTION_MODE_PARALLEL;
             }
             else if (strcmp(projection_param, "perspective")==0)
             {
+                proj_mode = PROJECTION_MODE_PERSPECTIVE;
             }
             else
             {
@@ -472,5 +478,5 @@ int main(int argc, char *argv[])
     image1_filename = argv[argc-3];
     image2_filename = argv[argc-2];
     output_filename = argv[argc-1];
-    return do_reconstruction(image1_filename, image2_filename, output_filename, scale, corr_mode, interp_mode);
+    return do_reconstruction(image1_filename, image2_filename, output_filename, scale, proj_mode, corr_mode, interp_mode);
 }

@@ -8,6 +8,7 @@
 
 #include "correlation.h"
 #include "configuration.h"
+#include "linmath.h"
 
 #define MATCH_RESULT_GROW_SIZE 1000
 
@@ -238,29 +239,113 @@ int correlation_match_points_complete(match_task *t)
 typedef struct {
     size_t iteration;
 
-    float best_error;
-
     int threads_completed;
     pthread_mutex_t lock;
     pthread_t *threads;
 } ransac_task_ctx;
 
-static inline void ransac_calculate_model(ransac_task *t, size_t *selected_matches, size_t selected_matches_count, float* dir_x, float *dir_y)
+static inline float ransac_calculate_error(ransac_task *t, size_t selected_match, float* f)
 {
-    // TODO: use least squares fitting?
-    float sum_dx = 0.0F, sum_dy = 0.0F;
+    // Calculate Sampson distance
+    ransac_match *match = &t->matches[selected_match];
+    float p1[3] = {match->x1, match->y1, 1.0F};
+    float p2[3] = {match->x2, match->y2, 1.0F};
+    float nominator = 0.0F;
+    float p2tFp1[3];
+    multiplyf(p2, f, p2tFp1, 1, 3, 3, 0, 0);
+    multiplyf(p2tFp1, p1, &nominator, 1, 1, 3, 0, 0);
+    float Fp1[3];
+    float Ftp2[3];
+    multiplyf(f, p1, Fp1, 3, 1, 3, 0, 0);
+    multiplyf(f, p2, Ftp2, 3, 1, 3, 1, 0);
+    float denominator = Fp1[0]*Fp1[0]+Fp1[1]*Fp1[1]+Ftp2[0]*Ftp2[0]+Ftp2[1]*Fp1[1];
+    return nominator*nominator/denominator;
+}
+
+static inline int ransac_calculate_model(ransac_task *t, size_t *selected_matches, size_t selected_matches_count, float* f)
+{
+    // TODO: preallocate memory
+    // 8-point algorithm
+    // Recenter & rescale points
+    float centerX1 = 0.0F, centerY1 = 0.0F;
+    float centerX2 = 0.0F, centerY2 = 0.0F;
     for(size_t i=0;i<selected_matches_count;i++)
     {
         size_t selected_match = selected_matches[i];
         ransac_match *match = &t->matches[selected_match];
-        float dx = (float)(match->x2 - match->x1);
-        float dy = (float)(match->y2 - match->y1);
-        float length = sqrtf(dx*dx + dy*dy);
-        sum_dx += dx/length;
-        sum_dy += dy/length;
+        centerX1 += match->x1;
+        centerY1 += match->y1;
+        centerX2 += match->x2;
+        centerY2 += match->y2;
     }
-    *dir_x = sum_dx/(float)(selected_matches_count);
-    *dir_y = sum_dy/(float)(selected_matches_count);
+    centerX1 /= (float)selected_matches_count;
+    centerY1 /= (float)selected_matches_count;
+    centerX2 /= (float)selected_matches_count;
+    centerY2 /= (float)selected_matches_count;
+    float scale1 = 0.0F, scale2 = 0.0F;
+    for(size_t i=0;i<selected_matches_count;i++)
+    {
+        size_t selected_match = selected_matches[i];
+        ransac_match *match = &t->matches[selected_match];
+        float dx1 = (float)match->x1-centerX1;
+        float dy1 = (float)match->y1-centerY1;
+        float dx2 = (float)match->x2-centerX2;
+        float dy2 = (float)match->y2-centerY2;
+        scale1 += sqrtf(dx1*dx1 + dy1*dy1);
+        scale2 += sqrtf(dx2*dx2 + dy2*dy2);
+    }
+    scale1 = sqrtf(2)*selected_matches_count/scale1;
+    scale2 = sqrtf(2)*selected_matches_count/scale2;
+    // Calculate fundamental matrix using the 8-point algorithm
+    float *a = malloc(sizeof(float)*selected_matches_count*9);
+    for(size_t i=0;i<selected_matches_count;i++)
+    {
+        size_t selected_match = selected_matches[i];
+        ransac_match *match = &t->matches[selected_match];
+        float x1 = ((float)match->x1-centerX1)*scale1;
+        float y1 = ((float)match->y1-centerY1)*scale1;
+        float x2 = ((float)match->x2-centerX2)*scale2;
+        float y2 = ((float)match->y2-centerY2)*scale2;
+        a[i*9  ] = x1*x2;
+        a[i*9+1] = x1*y2;
+        a[i*9+2] = x1;
+        a[i*9+3] = y1*x2;
+        a[i*9+4] = y1*y2;
+        a[i*9+5] = y1;
+        a[i*9+6] = x2;
+        a[i*9+7] = y2;
+        a[i*9+8] = 1.0F;
+    }
+    float *s = malloc(sizeof(float)*selected_matches_count);
+    float v[9*9];
+    int result = svdf(a, selected_matches_count, 9, NULL, s, v);
+    if (!result)
+        return result;
+
+    // TODO: figure out how to correctly read matrix V
+    float f_temp[9];
+    for(size_t i=0;i<9;i++)
+        f_temp[i] = v[9*8+i];
+    //    f_temp[i] = v[9*i+8];
+
+    float u[9];
+    float s_new[3];
+    result = svdf(f_temp, 3, 3, u, s_new, v);
+    if (!result)
+        return result;
+
+    float s_matrix[9] = {s_new[0], 0.0F, 0.0F, 0.0F, s_new[1], 0.0F, 0.0F, 0.0F};
+    multiplyf(u, s_matrix, f_temp, 3, 3, 3, 0, 0);
+    multiplyf(f_temp, v, f, 3, 3, 3, 0, 0);
+
+    // Scale back to image coordinates
+    float m1[9] = {scale1, 0.0F, -centerX1*scale1, 0.0F, scale1, -centerY1*scale1, 0.0F, 0.0F, 1.0F};
+    float m2[9] = {scale2, 0.0F, -centerX2*scale2, 0.0F, scale2, -centerY2*scale2, 0.0F, 0.0F, 1.0F};
+    multiplyf(m2, f, f_temp, 3, 3, 3, 1, 0);
+    multiplyf(f_temp, m1, f, 3, 3, 3, 0, 0);
+    free(a);
+    free(s);
+    return 1;
 }
 
 void* correlate_ransac_task(void *args)
@@ -270,6 +355,7 @@ void* correlate_ransac_task(void *args)
     size_t ransac_n = cybervision_ransac_n;
     size_t *inliers = malloc(sizeof(size_t)*ransac_n);
     size_t *extended_inliers = malloc(sizeof(size_t)*t->matches_count);
+    float *fundamental_matrix = malloc(sizeof(float)*9);
     size_t extended_inliers_count = 0;
     unsigned int rand_seed;
     
@@ -317,8 +403,18 @@ void* correlate_ransac_task(void *args)
             inliers[i] = m;
         }
 
-        float dir_x, dir_y;
-        ransac_calculate_model(t, inliers, ransac_n, &dir_x, &dir_y);
+        if (!ransac_calculate_model(t, inliers, ransac_n, fundamental_matrix))
+        {
+            t->error = "Failed to calculate fundamental matrix";
+            t->completed = 1;
+            break;
+        }
+
+        float fundamental_matrix_sum = 0.0F;
+        for(size_t i=0;i<9;i++)
+            fundamental_matrix_sum += fabsf(fundamental_matrix[i]);
+        if (fundamental_matrix_sum == 0.0F)
+            continue;
 
         for (size_t i=0;i<t->matches_count;i++)
         {
@@ -334,13 +430,7 @@ void* correlate_ransac_task(void *args)
             if (already_exists)
                 continue;
             
-            float match_dir_x, match_dir_y;
-            ransac_calculate_model(t, &i, 1, &match_dir_x, &match_dir_y);
-            match_dir_x -= dir_x;
-            match_dir_y -= dir_y;
-
-            float error = sqrtf(match_dir_x*match_dir_x + match_dir_y*match_dir_y);
-            if (error > cybervision_ransac_t)
+            if (ransac_calculate_error(t, i, fundamental_matrix) > cybervision_ransac_t)
                 continue;
 
             extended_inliers[extended_inliers_count++] = i;
@@ -351,28 +441,27 @@ void* correlate_ransac_task(void *args)
         
         for (size_t i=0;i<ransac_n;i++)
             extended_inliers[extended_inliers_count++] = inliers[i];
-        
-        float current_dir_x, current_dir_y;
-        ransac_calculate_model(t, extended_inliers, extended_inliers_count, &current_dir_x, &current_dir_y);
+
+        /*
+        if (!ransac_calculate_model(t, extended_inliers, extended_inliers_count, fundamental_matrix))
+        {
+            t->error = "Failed to calculate extended fundamental matrix";
+            t->completed = 1;
+            break;
+        }
+        */
 
         float error = 0.0F;
         for (size_t i=0;i<extended_inliers_count;i++)
-        {
-            float match_dir_x, match_dir_y;
-            ransac_calculate_model(t, &i, 1, &match_dir_x, &match_dir_y);
-            match_dir_x -= current_dir_x;
-            match_dir_y -= current_dir_y;
-
-            error += sqrtf(match_dir_x*match_dir_x + match_dir_y*match_dir_y);
-        }
+            error += ransac_calculate_error(t, extended_inliers[i], fundamental_matrix);
+        error /= (float)extended_inliers_count;
 
         if (pthread_mutex_lock(&ctx->lock) != 0)
             goto cleanup;
-        if (error < ctx->best_error)
+        if (extended_inliers_count > t->result_matches_count)
         {
-            t->dir_x = current_dir_x;
-            t->dir_y = current_dir_y;
-            ctx->best_error = error;
+            for (size_t i=0;i<9;i++)
+                t->fundamental_matrix[i] = fundamental_matrix[i];
             t->result_matches_count = extended_inliers_count;
         }
         if (pthread_mutex_unlock(&ctx->lock) != 0)
@@ -381,6 +470,7 @@ void* correlate_ransac_task(void *args)
 cleanup:
     free(inliers);
     free(extended_inliers);
+    free(fundamental_matrix);
     pthread_mutex_lock(&ctx->lock);
     ctx->threads_completed++;
     pthread_mutex_unlock(&ctx->lock);
@@ -404,7 +494,6 @@ int correlation_ransac_start(ransac_task *task)
     task->completed = 0;
     task->error = NULL;
 
-    ctx->best_error = INFINITY;
     task->dir_x = NAN;
     task->dir_y = NAN;
     task->result_matches_count = 0;
