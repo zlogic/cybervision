@@ -262,7 +262,7 @@ static inline float ransac_calculate_error(ransac_task *t, size_t selected_match
     return nominator*nominator/denominator;
 }
 
-static inline int ransac_calculate_model(ransac_task *t, size_t *selected_matches, size_t selected_matches_count, float* f)
+static inline int ransac_calculate_model(svd_internal svd_ctx, ransac_task *t, size_t *selected_matches, size_t selected_matches_count, float* f)
 {
     // TODO: preallocate memory
     // 8-point algorithm
@@ -318,7 +318,7 @@ static inline int ransac_calculate_model(ransac_task *t, size_t *selected_matche
     }
     float *s = malloc(sizeof(float)*selected_matches_count);
     float v[9*9];
-    int result = svdf(a, selected_matches_count, 9, NULL, s, v);
+    int result = svdf(svd_ctx, a, selected_matches_count, 9, NULL, s, v);
     if (!result)
         return result;
 
@@ -330,7 +330,7 @@ static inline int ransac_calculate_model(ransac_task *t, size_t *selected_matche
 
     float u[9];
     float s_new[3];
-    result = svdf(f_temp, 3, 3, u, s_new, v);
+    result = svdf(svd_ctx, f_temp, 3, 3, u, s_new, v);
     if (!result)
         return result;
 
@@ -352,10 +352,11 @@ void* correlate_ransac_task(void *args)
 {
     ransac_task *t = args;
     ransac_task_ctx *ctx = t->internal;
+    svd_internal svd_ctx = init_svd();
     size_t ransac_n = cybervision_ransac_n;
     size_t *inliers = malloc(sizeof(size_t)*ransac_n);
     size_t *extended_inliers = malloc(sizeof(size_t)*t->matches_count);
-    float *fundamental_matrix = malloc(sizeof(float)*9);
+    float fundamental_matrix[9];
     size_t extended_inliers_count = 0;
     unsigned int rand_seed;
     
@@ -403,7 +404,7 @@ void* correlate_ransac_task(void *args)
             inliers[i] = m;
         }
 
-        if (!ransac_calculate_model(t, inliers, ransac_n, fundamental_matrix))
+        if (!ransac_calculate_model(svd_ctx, t, inliers, ransac_n, fundamental_matrix))
         {
             t->error = "Failed to calculate fundamental matrix";
             t->completed = 1;
@@ -443,7 +444,7 @@ void* correlate_ransac_task(void *args)
             extended_inliers[extended_inliers_count++] = inliers[i];
 
         /*
-        if (!ransac_calculate_model(t, extended_inliers, extended_inliers_count, fundamental_matrix))
+        if (!ransac_calculate_model(svd_ctx, t, extended_inliers, extended_inliers_count, fundamental_matrix))
         {
             t->error = "Failed to calculate extended fundamental matrix";
             t->completed = 1;
@@ -470,7 +471,7 @@ void* correlate_ransac_task(void *args)
 cleanup:
     free(inliers);
     free(extended_inliers);
-    free(fundamental_matrix);
+    free_svd(svd_ctx);
     pthread_mutex_lock(&ctx->lock);
     ctx->threads_completed++;
     pthread_mutex_unlock(&ctx->lock);
