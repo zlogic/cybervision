@@ -2,20 +2,21 @@
 #include <f2c.h>
 #include <clapack.h>
 
-//#define sgemm_ sgemm
-
 #include "linmath.h"
 
 typedef struct {
-    integer work_size;
+    integer work_size, iwork_size;
     float *work;
+    integer *iwork;
 } svd_ctx;
 
 svd_internal init_svd()
 {
     svd_ctx *ctx = malloc(sizeof(svd_ctx));
     ctx->work = NULL;
+    ctx->iwork = NULL;
     ctx->work_size = 0;
+    ctx->iwork_size = 0;
     return ctx;
 }
 void free_svd(svd_internal svd)
@@ -25,6 +26,8 @@ void free_svd(svd_internal svd)
         return;
     if (ctx->work != NULL)
         free(ctx->work);
+    if (ctx->iwork != NULL)
+        free(ctx->iwork);
     free(ctx);
 }
 int svdf(svd_internal svd, float *matrix, int rows, int cols, float *u, float *s, float *v)
@@ -33,25 +36,27 @@ int svdf(svd_internal svd, float *matrix, int rows, int cols, float *u, float *s
     integer info;
     float optimal_work;
     integer m = rows, n = cols;
-    integer lda = m, ldu = u!=NULL?m:1, ldvt = n;
+    integer lda = m, ldu = m, ldvt = n;
     integer lwork = -1;
     svd_ctx *ctx = svd;
-
-    int result = sgesvd_(u!=NULL?"A":"N", "A", &m, &n, matrix, &lda, s, u, &ldu, v, &ldvt, &optimal_work, &lwork, &info);
+    integer iwork_size = 8*(m<n? m:n);
+    if (ctx->iwork_size < iwork_size)
+    {
+        size_t new_size = sizeof(integer)*iwork_size;
+        ctx->iwork = ctx->iwork == NULL? malloc(new_size) : realloc(ctx->work, new_size);
+        ctx->iwork_size = iwork_size;
+    }
+    int result = sgesdd_("A", &m, &n, matrix, &lda, s, u, &ldu, v, &ldvt, &optimal_work, &lwork, ctx->iwork, &info);
     if (info != 0)
         return 0;
     lwork = (int)optimal_work;
-    if (ctx->work == NULL)
+    if (ctx->work_size < lwork)
     {
-        ctx->work = malloc(sizeof(float)*lwork);
+        size_t new_size = sizeof(float)*lwork;
+        ctx->work = ctx->work == NULL? malloc(new_size) : realloc(ctx->work, new_size);
         ctx->work_size = lwork;
     }
-    else if (ctx->work_size < lwork)
-    {
-        ctx->work = realloc(ctx->work, sizeof(float)*lwork);
-        ctx->work_size = lwork;
-    }
-    result = sgesvd_(u!=NULL?"A":"N", "A", &m, &n, matrix, &lda, s, u, &ldu, v, &ldvt, ctx->work, &lwork, &info);
+    result = sgesdd_("A", &m, &n, matrix, &lda, s, u, &ldu, v, &ldvt, ctx->work, &lwork, ctx->iwork, &info);
     return info == 0;
 }
 

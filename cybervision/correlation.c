@@ -262,9 +262,16 @@ static inline float ransac_calculate_error(ransac_task *t, size_t selected_match
     return nominator*nominator/denominator;
 }
 
-static inline int ransac_calculate_model(svd_internal svd_ctx, ransac_task *t, size_t *selected_matches, size_t selected_matches_count, float* f)
+typedef struct {
+    svd_internal svd;
+    float *a;
+    float *u;
+    float *s;
+    float *v;
+} ransac_memory;
+
+static inline int ransac_calculate_model(ransac_memory *ctx, ransac_task *t, size_t *selected_matches, size_t selected_matches_count, float* f)
 {
-    // TODO: preallocate memory
     // 8-point algorithm
     // Recenter & rescale points
     float centerX1 = 0.0F, centerY1 = 0.0F;
@@ -297,7 +304,8 @@ static inline int ransac_calculate_model(svd_internal svd_ctx, ransac_task *t, s
     scale1 = sqrtf(2)*selected_matches_count/scale1;
     scale2 = sqrtf(2)*selected_matches_count/scale2;
     // Calculate fundamental matrix using the 8-point algorithm
-    float *a = malloc(sizeof(float)*selected_matches_count*9);
+    float *a = ctx->a;
+    float *u = ctx->u, *s = ctx->s, *v = ctx->v;
     for(size_t i=0;i<selected_matches_count;i++)
     {
         size_t selected_match = selected_matches[i];
@@ -316,9 +324,7 @@ static inline int ransac_calculate_model(svd_internal svd_ctx, ransac_task *t, s
         a[i*9+7] = y2;
         a[i*9+8] = 1.0F;
     }
-    float *s = malloc(sizeof(float)*selected_matches_count);
-    float v[9*9];
-    int result = svdf(svd_ctx, a, selected_matches_count, 9, NULL, s, v);
+    int result = svdf(ctx->svd, a, selected_matches_count, 9, u, s, v);
     if (!result)
         return result;
 
@@ -328,13 +334,11 @@ static inline int ransac_calculate_model(svd_internal svd_ctx, ransac_task *t, s
         f_temp[i] = v[9*8+i];
     //    f_temp[i] = v[9*i+8];
 
-    float u[9];
-    float s_new[3];
-    result = svdf(svd_ctx, f_temp, 3, 3, u, s_new, v);
+    result = svdf(ctx->svd, f_temp, 3, 3, u, s, v);
     if (!result)
         return result;
 
-    float s_matrix[9] = {s_new[0], 0.0F, 0.0F, 0.0F, s_new[1], 0.0F, 0.0F, 0.0F};
+    float s_matrix[9] = {s[0], 0.0F, 0.0F, 0.0F, s[1], 0.0F, 0.0F, 0.0F};
     multiplyf(u, s_matrix, f_temp, 3, 3, 3, 0, 0);
     multiplyf(f_temp, v, f, 3, 3, 3, 0, 0);
 
@@ -343,8 +347,6 @@ static inline int ransac_calculate_model(svd_internal svd_ctx, ransac_task *t, s
     float m2[9] = {scale2, 0.0F, -centerX2*scale2, 0.0F, scale2, -centerY2*scale2, 0.0F, 0.0F, 1.0F};
     multiplyf(m2, f, f_temp, 3, 3, 3, 1, 0);
     multiplyf(f_temp, m1, f, 3, 3, 3, 0, 0);
-    free(a);
-    free(s);
     return 1;
 }
 
@@ -352,12 +354,17 @@ void* correlate_ransac_task(void *args)
 {
     ransac_task *t = args;
     ransac_task_ctx *ctx = t->internal;
-    svd_internal svd_ctx = init_svd();
     size_t ransac_n = cybervision_ransac_n;
     size_t *inliers = malloc(sizeof(size_t)*ransac_n);
     size_t *extended_inliers = malloc(sizeof(size_t)*t->matches_count);
     float fundamental_matrix[9];
     size_t extended_inliers_count = 0;
+    ransac_memory ctx_memory = {0};
+    ctx_memory.svd = init_svd();
+    ctx_memory.a = malloc(sizeof(float)*ransac_n*9);
+    ctx_memory.u = malloc(sizeof(float)*ransac_n*ransac_n);
+    ctx_memory.s = malloc(sizeof(float)*ransac_n);
+    ctx_memory.v = malloc(sizeof(float)*9*9);
     unsigned int rand_seed;
     
     if (pthread_mutex_lock(&ctx->lock) != 0)
@@ -404,7 +411,7 @@ void* correlate_ransac_task(void *args)
             inliers[i] = m;
         }
 
-        if (!ransac_calculate_model(svd_ctx, t, inliers, ransac_n, fundamental_matrix))
+        if (!ransac_calculate_model(&ctx_memory, t, inliers, ransac_n, fundamental_matrix))
         {
             t->error = "Failed to calculate fundamental matrix";
             t->completed = 1;
@@ -471,7 +478,11 @@ void* correlate_ransac_task(void *args)
 cleanup:
     free(inliers);
     free(extended_inliers);
-    free_svd(svd_ctx);
+    free(ctx_memory.a);
+    free(ctx_memory.u);
+    free(ctx_memory.s);
+    free(ctx_memory.v);
+    free_svd(ctx_memory.svd);
     pthread_mutex_lock(&ctx->lock);
     ctx->threads_completed++;
     pthread_mutex_unlock(&ctx->lock);
