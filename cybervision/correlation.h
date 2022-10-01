@@ -40,6 +40,7 @@ typedef struct {
     int x2,y2;
 } ransac_match;
 typedef void* ransac_task_internal;
+typedef double matrix_3x3[3*3];
 typedef struct {
     ransac_match *matches;
     size_t matches_count;
@@ -51,7 +52,7 @@ typedef struct {
     int completed;
 
     float dir_x, dir_y;
-    float *fundamental_matrix;
+    matrix_3x3 fundamental_matrix;
     size_t result_matches_count;
 
     ransac_task_internal internal;
@@ -63,9 +64,10 @@ int correlation_ransac_complete(ransac_task*);
 typedef void* cross_correlate_task_internal;
 typedef struct {
     correlation_image img1, img2;
+    matrix_3x3 fundamental_matrix;
     float dir_x, dir_y;
     float scale;
-    
+
     int num_threads;
     int iteration;
 

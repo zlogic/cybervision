@@ -244,38 +244,38 @@ typedef struct {
     pthread_t *threads;
 } ransac_task_ctx;
 
-static inline float ransac_calculate_error(ransac_task *t, size_t selected_match, float* f)
+static inline float ransac_calculate_error(ransac_task *t, size_t selected_match, matrix_3x3 f)
 {
     // Calculate Sampson distance
     ransac_match *match = &t->matches[selected_match];
-    float p1[3] = {match->x1, match->y1, 1.0F};
-    float p2[3] = {match->x2, match->y2, 1.0F};
-    float nominator = 0.0F;
-    float p2tFp1[3];
-    multiplyf(p2, f, p2tFp1, 1, 3, 3, 0, 0);
-    multiplyf(p2tFp1, p1, &nominator, 1, 1, 3, 0, 0);
-    float Fp1[3];
-    float Ftp2[3];
-    multiplyf(f, p1, Fp1, 3, 1, 3, 0, 0);
-    multiplyf(f, p2, Ftp2, 3, 1, 3, 1, 0);
-    float denominator = Fp1[0]*Fp1[0]+Fp1[1]*Fp1[1]+Ftp2[0]*Ftp2[0]+Ftp2[1]*Fp1[1];
-    return nominator*nominator/denominator;
+    double p1[3] = {match->x1, match->y1, 1.0};
+    double p2[3] = {match->x2, match->y2, 1.0};
+    double nominator = 0.0;
+    double p2tFp1[3];
+    multiplyd(p2, f, p2tFp1, 1, 3, 3, 0, 0);
+    multiplyd(p2tFp1, p1, &nominator, 1, 1, 3, 0, 0);
+    double Fp1[3];
+    double Ftp2[3];
+    multiplyd(f, p1, Fp1, 3, 1, 3, 0, 0);
+    multiplyd(f, p2, Ftp2, 3, 1, 3, 1, 0);
+    double denominator = Fp1[0]*Fp1[0]+Fp1[1]*Fp1[1]+Ftp2[0]*Ftp2[0]+Ftp2[1]*Fp1[1];
+    return (float)(nominator*nominator/denominator);
 }
 
 typedef struct {
     svd_internal svd;
-    float *a;
-    float *u;
-    float *s;
-    float *v;
+    double *a;
+    double *u;
+    double *s;
+    double *v;
 } ransac_memory;
 
-static inline int ransac_calculate_model(ransac_memory *ctx, ransac_task *t, size_t *selected_matches, size_t selected_matches_count, float* f)
+static inline int ransac_calculate_model(ransac_memory *ctx, ransac_task *t, size_t *selected_matches, size_t selected_matches_count, matrix_3x3 f)
 {
     // 8-point algorithm
     // Recenter & rescale points
-    float centerX1 = 0.0F, centerY1 = 0.0F;
-    float centerX2 = 0.0F, centerY2 = 0.0F;
+    double centerX1 = 0.0, centerY1 = 0.0;
+    double centerX2 = 0.0, centerY2 = 0.0;
     for(size_t i=0;i<selected_matches_count;i++)
     {
         size_t selected_match = selected_matches[i];
@@ -285,35 +285,35 @@ static inline int ransac_calculate_model(ransac_memory *ctx, ransac_task *t, siz
         centerX2 += match->x2;
         centerY2 += match->y2;
     }
-    centerX1 /= (float)selected_matches_count;
-    centerY1 /= (float)selected_matches_count;
-    centerX2 /= (float)selected_matches_count;
-    centerY2 /= (float)selected_matches_count;
-    float scale1 = 0.0F, scale2 = 0.0F;
+    centerX1 /= (double)selected_matches_count;
+    centerY1 /= (double)selected_matches_count;
+    centerX2 /= (double)selected_matches_count;
+    centerY2 /= (double)selected_matches_count;
+    double scale1 = 0.0, scale2 = 0.0;
     for(size_t i=0;i<selected_matches_count;i++)
     {
         size_t selected_match = selected_matches[i];
         ransac_match *match = &t->matches[selected_match];
-        float dx1 = (float)match->x1-centerX1;
-        float dy1 = (float)match->y1-centerY1;
-        float dx2 = (float)match->x2-centerX2;
-        float dy2 = (float)match->y2-centerY2;
-        scale1 += sqrtf(dx1*dx1 + dy1*dy1);
-        scale2 += sqrtf(dx2*dx2 + dy2*dy2);
+        double dx1 = (double)match->x1-centerX1;
+        double dy1 = (double)match->y1-centerY1;
+        double dx2 = (double)match->x2-centerX2;
+        double dy2 = (double)match->y2-centerY2;
+        scale1 += sqrt(dx1*dx1 + dy1*dy1);
+        scale2 += sqrt(dx2*dx2 + dy2*dy2);
     }
-    scale1 = sqrtf(2)*selected_matches_count/scale1;
-    scale2 = sqrtf(2)*selected_matches_count/scale2;
+    scale1 = sqrt(2)*selected_matches_count/scale1;
+    scale2 = sqrt(2)*selected_matches_count/scale2;
     // Calculate fundamental matrix using the 8-point algorithm
-    float *a = ctx->a;
-    float *u = ctx->u, *s = ctx->s, *v = ctx->v;
+    double *a = ctx->a;
+    double *u = ctx->u, *s = ctx->s, *v = ctx->v;
     for(size_t i=0;i<selected_matches_count;i++)
     {
         size_t selected_match = selected_matches[i];
         ransac_match *match = &t->matches[selected_match];
-        float x1 = ((float)match->x1-centerX1)*scale1;
-        float y1 = ((float)match->y1-centerY1)*scale1;
-        float x2 = ((float)match->x2-centerX2)*scale2;
-        float y2 = ((float)match->y2-centerY2)*scale2;
+        double x1 = ((double)match->x1-centerX1)*scale1;
+        double y1 = ((double)match->y1-centerY1)*scale1;
+        double x2 = ((double)match->x2-centerX2)*scale2;
+        double y2 = ((double)match->y2-centerY2)*scale2;
         a[i*9  ] = x1*x2;
         a[i*9+1] = x1*y2;
         a[i*9+2] = x1;
@@ -322,31 +322,31 @@ static inline int ransac_calculate_model(ransac_memory *ctx, ransac_task *t, siz
         a[i*9+5] = y1;
         a[i*9+6] = x2;
         a[i*9+7] = y2;
-        a[i*9+8] = 1.0F;
+        a[i*9+8] = 1.0;
     }
-    int result = svdf(ctx->svd, a, selected_matches_count, 9, u, s, v);
+    int result = svdd(ctx->svd, a, selected_matches_count, 9, u, s, v);
     if (!result)
         return result;
 
     // TODO: figure out how to correctly read matrix V
-    float f_temp[9];
+    double f_temp[9];
     for(size_t i=0;i<9;i++)
         f_temp[i] = v[9*8+i];
     //    f_temp[i] = v[9*i+8];
 
-    result = svdf(ctx->svd, f_temp, 3, 3, u, s, v);
+    result = svdd(ctx->svd, f_temp, 3, 3, u, s, v);
     if (!result)
         return result;
 
-    float s_matrix[9] = {s[0], 0.0F, 0.0F, 0.0F, s[1], 0.0F, 0.0F, 0.0F};
-    multiplyf(u, s_matrix, f_temp, 3, 3, 3, 0, 0);
-    multiplyf(f_temp, v, f, 3, 3, 3, 0, 0);
+    double s_matrix[9] = {s[0], 0.0, 0.0, 0.0, s[1], 0.0, 0.0, 0.0};
+    multiplyd(u, s_matrix, f_temp, 3, 3, 3, 0, 0);
+    multiplyd(f_temp, v, f, 3, 3, 3, 0, 0);
 
     // Scale back to image coordinates
-    float m1[9] = {scale1, 0.0F, -centerX1*scale1, 0.0F, scale1, -centerY1*scale1, 0.0F, 0.0F, 1.0F};
-    float m2[9] = {scale2, 0.0F, -centerX2*scale2, 0.0F, scale2, -centerY2*scale2, 0.0F, 0.0F, 1.0F};
-    multiplyf(m2, f, f_temp, 3, 3, 3, 1, 0);
-    multiplyf(f_temp, m1, f, 3, 3, 3, 0, 0);
+    double m1[9] = {scale1, 0.0, -centerX1*scale1, 0.0, scale1, -centerY1*scale1, 0.0, 0.0, 1.0};
+    double m2[9] = {scale2, 0.0, -centerX2*scale2, 0.0, scale2, -centerY2*scale2, 0.0, 0.0, 1.0};
+    multiplyd(m2, f, f_temp, 3, 3, 3, 1, 0);
+    multiplyd(f_temp, m1, f, 3, 3, 3, 0, 0);
     return 1;
 }
 
@@ -357,14 +357,14 @@ void* correlate_ransac_task(void *args)
     size_t ransac_n = cybervision_ransac_n;
     size_t *inliers = malloc(sizeof(size_t)*ransac_n);
     size_t *extended_inliers = malloc(sizeof(size_t)*t->matches_count);
-    float fundamental_matrix[9];
+    matrix_3x3 fundamental_matrix;
     size_t extended_inliers_count = 0;
     ransac_memory ctx_memory = {0};
     ctx_memory.svd = init_svd();
-    ctx_memory.a = malloc(sizeof(float)*ransac_n*9);
-    ctx_memory.u = malloc(sizeof(float)*ransac_n*ransac_n);
-    ctx_memory.s = malloc(sizeof(float)*ransac_n);
-    ctx_memory.v = malloc(sizeof(float)*9*9);
+    ctx_memory.a = malloc(sizeof(double)*ransac_n*9);
+    ctx_memory.u = malloc(sizeof(double)*ransac_n*ransac_n);
+    ctx_memory.s = malloc(sizeof(double)*ransac_n);
+    ctx_memory.v = malloc(sizeof(double)*9*9);
     unsigned int rand_seed;
     
     if (pthread_mutex_lock(&ctx->lock) != 0)
@@ -418,10 +418,10 @@ void* correlate_ransac_task(void *args)
             break;
         }
 
-        float fundamental_matrix_sum = 0.0F;
+        double fundamental_matrix_sum = 0.0;
         for(size_t i=0;i<9;i++)
-            fundamental_matrix_sum += fabsf(fundamental_matrix[i]);
-        if (fundamental_matrix_sum == 0.0F)
+            fundamental_matrix_sum += fabs(fundamental_matrix[i]);
+        if (fundamental_matrix_sum == 0.0)
             continue;
 
         for (size_t i=0;i<t->matches_count;i++)

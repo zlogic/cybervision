@@ -189,7 +189,6 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
 
     {
         r_task.num_threads = num_threads;
-        r_task.fundamental_matrix = malloc(sizeof(float)*9);
         r_task.matches = malloc(sizeof(ransac_match)*m_task.matches_count);
         r_task.matches_count = 0;
         for (size_t i=0;i<m_task.matches_count;i++)
@@ -256,8 +255,8 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             float scale = 1.0F/(float)(1<<(scale_steps-i));
             total_percent += scale*scale;
         }
-        cc_task.dir_x = r_task.dir_x;
-        cc_task.dir_y = r_task.dir_y;
+        for (size_t i=0;i<9;i++)
+            cc_task.fundamental_matrix[i] = r_task.fundamental_matrix[i];
         cc_task.num_threads = num_threads;
         cc_task.out_width = img1->width;
         cc_task.out_height = img1->height;
@@ -380,8 +379,6 @@ cleanup:
         free(m_task.img2.img);
     if (r_task.matches != NULL)
         free(r_task.matches);
-    if(r_task.fundamental_matrix != NULL)
-        free(r_task.fundamental_matrix);
     if (points1 != NULL)
         free(points1);
     if (points2 != NULL)
