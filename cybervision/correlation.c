@@ -260,6 +260,13 @@ static inline double ransac_calculate_error(ransac_task *t, size_t selected_matc
     double Ftp2[3];
     multiplyd(f, p1, Fp1, 3, 1, 3, 0, 0);
     multiplyd(f, p2, Ftp2, 3, 1, 3, 1, 0);
+    /*
+    double Fp1[3];
+    multiplyd(f, p1, Fp1, 3, 1, 3, 0, 0);
+    multiplyd(p2, Fp1, &nominator, 1, 1, 3, 0, 0);
+    double Ftp2[3];
+    multiplyd(f, p2, Ftp2, 3, 1, 3, 1, 0);
+    */
     double denominator = Fp1[0]*Fp1[0]+Fp1[1]*Fp1[1]+Ftp2[0]*Ftp2[0]+Ftp2[1]*Fp1[1];
     return nominator*nominator/denominator;
 }
@@ -282,10 +289,10 @@ static inline int ransac_calculate_model(ransac_memory *ctx, ransac_task *t, siz
     {
         size_t selected_match = selected_matches[i];
         ransac_match *match = &t->matches[selected_match];
-        centerX1 += match->x1;
-        centerY1 += match->y1;
-        centerX2 += match->x2;
-        centerY2 += match->y2;
+        centerX1 += (double)match->x1;
+        centerY1 += (double)match->y1;
+        centerX2 += (double)match->x2;
+        centerY2 += (double)match->y2;
     }
     centerX1 /= (double)selected_matches_count;
     centerY1 /= (double)selected_matches_count;
@@ -303,8 +310,8 @@ static inline int ransac_calculate_model(ransac_memory *ctx, ransac_task *t, siz
         scale1 += sqrt(dx1*dx1 + dy1*dy1);
         scale2 += sqrt(dx2*dx2 + dy2*dy2);
     }
-    scale1 = sqrt(2)*selected_matches_count/scale1;
-    scale2 = sqrt(2)*selected_matches_count/scale2;
+    scale1 = sqrt(2.0)/(scale1/(double)selected_matches_count);
+    scale2 = sqrt(2.0)/(scale2/(double)selected_matches_count);
     // Calculate fundamental matrix using the 8-point algorithm
     double *a = ctx->a;
     double *u = ctx->u, *s = ctx->s, *v = ctx->v;
@@ -316,25 +323,23 @@ static inline int ransac_calculate_model(ransac_memory *ctx, ransac_task *t, siz
         double y1 = ((double)match->y1-centerY1)*scale1;
         double x2 = ((double)match->x2-centerX2)*scale2;
         double y2 = ((double)match->y2-centerY2)*scale2;
-        a[i*9  ] = x1*x2;
-        a[i*9+1] = x1*y2;
-        a[i*9+2] = x1;
-        a[i*9+3] = y1*x2;
-        a[i*9+4] = y1*y2;
-        a[i*9+5] = y1;
-        a[i*9+6] = x2;
-        a[i*9+7] = y2;
+        a[i*9  ] = x2*x1;
+        a[i*9+1] = x2*y1;
+        a[i*9+2] = x2;
+        a[i*9+3] = y2*x1;
+        a[i*9+4] = y2*y1;
+        a[i*9+5] = y2;
+        a[i*9+6] = x1;
+        a[i*9+7] = y1;
         a[i*9+8] = 1.0;
     }
     int result = svdd(ctx->svd, a, selected_matches_count, 9, u, s, v);
     if (!result)
         return result;
 
-    // TODO: figure out how to correctly read matrix V
     double f_temp[9];
     for(size_t i=0;i<9;i++)
         f_temp[i] = v[9*8+i];
-    //    f_temp[i] = v[9*i+8];
 
     result = svdd(ctx->svd, f_temp, 3, 3, u, s, v);
     if (!result)
@@ -349,6 +354,9 @@ static inline int ransac_calculate_model(ransac_memory *ctx, ransac_task *t, siz
     double m2[9] = {scale2, 0.0, -centerX2*scale2, 0.0, scale2, -centerY2*scale2, 0.0, 0.0, 1.0};
     multiplyd(m2, f, f_temp, 3, 3, 3, 1, 0);
     multiplyd(f_temp, m1, f, 3, 3, 3, 0, 0);
+    if (fabs(f[8])>1E-3)
+        for (size_t i=0;i<9;i++)
+            f[i]/=f[8];
     return 1;
 }
 
@@ -397,13 +405,17 @@ void* correlate_ransac_task(void *args)
         {
             size_t m;
             int unique = 0;
+            ransac_match match;
             while(!unique)
             {
                 m = rand_r(&rand_seed)%t->matches_count;
+                match = t->matches[m];
                 unique = 1;
                 for (size_t j=0;j<i;j++)
                 {
-                    if (inliers[j] == m)
+                    ransac_match check_match = t->matches[inliers[j]];
+                    if ((match.x1 == check_match.x1 && match.y1 == check_match.y1) ||
+                        (match.x2 == check_match.x2 && match.y2 == check_match.y2))
                     {
                         unique = 0;
                         break;
@@ -461,11 +473,20 @@ void* correlate_ransac_task(void *args)
         
         for (size_t i=0;i<ransac_n;i++)
         {
+            double inlier_error = ransac_calculate_error(t, inliers[i], fundamental_matrix);
+            /*
+            if (fabs(inlier_error) > (double)cybervision_ransac_t)
+            {
+                inliers_error = NAN;
+                break;
+            }
+            */
             extended_inliers[extended_inliers_count++] = inliers[i];
-            inliers_error += ransac_calculate_error(t, inliers[i], fundamental_matrix);
+            inliers_error += inlier_error;
         }
+        if (!isfinite(inliers_error))
+            continue;
         inliers_error = fabs(inliers_error/(double)extended_inliers_count);
-
 
         /*
         if (!ransac_calculate_model(svd_ctx, t, extended_inliers, extended_inliers_count, fundamental_matrix))

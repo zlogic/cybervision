@@ -14,8 +14,8 @@ const int cybervision_keypoint_scale_min_size = 512;
 
 const float cybervision_ransac_min_length = 3.0F;
 const size_t cybervision_ransac_k = 1E6;
-const size_t cybervision_ransac_n = 10;
-const float cybervision_ransac_t = 0.01F;
+const size_t cybervision_ransac_n = 20;
+const float cybervision_ransac_t = 20.0F;
 const size_t cybervision_ransac_d = 10;
 const size_t cybervision_ransac_check_interval = 10000;
 
