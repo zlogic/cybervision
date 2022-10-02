@@ -32,7 +32,6 @@ void free_svd(svd_internal svd)
 }
 int svdd(svd_internal svd, double *matrix, int rows, int cols, double *u, double *s, double *v)
 {
-    // TODO: reuse/preallocate work memory
     integer info;
     double optimal_work;
     integer m = rows, n = cols;

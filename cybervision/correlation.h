@@ -51,7 +51,6 @@ typedef struct {
     float percent_complete;
     int completed;
 
-    float dir_x, dir_y;
     matrix_3x3 fundamental_matrix;
     size_t result_matches_count;
 

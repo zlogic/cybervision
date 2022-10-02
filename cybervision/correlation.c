@@ -239,12 +239,14 @@ int correlation_match_points_complete(match_task *t)
 typedef struct {
     size_t iteration;
 
+    double best_error;
+
     int threads_completed;
     pthread_mutex_t lock;
     pthread_t *threads;
 } ransac_task_ctx;
 
-static inline float ransac_calculate_error(ransac_task *t, size_t selected_match, matrix_3x3 f)
+static inline double ransac_calculate_error(ransac_task *t, size_t selected_match, matrix_3x3 f)
 {
     // Calculate Sampson distance
     ransac_match *match = &t->matches[selected_match];
@@ -259,7 +261,7 @@ static inline float ransac_calculate_error(ransac_task *t, size_t selected_match
     multiplyd(f, p1, Fp1, 3, 1, 3, 0, 0);
     multiplyd(f, p2, Ftp2, 3, 1, 3, 1, 0);
     double denominator = Fp1[0]*Fp1[0]+Fp1[1]*Fp1[1]+Ftp2[0]*Ftp2[0]+Ftp2[1]*Fp1[1];
-    return (float)(nominator*nominator/denominator);
+    return nominator*nominator/denominator;
 }
 
 typedef struct {
@@ -420,10 +422,18 @@ void* correlate_ransac_task(void *args)
 
         double fundamental_matrix_sum = 0.0;
         for(size_t i=0;i<9;i++)
+        {
+            if (!isfinite(fundamental_matrix[i]))
+            {
+                fundamental_matrix_sum = NAN;
+                break;
+            }
             fundamental_matrix_sum += fabs(fundamental_matrix[i]);
-        if (fundamental_matrix_sum == 0.0)
+        }
+        if (fundamental_matrix_sum == 0.0 || !isfinite(fundamental_matrix_sum))
             continue;
 
+        double inliers_error = 0.0F;
         for (size_t i=0;i<t->matches_count;i++)
         {
             int already_exists = 0;
@@ -438,17 +448,24 @@ void* correlate_ransac_task(void *args)
             if (already_exists)
                 continue;
             
-            if (ransac_calculate_error(t, i, fundamental_matrix) > cybervision_ransac_t)
+            double inlier_error = ransac_calculate_error(t, i, fundamental_matrix);
+            if (fabs(inlier_error) > (double)cybervision_ransac_t)
                 continue;
 
             extended_inliers[extended_inliers_count++] = i;
+            inliers_error += inlier_error;
         }
 
         if (extended_inliers_count < cybervision_ransac_d)
             continue;
         
         for (size_t i=0;i<ransac_n;i++)
+        {
             extended_inliers[extended_inliers_count++] = inliers[i];
+            inliers_error += ransac_calculate_error(t, inliers[i], fundamental_matrix);
+        }
+        inliers_error = fabs(inliers_error/(double)extended_inliers_count);
+
 
         /*
         if (!ransac_calculate_model(svd_ctx, t, extended_inliers, extended_inliers_count, fundamental_matrix))
@@ -459,18 +476,14 @@ void* correlate_ransac_task(void *args)
         }
         */
 
-        float error = 0.0F;
-        for (size_t i=0;i<extended_inliers_count;i++)
-            error += ransac_calculate_error(t, extended_inliers[i], fundamental_matrix);
-        error /= (float)extended_inliers_count;
-
         if (pthread_mutex_lock(&ctx->lock) != 0)
             goto cleanup;
-        if (extended_inliers_count > t->result_matches_count)
+        if (extended_inliers_count > t->result_matches_count || (extended_inliers_count == t->result_matches_count && inliers_error < ctx->best_error))
         {
             for (size_t i=0;i<9;i++)
                 t->fundamental_matrix[i] = fundamental_matrix[i];
             t->result_matches_count = extended_inliers_count;
+            ctx->best_error = inliers_error;
         }
         if (pthread_mutex_unlock(&ctx->lock) != 0)
             goto cleanup;
@@ -506,8 +519,7 @@ int correlation_ransac_start(ransac_task *task)
     task->completed = 0;
     task->error = NULL;
 
-    task->dir_x = NAN;
-    task->dir_y = NAN;
+    ctx->best_error = INFINITY;
     task->result_matches_count = 0;
 
     if (pthread_mutex_init(&ctx->lock, NULL) != 0)
@@ -605,8 +617,10 @@ int estimate_search_range(cross_correlate_task *t, int x1, int y1, float *min_di
 }
 
 typedef struct {
-    int corridor_vertical;
-    float corridor_coeff;
+    float coeff_x, coeff_y;
+    float add_x, add_y;
+    int corridor_offset_x, corridor_offset_y;
+
     int kernel_size;
     int kernel_point_count;
     int x1, y1;
@@ -622,6 +636,31 @@ typedef struct {
     int match_count;
 } corridor_area_ctx;
 
+static inline void calculate_epipolar_line(cross_correlate_task *t, corridor_area_ctx* c)
+{
+    double p1[3] = {c->x1, c->y1, 1.0};
+    double Fp1[3];
+    multiplyd(t->fundamental_matrix, p1, Fp1, 3, 1, 3, 0, 0);
+    if (fabs(Fp1[0])>fabs(Fp1[1])) 
+    {
+        c->coeff_x = 1.0F;
+        c->add_x = 0.0F;
+        c->corridor_offset_x = 0;
+        c->coeff_y = (float)(-Fp1[1]/Fp1[0]);
+        c->add_y = (float)(-Fp1[2]/Fp1[0]);
+        c->corridor_offset_y = 1;
+    }
+    else
+    {
+        c->coeff_x = (float)(-Fp1[0]/Fp1[1]);
+        c->add_x = (float)(-Fp1[2]/Fp1[1]);
+        c->corridor_offset_x = 1;
+        c->coeff_y = 1.0F;
+        c->add_y = 0.0F;
+        c->corridor_offset_y = 0;
+    }
+}
+
 static inline void correlate_corridor_area(cross_correlate_task *t, corridor_area_ctx* c, int corridor_start, int corridor_end)
 {
     int kernel_size = c->kernel_size;
@@ -632,24 +671,13 @@ static inline void correlate_corridor_area(cross_correlate_task *t, corridor_are
     int w2 = t->img2.width, h2 = t->img2.height;
     for (int i=corridor_start;i<corridor_end;i++)
     {
-        int x2, y2;
+        int x2 = (int)(c->coeff_x*i + c->add_x) + c->corridor_offset*c->corridor_offset_x;
+        int y2 = (int)(c->coeff_y*i + c->add_y) + c->corridor_offset*c->corridor_offset_y;
         float corr = 0;
         float dx, dy;
         float distance;
-        if (c->corridor_vertical)
-        {
-            y2 = i;
-            x2 = x1+c->corridor_offset + (int)((y2-y1)*c->corridor_coeff);
-            if (x2 < kernel_size || x2 >= w2-kernel_size)
-                continue;
-        }
-        else
-        {
-            x2 = i;
-            y2 = y1+c->corridor_offset + (int)((x2-x1)*c->corridor_coeff);
-            if (y2 < kernel_size || y2 >= h2-kernel_size)
-                continue;
-        }
+        if (x2 < kernel_size || x2 >= w2-kernel_size || y2 < kernel_size || y2 >= h2-kernel_size)
+            continue;
 
         dx = (float)(x2-x1)/t->scale;
         dy = (float)(y2-y1)/t->scale;
@@ -703,16 +731,7 @@ void* cross_correlation_task(void *args)
     int processed_points = 0;
     int points_to_process = (w1-2*kernel_size)*(h1-2*kernel_size);
 
-    int corridor_vertical = fabsf(t->dir_y)>fabsf(t->dir_x);
-    int corridor_start = kernel_size;
-    int corridor_end = corridor_vertical? h2-kernel_size : w2-kernel_size;
     float inv_scale = 1.0F/t->scale;
-
-    float dir_length = sqrtf(t->dir_x*t->dir_x + t->dir_y*t->dir_y);
-    float distance_coeff = fabsf(corridor_vertical? t->dir_y/dir_length : t->dir_x/dir_length)*t->scale;
-
-    corr_ctx.corridor_vertical = corridor_vertical;
-    corr_ctx.corridor_coeff = corridor_vertical? t->dir_x/t->dir_y : t->dir_y/t->dir_x;
     corr_ctx.kernel_size = kernel_size;
     corr_ctx.kernel_point_count = kernel_point_count;
 
@@ -735,6 +754,11 @@ void* cross_correlation_task(void *args)
         for (int x1=kernel_size;x1<w1-kernel_size;x1++)
         {
             float min_distance, max_distance;
+            int corridor_vertical;
+            int corridor_start = kernel_size;
+            int corridor_end = 0;
+            float dir_length = NAN;
+            float distance_coeff = NAN;
 
             corr_ctx.best_distance = NAN;
             corr_ctx.best_corr = 0;
@@ -743,19 +767,28 @@ void* cross_correlation_task(void *args)
             corr_ctx.match_count = 0;
 
             compute_correlation_data(&t->img1, kernel_size, x1, y1, &corr_ctx.stdev1, corr_ctx.delta1);
-
             if (!isfinite(corr_ctx.stdev1))
                 continue;
 
+            calculate_epipolar_line(t, &corr_ctx);
+            if (!isfinite(corr_ctx.coeff_x) || !isfinite(corr_ctx.coeff_y) || !isfinite(corr_ctx.add_x) || !isfinite(corr_ctx.add_y))
+                continue;
+
+            // TODO: fix search range estimaton and remove iteration > 10 workaround
+            corridor_vertical = fabsf(corr_ctx.coeff_y) > fabsf(corr_ctx.coeff_x);
+            corridor_end = corridor_vertical? h2-kernel_size : w2-kernel_size;
+            dir_length = sqrtf(t->dir_x*t->dir_x + t->dir_y*t->dir_y);
+            distance_coeff = fabsf(corridor_vertical? t->dir_y/dir_length : t->dir_x/dir_length)*t->scale;
+
             processed_points++;
-            if (t->iteration > 0)
+            if (t->iteration > 10)
                 if (!estimate_search_range(t, x1, y1, &min_distance, &max_distance))
                     continue;
 
             for (int corridor_offset=-corridor_size;corridor_offset<=corridor_size;corridor_offset++)
             {
                 corr_ctx.corridor_offset = corridor_offset;
-                if (t->iteration > 0)
+                if (t->iteration > 10)
                 {
                     int current_pos, min_pos, max_pos;
                     int start, end;
