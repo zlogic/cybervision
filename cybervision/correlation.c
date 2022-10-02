@@ -473,8 +473,8 @@ void* correlate_ransac_task(void *args)
         
         for (size_t i=0;i<ransac_n;i++)
         {
-            double inlier_error = ransac_calculate_error(t, inliers[i], fundamental_matrix);
             /*
+            double inlier_error = ransac_calculate_error(t, inliers[i], fundamental_matrix);
             if (fabs(inlier_error) > (double)cybervision_ransac_t)
             {
                 inliers_error = NAN;
@@ -482,7 +482,7 @@ void* correlate_ransac_task(void *args)
             }
             */
             extended_inliers[extended_inliers_count++] = inliers[i];
-            inliers_error += inlier_error;
+            //inliers_error += inlier_error;
         }
         if (!isfinite(inliers_error))
             continue;
