@@ -338,7 +338,7 @@ static inline int ransac_calculate_model(ransac_memory *ctx, ransac_task *t, siz
     if (!result)
         return result;
 
-    double s_matrix[9] = {s[0], 0.0, 0.0, 0.0, s[1], 0.0, 0.0, 0.0};
+    double s_matrix[9] = {s[0], 0.0, 0.0, 0.0, s[1], 0.0, 0.0, 0.0, 0.0};
     multiplyd(u, s_matrix, f_temp, 3, 3, 3, 0, 0);
     multiplyd(f_temp, v, f, 3, 3, 3, 0, 0);
 
