@@ -189,6 +189,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
 
     {
         r_task.num_threads = num_threads;
+        r_task.proj_mode = proj_mode;
         r_task.matches = malloc(sizeof(ransac_match)*m_task.matches_count);
         r_task.matches_count = 0;
         for (size_t i=0;i<m_task.matches_count;i++)
@@ -227,7 +228,12 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             show_progressbar(r_task.percent_complete);
         }
         reset_progressbar();
-        correlation_ransac_complete(&r_task);
+        if (!correlation_ransac_complete(&r_task))
+        {
+            fprintf(stderr, "Failed to complete RANSAC task: %s\n", r_task.error!=NULL? r_task.error : "unknown error");
+            result_code = 1;
+            goto cleanup;
+        }
         timespec_get(&current_operation_time, TIME_UTC);
         printf("Completed RANSAC fitting in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
         printf("Kept %zi matches\n", r_task.result_matches_count);

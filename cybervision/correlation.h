@@ -45,6 +45,8 @@ typedef struct {
     ransac_match *matches;
     size_t matches_count;
 
+    projection_mode proj_mode;
+
     int num_threads;
     const char *error;
 
