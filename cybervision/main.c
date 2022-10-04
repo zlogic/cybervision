@@ -132,7 +132,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         correlation_image fast_img = {0};
         resize_image(img1, &fast_img, keypoint_scale);
         timespec_get(&last_operation_time, TIME_UTC);
-        points1 = fast_detect(&fast_img, &points1_size);
+        points1 = fast_detect(&fast_img, keypoint_scale, &points1_size);
         free(fast_img.img);
         if (points1 == NULL)
         {
@@ -141,7 +141,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             goto cleanup;
         }
         resize_image(img2, &fast_img, keypoint_scale);
-        points2 = fast_detect(&fast_img, &points2_size);
+        points2 = fast_detect(&fast_img, keypoint_scale, &points2_size);
         free(fast_img.img);
         if (points2 == NULL)
         {

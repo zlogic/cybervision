@@ -31,7 +31,7 @@ void increase_contrast(correlation_image *img)
     }
 }
 
-correlation_point* fast_detect(correlation_image *img, size_t  *count)
+correlation_point* fast_detect(correlation_image *img, float scale, size_t  *count)
 {
     int threshold = cybervision_fast_threshold, mode = cybervision_fast_mode, nonmax = cybervision_fast_nonmax;
     int num_corners;
@@ -62,10 +62,10 @@ correlation_point* fast_detect(correlation_image *img, size_t  *count)
         goto cleanup;
 
     *count = (size_t)num_corners;
-    out = malloc(sizeof(correlation_point)* num_corners);
+    out = malloc(sizeof(correlation_point)*num_corners);
     for(int i=0;i<num_corners;i++) {
-        out[i].x = corners[i].x;
-        out[i].y = corners[i].y;
+        out[i].x = corners[i].x/scale;
+        out[i].y = corners[i].y/scale;
     }
 cleanup:
     if (corners != NULL)
