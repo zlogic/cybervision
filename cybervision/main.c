@@ -191,26 +191,17 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         r_task.num_threads = num_threads;
         r_task.proj_mode = proj_mode;
         r_task.matches = malloc(sizeof(ransac_match)*m_task.matches_count);
-        r_task.matches_count = 0;
+        r_task.matches_count = m_task.matches_count;
         for (size_t i=0;i<m_task.matches_count;i++)
         {
             correlation_match m = m_task.matches[i];
             int p1 = m.point1, p2 = m.point2;
-            float corr;
-            float dx, dy, length;
 
-            ransac_match *converted_match = &(r_task.matches[r_task.matches_count]);
+            ransac_match *converted_match = &(r_task.matches[i]);
             converted_match->x1 = points1[p1].x;
             converted_match->y1 = points1[p1].y;
             converted_match->x2 = points2[p2].x;
             converted_match->y2 = points2[p2].y;
-
-            dx = (float)(converted_match->x2 - converted_match->x1);
-            dy = (float)(converted_match->y2 - converted_match->y1);
-            length = sqrtf(dx*dx + dy*dy);
-
-            if (length >= cybervision_ransac_min_length)
-                r_task.matches_count++;
         }
         free(m_task.matches);
         m_task.matches = NULL;

@@ -12,7 +12,6 @@ const int cybervision_correlation_kernel_size = 7;
 
 const int cybervision_keypoint_scale_min_size = 512;
 
-const float cybervision_ransac_min_length = 3.0F;
 const size_t cybervision_ransac_k = 1E6;
 const size_t cybervision_ransac_n_affine = 6;
 const size_t cybervision_ransac_n_perspective = 10;
