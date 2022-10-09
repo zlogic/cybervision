@@ -32,17 +32,17 @@ void free_svd(svd_internal svd)
 }
 int svdd(svd_internal svd, double *matrix, int rows, int cols, double *u, double *s, double *v)
 {
-    integer info;
-    double optimal_work;
+    integer info = 0;
+    double optimal_work = 0.0;
     integer m = rows, n = cols;
     integer lda = m, ldu = m, ldvt = n;
     integer lwork = -1;
     svd_ctx *ctx = svd;
-    integer iwork_size = 8*(m<n? m:n);
+    size_t iwork_size = 8*(m<n? m:n);
     if (ctx->iwork_size < iwork_size)
     {
         size_t new_size = sizeof(integer)*iwork_size;
-        ctx->iwork = ctx->iwork == NULL? malloc(new_size) : realloc(ctx->work, new_size);
+        ctx->iwork = ctx->iwork == NULL? malloc(new_size) : realloc(ctx->iwork, new_size);
         ctx->iwork_size = iwork_size;
     }
     int result = dgesdd_("A", &m, &n, matrix, &lda, s, u, &ldu, v, &ldvt, &optimal_work, &lwork, ctx->iwork, &info);

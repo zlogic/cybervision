@@ -267,7 +267,7 @@ static inline double ransac_calculate_error(ransac_task *t, size_t selected_matc
     double Ftp2[3];
     multiplyd(f, p2, Ftp2, 3, 1, 3, 1, 0);
     */
-    double denominator = Fp1[0]*Fp1[0]+Fp1[1]*Fp1[1]+Ftp2[0]*Ftp2[0]+Ftp2[1]*Fp1[1];
+    double denominator = Fp1[0]*Fp1[0]+Fp1[1]*Fp1[1]+Ftp2[0]*Ftp2[0]+Ftp2[1]*Ftp2[1];
     return nominator*nominator/denominator;
 }
 
@@ -571,8 +571,8 @@ void* correlate_ransac_task(void *args)
             if (already_exists)
                 continue;
             
-            double inlier_error = ransac_calculate_error(t, i, fundamental_matrix);
-            if (fabs(inlier_error) > (double)cybervision_ransac_t)
+            double inlier_error = fabs(ransac_calculate_error(t, i, fundamental_matrix));
+            if (inlier_error > (double)cybervision_ransac_t)
                 continue;
 
             extended_inliers[extended_inliers_count++] = i;
@@ -585,8 +585,8 @@ void* correlate_ransac_task(void *args)
         for (size_t i=0;i<ransac_n;i++)
         {
             /*
-            double inlier_error = ransac_calculate_error(t, inliers[i], fundamental_matrix);
-            if (fabs(inlier_error) > (double)cybervision_ransac_t)
+            double inlier_error = fabs(ransac_calculate_error(t, inliers[i], fundamental_matrix));
+            if (inlier_error > (double)cybervision_ransac_t)
             {
                 inliers_error = NAN;
                 break;
