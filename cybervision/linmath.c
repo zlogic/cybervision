@@ -69,3 +69,17 @@ void multiplyd(double *a, double *b, double *output, int m, int n, int k, int tr
     integer ldc = m;
     dgemm_(transposeA? "T":"N", transposeB? "T":"N", &m_in, &n_in, &k_in, &alpha, a, &lda, b, &ldb, &beta, output, &ldc);
 }
+
+void multiply_f_vector(double f[9], double p[3], double target[3])
+{
+    target[0] = f[0]*p[0]+f[1]*p[1]+f[2]*p[2];
+    target[1] = f[3]*p[0]+f[4]*p[1]+f[5]*p[2];
+    target[2] = f[6]*p[0]+f[7]*p[1]+f[8]*p[2];
+}
+
+void multiply_ft_vector(double f[9], double p[3], double target[3])
+{
+    target[0] = f[0]*p[0]+f[3]*p[1]+f[6]*p[2];
+    target[1] = f[1]*p[0]+f[4]*p[1]+f[7]*p[2];
+    target[2] = f[2]*p[0]+f[5]*p[1]+f[8]*p[2];
+}

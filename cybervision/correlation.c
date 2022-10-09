@@ -254,19 +254,14 @@ static inline double ransac_calculate_error(ransac_task *t, size_t selected_matc
     double p2[3] = {match->x2, match->y2, 1.0};
     double nominator = 0.0;
     double p2tFp1[3];
-    multiplyd(p2, f, p2tFp1, 1, 3, 3, 0, 0);
-    multiplyd(p2tFp1, p1, &nominator, 1, 1, 3, 0, 0);
+    p2tFp1[0] = p2[0]*f[0]+p2[1]*f[3]+p2[2]*f[6];
+    p2tFp1[1] = p2[0]*f[1]+p2[1]*f[4]+p2[2]*f[7];
+    p2tFp1[2] = p2[0]*f[2]+p2[1]*f[5]+p2[2]*f[8];
+    nominator = p2tFp1[0]*p1[0]+p2tFp1[1]*p1[1]+p2tFp1[2]*p1[2];
     double Fp1[3];
     double Ftp2[3];
-    multiplyd(f, p1, Fp1, 3, 1, 3, 0, 0);
-    multiplyd(f, p2, Ftp2, 3, 1, 3, 1, 0);
-    /*
-    double Fp1[3];
-    multiplyd(f, p1, Fp1, 3, 1, 3, 0, 0);
-    multiplyd(p2, Fp1, &nominator, 1, 1, 3, 0, 0);
-    double Ftp2[3];
-    multiplyd(f, p2, Ftp2, 3, 1, 3, 1, 0);
-    */
+    multiply_f_vector(f, p1, Fp1);
+    multiply_ft_vector(f, p2, Ftp2);
     double denominator = Fp1[0]*Fp1[0]+Fp1[1]*Fp1[1]+Ftp2[0]*Ftp2[0]+Ftp2[1]*Ftp2[1];
     return nominator*nominator/denominator;
 }
@@ -764,7 +759,7 @@ static inline void calculate_epipolar_line(cross_correlate_task *t, corridor_are
     double scale = t->scale;
     double p1[3] = {(double)c->x1/scale, (double)c->y1/scale, 1.0};
     double Fp1[3];
-    multiplyd(t->fundamental_matrix, p1, Fp1, 3, 1, 3, 0, 0);
+    multiply_f_vector(t->fundamental_matrix, p1, Fp1);
     if (fabs(Fp1[0])>fabs(Fp1[1])) 
     {
         c->coeff_x = (float)(-Fp1[1]/Fp1[0]);
