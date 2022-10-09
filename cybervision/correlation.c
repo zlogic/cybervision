@@ -767,21 +767,21 @@ static inline void calculate_epipolar_line(cross_correlate_task *t, corridor_are
     multiplyd(t->fundamental_matrix, p1, Fp1, 3, 1, 3, 0, 0);
     if (fabs(Fp1[0])>fabs(Fp1[1])) 
     {
-        c->coeff_x = 1.0F;
-        c->add_x = 0.0F;
-        c->corridor_offset_x = 0;
-        c->coeff_y = (float)(-Fp1[1]/Fp1[0]);
-        c->add_y = (float)(-scale*Fp1[2]/Fp1[0]);
-        c->corridor_offset_y = 1;
-    }
-    else
-    {
-        c->coeff_x = (float)(-Fp1[0]/Fp1[1]);
-        c->add_x = (float)(-scale*Fp1[2]/Fp1[1]);
+        c->coeff_x = (float)(-Fp1[1]/Fp1[0]);
+        c->add_x = (float)(-scale*Fp1[2]/Fp1[0]);
         c->corridor_offset_x = 1;
         c->coeff_y = 1.0F;
         c->add_y = 0.0F;
         c->corridor_offset_y = 0;
+    }
+    else
+    {
+        c->coeff_x = 1.0F;
+        c->add_x = 0.0F;
+        c->corridor_offset_x = 0;
+        c->coeff_y = (float)(-Fp1[0]/Fp1[1]);
+        c->add_y = (float)(-scale*Fp1[2]/Fp1[1]);
+        c->corridor_offset_y = 1;
     }
 }
 
