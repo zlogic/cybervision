@@ -461,7 +461,7 @@ void* correlate_ransac_task(void *args)
     size_t extended_inliers_count = 0;
     ransac_memory ctx_memory = {0};
     int (*ransac_calculate_model)(ransac_memory *ctx, ransac_task *t, size_t *selected_matches, size_t selected_matches_count, matrix_3x3 f);
-    struct drand48_data rand_buf;
+    unsigned int rand_seed = (unsigned int)pthread_self() ^ (unsigned int)time(NULL);
     
     if (t->proj_mode == PROJECTION_MODE_PARALLEL)
     {
@@ -480,12 +480,6 @@ void* correlate_ransac_task(void *args)
     ctx_memory.s = malloc(sizeof(double)*ransac_n);
     ctx_memory.v = malloc(sizeof(double)*9*9);
     
-    if (pthread_mutex_lock(&ctx->lock) != 0)
-        goto cleanup;
-    srand48_r((unsigned int)pthread_self() ^ (unsigned int)time(NULL), &rand_buf);
-    if (pthread_mutex_unlock(&ctx->lock) != 0)
-        goto cleanup;
-
     while (!t->completed)
     {
         size_t iteration;
@@ -511,11 +505,7 @@ void* correlate_ransac_task(void *args)
             ransac_match match;
             while(!unique)
             {
-                long random_number;
-                unique = 0;
-                if (lrand48_r(&rand_buf, &random_number) != 0)
-                    continue;
-                m = ((size_t)random_number)%t->matches_count;
+                m = rand_r(&rand_seed)%t->matches_count;
                 match = t->matches[m];
                 unique = 1;
                 for (size_t j=0;j<i;j++)
