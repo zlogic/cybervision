@@ -31,7 +31,7 @@ const int cybervision_crosscorrelation_corridor_segment_length = 256;
 const int cybervision_crosscorrelation_search_area_segment_length = 8;
 const int cybervision_crosscorrelation_neighbor_distance = 10;
 // const int cybervision_crosscorrelation_neighbor_distance = 8;
-const float cybervision_crosscorrelation_corridor_extend_range = 3.0F;
+const float cybervision_crosscorrelation_corridor_extend_range = 1.0F;
 const int cybervision_crosscorrelation_match_limit = 16;
 
 #ifndef CYBERVISION_DISABLE_GPU
