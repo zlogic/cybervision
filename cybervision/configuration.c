@@ -16,7 +16,8 @@ const size_t cybervision_ransac_k = 1E7;
 const size_t cybervision_ransac_n_affine = 6;
 const size_t cybervision_ransac_n_perspective = 10;
 const float cybervision_ransac_rank_epsilon = 1E-3F;
-const float cybervision_ransac_t = 1.0F;
+const float cybervision_ransac_t_affine = 1.0F;
+const float cybervision_ransac_t_perspective = 5.0F;
 const size_t cybervision_ransac_d = 10;
 const size_t cybervision_ransac_check_interval = 1E6;
 

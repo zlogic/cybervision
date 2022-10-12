@@ -16,7 +16,8 @@ extern const size_t cybervision_ransac_k;
 extern const size_t cybervision_ransac_n_affine;
 extern const size_t cybervision_ransac_n_perspective;
 extern const float cybervision_ransac_rank_epsilon;
-extern const float cybervision_ransac_t;
+extern const float cybervision_ransac_t_affine;
+extern const float cybervision_ransac_t_perspective;
 extern const size_t cybervision_ransac_d;
 extern const size_t cybervision_ransac_check_interval;
 

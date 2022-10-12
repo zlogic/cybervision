@@ -424,6 +424,7 @@ void* correlate_ransac_task(void *args)
     ransac_task_ctx *ctx = t->internal;
     size_t ransac_n;
     size_t *inliers;
+    double ransac_t;
     matrix_3x3 fundamental_matrix;
     size_t extended_inliers_count = 0;
     ransac_memory ctx_memory = {0};
@@ -434,11 +435,13 @@ void* correlate_ransac_task(void *args)
     {
         ransac_calculate_model = ransac_calculate_model_affine;
         ransac_n = cybervision_ransac_n_affine;
+        ransac_t = cybervision_ransac_t_affine;
     }
     else if (t->proj_mode == PROJECTION_MODE_PERSPECTIVE)
     {
         ransac_calculate_model = ransac_calculate_model_perspective;
         ransac_n = cybervision_ransac_n_perspective;
+        ransac_t = cybervision_ransac_t_perspective;
     }
     inliers = malloc(sizeof(size_t)*ransac_n);
     ctx_memory.svd = init_svd();
@@ -520,7 +523,7 @@ void* correlate_ransac_task(void *args)
                 continue;
             
             double inlier_error = fabs(ransac_calculate_error(t, i, fundamental_matrix));
-            if (inlier_error > (double)cybervision_ransac_t)
+            if (inlier_error > ransac_t)
                 continue;
 
             extended_inliers_count++;
@@ -533,7 +536,7 @@ void* correlate_ransac_task(void *args)
         for (size_t i=0;i<ransac_n;i++)
         {
             double inlier_error = fabs(ransac_calculate_error(t, inliers[i], fundamental_matrix));
-            if (inlier_error > (double)cybervision_ransac_t)
+            if (inlier_error > ransac_t)
             {
                 inliers_error = NAN;
                 break;
