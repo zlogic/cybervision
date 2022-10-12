@@ -633,59 +633,6 @@ static inline int fit_range(int val, int min, int max)
     return val;
 }
 
-int estimate_search_range(cross_correlate_task *t, int x1, int y1, float *min_distance, float *max_distance)
-{
-    float min_depth, max_depth;
-    int found = 0;
-    float inv_scale = 1.0F/t->scale;
-    int x_min = (int)floorf((x1-cybervision_crosscorrelation_neighbor_distance)*inv_scale);
-    int x_max = (int)ceilf((x1+cybervision_crosscorrelation_neighbor_distance)*inv_scale);
-    int y_min = (int)floorf((y1-cybervision_crosscorrelation_neighbor_distance)*inv_scale);
-    int y_max = (int)ceilf((y1+cybervision_crosscorrelation_neighbor_distance)*inv_scale);
-
-    x_min = fit_range(x_min, 0, t->out_width);
-    x_max = fit_range(x_max, 0, t->out_width);
-    y_min = fit_range(y_min, 0, t->out_height);
-    y_max = fit_range(y_max, 0, t->out_height);
-    for (int j=y_min;j<y_max;j++)
-    {
-        for (int i=x_min;i<x_max;i++)
-        {
-            int out_pos = j*t->out_width + i;
-            float current_depth, distance;
-            float dx, dy;
-            float min, max;
-            current_depth = t->out_points[out_pos];
-
-            if (!isfinite(current_depth))
-                continue;
-
-            dx = (float)i-(float)x1*inv_scale;
-            dy = (float)j-(float)y1*inv_scale;
-            distance = sqrtf(dx*dx + dy*dy);
-            min = current_depth - distance*cybervision_crosscorrelation_max_slope;
-            max = current_depth + distance*cybervision_crosscorrelation_max_slope;
-
-            if (!found)
-            {
-                min_depth = min;
-                max_depth = max;
-                found = 1;
-            }
-            else
-            {
-                min_depth = min<min_depth? min:min_depth;
-                max_depth = max>max_depth? max:max_depth;
-            }
-        }
-    }
-    if (!found)
-        return 0;
-    *min_distance = min_depth;
-    *max_distance = max_depth;
-    return 1;
-}
-
 typedef struct {
     float coeff_x, coeff_y;
     float add_x, add_y;
@@ -699,12 +646,61 @@ typedef struct {
     float *delta1;
     float *avg2;
     float *stdev2;
+    float *stdev_range;
 
     int corridor_offset;
     float best_corr;
-    float best_distance;
+    int best_match_x, best_match_y;
     int match_count;
 } corridor_area_ctx;
+int estimate_search_range(cross_correlate_task *t, corridor_area_ctx *ctx, int x1, int y1, int *corridor_start, int *corridor_end)
+{
+    float mid_corridor = 0.0F;
+    int neighbor_count = 0;
+    float range_stdev = 0.0F;
+    float inv_scale = 1.0F/t->scale;
+    int x_min = (int)floorf((x1-cybervision_crosscorrelation_neighbor_distance)*inv_scale);
+    int x_max = (int)ceilf((x1+cybervision_crosscorrelation_neighbor_distance)*inv_scale);
+    int y_min = (int)floorf((y1-cybervision_crosscorrelation_neighbor_distance)*inv_scale);
+    int y_max = (int)ceilf((y1+cybervision_crosscorrelation_neighbor_distance)*inv_scale);
+    int corridor_vertical = fabsf(ctx->coeff_y) > fabsf(ctx->coeff_x);
+
+    x_min = fit_range(x_min, 0, t->out_width);
+    x_max = fit_range(x_max, 0, t->out_width);
+    y_min = fit_range(y_min, 0, t->out_height);
+    y_max = fit_range(y_max, 0, t->out_height);
+    for (int j=y_min;j<y_max;j++)
+    {
+        for (int i=x_min;i<x_max;i++)
+        {
+            int out_pos = j*t->out_width + i;
+            float x2 = t->scale*(float)t->correlated_points[out_pos*2];
+            float y2 = t->scale*(float)t->correlated_points[out_pos*2+1];
+            if (x2<0 || y2<0)
+                continue;
+
+            int corridor_pos = (int)(corridor_vertical? roundf((y2-ctx->add_y)/ctx->coeff_y):roundf((x2-ctx->add_x)/ctx->coeff_x));
+            ctx->stdev_range[neighbor_count++] = corridor_pos;
+            mid_corridor += corridor_pos;
+        }
+    }
+    if (neighbor_count==0)
+        return 0;
+
+    mid_corridor /= (float)neighbor_count;
+    for (int i=0;i<neighbor_count;i++)
+    {
+        float delta = ctx->stdev_range[i]-mid_corridor;
+        range_stdev += delta*delta;
+    }
+    range_stdev = sqrtf(range_stdev/(float)neighbor_count);
+    
+    int corridor_center = (int)roundf(mid_corridor);
+    int corridor_length = (int)roundf(range_stdev*cybervision_crosscorrelation_corridor_extend_range);
+    *corridor_start = fit_range(corridor_center - corridor_length, *corridor_start, *corridor_end);
+    *corridor_end = fit_range(corridor_center + corridor_length, *corridor_start, *corridor_end);
+    return 1;
+}
 
 static inline void calculate_epipolar_line(cross_correlate_task *t, corridor_area_ctx* c)
 {
@@ -740,19 +736,14 @@ static inline void correlate_corridor_area(cross_correlate_task *t, corridor_are
     int x1 = c->x1, y1 = c->y1;
     int w1 = t->img1.width;
     int w2 = t->img2.width, h2 = t->img2.height;
+    float inv_scale = 1.0F/t->scale;
     for (int i=corridor_start;i<corridor_end;i++)
     {
         int x2 = (int)(c->coeff_x*i + c->add_x) + c->corridor_offset*c->corridor_offset_x;
         int y2 = (int)(c->coeff_y*i + c->add_y) + c->corridor_offset*c->corridor_offset_y;
         float corr = 0;
-        float dx, dy;
-        float distance;
         if (x2 < kernel_size || x2 >= w2-kernel_size || y2 < kernel_size || y2 >= h2-kernel_size)
             continue;
-
-        dx = (float)(x2-x1)/t->scale;
-        dy = (float)(y2-y1)/t->scale;
-        distance = sqrtf(dx*dx+dy*dy);
 
         float avg2 = c->avg2[y2*w2+x2];
         float stdev2 = c->stdev2[y2*w2+x2];
@@ -769,7 +760,8 @@ static inline void correlate_corridor_area(cross_correlate_task *t, corridor_are
         
         if (corr >= cybervision_crosscorrelation_threshold && corr > c->best_corr)
         {
-            c->best_distance = distance;
+            c->best_match_x = (int)roundf(inv_scale*x2);
+            c->best_match_y = (int)roundf(inv_scale*y2);
             c->best_corr = corr;
             c->match_count++;
         }
@@ -782,7 +774,7 @@ typedef struct {
     size_t processed_points;
     float *avg2;
     float *stdev2;
-    float *out_points;
+    int *correlated_points;
     pthread_mutex_t lock;
     pthread_t *threads;
 } cross_correlation_task_ctx;
@@ -803,12 +795,14 @@ void* cross_correlation_task(void *args)
     int points_to_process = (w1-2*kernel_size)*(h1-2*kernel_size);
 
     float inv_scale = 1.0F/t->scale;
+    int neighbor_size = 2*(int)(ceilf(cybervision_crosscorrelation_neighbor_distance*inv_scale))+1;
     corr_ctx.kernel_size = kernel_size;
     corr_ctx.kernel_point_count = kernel_point_count;
 
     corr_ctx.delta1 = malloc(sizeof(float)*kernel_point_count);
     corr_ctx.avg2 = ctx->avg2;
     corr_ctx.stdev2 = ctx->stdev2;
+    corr_ctx.stdev_range = malloc(sizeof(float)*neighbor_size*neighbor_size);
     
     while (!t->completed)
     {
@@ -824,14 +818,11 @@ void* cross_correlation_task(void *args)
 
         for (int x1=kernel_size;x1<w1-kernel_size;x1++)
         {
-            float min_distance, max_distance;
-            int corridor_vertical;
             int corridor_start = kernel_size;
             int corridor_end = 0;
-            float dir_length = NAN;
-            float distance_coeff = NAN;
 
-            corr_ctx.best_distance = NAN;
+            corr_ctx.best_match_x = -1;
+            corr_ctx.best_match_y = -1;
             corr_ctx.best_corr = 0;
             corr_ctx.x1 = x1;
             corr_ctx.y1 = y1;
@@ -845,51 +836,30 @@ void* cross_correlation_task(void *args)
             if (!isfinite(corr_ctx.coeff_x) || !isfinite(corr_ctx.coeff_y) || !isfinite(corr_ctx.add_x) || !isfinite(corr_ctx.add_y))
                 continue;
 
-            // TODO: fix search range estimaton and remove iteration > 10 workaround
-            corridor_vertical = fabsf(corr_ctx.coeff_y) > fabsf(corr_ctx.coeff_x);
+            int corridor_vertical = fabsf(corr_ctx.coeff_y) > fabsf(corr_ctx.coeff_x);
             corridor_end = corridor_vertical? h2-kernel_size : w2-kernel_size;
-            dir_length = sqrtf(t->dir_x*t->dir_x + t->dir_y*t->dir_y);
-            distance_coeff = fabsf(corridor_vertical? t->dir_y/dir_length : t->dir_x/dir_length)*t->scale;
-
             processed_points++;
-            if (t->iteration > 10)
-                if (!estimate_search_range(t, x1, y1, &min_distance, &max_distance))
+            if (t->iteration > 0)
+                if (!estimate_search_range(t, &corr_ctx, x1, y1, &corridor_start, &corridor_end))
                     continue;
 
             for (int corridor_offset=-corridor_size;corridor_offset<=corridor_size;corridor_offset++)
             {
                 corr_ctx.corridor_offset = corridor_offset;
-                if (t->iteration > 10)
-                {
-                    int current_pos, min_pos, max_pos;
-                    int start, end;
-                    if (corridor_vertical)
-                        current_pos = y1;
-                    else
-                        current_pos = x1;
-                    min_pos = (int)floorf(min_distance*distance_coeff);
-                    max_pos = (int)ceilf(max_distance*distance_coeff);
-                    start = fit_range(current_pos+min_pos, corridor_start, corridor_end);
-                    end = fit_range(current_pos+max_pos, corridor_start, corridor_end);
-                    correlate_corridor_area(t, &corr_ctx, start, end);
-                    start = fit_range(current_pos-max_pos, corridor_start, corridor_end);
-                    end = fit_range(current_pos-min_pos, corridor_start, corridor_end);
-                    correlate_corridor_area(t, &corr_ctx, start, end);
-                }
-                else
-                {
-                    correlate_corridor_area(t, &corr_ctx, corridor_start, corridor_end);
-                }
+                correlate_corridor_area(t, &corr_ctx, corridor_start, corridor_end);
                 if (corr_ctx.match_count>cybervision_crosscorrelation_match_limit)
                 {
-                    corr_ctx.best_distance = NAN;
+                    corr_ctx.best_match_x = -1;
+                    corr_ctx.best_match_y = -1;
                     corr_ctx.best_corr = 0;
                     break;
                 }
             }
-            if (isfinite(corr_ctx.best_distance))
+            if (corr_ctx.best_match_x>=0 && corr_ctx.best_match_y>=0)
             {
-                ctx->out_points[y1*t->img1.width + x1] = corr_ctx.best_distance;
+                size_t out_pos = y1*t->img1.width + x1;
+                ctx->correlated_points[out_pos*2] = corr_ctx.best_match_x;
+                ctx->correlated_points[out_pos*2+1] = corr_ctx.best_match_y;
             }
         }
         if (pthread_mutex_lock(&ctx->lock) != 0)
@@ -904,6 +874,7 @@ void* cross_correlation_task(void *args)
 
 cleanup:
     free(corr_ctx.delta1);
+    free(corr_ctx.stdev_range);
     pthread_mutex_lock(&ctx->lock);
     ctx->threads_completed++;
     pthread_mutex_unlock(&ctx->lock);
@@ -919,9 +890,9 @@ int cpu_correlation_cross_correlate_start(cross_correlate_task* task)
     task->internal = ctx;
     ctx->threads= malloc(sizeof(pthread_t)*task->num_threads);
 
-    ctx->out_points = malloc(sizeof(float)*task->img1.width*task->img1.height);
-    for(int i = 0; i < task->img1.width*task->img1.height; i++)
-        ctx->out_points[i] = NAN;
+    ctx->correlated_points = malloc(sizeof(int)*task->img1.width*task->img1.height*2);
+    for(size_t i = 0; i<task->img1.width*task->img1.height*2; i++)
+        ctx->correlated_points[i] = -1;
     ctx->processed_points = 0;
     task->percent_complete = 0.0;
     ctx->threads_completed = 0;
@@ -964,18 +935,20 @@ int cpu_correlation_cross_correlate_complete(cross_correlate_task *t)
     {
         for (int x=0;x<t->img1.width;x++)
         {
-            float value = ctx->out_points[y*t->img1.width + x];
+            size_t match_pos = y*t->img1.width + x;
+            int x2 = ctx->correlated_points[match_pos*2];
+            int y2 = ctx->correlated_points[match_pos*2+1];
+            if(x2<0 || y2<0)
+                continue;
             int out_point_pos = ((int)roundf(inv_scale*y))*t->out_width + (int)roundf(inv_scale*x);
-            if(isfinite(value))
-            {
-                t->out_points[out_point_pos] = value;
-            }
+            t->correlated_points[out_point_pos*2] = x2;
+            t->correlated_points[out_point_pos*2+1] = y2;
         }
     }
 
     pthread_mutex_destroy(&ctx->lock);
     free(ctx->threads);
-    free(ctx->out_points);
+    free(ctx->correlated_points);
     free(ctx->avg2);
     free(ctx->stdev2);
     free(t->internal);

@@ -77,7 +77,7 @@ typedef struct {
     const char *error;
 
     int out_width, out_height;
-    float *out_points;
+    int *correlated_points;
 
     cross_correlate_task_internal internal;
 } cross_correlate_task;

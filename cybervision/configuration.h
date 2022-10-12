@@ -28,7 +28,7 @@ extern const int cybervision_crosscorrelation_corridor_size;
 extern const int cybervision_crosscorrelation_corridor_segment_length;
 extern const int cybervision_crosscorrelation_search_area_segment_length;
 extern const int cybervision_crosscorrelation_neighbor_distance;
-extern const float cybervision_crosscorrelation_max_slope;
+extern const float cybervision_crosscorrelation_corridor_extend_range;
 extern const int cybervision_crosscorrelation_match_limit;
 
 typedef enum 

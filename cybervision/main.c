@@ -257,9 +257,9 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         cc_task.num_threads = num_threads;
         cc_task.out_width = img1->width;
         cc_task.out_height = img1->height;
-        cc_task.out_points = malloc(sizeof(float)*cc_task.out_width*cc_task.out_height);
-        for (int i=0;i<img1->width*img1->height;i++)
-            cc_task.out_points[i] = NAN;
+        cc_task.correlated_points = malloc(sizeof(int)*cc_task.out_width*cc_task.out_height*2);
+        for (size_t i=0;i<(size_t)cc_task.out_width*cc_task.out_height*2;i++)
+            cc_task.correlated_points[i] = -1;
 
         timespec_get(&last_operation_time, TIME_UTC);
         if (corr_mode == CORRELATION_MODE_GPU && !gpu_correlation_cross_correlate_init(&cc_task, img1->width*img1->height, img2->width*img2->height))
@@ -336,14 +336,27 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     {
         surface_data surf = {0};
 
-        surf.depth = cc_task.out_points;
-        cc_task.out_points = NULL;
+        surf.depth = malloc(sizeof(float)*cc_task.out_width*cc_task.out_height);
         surf.width = cc_task.out_width;
-        surf.height = cc_task.out_height;        
-        for (int i=0;i<surf.width*surf.height;i++)
+        surf.height = cc_task.out_height;
+        for (int y1=0;y1<cc_task.out_height;y1++)
         {
-            surf.depth[i] = surf.depth[i]*depth_scale;
+            for (int x1=0;x1<cc_task.out_width;x1++)
+            {
+                size_t pos = y1*cc_task.out_width+x1;
+                int x2 = cc_task.correlated_points[pos*2];
+                int y2 = cc_task.correlated_points[pos*2+1];
+                if (x2<0 || y2<0)
+                {
+                    surf.depth[y1*surf.width+x1] = NAN;
+                    continue;
+                }
+                float dx = (float)x1-(float)x2, dy = (float)y1-(float)y2;
+                surf.depth[y1*surf.width+x1] = sqrtf(dx*dx+dy*dy)*depth_scale;
+            }
         }
+        free(cc_task.correlated_points);
+        cc_task.correlated_points = NULL;
 
         if (!surface_output(surf, output_filename, interp_mode))
         {
@@ -384,8 +397,8 @@ cleanup:
         free(cc_task.img1.img);
     if (cc_task.img2.img != NULL)
         free(cc_task.img2.img);
-    if (cc_task.out_points != NULL)
-        free(cc_task.out_points);
+    if (cc_task.correlated_points != NULL)
+        free(cc_task.correlated_points);
     return result_code;
 }
 
