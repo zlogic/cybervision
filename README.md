@@ -91,17 +91,10 @@ To build it:
 2. Install Vulkan SDK (Windows and Linux only), see [gpu.md](gpu.md) for mode details.
 3. Configure and build the project with CMake.
 
-## Valgrind workarounds
-
-If LAPACK is compiled with support for AVX-512 instructions, Valgrind will crash with a `SIGILL` signal.
-
-To fix this, edit the vcpkg portfile (`vcpkg/ports/openblas/portfile.cmake`) and add a `list(APPEND OPENBLAS_EXTRA_OPTIONS -DTARGET=HASWELL)` line before `vcpkg_cmake_configure`.
-
 ## External libraries
 
 * [fast](https://www.edwardrosten.com/work/fast.html) keypoint detector
 * [qhull](http://www.qhull.org) for Delaunay triangulation
-* [LAPACK](https://netlib.org/lapack/) for linear algebra routines
 * [libtiff](http://libtiff.maptools.org/) to load `tiff` files
 * [libjpeg-turbo](https://libjpeg-turbo.org) to load `jpeg` files
 * [libpng](http://libpng.org/pub/png/libpng.html) to load and save `png` files

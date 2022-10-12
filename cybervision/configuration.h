@@ -15,7 +15,7 @@ extern const int cybervision_keypoint_scale_min_size;
 extern const size_t cybervision_ransac_k;
 extern const size_t cybervision_ransac_n_affine;
 extern const size_t cybervision_ransac_n_perspective;
-extern const float cybervision_ransac_collinear_epsilon;
+extern const float cybervision_ransac_rank_epsilon;
 extern const float cybervision_ransac_t;
 extern const size_t cybervision_ransac_d;
 extern const size_t cybervision_ransac_check_interval;

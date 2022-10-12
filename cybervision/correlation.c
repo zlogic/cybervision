@@ -269,7 +269,6 @@ static inline double ransac_calculate_error(ransac_task *t, size_t selected_matc
 typedef struct {
     svd_internal svd;
     double *a;
-    double *u;
     double *s;
     double *v;
 } ransac_memory;
@@ -323,7 +322,7 @@ static inline int ransac_calculate_model_perspective(ransac_memory *ctx, ransac_
     normalize_points(t, selected_matches, selected_matches_count, m1, m2);
     // Calculate fundamental matrix using the 8-point algorithm
     double *a = ctx->a;
-    double *u = ctx->u, *s = ctx->s, *v = ctx->v;
+    double *s = ctx->s, *v = ctx->v;
     for(size_t i=0;i<selected_matches_count;i++)
     {
         size_t selected_match = selected_matches[i];
@@ -342,25 +341,25 @@ static inline int ransac_calculate_model_perspective(ransac_memory *ctx, ransac_
         a[i*9+7] = y1;
         a[i*9+8] = 1.0;
     }
-    int result = svdd(ctx->svd, a, selected_matches_count, 9, u, s, v);
+    int result = svdd(ctx->svd, a, selected_matches_count, 9, s, v);
     if (!result)
         return result;
 
+   for(size_t i=0;i<9;i++)
+        a[i] = v[9*8+i];
+
+    result = svdd(ctx->svd, a, 3, 3, s, v);
+    if (!result)
+        return result;
+
+    matrix_3x3 s_matrix = {s[0], 0.0, 0.0, 0.0, s[1], 0.0, 0.0, 0.0, 0.0};
     matrix_3x3 f_temp;
-    for(size_t i=0;i<9;i++)
-        f_temp[i] = v[9*8+i];
-
-    result = svdd(ctx->svd, f_temp, 3, 3, u, s, v);
-    if (!result)
-        return result;
-
-    double s_matrix[9] = {s[0], 0.0, 0.0, 0.0, s[1], 0.0, 0.0, 0.0, 0.0};
-    multiplyd(u, s_matrix, f_temp, 3, 3, 3, 0, 0);
-    multiplyd(f_temp, v, f, 3, 3, 3, 0, 0);
+    multiply_matrix_3x3(a, s_matrix, f_temp);
+    multiply_matrix_3x3(f_temp, v, f);
 
     // Scale back to image coordinates
-    multiplyd(m2, f, f_temp, 3, 3, 3, 1, 0);
-    multiplyd(f_temp, m1, f, 3, 3, 3, 0, 0);
+    multiply_matrix_3tx3(m2, f, f_temp);
+    multiply_matrix_3x3(f_temp, m1, f);
     return 1;
 }
 
@@ -369,8 +368,7 @@ static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_task 
     matrix_3x3 m1;
     matrix_3x3 m2;
     // Calculate fundamental matrix using the 4-point algorithm
-    double *a = ctx->a;
-    double *u = ctx->u, *s = ctx->s, *v = ctx->v;
+    double *a = ctx->a, *s = ctx->s, *v = ctx->v;
     double mean_x1 = 0.0, mean_y1 = 0.0;
     double mean_x2 = 0.0, mean_y2 = 0.0;
     for(size_t i=0;i<selected_matches_count;i++)
@@ -403,51 +401,20 @@ static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_task 
         a[i*4+2] -= mean_x1;
         a[i*4+3] -= mean_y1;
     }
-    int result = svdd(ctx->svd, a, selected_matches_count, 4, u, s, v);
+    int result = svdd(ctx->svd, a, selected_matches_count, 4, s, v);
     if (!result)
         return result;
     v = &v[4*3];
-    
+
+    // Check if matrix rank is too low
+    if (s[3]<cybervision_ransac_rank_epsilon)
+        return 0;
+
     f[0] = 0.0; f[1] = 0.0; f[2] = v[0];
     f[3] = 0.0; f[4] = 0.0; f[5] = v[1];
     f[6] = v[2]; f[7] = v[3]; f[8] = -(v[0]*mean_x2+v[1]*mean_y2+v[2]*mean_x1+v[3]*mean_y1);
 
     return 1;
-}
-
-static int ransac_points_collinear(ransac_task *t, size_t *selected_matches, size_t selected_matches_count)
-{
-    for(size_t i=0;i<selected_matches_count;i++)
-    {
-        size_t selected_match = selected_matches[i];
-        ransac_match *match = &t->matches[selected_match];
-        float x1 = match->x1, y1 = match->y1;
-        for(size_t j=i+1;j<selected_matches_count;j++)
-        {
-            selected_match = selected_matches[j];
-            match = &t->matches[selected_match];
-            float x2 = match->x1, y2 = match->y1;
-            for(size_t k=j+1;k<selected_matches_count;k++)
-            {
-                selected_match = selected_matches[k];
-                match = &t->matches[selected_match];
-                float x3 = match->x1, y3 = match->y1;
-                float lx12 = x1-x2, ly12 = y1-y2;
-                float lx23 = x2-x3, ly23 = y2-y3;
-                float lx13 = x1-x3, ly13 = y1-y3;
-                float d12 = sqrtf(lx12*lx12 + ly12*ly12);
-                float d23 = sqrtf(lx23*lx23 + ly23*ly23);
-                float d13 = sqrtf(lx13*lx13 + ly13*ly13);
-                float max_distance = d12>d13?d12:d13;
-                max_distance = d23>max_distance?d23:max_distance;
-                // Shoelace formula
-                float triangle_area = 0.5F*fabsf(x1*y2 - x2*y1 + x2*y3 - x3*y2 + x3*y1 - x1*y3)/max_distance;
-                if (triangle_area < cybervision_ransac_collinear_epsilon)
-                    return 1;
-            }
-        }
-    }
-    return 0;
 }
 
 void* correlate_ransac_task(void *args)
@@ -456,7 +423,6 @@ void* correlate_ransac_task(void *args)
     ransac_task_ctx *ctx = t->internal;
     size_t ransac_n;
     size_t *inliers;
-    size_t *extended_inliers = malloc(sizeof(size_t)*t->matches_count);
     matrix_3x3 fundamental_matrix;
     size_t extended_inliers_count = 0;
     ransac_memory ctx_memory = {0};
@@ -475,8 +441,7 @@ void* correlate_ransac_task(void *args)
     }
     inliers = malloc(sizeof(size_t)*ransac_n);
     ctx_memory.svd = init_svd();
-    ctx_memory.a = malloc(sizeof(double)*ransac_n*9);
-    ctx_memory.u = malloc(sizeof(double)*ransac_n*ransac_n);
+    ctx_memory.a = malloc(sizeof(double)*(ransac_n>9?ransac_n*ransac_n:9*9));
     ctx_memory.s = malloc(sizeof(double)*ransac_n);
     ctx_memory.v = malloc(sizeof(double)*9*9);
     
@@ -522,15 +487,8 @@ void* correlate_ransac_task(void *args)
             inliers[i] = m;
         }
 
-        if (ransac_points_collinear(t, inliers, ransac_n))
-            continue;
-
         if (!ransac_calculate_model(&ctx_memory, t, inliers, ransac_n, fundamental_matrix))
-        {
-            t->error = "Failed to calculate fundamental matrix";
-            t->completed = 1;
-            break;
-        }
+            continue;
 
         double fundamental_matrix_sum = 0.0;
         for(size_t i=0;i<9;i++)
@@ -564,25 +522,23 @@ void* correlate_ransac_task(void *args)
             if (inlier_error > (double)cybervision_ransac_t)
                 continue;
 
-            extended_inliers[extended_inliers_count++] = i;
+            extended_inliers_count++;
             inliers_error += inlier_error;
         }
 
         if (extended_inliers_count < cybervision_ransac_d)
             continue;
-        
+
         for (size_t i=0;i<ransac_n;i++)
         {
-            /*
             double inlier_error = fabs(ransac_calculate_error(t, inliers[i], fundamental_matrix));
             if (inlier_error > (double)cybervision_ransac_t)
             {
                 inliers_error = NAN;
                 break;
             }
-            */
-            extended_inliers[extended_inliers_count++] = inliers[i];
-            //inliers_error += inlier_error;
+            extended_inliers_count++;
+            inliers_error += inlier_error;
         }
         if (!isfinite(inliers_error))
             continue;
@@ -590,7 +546,7 @@ void* correlate_ransac_task(void *args)
 
         if (pthread_mutex_lock(&ctx->lock) != 0)
             goto cleanup;
-        if (extended_inliers_count > t->result_matches_count || (extended_inliers_count == t->result_matches_count && inliers_error < ctx->best_error))
+        if (extended_inliers_count >= t->result_matches_count && inliers_error <= ctx->best_error)
         {
             for (size_t i=0;i<9;i++)
                 t->fundamental_matrix[i] = fundamental_matrix[i];
@@ -602,9 +558,7 @@ void* correlate_ransac_task(void *args)
     }
 cleanup:
     free(inliers);
-    free(extended_inliers);
     free(ctx_memory.a);
-    free(ctx_memory.u);
     free(ctx_memory.s);
     free(ctx_memory.v);
     free_svd(ctx_memory.svd);
