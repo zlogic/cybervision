@@ -9,6 +9,7 @@
 #include "correlation.h"
 #include "configuration.h"
 #include "linmath.h"
+#include "system.h"
 
 #define MATCH_RESULT_GROW_SIZE 1000
 
@@ -427,7 +428,7 @@ void* correlate_ransac_task(void *args)
     size_t extended_inliers_count = 0;
     ransac_memory ctx_memory = {0};
     int (*ransac_calculate_model)(ransac_memory *ctx, ransac_task *t, size_t *selected_matches, size_t selected_matches_count, matrix_3x3 f);
-    unsigned int rand_seed = (unsigned int)pthread_self() ^ (unsigned int)time(NULL);
+    unsigned int rand_seed = thread_id() ^ (unsigned int)time(NULL);
     
     if (t->proj_mode == PROJECTION_MODE_PARALLEL)
     {
