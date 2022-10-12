@@ -271,15 +271,15 @@ void resize_image(correlation_image *src, correlation_image *dst, float scale)
 
 static inline png_byte map_color(float value, const png_byte *colormap, size_t colormap_size)
 {
-    if (value < 0)
+    if (value <= 0)
         return colormap[0];
-    if (value > 1.0F)
+    if (value >= 1.0F)
         return colormap[colormap_size-1];
-    float step = 1.0F/(colormap_size-2);
+    float step = 1.0F/(colormap_size-1);
     size_t box = (size_t)floorf(value/step);
     float ratio = (value-step*box)/step;
     png_byte c1 = colormap[box];
-    png_byte c2 = colormap[box+1];
+    png_byte c2 = (box+1)<colormap_size? colormap[box+1]:colormap[box];
     int color = (int)roundf((float)c2*ratio+(float)c1*(1.0F-ratio));
     if (color>0xFF)
         return 0xFF;
@@ -347,9 +347,6 @@ int save_surface_image(surface_data data, char *filename)
             }
             else
             {
-                int depth_int = (int)floorf(depth*255.0F);
-                depth_int = depth_int>0xFF? 0xFF:depth_int;
-                depth_int = depth_int<0? 0:depth_int;
                 row[x*4] = map_color(depth, colormap_r, colormap_size);
                 row[x*4+1] = map_color(depth, colormap_g, colormap_size);
                 row[x*4+2] = map_color(depth, colormap_b, colormap_size);
