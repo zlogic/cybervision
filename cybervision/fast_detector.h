@@ -3,6 +3,6 @@
 
 #include "correlation.h"
 
-correlation_point* fast_detect(correlation_image *img, float scale, size_t  *count);
+correlation_point* fast_detect(correlation_image *img, size_t  *count);
 
 #endif

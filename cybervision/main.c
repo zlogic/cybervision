@@ -58,10 +58,10 @@ void show_progressbar(float percent)
 float optimal_keypoint_scale(correlation_image *img)
 {
     int min_dimension = img->width<img->height? img->width:img->height;
-    int scale = 1;
+    int scale = 0;
     while(min_dimension/(1<<scale)>cybervision_keypoint_scale_min_size)
         scale++;
-    scale = scale>0? scale-1 : 1;
+    scale = scale>0? scale-1 : 0;
     return 1.0F/(1<<scale);
 }
 
@@ -132,7 +132,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         correlation_image fast_img = {0};
         resize_image(img1, &fast_img, keypoint_scale);
         timespec_get(&last_operation_time, TIME_UTC);
-        points1 = fast_detect(&fast_img, keypoint_scale, &points1_size);
+        points1 = fast_detect(&fast_img, &points1_size);
         free(fast_img.img);
         if (points1 == NULL)
         {
@@ -141,7 +141,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
             goto cleanup;
         }
         resize_image(img2, &fast_img, keypoint_scale);
-        points2 = fast_detect(&fast_img, keypoint_scale, &points2_size);
+        points2 = fast_detect(&fast_img, &points2_size);
         free(fast_img.img);
         if (points2 == NULL)
         {
@@ -192,16 +192,17 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         r_task.proj_mode = proj_mode;
         r_task.matches = malloc(sizeof(ransac_match)*m_task.matches_count);
         r_task.matches_count = m_task.matches_count;
+        r_task.keypoint_scale = keypoint_scale;
         for (size_t i=0;i<m_task.matches_count;i++)
         {
             correlation_match m = m_task.matches[i];
             int p1 = m.point1, p2 = m.point2;
 
             ransac_match *converted_match = &(r_task.matches[i]);
-            converted_match->x1 = points1[p1].x;
-            converted_match->y1 = points1[p1].y;
-            converted_match->x2 = points2[p2].x;
-            converted_match->y2 = points2[p2].y;
+            converted_match->x1 = (int)roundf((float)points1[p1].x/keypoint_scale);
+            converted_match->y1 = (int)roundf((float)points1[p1].y/keypoint_scale);
+            converted_match->x2 = (int)roundf((float)points2[p2].x/keypoint_scale);
+            converted_match->y2 = (int)roundf((float)points2[p2].y/keypoint_scale);
         }
         free(m_task.matches);
         m_task.matches = NULL;

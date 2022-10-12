@@ -441,7 +441,7 @@ void* correlate_ransac_task(void *args)
     {
         ransac_calculate_model = ransac_calculate_model_perspective;
         ransac_n = cybervision_ransac_n_perspective;
-        ransac_t = cybervision_ransac_t_perspective;
+        ransac_t = cybervision_ransac_t_perspective/(t->keypoint_scale*t->keypoint_scale);
     }
     inliers = malloc(sizeof(size_t)*ransac_n);
     ctx_memory.svd = init_svd();

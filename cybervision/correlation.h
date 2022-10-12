@@ -46,6 +46,7 @@ typedef struct {
     size_t matches_count;
 
     projection_mode proj_mode;
+    float keypoint_scale;
 
     int num_threads;
     const char *error;
