@@ -549,21 +549,25 @@ void* gpu_correlate_cross_correlation_task(void *args)
     if (!gpu_transfer_in_images(t, ctx->dev.device, ctx->dev.img_bufferMemory))
     {
         t->error = "Failed to transfer input images";
+        t->completed = 1;
         return 0;
     }
     if (!gpu_transfer_in_previous_results(t, ctx->dev.device, ctx->dev.previous_result_bufferMemory))
     {
         t->error = "Failed to transfer previous results";
+        t->completed = 1;
         return 0;
     }
     if (!gpu_transfer_in_params(t, &ctx->dev, 0, 0, 0, 1))
     {
         t->error = "Failed to transfer input parameters (initialization stage)";
+        t->completed = 1;
         return NULL;
     }
     if (!gpu_run_command_buffer(&ctx->dev, max_width, max_height))
     {
         t->error = "Failed to run command buffer (initialization stage)";
+        t->completed = 1;
         return NULL;
     }
 
@@ -576,11 +580,13 @@ void* gpu_correlate_cross_correlation_task(void *args)
             if (!gpu_transfer_in_params(t, &ctx->dev, 0, y, y+batch_size, 2))
             {
                 t->error = "Failed to transfer input parameters (search area estimation stage)";
+                t->completed = 1;
                 return NULL;
             }
             if (!gpu_run_command_buffer(&ctx->dev, t->img1.width, t->img1.height))
             {
                 t->error = "Failed to run command buffer (search area estimation stage)";
+                t->completed = 1;
                 return NULL;
             }
         }
@@ -714,7 +720,7 @@ int gpu_correlation_cross_correlate_complete(cross_correlate_task *t)
     if (ctx->thread_started)
         pthread_join(ctx->thread, NULL);
     ctx->thread_started = 0;
-    return 1;
+    return t->error == NULL;
 }
 
 int gpu_correlation_cross_correlate_cleanup(cross_correlate_task *t)

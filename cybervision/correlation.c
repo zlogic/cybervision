@@ -953,7 +953,7 @@ int cpu_correlation_cross_correlate_complete(cross_correlate_task *t)
     free(ctx->stdev2);
     free(t->internal);
     t->internal = NULL;
-    return 1;
+    return t->error == NULL;
 }
 
 #ifdef CYBERVISION_DISABLE_GPU
