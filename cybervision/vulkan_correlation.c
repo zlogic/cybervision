@@ -14,8 +14,8 @@ typedef struct {
     VkQueue queue;
     uint32_t queueFamilyIndex;
 
-    VkBuffer params_buffer, img_buffer, internal_buffer, internal_int_buffer, out_buffer;
-    VkDeviceMemory params_bufferMemory, img_bufferMemory, internal_bufferMemory, internal_int_bufferMemory, out_bufferMemory;
+    VkBuffer params_buffer, img_buffer, previous_result_buffer, internal_buffer, internal_int_buffer, out_buffer;
+    VkDeviceMemory params_bufferMemory, img_bufferMemory, previous_result_bufferMemory, internal_bufferMemory, internal_int_bufferMemory, out_bufferMemory;
 
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
@@ -44,7 +44,8 @@ typedef struct {
     int32_t img2_height;
     int32_t output_width;
     int32_t output_height;
-    float dir_x, dir_y;
+    int32_t pad[1]; // std430 layout requires matrices to be aligned to 8 bytes
+    double fundamental_matrix[4*3]; // in std430 matrices are column-major and each column is aligned to 4-component vectors
     float scale;
     int32_t iteration;
     int32_t corridor_offset;
@@ -54,7 +55,7 @@ typedef struct {
     int32_t kernel_size;
     float threshold;
     int32_t neighbor_distance;
-    float max_slope;
+    float extend_range;
     int32_t match_limit;
 } shader_params;
 
@@ -254,10 +255,10 @@ int gpu_create_buffer(vulkan_device *dev, VkDeviceSize bufferSize, VkBuffer *buf
 
 int gpu_create_descriptor_set_layout(vulkan_device *dev)
 {
-    VkDescriptorSetLayoutBinding descriptorSetLayoutBindings[5];
+    VkDescriptorSetLayoutBinding descriptorSetLayoutBindings[6];
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {0};
 
-    for(uint32_t i=0;i<5;i++)
+    for(uint32_t i=0;i<6;i++)
     {
         VkDescriptorSetLayoutBinding descriptorSetLayoutBinding = {0};
         descriptorSetLayoutBinding.binding = i;
@@ -268,7 +269,7 @@ int gpu_create_descriptor_set_layout(vulkan_device *dev)
     }
 
     descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetLayoutCreateInfo.bindingCount = 5;
+    descriptorSetLayoutCreateInfo.bindingCount = 6;
     descriptorSetLayoutCreateInfo.pBindings = descriptorSetLayoutBindings; 
 
     if (vkCreateDescriptorSetLayout(dev->device, &descriptorSetLayoutCreateInfo, NULL, &dev->descriptorSetLayout) != VK_SUCCESS)
@@ -281,12 +282,12 @@ int gpu_create_descriptor_set(vulkan_device *dev)
     VkDescriptorPoolSize descriptorPoolSize = {0};
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {0};
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {0};
-    VkWriteDescriptorSet writeDescriptorSets[5];
+    VkWriteDescriptorSet writeDescriptorSets[6];
 
-    VkDescriptorBufferInfo descriptorBufferInfo[5] = {0};
+    VkDescriptorBufferInfo descriptorBufferInfo[6] = {0};
 
     descriptorPoolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorPoolSize.descriptorCount = 5;
+    descriptorPoolSize.descriptorCount = 6;
 
     descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     descriptorPoolCreateInfo.maxSets = 1;
@@ -312,19 +313,23 @@ int gpu_create_descriptor_set(vulkan_device *dev)
     descriptorBufferInfo[1].offset = 0;
     descriptorBufferInfo[1].range = VK_WHOLE_SIZE;
 
-    descriptorBufferInfo[2].buffer = dev->internal_buffer;
+    descriptorBufferInfo[2].buffer = dev->previous_result_buffer;
     descriptorBufferInfo[2].offset = 0;
     descriptorBufferInfo[2].range = VK_WHOLE_SIZE;
 
-    descriptorBufferInfo[3].buffer = dev->internal_int_buffer;
+    descriptorBufferInfo[3].buffer = dev->internal_buffer;
     descriptorBufferInfo[3].offset = 0;
     descriptorBufferInfo[3].range = VK_WHOLE_SIZE;
 
-    descriptorBufferInfo[4].buffer = dev->out_buffer;
+    descriptorBufferInfo[4].buffer = dev->internal_int_buffer;
     descriptorBufferInfo[4].offset = 0;
     descriptorBufferInfo[4].range = VK_WHOLE_SIZE;
 
-    for(uint32_t i=0;i<5;i++)
+    descriptorBufferInfo[5].buffer = dev->out_buffer;
+    descriptorBufferInfo[5].offset = 0;
+    descriptorBufferInfo[5].range = VK_WHOLE_SIZE;
+
+    for(uint32_t i=0;i<6;i++)
     {
         VkWriteDescriptorSet writeDescriptorSet = {0};
         writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -336,7 +341,7 @@ int gpu_create_descriptor_set(vulkan_device *dev)
         writeDescriptorSets[i] = writeDescriptorSet;
     }
 
-    vkUpdateDescriptorSets(dev->device, 5, writeDescriptorSets, 0, NULL);
+    vkUpdateDescriptorSets(dev->device, 6, writeDescriptorSets, 0, NULL);
     return 1;
 }
 
@@ -447,9 +452,6 @@ int gpu_transfer_in_images(cross_correlate_task *t, VkDevice device, VkDeviceMem
     payload += t->img1.width*t->img1.height;
     for (int i=0;i<t->img2.width*t->img2.height;i++)
         payload[i] = (unsigned char)t->img2.img[i];
-    payload += t->img2.width*t->img2.height;
-    for (int i=0;i<t->out_width*t->out_height;i++)
-        payload[i] = t->out_points[i];
 
     vkUnmapMemory(device, bufferMemory);
 
@@ -458,6 +460,19 @@ int gpu_transfer_in_images(cross_correlate_task *t, VkDevice device, VkDeviceMem
     free(t->img2.img);
     t->img2.img = NULL;
 
+    return 1;
+}
+
+int gpu_transfer_in_previous_results(cross_correlate_task *t, VkDevice device, VkDeviceMemory bufferMemory)
+{
+    int32_t *payload;
+    if (vkMapMemory(device, bufferMemory, 0, VK_WHOLE_SIZE, 0, (void*)&payload) != VK_SUCCESS)
+        return 0;
+
+    for (int i=0;i<t->out_width*t->out_height*2;i++)
+        payload[i] = t->correlated_points[i];
+
+    vkUnmapMemory(device, bufferMemory);
     return 1;
 }
 
@@ -474,8 +489,9 @@ int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev, int corr
     payload->img2_height = t->img2.height;
     payload->output_width = t->out_width;
     payload->output_height = t->out_height;
-    payload->dir_x = t->dir_x;
-    payload->dir_y = t->dir_y;
+    for(size_t i=0;i<3;i++)
+        for(size_t j=0;j<3;j++)
+            payload->fundamental_matrix[j*4+i] = t->fundamental_matrix[i*3+j];
     payload->scale = t->scale;
     payload->iteration = t->iteration;
     payload->corridor_offset = corridor_offset;
@@ -485,7 +501,7 @@ int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev, int corr
     payload->kernel_size = cybervision_crosscorrelation_kernel_size;
     payload->threshold = cybervision_crosscorrelation_threshold;
     payload->neighbor_distance = cybervision_crosscorrelation_neighbor_distance;
-    payload->max_slope = cybervision_crosscorrelation_max_slope;
+    payload->extend_range = cybervision_crosscorrelation_corridor_extend_range;
     payload->match_limit = cybervision_crosscorrelation_match_limit;
 
     vkUnmapMemory(dev->device, dev->params_bufferMemory);
@@ -494,22 +510,25 @@ int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev, int corr
 
 int gpu_transfer_out_image(cross_correlate_task *t, vulkan_device *dev)
 {
-    float *output_points;
+    int32_t *correlated_points;
     float inv_scale = 1.0F/t->scale;
-    if (vkMapMemory(dev->device, dev->out_bufferMemory, 0, VK_WHOLE_SIZE, 0, (void*)&output_points) != VK_SUCCESS)
+    if (vkMapMemory(dev->device, dev->out_bufferMemory, 0, VK_WHOLE_SIZE, 0, (void*)&correlated_points) != VK_SUCCESS)
         return 0;
     for (int y=0;y<t->img1.height;y++)
     {
         for (int x=0;x<t->img1.width;x++)
         {
+            size_t match_pos = y*t->img1.width + x;
+            int x2 = correlated_points[match_pos*2];
+            int y2 = correlated_points[match_pos*2+1];
+            if(x2<0 || y2<0)
+                continue;
             int out_point_pos = ((int)roundf(inv_scale*y))*t->out_width + (int)roundf(inv_scale*x);
-            float value = output_points[y*t->img1.width + x];
-            if (isfinite(value)){
-                t->out_points[out_point_pos] = value;
-            }
+            t->correlated_points[out_point_pos*2] = x2;
+            t->correlated_points[out_point_pos*2+1] = y2;
         }
     }
-    
+
     vkUnmapMemory(dev->device, dev->out_bufferMemory);
     return 1;
 }
@@ -524,7 +543,7 @@ void* gpu_correlate_cross_correlation_task(void *args)
     int corridor_stripes = 2*corridor_size+1;
     int max_width = t->img1.width > t->img2.width ? t->img1.width:t->img2.width;
     int max_height = t->img1.height > t->img2.height ? t->img1.height:t->img2.height;
-    int corridor_length = (fabs(t->dir_y)>fabs(t->dir_x)? t->img2.height:t->img2.width);
+    int corridor_length = (t->img2.width>t->img2.height? t->img2.width:t->img2.height)-(kernel_size*2);
     int corridor_segments = corridor_length/cybervision_crosscorrelation_corridor_segment_length + 1;
 
     if (!gpu_transfer_in_images(t, ctx->dev.device, ctx->dev.img_bufferMemory))
@@ -532,7 +551,11 @@ void* gpu_correlate_cross_correlation_task(void *args)
         t->error = "Failed to transfer input images";
         return 0;
     }
-
+    if (!gpu_transfer_in_previous_results(t, ctx->dev.device, ctx->dev.previous_result_bufferMemory))
+    {
+        t->error = "Failed to transfer previous results";
+        return 0;
+    }
     if (!gpu_transfer_in_params(t, &ctx->dev, 0, 0, 0, 1))
     {
         t->error = "Failed to transfer input parameters (initialization stage)";
@@ -584,7 +607,7 @@ void* gpu_correlate_cross_correlation_task(void *args)
                 break;
             }
 
-            float corridor_complete = (float)(corridor_end - kernel_size) / (corridor_length-2*kernel_size);
+            float corridor_complete = (float)(corridor_end - kernel_size) / (corridor_length);
             t->percent_complete = 2.0F + 98.0F*(c+corridor_size + corridor_complete)/corridor_stripes;
         }
     }
@@ -617,22 +640,27 @@ int gpu_correlation_cross_correlate_init(cross_correlate_task *t, size_t img1_pi
         t->error = "Failed to create buffer (parameters)";
         return 0;
     }
-    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*(img1_pixels+img2_pixels+t->out_width*t->out_height), &ctx->dev.img_buffer, &ctx->dev.img_bufferMemory, 0))
+    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*(img1_pixels+img2_pixels), &ctx->dev.img_buffer, &ctx->dev.img_bufferMemory, 0))
     {
         t->error = "Failed to create buffer (images)";
         return 0;
     }
-    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*(img1_pixels*2+img2_pixels*2+t->out_width*t->out_height*3), &ctx->dev.internal_buffer, &ctx->dev.internal_bufferMemory, 1))
+    if (!gpu_create_buffer(&ctx->dev, sizeof(int32_t)*(t->out_width*t->out_height*2), &ctx->dev.previous_result_buffer, &ctx->dev.previous_result_bufferMemory, 0))
+    {
+        t->error = "Failed to create buffer (previous results)";
+        return 0;
+    }
+    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*(img1_pixels*3+img2_pixels*2), &ctx->dev.internal_buffer, &ctx->dev.internal_bufferMemory, 1))
     {
         t->error = "Failed to create buffer (internal float)";
         return 0;
     }
-    if (!gpu_create_buffer(&ctx->dev, sizeof(int32_t)*(t->out_width*t->out_height), &ctx->dev.internal_int_buffer, &ctx->dev.internal_int_bufferMemory, 1))
+    if (!gpu_create_buffer(&ctx->dev, sizeof(int32_t)*img1_pixels*3, &ctx->dev.internal_int_buffer, &ctx->dev.internal_int_bufferMemory, 1))
     {
         t->error = "Failed to create buffer (internal int)";
         return 0;
     }
-    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*img1_pixels, &ctx->dev.out_buffer, &ctx->dev.out_bufferMemory, 0))
+    if (!gpu_create_buffer(&ctx->dev, sizeof(int32_t)*img1_pixels*2, &ctx->dev.out_buffer, &ctx->dev.out_bufferMemory, 0))
     {
         t->error = "Failed to create buffer (output)";
         return 0;
@@ -701,11 +729,13 @@ int gpu_correlation_cross_correlate_cleanup(cross_correlate_task *t)
     vkDeviceWaitIdle(device);
     vkFreeMemory(device, ctx->dev.params_bufferMemory, NULL);
     vkFreeMemory(device, ctx->dev.img_bufferMemory, NULL);
+    vkFreeMemory(device, ctx->dev.previous_result_bufferMemory, NULL);
     vkFreeMemory(device, ctx->dev.internal_bufferMemory, NULL);
     vkFreeMemory(device, ctx->dev.internal_int_bufferMemory, NULL);
     vkFreeMemory(device, ctx->dev.out_bufferMemory, NULL);
     vkDestroyBuffer(device, ctx->dev.params_buffer, NULL);
     vkDestroyBuffer(device, ctx->dev.img_buffer, NULL);
+    vkDestroyBuffer(device, ctx->dev.previous_result_buffer, NULL);
     vkDestroyBuffer(device, ctx->dev.internal_buffer, NULL);
     vkDestroyBuffer(device, ctx->dev.internal_int_buffer, NULL);
     vkDestroyBuffer(device, ctx->dev.out_buffer, NULL);

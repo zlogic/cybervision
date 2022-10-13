@@ -173,6 +173,7 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    if: "false"
     strategy:
       fail-fast: true
       matrix:

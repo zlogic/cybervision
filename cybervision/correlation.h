@@ -67,7 +67,6 @@ typedef void* cross_correlate_task_internal;
 typedef struct {
     correlation_image img1, img2;
     matrix_3x3 fundamental_matrix;
-    float dir_x, dir_y;
     float scale;
 
     int num_threads;
