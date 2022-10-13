@@ -395,8 +395,6 @@ static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_task 
     mean_y2 /= (double)selected_matches_count;
     for(size_t i=0;i<selected_matches_count;i++)
     {
-        size_t selected_match = selected_matches[i];
-        ransac_match *match = &t->matches[selected_match];
         a[i*4  ] -= mean_x2;
         a[i*4+1] -= mean_y2;
         a[i*4+2] -= mean_x1;
