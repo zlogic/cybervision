@@ -558,7 +558,56 @@ void* gpu_correlate_cross_correlation_task(void *args)
         t->completed = 1;
         return 0;
     }
-    if (!gpu_transfer_in_params(t, &ctx->dev, 0, 0, 0, 1))
+
+    if (t->iteration > 0)
+    {
+        int y_limit = (int)ceilf((cybervision_crosscorrelation_neighbor_distance)/t->scale);
+        int batch_size = cybervision_crosscorrelation_search_area_segment_length;
+        if (!gpu_transfer_in_params(t, &ctx->dev, 0, 0, 0, 1))
+        {
+            t->error = "Failed to transfer input parameters (search area estimationinitialization stage)";
+            t->completed = 1;
+            return NULL;
+        }
+        if (!gpu_run_command_buffer(&ctx->dev, max_width, max_height))
+        {
+            t->error = "Failed to run command buffer (search area estimation initialization stage)";
+            t->completed = 1;
+            return NULL;
+        }
+        for(int y=-y_limit;y<=y_limit;y+=batch_size)
+        {
+            if (!gpu_transfer_in_params(t, &ctx->dev, 0, y, y+batch_size, 2))
+            {
+                t->error = "Failed to transfer input parameters (search area estimation stage phase 0)";
+                t->completed = 1;
+                return NULL;
+            }
+            if (!gpu_run_command_buffer(&ctx->dev, t->img1.width, t->img1.height))
+            {
+                t->error = "Failed to run command buffer (search area estimation stage phase 0)";
+                t->completed = 1;
+                return NULL;
+            }
+        }
+        for(int y=-y_limit;y<=y_limit;y+=batch_size)
+        {
+            if (!gpu_transfer_in_params(t, &ctx->dev, 0, y, y+batch_size, 3))
+            {
+                t->error = "Failed to transfer input parameters (search area estimation stage phase 1)";
+                t->completed = 1;
+                return NULL;
+            }
+            if (!gpu_run_command_buffer(&ctx->dev, t->img1.width, t->img1.height))
+            {
+                t->error = "Failed to run command buffer (search area estimation stage phase 1)";
+                t->completed = 1;
+                return NULL;
+            }
+        }
+    }
+
+    if (!gpu_transfer_in_params(t, &ctx->dev, 0, 0, 0, 4))
     {
         t->error = "Failed to transfer input parameters (initialization stage)";
         t->completed = 1;
@@ -571,27 +620,6 @@ void* gpu_correlate_cross_correlation_task(void *args)
         return NULL;
     }
 
-    if (t->iteration > 0)
-    {
-        int y_limit = (int)ceilf((cybervision_crosscorrelation_neighbor_distance)/t->scale);
-        int batch_size = cybervision_crosscorrelation_search_area_segment_length;
-        for(int y=-y_limit;y<=y_limit;y+=batch_size)
-        {
-            if (!gpu_transfer_in_params(t, &ctx->dev, 0, y, y+batch_size, 2))
-            {
-                t->error = "Failed to transfer input parameters (search area estimation stage)";
-                t->completed = 1;
-                return NULL;
-            }
-            if (!gpu_run_command_buffer(&ctx->dev, t->img1.width, t->img1.height))
-            {
-                t->error = "Failed to run command buffer (search area estimation stage)";
-                t->completed = 1;
-                return NULL;
-            }
-        }
-    }
-
     t->percent_complete = 2.0F;
 
     for (int c=-corridor_size;c<=corridor_size;c++)
@@ -602,7 +630,7 @@ void* gpu_correlate_cross_correlation_task(void *args)
             int corridor_end = kernel_size + (l+1)*corridor_segment_length;
             if (corridor_end> corridor_length-kernel_size)
                 corridor_end = corridor_length-kernel_size;
-            if (!gpu_transfer_in_params(t, &ctx->dev, c, corridor_start, corridor_end, 3))
+            if (!gpu_transfer_in_params(t, &ctx->dev, c, corridor_start, corridor_end, 5))
             {
                 t->error = "Failed to transfer input parameters";
                 break;

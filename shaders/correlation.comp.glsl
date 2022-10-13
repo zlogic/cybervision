@@ -39,13 +39,19 @@ layout(std430, binding = 2) buffer readonly Previous_result
 layout(std430, binding = 3) buffer Internals
 {
     // Layout:
+    // For the search range estimation pass:
+    // avg corridor coeff; corridor coeff standard deviation
+    // For the correlation pass:
     // img1 avg; img1 stdev; img2 avg; img2 stdev; best correlation
     float internals[];
 };
 layout(std430, binding = 4) buffer Internals_Int
 {
     // Layout:
-    // match count; corridor start; corridor end;
+    // For the search range estimation pass:
+    // neighbor count; corridor start/end;
+    // For the correlation pass:
+    // match count; corridor start/end;
     int internals_int[];
 };
 layout(std430, binding = 5) buffer writeonly Result
@@ -55,7 +61,29 @@ layout(std430, binding = 5) buffer writeonly Result
 
 const float NAN = 0.0f/0.0f;
 
-void prepare_initialdata() {
+void prepare_initialdata_searchdata() {
+    const uint x = gl_GlobalInvocationID.x;
+    const uint y = gl_GlobalInvocationID.y;
+
+    const uint img1_offset = 0;
+    const uint img2_offset = img1_width*img1_height;
+
+    const int mean_coeff_offset = 0;
+    const int corridor_stdev_offset = mean_coeff_offset + img1_width*img1_height;
+    const int neighbor_count_offset = 0;
+    const int corridor_range_offset = neighbor_count_offset + img1_width*img1_height;
+
+    if (x < img1_width && y < img1_height)
+    {
+        internals[mean_coeff_offset + img1_width*y+x] = 0;
+        internals[corridor_stdev_offset + img1_width*y+x] = 0;
+        internals_int[neighbor_count_offset + img1_width*y+x] = 0;
+        internals_int[corridor_range_offset + (img1_width*y+x)*2] = -1;
+        internals_int[corridor_range_offset + (img1_width*y+x)*2+1] = -1;
+    }
+}
+
+void prepare_initialdata_correlation() {
     const uint x = gl_GlobalInvocationID.x;
     const uint y = gl_GlobalInvocationID.y;
     const float kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
@@ -69,14 +97,11 @@ void prepare_initialdata() {
     const int img2_stdev_offset = img2_avg_offset + img2_width*img2_height;
     const int correlation_offset = img2_stdev_offset + img2_width*img2_height;
     const int match_count_offset = 0;
-    const int corridor_range_offset = match_count_offset + img1_width*img1_height;
 
     if (x < img1_width && y < img1_height)
     {
         internals[correlation_offset + img1_width*y+x] = 0;
         internals_int[match_count_offset + img1_width*y+x] = 0;
-        internals_int[corridor_range_offset + (img1_width*y+x)*2] = 0;
-        internals_int[corridor_range_offset + (img1_width*y+x)*2+1] = 0;
         result[(img1_width*y+x)*2] = -1;
         result[(img1_width*y+x)*2+1] = -1;
     }
@@ -160,10 +185,13 @@ void calculate_epipolar_line(uint x1, uint y1, out vec2 coeff, out vec2 add_cons
     }
 }
 
-void prepare_searchdata() {
+void prepare_searchdata(int pass) {
     const uint x = gl_GlobalInvocationID.x;
     const uint y = gl_GlobalInvocationID.y;
-    const uint corridor_range_offset = img1_width*img1_height;
+    const uint neighbor_count_offset = 0;
+    const uint corridor_range_offset = neighbor_count_offset + img1_width*img1_height;
+    const uint mean_coeff_offset = 0;
+    const uint corridor_stdev_offset = mean_coeff_offset + img1_width*img1_height;
     vec2 coeff, add_const;
     bool corridor_affects_x, corridor_affects_y;
     calculate_epipolar_line(x, y, coeff, add_const, corridor_affects_x, corridor_affects_y);
@@ -172,19 +200,22 @@ void prepare_searchdata() {
     const float inv_scale = 1.0/scale;
     int x_min = int(floor((int(x)-neighbor_distance)*inv_scale));
     int x_max = int(ceil((int(x)+neighbor_distance)*inv_scale));
-    int y_min = int(floor((int(y)-neighbor_distance)*inv_scale));
-    int y_max = int(ceil((int(y)+neighbor_distance)*inv_scale));
-    // TODO: fix this
-    //int y_min = int(float(y)*inv_scale)+corridor_start;
-    //int y_max = int(float(y)*inv_scale)+corridor_end;
+    int y_min = int(float(y)*inv_scale)+corridor_start;
+    int y_max = int(float(y)*inv_scale)+corridor_end;
 
     x_min = min(max(0, x_min), out_width);
     x_max = min(max(0, x_max), out_width);
     y_min = min(max(0, y_min), out_height);
     y_max = min(max(0, y_max), out_height);
 
-    float mid_corridor = 0.0;
-    int neighbor_count = 0;
+    int neighbor_count = internals_int[neighbor_count_offset+y*img1_width+x];
+    if (pass == 1 && neighbor_count<=0)
+        return;
+
+    float mid_corridor = internals[mean_coeff_offset + y*img1_width+x];
+    float range_stdev = internals[corridor_stdev_offset + y*img1_width+x];
+    if (pass == 1)
+        mid_corridor /= float(neighbor_count);
     for (int j=y_min;j<y_max;j++)
     {
         for (int i=x_min;i<x_max;i++)
@@ -196,38 +227,26 @@ void prepare_searchdata() {
                 continue;
 
             int corridor_pos = int(corridor_vertical? round((y2-add_const.y)/coeff.y):round((x2-add_const.x)/coeff.x));
-            mid_corridor += float(corridor_pos);
-            neighbor_count++;
+            if (pass == 0)
+            {
+                mid_corridor += float(corridor_pos);
+                neighbor_count++;
+            } else if (pass == 1) {
+                float delta = float(corridor_pos)-mid_corridor;
+                range_stdev += delta*delta/float(neighbor_count);
+            }
         }
     }
-    if (neighbor_count==0)
-    {
-        internals_int[corridor_range_offset + (y*img1_width+x)*2] = -1;
-        internals_int[corridor_range_offset + (y*img1_width+x)*2+1] = -1;
+    
+    if (pass == 0) {
+        internals[mean_coeff_offset + y*img1_width+x] = mid_corridor;
+        internals_int[neighbor_count_offset+y*img1_width+x] = neighbor_count;
         return;
     }
 
-    mid_corridor /= float(neighbor_count);
-    float range_stdev = 0.0;
-    for (int j=y_min;j<y_max;j++)
-    {
-        for (int i=x_min;i<x_max;i++)
-        {
-            int out_pos = j*out_width + i;
-            float x2 = scale*float(previous_result[out_pos*2]);
-            float y2 = scale*float(previous_result[out_pos*2+1]);
-            if (x2<0 || y2<0)
-                continue;
-
-            int corridor_pos = int(corridor_vertical? round((y2-add_const.y)/coeff.y):round((x2-add_const.x)/coeff.x));
-            float delta = float(corridor_pos)-mid_corridor;
-            range_stdev += delta*delta;
-        }
-    }
-    range_stdev = sqrt(range_stdev/float(neighbor_count));
-
+    internals[corridor_stdev_offset + y*img1_width+x] = range_stdev;
     const int corridor_center = int(round(mid_corridor));
-    const int corridor_length = int(round(range_stdev*extend_range));
+    const int corridor_length = int(round(sqrt(range_stdev)*extend_range));
     int min_pos = kernel_size;
     int max_pos = corridor_vertical? img2_height-kernel_size : img2_width-kernel_size;
     min_pos = min(max(min_pos, corridor_center - corridor_length), max_pos);
@@ -239,12 +258,22 @@ void prepare_searchdata() {
 void main() {
     if (phase == 1)
     {
-        prepare_initialdata();
+        prepare_initialdata_searchdata();
         return;
     }
     if (phase == 2)
     {
-        prepare_searchdata();
+        prepare_searchdata(0);
+        return;
+    }
+    if (phase == 3)
+    {
+        prepare_searchdata(1);
+        return;
+    }
+    if (phase == 4)
+    {
+        prepare_initialdata_correlation();
         return;
     }
 
