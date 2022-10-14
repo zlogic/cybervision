@@ -91,10 +91,11 @@ To build it:
 2. Install Vulkan SDK (Windows and Linux only), see [gpu.md](gpu.md) for mode details.
 3. Configure and build the project with CMake.
 
-## External libraries
+## External libraries or dependencies
 
 * [fast](https://www.edwardrosten.com/work/fast.html) keypoint detector
 * [qhull](http://www.qhull.org) for Delaunay triangulation
 * [libtiff](http://libtiff.maptools.org/) to load `tiff` files
 * [libjpeg-turbo](https://libjpeg-turbo.org) to load `jpeg` files
 * [libpng](http://libpng.org/pub/png/libpng.html) to load and save `png` files
+* [plasma colormap](https://bids.github.io/colormap/) to generate depth map images
