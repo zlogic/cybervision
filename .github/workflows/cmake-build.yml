@@ -13,6 +13,7 @@ env:
 jobs:
   build-linux:
     runs-on: ubuntu-20.04
+    if: "false"
     strategy:
       fail-fast: true
       matrix:
@@ -98,6 +99,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
+    if: "false"
     env:
       VULKAN_LOADER_VERSION: 1.3.225
       VULKAN_SDK: "${{github.workspace}}\\vulkan-sdk"
@@ -173,7 +175,6 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
-    if: "false"
     strategy:
       fail-fast: true
       matrix:
