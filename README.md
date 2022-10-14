@@ -98,4 +98,4 @@ To build it:
 * [libtiff](http://libtiff.maptools.org/) to load `tiff` files
 * [libjpeg-turbo](https://libjpeg-turbo.org) to load `jpeg` files
 * [libpng](http://libpng.org/pub/png/libpng.html) to load and save `png` files
-* [plasma colormap](https://bids.github.io/colormap/) to generate depth map images
+* [viridis colormap](https://bids.github.io/colormap/) to generate depth map images
