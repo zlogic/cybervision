@@ -3,7 +3,6 @@
 
 int cpu_cores();
 void sleep_ms();
-unsigned int thread_id();
 #ifdef _MSC_VER
 #define strcasecmp _stricmp
 #endif

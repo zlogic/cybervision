@@ -239,6 +239,7 @@ int correlation_match_points_complete(match_task *t)
 
 typedef struct {
     size_t iteration;
+    unsigned int thread_id;
 
     float best_error;
 
@@ -433,8 +434,14 @@ void* correlate_ransac_task(void *args)
     size_t extended_inliers_count = 0;
     ransac_memory ctx_memory = {0};
     int (*ransac_calculate_model)(ransac_memory *ctx, ransac_task *t, size_t *selected_matches, size_t selected_matches_count, matrix_3x3 f);
-    unsigned int rand_seed = thread_id() ^ (unsigned int)time(NULL);
-    
+    unsigned int rand_seed;
+
+    if (pthread_mutex_lock(&ctx->lock) != 0)
+        goto cleanup;
+    rand_seed = (ctx->thread_id++) ^ (unsigned int)time(NULL);
+    if (pthread_mutex_unlock(&ctx->lock) != 0)
+        goto cleanup;
+
     if (t->proj_mode == PROJECTION_MODE_PARALLEL)
     {
         ransac_calculate_model = ransac_calculate_model_affine;
@@ -588,6 +595,7 @@ int correlation_ransac_start(ransac_task *task)
     ctx->threads= malloc(sizeof(pthread_t)*task->num_threads);
 
     ctx->iteration = 0;
+    ctx->thread_id = 0;
     task->percent_complete = 0.0;
     ctx->threads_completed = 0;
     task->completed = 0;

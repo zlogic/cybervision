@@ -7,10 +7,6 @@
 #include <unistd.h>
 #endif
 
-#ifndef _WIN32
-#include <pthread.h>
-#endif
-
 #if _POSIX_C_SOURCE >= 199309L
 #include <time.h>
 #endif
@@ -54,15 +50,6 @@ void sleep_ms(int milliseconds)
     if (milliseconds >= 1000)
         sleep(milliseconds / 1000);
     usleep((milliseconds % 1000) * 1000);
-#endif
-}
-
-unsigned int thread_id()
-{
-#ifdef WIN32
-    return (unsigned int)GetCurrentThreadId();
-#else
-    return (unsigned int)pthread_self();
 #endif
 }
 
