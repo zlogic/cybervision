@@ -44,8 +44,8 @@ typedef struct {
     int32_t img2_height;
     int32_t output_width;
     int32_t output_height;
-    int32_t pad[1]; // std430 layout requires matrices to be aligned to 8 bytes
-    double fundamental_matrix[4*3]; // in std430 matrices are column-major and each column is aligned to 4-component vectors
+    int32_t pad[2]; // std430 layout requires matrices to be aligned to 16 bytes
+    float fundamental_matrix[4*3]; // in std430 matrices are column-major and each column is aligned to 4-component vectors
     float scale;
     int32_t iteration;
     int32_t corridor_offset;
@@ -565,7 +565,7 @@ void* gpu_correlate_cross_correlation_task(void *args)
         int batch_size = cybervision_crosscorrelation_search_area_segment_length;
         if (!gpu_transfer_in_params(t, &ctx->dev, 0, 0, 0, 1))
         {
-            t->error = "Failed to transfer input parameters (search area estimationinitialization stage)";
+            t->error = "Failed to transfer input parameters (search area estimation initialization stage)";
             t->completed = 1;
             return NULL;
         }

@@ -40,7 +40,7 @@ typedef struct {
     int x2,y2;
 } ransac_match;
 typedef void* ransac_task_internal;
-typedef double matrix_3x3[3*3];
+typedef float matrix_3x3[3*3];
 typedef struct {
     ransac_match *matches;
     size_t matches_count;

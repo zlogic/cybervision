@@ -240,30 +240,30 @@ int correlation_match_points_complete(match_task *t)
 typedef struct {
     size_t iteration;
 
-    double best_error;
+    float best_error;
 
     int threads_completed;
     pthread_mutex_t lock;
     pthread_t *threads;
 } ransac_task_ctx;
 
-static inline double ransac_calculate_error(ransac_task *t, size_t selected_match, matrix_3x3 f)
+static inline float ransac_calculate_error(ransac_task *t, size_t selected_match, matrix_3x3 f)
 {
     // Calculate Sampson distance
     ransac_match *match = &t->matches[selected_match];
-    double p1[3] = {match->x1, match->y1, 1.0};
-    double p2[3] = {match->x2, match->y2, 1.0};
-    double nominator = 0.0;
-    double p2tFp1[3];
+    float p1[3] = {match->x1, match->y1, 1.0F};
+    float p2[3] = {match->x2, match->y2, 1.0F};
+    float nominator = 0.0F;
+    float p2tFp1[3];
     p2tFp1[0] = p2[0]*f[0]+p2[1]*f[3]+p2[2]*f[6];
     p2tFp1[1] = p2[0]*f[1]+p2[1]*f[4]+p2[2]*f[7];
     p2tFp1[2] = p2[0]*f[2]+p2[1]*f[5]+p2[2]*f[8];
     nominator = p2tFp1[0]*p1[0]+p2tFp1[1]*p1[1]+p2tFp1[2]*p1[2];
-    double Fp1[3];
-    double Ftp2[3];
+    float Fp1[3];
+    float Ftp2[3];
     multiply_f_vector(f, p1, Fp1);
     multiply_ft_vector(f, p2, Ftp2);
-    double denominator = Fp1[0]*Fp1[0]+Fp1[1]*Fp1[1]+Ftp2[0]*Ftp2[0]+Ftp2[1]*Ftp2[1];
+    float denominator = Fp1[0]*Fp1[0]+Fp1[1]*Fp1[1]+Ftp2[0]*Ftp2[0]+Ftp2[1]*Ftp2[1];
     return nominator*nominator/denominator;
 }
 
@@ -277,43 +277,43 @@ typedef struct {
 static inline void normalize_points(ransac_task *t, size_t *selected_matches, size_t selected_matches_count, matrix_3x3 m1, matrix_3x3 m2)
 {
     // Recenter & rescale points
-    double centerX1 = 0.0, centerY1 = 0.0;
-    double centerX2 = 0.0, centerY2 = 0.0;
+    float centerX1 = 0.0F, centerY1 = 0.0F;
+    float centerX2 = 0.0F, centerY2 = 0.0F;
     for(size_t i=0;i<selected_matches_count;i++)
     {
         size_t selected_match = selected_matches[i];
         ransac_match *match = &t->matches[selected_match];
-        centerX1 += (double)match->x1;
-        centerY1 += (double)match->y1;
-        centerX2 += (double)match->x2;
-        centerY2 += (double)match->y2;
+        centerX1 += (float)match->x1;
+        centerY1 += (float)match->y1;
+        centerX2 += (float)match->x2;
+        centerY2 += (float)match->y2;
     }
-    centerX1 /= (double)selected_matches_count;
-    centerY1 /= (double)selected_matches_count;
-    centerX2 /= (double)selected_matches_count;
-    centerY2 /= (double)selected_matches_count;
-    double scale1 = 0.0, scale2 = 0.0;
+    centerX1 /= (float)selected_matches_count;
+    centerY1 /= (float)selected_matches_count;
+    centerX2 /= (float)selected_matches_count;
+    centerY2 /= (float)selected_matches_count;
+    float scale1 = 0.0F, scale2 = 0.0F;
     for(size_t i=0;i<selected_matches_count;i++)
     {
         size_t selected_match = selected_matches[i];
         ransac_match *match = &t->matches[selected_match];
-        double dx1 = (double)match->x1-centerX1;
-        double dy1 = (double)match->y1-centerY1;
-        double dx2 = (double)match->x2-centerX2;
-        double dy2 = (double)match->y2-centerY2;
-        scale1 += sqrt(dx1*dx1 + dy1*dy1);
-        scale2 += sqrt(dx2*dx2 + dy2*dy2);
+        float dx1 = (float)match->x1-centerX1;
+        float dy1 = (float)match->y1-centerY1;
+        float dx2 = (float)match->x2-centerX2;
+        float dy2 = (float)match->y2-centerY2;
+        scale1 += sqrtf(dx1*dx1 + dy1*dy1);
+        scale2 += sqrtf(dx2*dx2 + dy2*dy2);
     }
-    scale1 = sqrt(2.0)/(scale1/(double)selected_matches_count);
-    scale2 = sqrt(2.0)/(scale2/(double)selected_matches_count);
+    scale1 = sqrtf(2.0F)/(scale1/(float)selected_matches_count);
+    scale2 = sqrtf(2.0F)/(scale2/(float)selected_matches_count);
 
-    m1[0] = scale1; m1[1] = 0.0; m1[2] = -centerX1*scale1;
-    m1[3] = 0.0; m1[3+1] = scale1; m1[3+2] = -centerY1*scale1;
-    m1[6] = 0.0; m1[6+1] = 0.0; m1[6+2] = 1.0;
+    m1[0] = scale1; m1[1] = 0.0F; m1[2] = -centerX1*scale1;
+    m1[3] = 0.0F; m1[3+1] = scale1; m1[3+2] = -centerY1*scale1;
+    m1[6] = 0.0F; m1[6+1] = 0.0F; m1[6+2] = 1.0F;
 
-    m2[0] = scale2; m2[1] = 0.0; m2[2] = -centerX2*scale2;
-    m2[3] = 0.0; m2[3+1] = scale2; m2[3+2] = -centerY2*scale2;
-    m2[6] = 0.0; m2[6+1] = 0.0; m2[6+2] = 1.0;
+    m2[0] = scale2; m2[1] = 0.0F; m2[2] = -centerX2*scale2;
+    m2[3] = 0.0F; m2[3+1] = scale2; m2[3+2] = -centerY2*scale2;
+    m2[6] = 0.0F; m2[6+1] = 0.0F; m2[6+2] = 1.0F;
 }
 
 static inline int ransac_calculate_model_perspective(ransac_memory *ctx, ransac_task *t, size_t *selected_matches, size_t selected_matches_count, matrix_3x3 f)
@@ -328,10 +328,10 @@ static inline int ransac_calculate_model_perspective(ransac_memory *ctx, ransac_
     {
         size_t selected_match = selected_matches[i];
         ransac_match *match = &t->matches[selected_match];
-        double x1 = (double)match->x1*m1[0] + (double)match->y1*m1[1] + m1[2];
-        double y1 = (double)match->x1*m1[3] + (double)match->y1*m1[4] + m1[5];
-        double x2 = (double)match->x2*m2[0] + (double)match->y2*m2[1] + m2[2];
-        double y2 = (double)match->x2*m2[3] + (double)match->y2*m2[4] + m2[5];
+        float x1 = (float)match->x1*m1[0] + (float)match->y1*m1[1] + m1[2];
+        float y1 = (float)match->x1*m1[3] + (float)match->y1*m1[4] + m1[5];
+        float x2 = (float)match->x2*m2[0] + (float)match->y2*m2[1] + m2[2];
+        float y2 = (float)match->x2*m2[3] + (float)match->y2*m2[4] + m2[5];
         a[i*9  ] = x2*x1;
         a[i*9+1] = x2*y1;
         a[i*9+2] = x2;
@@ -353,10 +353,16 @@ static inline int ransac_calculate_model_perspective(ransac_memory *ctx, ransac_
     if (!result)
         return result;
 
-    matrix_3x3 s_matrix = {s[0], 0.0, 0.0, 0.0, s[1], 0.0, 0.0, 0.0, 0.0};
+    matrix_3x3 a_float, v_float;
+    for(size_t i=0;i<9;i++)
+    {
+        a_float[i] = a[i];
+        v_float[i] = v[i];
+    }
+    matrix_3x3 s_matrix = {s[0], 0.0F, 0.0F, 0.0F, s[1], 0.0F, 0.0F, 0.0F, 0.0F};
     matrix_3x3 f_temp;
-    multiply_matrix_3x3(a, s_matrix, f_temp);
-    multiply_matrix_3x3(f_temp, v, f);
+    multiply_matrix_3x3(a_float, s_matrix, f_temp);
+    multiply_matrix_3x3(f_temp, v_float, f);
 
     // Scale back to image coordinates
     multiply_matrix_3tx3(m2, f, f_temp);
@@ -370,16 +376,16 @@ static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_task 
     matrix_3x3 m2;
     // Calculate fundamental matrix using the 4-point algorithm
     double *a = ctx->a, *s = ctx->s, *v = ctx->v;
-    double mean_x1 = 0.0, mean_y1 = 0.0;
-    double mean_x2 = 0.0, mean_y2 = 0.0;
+    float mean_x1 = 0.0F, mean_y1 = 0.0F;
+    float mean_x2 = 0.0F, mean_y2 = 0.0F;
     for(size_t i=0;i<selected_matches_count;i++)
     {
         size_t selected_match = selected_matches[i];
         ransac_match *match = &t->matches[selected_match];
-        double x1 = match->x1;
-        double y1 = match->y1;
-        double x2 = match->x2;
-        double y2 = match->y2;
+        float x1 = match->x1;
+        float y1 = match->y1;
+        float x2 = match->x2;
+        float y2 = match->y2;
         a[i*4  ] = x2;
         a[i*4+1] = y2;
         a[i*4+2] = x1;
@@ -389,10 +395,10 @@ static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_task 
         mean_x1 += x1;
         mean_y1 += y1;
     }
-    mean_x1 /= (double)selected_matches_count;
-    mean_y1 /= (double)selected_matches_count;
-    mean_x2 /= (double)selected_matches_count;
-    mean_y2 /= (double)selected_matches_count;
+    mean_x1 /= (float)selected_matches_count;
+    mean_y1 /= (float)selected_matches_count;
+    mean_x2 /= (float)selected_matches_count;
+    mean_y2 /= (float)selected_matches_count;
     for(size_t i=0;i<selected_matches_count;i++)
     {
         a[i*4  ] -= mean_x2;
@@ -409,8 +415,8 @@ static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_task 
     if (s[3]<cybervision_ransac_rank_epsilon)
         return 0;
 
-    f[0] = 0.0; f[1] = 0.0; f[2] = v[0];
-    f[3] = 0.0; f[4] = 0.0; f[5] = v[1];
+    f[0] = 0.0F; f[1] = 0.0F; f[2] = v[0];
+    f[3] = 0.0F; f[4] = 0.0F; f[5] = v[1];
     f[6] = v[2]; f[7] = v[3]; f[8] = -(v[0]*mean_x2+v[1]*mean_y2+v[2]*mean_x1+v[3]*mean_y1);
 
     return 1;
@@ -422,7 +428,7 @@ void* correlate_ransac_task(void *args)
     ransac_task_ctx *ctx = t->internal;
     size_t ransac_n;
     size_t *inliers;
-    double ransac_t;
+    float ransac_t;
     matrix_3x3 fundamental_matrix;
     size_t extended_inliers_count = 0;
     ransac_memory ctx_memory = {0};
@@ -492,7 +498,7 @@ void* correlate_ransac_task(void *args)
         if (!ransac_calculate_model(&ctx_memory, t, inliers, ransac_n, fundamental_matrix))
             continue;
 
-        double fundamental_matrix_sum = 0.0;
+        float fundamental_matrix_sum = 0.0F;
         for(size_t i=0;i<9;i++)
         {
             if (!isfinite(fundamental_matrix[i]))
@@ -500,12 +506,12 @@ void* correlate_ransac_task(void *args)
                 fundamental_matrix_sum = NAN;
                 break;
             }
-            fundamental_matrix_sum += fabs(fundamental_matrix[i]);
+            fundamental_matrix_sum += fabsf(fundamental_matrix[i]);
         }
-        if (fundamental_matrix_sum == 0.0 || !isfinite(fundamental_matrix_sum))
+        if (fundamental_matrix_sum == 0.0F || !isfinite(fundamental_matrix_sum))
             continue;
 
-        double inliers_error = 0.0F;
+        float inliers_error = 0.0F;
         for (size_t i=0;i<t->matches_count;i++)
         {
             int already_exists = 0;
@@ -520,7 +526,7 @@ void* correlate_ransac_task(void *args)
             if (already_exists)
                 continue;
             
-            double inlier_error = fabs(ransac_calculate_error(t, i, fundamental_matrix));
+            float inlier_error = fabsf(ransac_calculate_error(t, i, fundamental_matrix));
             if (inlier_error > ransac_t)
                 continue;
 
@@ -533,7 +539,7 @@ void* correlate_ransac_task(void *args)
 
         for (size_t i=0;i<ransac_n;i++)
         {
-            double inlier_error = fabs(ransac_calculate_error(t, inliers[i], fundamental_matrix));
+            float inlier_error = fabsf(ransac_calculate_error(t, inliers[i], fundamental_matrix));
             if (inlier_error > ransac_t)
             {
                 inliers_error = NAN;
@@ -544,7 +550,7 @@ void* correlate_ransac_task(void *args)
         }
         if (!isfinite(inliers_error))
             continue;
-        inliers_error = fabs(inliers_error/(double)extended_inliers_count);
+        inliers_error = fabsf(inliers_error/(float)extended_inliers_count);
 
         if (pthread_mutex_lock(&ctx->lock) != 0)
             goto cleanup;
@@ -702,9 +708,9 @@ int estimate_search_range(cross_correlate_task *t, corridor_area_ctx *ctx, int x
 
 static inline void calculate_epipolar_line(cross_correlate_task *t, corridor_area_ctx* c)
 {
-    double scale = t->scale;
-    double p1[3] = {(double)c->x1/scale, (double)c->y1/scale, 1.0};
-    double Fp1[3];
+    float scale = t->scale;
+    float p1[3] = {(float)c->x1/scale, (float)c->y1/scale, 1.0F};
+    float Fp1[3];
     multiply_f_vector(t->fundamental_matrix, p1, Fp1);
     if (fabs(Fp1[0])>fabs(Fp1[1])) 
     {

@@ -11,7 +11,7 @@ layout(std430, binding = 0) buffer readonly Parameters
     int img2_height;
     int out_width;
     int out_height;
-    dmat3x3 fundamental_matrix;
+    mat3x3 fundamental_matrix;
     float scale;
     int iteration;
     int corridor_offset;
@@ -64,9 +64,6 @@ const float NAN = 0.0f/0.0f;
 void prepare_initialdata_searchdata() {
     const uint x = gl_GlobalInvocationID.x;
     const uint y = gl_GlobalInvocationID.y;
-
-    const uint img1_offset = 0;
-    const uint img2_offset = img1_width*img1_height;
 
     const int mean_coeff_offset = 0;
     const int corridor_stdev_offset = mean_coeff_offset + img1_width*img1_height;
@@ -166,8 +163,8 @@ void prepare_initialdata_correlation() {
 }
 
 void calculate_epipolar_line(uint x1, uint y1, out vec2 coeff, out vec2 add_const, out bool corridor_affects_x, out bool corridor_affects_y) {
-    dvec3 p1 = dvec3(double(x1)/scale, double(y1)/scale, 1.0);
-    dvec3 Fp1 = fundamental_matrix*p1;
+    vec3 p1 = vec3(float(x1)/scale, float(y1)/scale, 1.0);
+    vec3 Fp1 = fundamental_matrix*p1;
     if (abs(Fp1.x)>abs(Fp1.y)) {
         coeff.x = float(-Fp1.y/Fp1.x);
         add_const.x = float(-scale*Fp1.z/Fp1.x);
