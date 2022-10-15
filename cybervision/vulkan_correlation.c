@@ -545,6 +545,7 @@ void* gpu_correlate_cross_correlation_task(void *args)
     int max_height = t->img1.height > t->img2.height ? t->img1.height:t->img2.height;
     int corridor_length = (t->img2.width>t->img2.height? t->img2.width:t->img2.height)-(kernel_size*2);
     int corridor_segments = corridor_length/cybervision_crosscorrelation_corridor_segment_length + 1;
+    float progressbar_completed_percentage = 2.0F;
 
     if (!gpu_transfer_in_images(t, ctx->dev.device, ctx->dev.img_bufferMemory))
     {
@@ -575,6 +576,7 @@ void* gpu_correlate_cross_correlation_task(void *args)
             t->completed = 1;
             return NULL;
         }
+        t->percent_complete = 2.0F;
         for(int y=-y_limit;y<=y_limit;y+=batch_size)
         {
             if (!gpu_transfer_in_params(t, &ctx->dev, 0, y, y+batch_size, 2))
@@ -589,7 +591,9 @@ void* gpu_correlate_cross_correlation_task(void *args)
                 t->completed = 1;
                 return NULL;
             }
+            t->percent_complete = 2.0F+29.0F*(y+y_limit)/(2.0F*y_limit+1.0F);
         }
+        t->percent_complete = 31.0F;
         for(int y=-y_limit;y<=y_limit;y+=batch_size)
         {
             if (!gpu_transfer_in_params(t, &ctx->dev, 0, y, y+batch_size, 3))
@@ -604,7 +608,9 @@ void* gpu_correlate_cross_correlation_task(void *args)
                 t->completed = 1;
                 return NULL;
             }
+            t->percent_complete = 31.0F+29.0F*(y+y_limit)/(2.0F*y_limit+1.0F);
         }
+        progressbar_completed_percentage = 60.0F;
     }
 
     if (!gpu_transfer_in_params(t, &ctx->dev, 0, 0, 0, 4))
@@ -620,7 +626,7 @@ void* gpu_correlate_cross_correlation_task(void *args)
         return NULL;
     }
 
-    t->percent_complete = 2.0F;
+    t->percent_complete = progressbar_completed_percentage;
 
     for (int c=-corridor_size;c<=corridor_size;c++)
     {
@@ -642,7 +648,7 @@ void* gpu_correlate_cross_correlation_task(void *args)
             }
 
             float corridor_complete = (float)(corridor_end - kernel_size) / (corridor_length);
-            t->percent_complete = 2.0F + 98.0F*(c+corridor_size + corridor_complete)/corridor_stripes;
+            t->percent_complete = progressbar_completed_percentage + (100.0F-progressbar_completed_percentage)*(c+corridor_size + corridor_complete)/corridor_stripes;
         }
     }
 
