@@ -244,7 +244,7 @@ void* correlate_ransac_task(void *args)
         if (iteration > cybervision_ransac_k)
             break;
 
-        if (iteration % cybervision_ransac_check_interval == 0 && t->result_matches_count > 0)
+        if (iteration % cybervision_ransac_check_interval == 0 && t->result_matches_count > cybervision_ransac_d_early_exit)
             t->completed = 1;
 
         extended_inliers_count = 0;
