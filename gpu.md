@@ -31,7 +31,7 @@ Set the `OBJC_DEBUG_MISSING_POOLS` environment variable to `YES` to confirm that
 
 In macOS, download the [glslang](https://github.com/KhronosGroup/glslang) compiler from [Homebrew](https://formulae.brew.sh/formula/glslang).
 
-In Ubuntu, install the `glslang-tools` paskage.
+In Ubuntu, install the `glslang-tools` package.
 
 Compile the shader and convert it into a C source that can be embedded into the binary by building the `shaders` CMake target:
 

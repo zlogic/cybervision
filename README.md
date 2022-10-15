@@ -7,8 +7,8 @@ Cybervision is a 3D reconstruction software for Scanning Electron Microscope ima
 The tool needs two images of an object taken from slighly different angles.
 Cybervision can match those images and use the parallax effect to determine the object's 3D shape.
 
-⚠️ Only high-contrast images with parallel projection are supported.
-Regular photos are not likely to work correctly, because regular cameras have perspective projection.
+⚠️ Cybervision works best with high-contrast images with parallel (affine) projection.
+Regular photos with perspective projection can be reconstructed as well, but this is a secondary use case.
 
 More information is available in the [Wiki](https://github.com/zlogic/cybervision/wiki).
 
@@ -26,11 +26,11 @@ cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay
 
 `--mode=<cpu|gpu>` is an optional argument to specify a depth scale, for example `--mode=cpu` or `--mode=gpu`.Results might be slightly different between modes because the implementation is not completely identical.
 
-`--interpolation=<none|delaunay>` is an optional argument to specify a depth scale, for example `--mode=cpu` or `--mode=gpu`. 
+`--interpolation=<none|delaunay>` is an optional argument to specify an interpolation mode, for example `--interpolation=none` or `--interpolation=delaunay`. 
 `none` means that interpolation is disabled, `delaunay` uses [Delaunay triangulation](https://en.wikipedia.org/wiki/Delaunay_triangulation).
 
 `--projection=<parallel|perspective>` is an optional argument to specify a projection mode, for example `--projection=parallel` or `--projection=perspective`. 
-`parallel` projection should be used for images from a scanning electron microscope, `perspective` should be used for regular photos.
+`parallel` projection should be used for images from a scanning electron microscope, `perspective` should be used for photos from a regular camera.
 
 `<img1>` and `<img2>` are input filenames for image 1 and 2; supported formats are `jpg`, `tif` and `png`.
 
@@ -51,13 +51,14 @@ Cybervision was tested to support CPU-only and GPU-accelerated processing on:
 
 * Apple Macbook Air M1 (2020)
 * Apple Macbook Pro M1 Max (2021)
+* Windows 11, i7-11800H, Geforce RTX 3070 (mobile)
 * Windows 11, i7-8750H, Geforce GTX 1050 (mobile)
 * Fedora CoreOS 36, Celeron N3350 (digital signage appliance)
 
 To run Cybervision, you will need the Vulkan runtime library:
 
 * In Linux, it's called `libvulkan.so.1` and the package is typically called something like `vulkan`, `vulkan-loader`, `libvulkan` or `libvulkan1`.
-* In Windows, it's the Vulkan Runtime (VulkanRT) should already be installed - it's included with GPU drivers.
+* In Windows, it's the Vulkan Runtime (VulkanRT) and is likely to already be installed - it's included with GPU drivers.
 * In macOS, a native Metal implementation is used instead of Vulkan, no extra libraries are needed.
 
 More details can be found in [gpu.md](gpu.md).
