@@ -7,6 +7,7 @@
 #include "fast_detector.h"
 #include "system.h"
 #include "correlation.h"
+#include "fundamental_matrix.h"
 #include "gpu_correlation.h"
 #include "configuration.h"
 #include "surface.h"
