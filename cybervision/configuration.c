@@ -5,7 +5,7 @@ const int cybervision_fast_mode = 12;
 const int cybervision_fast_nonmax = 1;
 
 const float cybervision_correlation_threshold = 0.9F;
-const size_t cybervision_correlation_max_matches_per_point = 5;
+const size_t cybervision_correlation_max_matches_per_point = 10;
 // slower, but more effective
 // const int cybervision_correlation_kernel_size = 10;
 const int cybervision_correlation_kernel_size = 7;
@@ -19,8 +19,8 @@ const float cybervision_ransac_rank_epsilon = 1E-3F;
 const float cybervision_ransac_t_affine = 1.0F;
 const float cybervision_ransac_t_perspective = 5.0F;
 const size_t cybervision_ransac_d = 10;
-const size_t cybervision_ransac_d_early_exit = 200;
-const size_t cybervision_ransac_check_interval = 1E4;
+const size_t cybervision_ransac_d_early_exit = 100;
+const size_t cybervision_ransac_check_interval = 1E6;
 
 const int cybervision_crosscorrelation_scale_min_size = 64;
 const int cybervision_crosscorrelation_kernel_size = 5;

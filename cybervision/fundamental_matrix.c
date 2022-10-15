@@ -252,7 +252,7 @@ void* correlate_ransac_task(void *args)
             t->completed = 1;
 
         extended_inliers_count = 0;
-        
+
         for(size_t i=0;i<ransac_n;i++)
         {
             size_t m;
