@@ -5,7 +5,6 @@ const int cybervision_fast_mode = 12;
 const int cybervision_fast_nonmax = 1;
 
 const float cybervision_correlation_threshold = 0.9F;
-const size_t cybervision_correlation_max_matches_per_point = 10;
 // slower, but more effective
 // const int cybervision_correlation_kernel_size = 10;
 const int cybervision_correlation_kernel_size = 7;

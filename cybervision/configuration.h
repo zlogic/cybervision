@@ -8,7 +8,6 @@ extern const int cybervision_fast_mode;
 extern const int cybervision_fast_nonmax;
 
 extern const float cybervision_correlation_threshold;
-extern const size_t cybervision_correlation_max_matches_per_point;
 extern const int cybervision_correlation_kernel_size;
 
 extern const int cybervision_keypoint_scale_min_size;

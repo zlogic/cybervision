@@ -110,14 +110,10 @@ void* correlate_points_task(void *args)
 
     float *delta1 = malloc(sizeof(float)*kernel_point_count);
     float stdev1;
-    const size_t max_matches = cybervision_correlation_max_matches_per_point;
-    correlation_match *p1_matches = malloc(sizeof(correlation_match)*max_matches);
     while (!t->completed)
     {
         size_t p1;
         int x1, y1;
-        float min_corr = 0.0F;
-        size_t min_match_pos = 0;
         if (pthread_mutex_lock(&ctx->lock) != 0)
             goto cleanup;
         p1 = ctx->p1++;
@@ -132,10 +128,7 @@ void* correlate_points_task(void *args)
         x1 = points1[p1].x, y1 = points1[p1].y;
         if (x1-kernel_size<0 || x1+kernel_size>=w1 || y1-kernel_size<0 || y1+kernel_size>=h1)
             continue;
-
-        for (size_t i=0;i<max_matches;i++)
-            p1_matches[i].corr = 0.0F;
-
+        
         compute_correlation_data(&t->img1, kernel_size, x1, y1, &stdev1, delta1);
         for (size_t p2=0;p2<points2_size;p2++)
         {
@@ -150,49 +143,29 @@ void* correlate_points_task(void *args)
                 corr += delta1[i] * delta2[i];
             corr = corr/(stdev1*stdev2*(float)kernel_point_count);
             
-            if (corr >= cybervision_correlation_threshold && corr > min_corr)
+            if (corr >= cybervision_correlation_threshold)
             {
-                correlation_match *m;
-                m = &p1_matches[min_match_pos];
-                m->point1 = (int)p1;
-                m->point2 = (int)p2;
-                m->corr = corr;
-
-                min_corr = p1_matches[0].corr;
-                min_match_pos = 0;
-                for (size_t i=1;i<max_matches;i++)
+                correlation_match m;
+                m.point1 = (int)p1;
+                m.point2 = (int)p2;
+                m.corr = corr;
+                if (pthread_mutex_lock(&ctx->lock) != 0)
+                    goto cleanup;
+                if (t->matches_count >= ctx->matches_limit)
                 {
-                    if (p1_matches[i].corr<min_corr)
-                    {
-                        min_corr = p1_matches[i].corr;
-                        min_match_pos = i;
-                    }
+                    ctx->matches_limit += MATCH_RESULT_GROW_SIZE;
+                    t->matches = realloc(t->matches, sizeof(correlation_match)*ctx->matches_limit);
                 }
+                t->matches[t->matches_count] = m;
+                t->matches_count++;
+                if (pthread_mutex_unlock(&ctx->lock) != 0)
+                    goto cleanup;
             }
         }
-
-        if (pthread_mutex_lock(&ctx->lock) != 0)
-            goto cleanup;
-        for (size_t i=0;i<max_matches;i++)
-        {
-            correlation_match *m = &p1_matches[i];
-            if (m->corr<cybervision_correlation_threshold)
-                continue;
-            if (t->matches_count >= ctx->matches_limit)
-            {
-                ctx->matches_limit += MATCH_RESULT_GROW_SIZE;
-                t->matches = realloc(t->matches, sizeof(correlation_match)*ctx->matches_limit);
-            }
-            t->matches[t->matches_count] = *m;
-            t->matches_count++;
-        }
-        if (pthread_mutex_unlock(&ctx->lock) != 0)
-            goto cleanup;
     }
 
 cleanup:
     free(delta1);
-    free(p1_matches);
     pthread_mutex_lock(&ctx->lock);
     ctx->threads_completed++;
     pthread_mutex_unlock(&ctx->lock);
