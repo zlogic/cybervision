@@ -103,23 +103,23 @@ static inline int ransac_calculate_model_perspective(ransac_memory *ctx, ransac_
         float y1 = (float)match->x1*m1[3] + (float)match->y1*m1[4] + m1[5];
         float x2 = (float)match->x2*m2[0] + (float)match->y2*m2[1] + m2[2];
         float y2 = (float)match->x2*m2[3] + (float)match->y2*m2[4] + m2[5];
-        a[i*9  ] = x2*x1;
-        a[i*9+1] = x2*y1;
-        a[i*9+2] = x2;
-        a[i*9+3] = y2*x1;
-        a[i*9+4] = y2*y1;
-        a[i*9+5] = y2;
-        a[i*9+6] = x1;
-        a[i*9+7] = y1;
-        a[i*9+8] = 1.0;
+        a[0*selected_matches_count+i] = x2*x1;
+        a[1*selected_matches_count+i] = x2*y1;
+        a[2*selected_matches_count+i] = x2;
+        a[3*selected_matches_count+i] = y2*x1;
+        a[4*selected_matches_count+i] = y2*y1;
+        a[5*selected_matches_count+i] = y2;
+        a[6*selected_matches_count+i] = x1;
+        a[7*selected_matches_count+i] = y1;
+        a[8*selected_matches_count+i] = 1.0;
     }
-    if (!svd(ctx->svd, a, selected_matches_count, 9, u, s, vt))
+    if (!svdd(ctx->svd, a, selected_matches_count, 9, u, s, vt))
         return 0;
 
    for(size_t i=0;i<9;i++)
-        a[i] = vt[9*8+i];
+        a[i] = vt[9*i+8];
 
-    if (!svd(ctx->svd, a, 3, 3, u, s, vt))
+    if (!svdd(ctx->svd, a, 3, 3, u, s, vt))
         return 0;
 
     // Check if matrix rank is too low
@@ -127,10 +127,13 @@ static inline int ransac_calculate_model_perspective(ransac_memory *ctx, ransac_
         return 0;
 
     matrix_3x3 u_float, v_float;
-    for(size_t i=0;i<9;i++)
+    for(size_t i=0;i<3;i++)
     {
-        u_float[i] = u[i];
-        v_float[i] = vt[i];
+        for(size_t j=0;j<3;j++)
+        {
+            u_float[i*3+j] = u[j*3+i];
+            v_float[i*3+j] = vt[j*3+i];
+        }
     }
     matrix_3x3 s_matrix = {s[0], 0.0F, 0.0F, 0.0F, s[1], 0.0F, 0.0F, 0.0F, 0.0F};
     matrix_3x3 f_temp;
@@ -159,10 +162,10 @@ static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_task 
         float y1 = match->y1;
         float x2 = match->x2;
         float y2 = match->y2;
-        a[i*4  ] = x2;
-        a[i*4+1] = y2;
-        a[i*4+2] = x1;
-        a[i*4+3] = y1;
+        a[0*selected_matches_count+i] = x2;
+        a[1*selected_matches_count+i] = y2;
+        a[2*selected_matches_count+i] = x1;
+        a[3*selected_matches_count+i] = y1;
         mean_x2 += x2;
         mean_y2 += y2;
         mean_x1 += x1;
@@ -174,14 +177,16 @@ static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_task 
     mean_y2 /= (float)selected_matches_count;
     for(size_t i=0;i<selected_matches_count;i++)
     {
-        a[i*4  ] -= mean_x2;
-        a[i*4+1] -= mean_y2;
-        a[i*4+2] -= mean_x1;
-        a[i*4+3] -= mean_y1;
+        a[0*selected_matches_count+i] -= mean_x2;
+        a[1*selected_matches_count+i] -= mean_y2;
+        a[2*selected_matches_count+i] -= mean_x1;
+        a[3*selected_matches_count+i] -= mean_y1;
     }
-    if (!svd(ctx->svd, a, selected_matches_count, 4, u, s, vt))
+    if (!svdd(ctx->svd, a, selected_matches_count, 4, u, s, vt))
         return 0;
-    vt = &vt[4*3];
+    float vt_float[4];
+    for(size_t i=0;i<4;i++)
+        vt_float[i] = vt[4*i+3];
 
     // Check if matrix rank is too low
     if (fabs(s[3])<cybervision_ransac_rank_epsilon)
@@ -189,7 +194,7 @@ static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_task 
 
     f[0] = 0.0F; f[1] = 0.0F; f[2] = vt[0];
     f[3] = 0.0F; f[4] = 0.0F; f[5] = vt[1];
-    f[6] = vt[2]; f[7] = vt[3]; f[8] = -(vt[0]*mean_x2+vt[1]*mean_y2+vt[2]*mean_x1+vt[3]*mean_y1);
+    f[6] = vt[2]; f[7] = vt[3]; f[8] = -(vt_float[0]*mean_x2+vt_float[1]*mean_y2+vt_float[2]*mean_x1+vt_float[3]*mean_y1);
 
     return 1;
 }

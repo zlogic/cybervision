@@ -13,7 +13,7 @@
 
 int cpu_cores()
 {
-#ifdef WIN32
+#ifdef _WIN32
     SYSTEM_INFO sysinfo;
     GetSystemInfo(&sysinfo);
     return sysinfo.dwNumberOfProcessors;
@@ -39,7 +39,7 @@ int cpu_cores()
 
 void sleep_ms(int milliseconds)
 {
-#ifdef WIN32
+#ifdef _WIN32
     Sleep(milliseconds);
 #elif _POSIX_C_SOURCE >= 199309L
     struct timespec ts;
@@ -53,7 +53,7 @@ void sleep_ms(int milliseconds)
 #endif
 }
 
-#ifdef WIN32
+#ifdef _WIN32
 int rand_r(unsigned int *seedp)
 {
     return (int)rand();

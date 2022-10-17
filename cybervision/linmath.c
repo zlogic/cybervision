@@ -1,6 +1,11 @@
 #include <stdlib.h>
-#include <math.h>
-#include <stdio.h>
+#ifdef __APPLE__
+#include <Accelerate/Accelerate.h>
+typedef __CLPK_integer integer;
+#else
+#include <f2c.h>
+#include <clapack.h>
+#endif
 
 #include "linmath.h"
 
@@ -33,25 +38,18 @@ void multiply_ft_vector(float f[9], float p[3], float target[3])
 }
 
 typedef struct {
-    size_t temp_size;
-    double *temp_ata, *temp_q, *temp_r, *temp_h;
-    double *previous_q, *q, *r, *temp_pq, *previous_pq;
-    unsigned int *rand_seed;
+    integer work_size, iwork_size;
+    double *work;
+    integer *iwork;
 } svd_ctx;
 
 svd_internal init_svd()
 {
     svd_ctx *ctx = malloc(sizeof(svd_ctx));
-    ctx->temp_ata = NULL;
-    ctx->temp_q = NULL;
-    ctx->temp_r = NULL;
-    ctx->temp_h = NULL;
-    ctx->previous_q = NULL;
-    ctx->q = NULL;
-    ctx->r = NULL;
-    ctx->temp_pq = NULL;
-    ctx->previous_pq = NULL;
-    ctx->temp_size = 0;
+    ctx->work = NULL;
+    ctx->iwork = NULL;
+    ctx->work_size = 0;
+    ctx->iwork_size = 0;
     return ctx;
 }
 void free_svd(svd_internal svd)
@@ -59,279 +57,49 @@ void free_svd(svd_internal svd)
     svd_ctx *ctx = svd;
     if (ctx == NULL)
         return;
-    if (ctx->temp_ata != NULL)
-        free(ctx->temp_ata);
-    if (ctx->temp_q != NULL)
-        free(ctx->temp_q);
-    if (ctx->temp_r != NULL)
-        free(ctx->temp_r);
-    if (ctx->temp_h != NULL)
-        free(ctx->temp_h);
-    if (ctx->previous_q != NULL)
-        free(ctx->previous_q);
-    if (ctx->q != NULL)
-        free(ctx->q);
-    if (ctx->r != NULL)
-        free(ctx->r);
-    if (ctx->temp_pq != NULL)
-        free(ctx->temp_pq);
-    if (ctx->previous_pq != NULL)
-        free(ctx->previous_pq);
+    if (ctx->work != NULL)
+        free(ctx->work);
+    if (ctx->iwork != NULL)
+        free(ctx->iwork);
     free(ctx);
 }
-
-static inline void multiply_matrix_mxk_kxn(double *a, double *b, double *result, const size_t m, const size_t k, const size_t n)
+int svdd(svd_internal svd, double *matrix, int rows, int cols, double *u, double *s, double *v)
 {
-    for(size_t i=0;i<m*n;i++)
-        result[i] = 0.0;
-    for(size_t i=0;i<m;i++)
-        for(size_t j=0;j<n;j++)
-            for(size_t l=0;l<k;l++)
-                result[i*n+j] += a[i*n+l]*b[l*n+j];
-}
-
-static inline void multiply_matrix_kxmt_kxn(double *a, double *b, double *result, const size_t m, const size_t k, const size_t n)
-{
-    for(size_t i=0;i<m*n;i++)
-        result[i] = 0.0;
-    for(size_t i=0;i<m;i++)
-        for(size_t j=0;j<n;j++)
-            for(size_t l=0;l<k;l++)
-                result[i*n+j] += a[l*m+i]*b[l*n+j];
-}
-
-static inline void normalize_vector(double *vector, size_t n)
-{
-    double sum = 0.0;
-    for (size_t i=0;i<n;i++)
-        sum += vector[i]*vector[i];
-    sum = sqrt(sum);
-    for (size_t i=0;i<n;i++)
-        vector[i] = vector[i]/sum;
-}
-
-static inline void svd_householder(svd_ctx *ctx, double *a, double *h, size_t n, size_t it)
-{
-    for(size_t i=0;i<n;i++)
-        for(size_t j=0;j<n;j++)
-            h[i*n+j] = (i==j?1:0);
-    double a_norm = 0.0;
-    for(size_t i=it;i<n;i++)
-        a_norm += a[i*n+it]*a[i*n+it];
-    a_norm = sqrt(a_norm);
-    a_norm = 1.0/(a[it*n+it] + (a[it*n+it]>0.0?a_norm:-a_norm));
-
-    double v_dot_v = 1.0;
-    for(size_t i=it+1;i<n;i++)
-        v_dot_v += (a[i*n+it]*a_norm)*(a[i*n+it]*a_norm);
-    for(size_t i=it;i<n;i++)
-    {
-        for(size_t j=it;j<n;j++)
-        {
-            double v_ik = i==it?1:(a[i*n+it]*a_norm);
-            double vt_kj = j==it?1:(a[j*n+it]*a_norm);
-            h[i*n+j] -= (2.0/v_dot_v)*v_ik*vt_kj;
-        }
-    }
-}
-
-static inline void svd_qr(svd_ctx *ctx, double *a, double *q, double *r, const size_t n)
-{
-    // Based on https://rosettacode.org/wiki/QR_decomposition#Python
-    for(size_t i=0;i<n;i++)
-    {
-        for(size_t j=0;j<n;j++)
-        {
-            q[i*n+j] = (i==j?1:0);
-            r[i*n+j] = a[i*n+j];
-        }
-    }
-    for(size_t i=0;i<n-1;i++)
-    {
-        svd_householder(ctx, r, ctx->temp_h, n, i);
-        multiply_matrix_mxk_kxn(q, ctx->temp_h, ctx->temp_q, n, n, n);
-        multiply_matrix_mxk_kxn(ctx->temp_h, r, ctx->temp_r, n, n, n);
-        for(size_t j=0;j<n*n;j++)
-        {
-            q[j] = ctx->temp_q[j];
-            r[j] = ctx->temp_r[j];
-        }
-    }
-}
-
-int svd(svd_internal svd, double *matrix, const size_t rows, const size_t cols, double *u, double *s, double *vt)
-{
-    // SVD using QR decomposition
+    // Warning: LAPACK needs column-major matrices (iterate by columns, first, then by rows)
+    integer info = 0;
+    double optimal_work = 0.0;
+    integer m = rows, n = cols;
+    integer lda = m, ldu = m, ldvt = n;
+    integer lwork = -1;
     svd_ctx *ctx = svd;
-    // TODO: if rows<cols, transpose matrix in-place and swap U and S
-    if (rows<cols)
+    size_t iwork_size = 8*(m<n? m:n);
+    if (ctx->iwork_size < iwork_size)
+    {
+        size_t new_size = sizeof(integer)*iwork_size;
+        ctx->iwork = ctx->iwork == NULL? malloc(new_size) : realloc(ctx->iwork, new_size);
+        ctx->iwork_size = iwork_size;
+    }
+    int result = dgesdd_("A", &m, &n, matrix, &lda, s, u, &ldu, v, &ldvt, &optimal_work, &lwork, ctx->iwork, &info);
+    if (info != 0)
         return 0;
-    //for (size_t i=0;i<rows*cols;i++)
-    //    matrix[i] = i+1;
+    lwork = (int)optimal_work;
+    if (ctx->work_size < lwork)
+    {
+        size_t new_size = sizeof(double)*lwork;
+        ctx->work = ctx->work == NULL? malloc(new_size) : realloc(ctx->work, new_size);
+        ctx->work_size = lwork;
+    }
+    result = dgesdd_("A", &m, &n, matrix, &lda, s, u, &ldu, v, &ldvt, ctx->work, &lwork, ctx->iwork, &info);
+    return info == 0;
+}
 
-    for(size_t i=0;i<cols;i++)
-        for(size_t j=0;j<cols;j++)
-            vt[i] = NAN;
-    if (ctx->temp_size<cols)
-    {
-        size_t new_size = sizeof(double)*cols*cols;
-        ctx->temp_size = cols;
-        ctx->temp_ata = ctx->temp_ata==NULL? malloc(new_size) : realloc(ctx->temp_ata, new_size);
-        ctx->temp_q = ctx->temp_q==NULL? malloc(new_size) : realloc(ctx->temp_q, new_size);
-        ctx->temp_r = ctx->temp_r==NULL? malloc(new_size) : realloc(ctx->temp_r, new_size);
-        ctx->temp_h = ctx->temp_h==NULL? malloc(new_size) : realloc(ctx->temp_h, new_size);
-        ctx->previous_q = ctx->previous_q==NULL? malloc(new_size) : realloc(ctx->previous_q, new_size);
-        ctx->q = ctx->q==NULL? malloc(new_size) : realloc(ctx->q, new_size);
-        ctx->r = ctx->r==NULL? malloc(new_size) : realloc(ctx->r, new_size);
-        ctx->temp_pq = ctx->temp_pq==NULL? malloc(new_size) : realloc(ctx->temp_pq, new_size);
-        ctx->previous_pq = ctx->previous_pq==NULL? malloc(new_size) : realloc(ctx->previous_pq, new_size);
-    }
-
-    multiply_matrix_kxmt_kxn(matrix, matrix, ctx->temp_ata, cols, rows, cols);
-    //for (size_t i=0;i<cols*cols;i++)
-    //    ctx->temp_ata_q[i] = ctx->temp_ata[i];
-    /*
-    printf("AtA=\n[");
-    for (size_t j=0;j<cols;j++)
-    {
-        printf("[");
-        for (size_t k=0;k<cols;k++)
-            printf("%f%s", ctx->temp_ata[j*cols+k], k<cols-1?",":"");
-        printf("]%s", j<cols-1?",":"");
-    }
-    printf("]\n");
-    */
-    for(size_t i=0;i<cols;i++)
-        for(size_t j=0;j<cols;j++)
-            ctx->previous_pq[i*cols+j] = (i==j)?1.0:0;
-    int found = 0;
-    for(size_t i=0;i<1000;i++)
-    {
-        svd_qr(ctx, ctx->temp_ata, ctx->q, ctx->r, cols);
-        multiply_matrix_mxk_kxn(ctx->r, ctx->q, ctx->temp_ata, cols, cols, cols);
-        multiply_matrix_mxk_kxn(ctx->previous_pq, ctx->q, ctx->temp_pq, cols, cols, cols);
-        for(size_t j=0;j<cols*cols;j++)
-            ctx->previous_pq[j] = ctx->temp_pq[j];
-        if (i>0)
-        {
-            double delta = 0.0;
-            for(size_t j=0;j<cols*cols;j++)
-                delta += (ctx->previous_q[j]-ctx->q[j])*(ctx->previous_q[j]-ctx->q[j]);
-            if (delta<(1.0E-10))
-            {
-                found = 1;
-                break;
-            }
-        }
-        for(size_t i=0;i<cols*cols;i++)
-            ctx->previous_q[i] = ctx->q[i];
-    }
-
-    if (!found)
-        return 0;
-    for(size_t i=0;i<cols;i++)
-        for(size_t j=0;j<cols;j++)
-            vt[i*cols+j] = ctx->previous_pq[i*cols+j];
-    for(size_t i=0;i<cols;i++)
-    {
-        s[i] = ctx->temp_ata[i*cols+i];
-        if (s[i]<0)
-        {
-            s[i] = -s[i];
-            for(size_t j=0;j<cols;j++)
-                vt[i*cols+j] = -vt[i*cols+j];
-        }
-        s[i] = sqrt(s[i]);
-    }
-    multiply_matrix_mxk_kxn(matrix, ctx->q, ctx->temp_q, cols, cols, cols);
-    /*
-    printf("\naq=\n[");
-    for (size_t j=0;j<rows;j++)
-    {
-        printf("[");
-        for (size_t k=0;k<cols;k++)
-            printf("%f%s", ctx->temp_q[j*cols+k], k<cols-1?",":"");
-        printf("]%s", j<rows-1?",":"");
-    }
-    */
-    for(size_t i=0;i<cols;i++)
-        for(size_t j=0;j<cols;j++)
-            u[i*cols+j] = ctx->temp_q[i*cols+j]/s[j];
-
-    /*
-    printf("\nq=\n[");
-    for (size_t j=0;j<cols;j++)
-    {
-        printf("[");
-        for (size_t k=0;k<cols;k++)
-            printf("%f%s", ctx->q[j*cols+k], k<cols-1?",":"");
-        printf("]%s", j<cols-1?",":"");
-    }
-    printf("\nr=\n[");
-    for (size_t j=0;j<cols;j++)
-    {
-        printf("[");
-        for (size_t k=0;k<cols;k++)
-            printf("%f%s", ctx->r[j*cols+k], k<cols-1?",":"");
-        printf("]%s", j<cols-1?",":"");
-    }
-    printf("\nu=\n[");
-    for (size_t i=0;i<cols;i++)
-    {
-        printf("[");
-        for (size_t j=0;j<cols;j++)
-            printf("%f%s", u[i*cols+j], j<cols-1?",":"");
-        printf("]%s", i<cols-1?",":"");
-    }
-    printf("]\ns=\n[");
-    for (size_t i=0;i<cols;i++)
-    {
-        printf("%f%s", s[i], i<cols-1?",":"");
-    }
-    printf("]");
-    printf("\nvt=\n[");
-    for (size_t i=0;i<cols;i++)
-    {
-        printf("[");
-        for (size_t j=0;j<cols;j++)
-            printf("%f%s", vt[i*cols+j], j<cols-1?",":"");
-        printf("]%s", i<cols-1?",":"");
-    }
-    printf("]\n");
-    double *s_diag = malloc(sizeof(double)*rows*cols);
-    for (size_t i=0;i<rows;i++)
-        for (size_t j=0;j<cols;j++)
-            s_diag[i*cols+j] = (i==j)?s[i]:0;
-    printf("s_diag=\n[");
-    for (size_t j=0;j<rows;j++)
-    {
-        printf("[");
-        for (size_t k=0;k<cols;k++)
-            printf("%f%s", s_diag[j*cols+k], k<cols-1?",":"");
-        printf("]%s", j<rows-1?",":"");
-    }
-    printf("]\n");
-    double *us = malloc(sizeof(double)*cols*cols);
-    multiply_matrix_mxk_kxn(u, s_diag, us, cols, cols, cols);
-    printf("us=\n[");
-    for (size_t j=0;j<cols;j++)
-    {
-        printf("[");
-        for (size_t k=0;k<cols;k++)
-            printf("%f%s", us[j*cols+k], k<cols-1?",":"");
-        printf("]%s", j<cols-1?",":"");
-    }
-    printf("]\n");
-    multiply_matrix_mxk_kxn(us, vt, ctx->temp_ata, cols, cols, cols);
-    printf("AtA=\n[");
-    for (size_t j=0;j<cols;j++)
-    {
-        printf("[");
-        for (size_t k=0;k<cols;k++)
-            printf("%f%s", ctx->temp_ata[j*cols+k], k<cols-1?",":"");
-        printf("]%s", j<cols-1?",":"");
-    }
-    printf("]\n");
-    */
-    return 1;
+void multiplyd(double *a, double *b, double *output, int m, int n, int k, int transposeA, int transposeB)
+{
+    integer m_in = m, n_in = n, k_in = k;
+    double alpha = 1.0;
+    double beta = 0.0;
+    integer lda = transposeA? k:m;
+    integer ldb = transposeB? n:k;
+    integer ldc = m;
+    dgemm_(transposeA? "T":"N", transposeB? "T":"N", &m_in, &n_in, &k_in, &alpha, a, &lda, b, &ldb, &beta, output, &ldc);
 }

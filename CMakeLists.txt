@@ -38,6 +38,8 @@ find_package(Qhull CONFIG REQUIRED)
 find_package(JPEG REQUIRED)
 find_package(TIFF REQUIRED)
 find_package(PNG REQUIRED)
+find_package(BLAS)
+find_package(LAPACK REQUIRED)
 find_library(FASTFEAT_LIBRARY fastfeat)
 
 target_link_libraries(cybervision PRIVATE Qhull::qhull_r)
@@ -45,7 +47,10 @@ target_include_directories(cybervision PRIVATE ${JPEG_INCLUDE_DIR})
 target_link_libraries(cybervision PRIVATE JPEG::JPEG)
 target_link_libraries(cybervision PRIVATE TIFF::TIFF)
 target_link_libraries(cybervision PRIVATE PNG::PNG)
+target_link_libraries(cybervision PRIVATE ${BLAS_LIBRARIES})
+target_link_libraries(cybervision PRIVATE ${LAPACK_LIBRARIES})
 target_link_libraries(cybervision PRIVATE ${FASTFEAT_LIBRARY})
+target_include_directories(cybervision PRIVATE ${LAPACK_INCLUDE_DIRS})
 
 if(NOT MSVC)
     target_link_libraries(cybervision PUBLIC m)
@@ -54,7 +59,7 @@ endif()
 option(CYBERVISION_DISABLE_GPU "disable GPU features" OFF)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    target_link_libraries(cybervision PRIVATE "-framework Foundation" "-framework CoreGraphics" "-framework Metal" )
+    target_link_libraries(cybervision PRIVATE "-framework Foundation" "-framework CoreGraphics" "-framework Metal" "-framework Accelerate")
     add_custom_command(
         OUTPUT cybervision/shaders_metal.h
         COMMAND xcrun -sdk macosx metal -c ${CMAKE_CURRENT_SOURCE_DIR}/shaders/correlation.metal -o correlation.air
