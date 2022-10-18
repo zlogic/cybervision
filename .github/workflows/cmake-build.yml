@@ -48,28 +48,17 @@ jobs:
       if: steps.cache-vcpkg.outputs.cache-hit != 'true'
       run: sudo apt-get install -y yasm
 
-    - name: Install compiler
+    - name: Install compiler and prepare for cross-compilation
       if: matrix.arch  == 'arm64'
       run: |
-        sudo apt-get install -y g++-aarch64-linux-gnu gcc-aarch64-linux-gnu qemu-user-static
-        echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-        echo "CPP=aarch64-linux-gnu-g++" >> $GITHUB_ENV
-
-    - name: Cache sysroot
-      id: cache-sysroot
-      uses: actions/cache@v3
-      with:
-        path: ${{github.workspace}}/sysroot
-        key: ${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-sysroot
-
-    - name: Prepare sysroot
-      if: steps.cache-sysroot.outputs.cache-hit != 'true'
-      run: |
-        mkdir ${{github.workspace}}/sysroot
-        SYSROOT_CONTAINER=$(podman create --arch ${{ matrix.arch }} --interactive ubuntu:focal sh -c "apt-get update && apt-get install -y libc6-dev libvulkan-dev")
-        podman start --attach $SYSROOT_CONTAINER
-        podman cp $SYSROOT_CONTAINER:/usr ${{github.workspace}}/sysroot
-        mv ${{github.workspace}}/sysroot/usr/lib/*-linux-gnu/* ${{github.workspace}}/sysroot/usr/lib
+        sudo apt-get install -y crossbuild-essential-arm64 qemu-user-static
+        echo 'set(ENV{LD_LIBRARY_PATH} "/usr/aarch64-linux-gnu/lib:$ENV{LD_LIBRARY_PATH}")' >> $VCPKG_INSTALLATION_ROOT/triplets/community/arm64-linux.cmake
+        sudo ln -s /usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1 /lib/ld-linux-aarch64.so.1
+        echo "CC=/usr/bin/aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+        echo "CXX=/usr/bin/aarch64-linux-gnu-g++" >> $GITHUB_ENV
+        echo "VCPKG_TARGET_ARCHITECTURE=arm64" >> $GITHUB_ENV
+        echo "VCPKG_DEFAULT_TRIPLET=arm64-linux" >> $GITHUB_ENV
+        echo "VCPKG_DEFAULT_HOST_TRIPLET=arm64-linux" >> $GITHUB_ENV
 
     - name: Configure vcpkg
       run: echo "CMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
@@ -82,7 +71,7 @@ jobs:
         if [ "${{matrix.arch}}" == "amd64" ]; then
           VCPKG_ARCH=x64
         fi
-        cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCYBERVISION_DISABLE_GPU=${{matrix.mode != 'gpu'}} -DVCPKG_TARGET_TRIPLET=${VCPKG_ARCH}-linux -DCMAKE_SYSTEM_PROCESSOR=${{matrix.arch}} -DCMAKE_FIND_ROOT_PATH=${{github.workspace}}/sysroot -DCMAKE_SYSROOT=${{github.workspace}}/sysroot
+        cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCYBERVISION_DISABLE_GPU=${{matrix.mode != 'gpu'}} -DVCPKG_TARGET_TRIPLET=${VCPKG_ARCH}-linux -DCMAKE_SYSTEM_PROCESSOR=${{matrix.arch}}
 
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --target cybervision

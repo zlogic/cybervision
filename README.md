@@ -96,7 +96,10 @@ To build it:
 
 If LAPACK is compiled with support for AVX-512 instructions, Valgrind will crash with a `SIGILL` signal.
 
-To fix this, edit the vcpkg portfile (`vcpkg/ports/openblas/portfile.cmake`) and add a `list(APPEND OPENBLAS_EXTRA_OPTIONS -DTARGET=HASWELL)` line before `vcpkg_cmake_configure`.
+To fix this, 
+1. Copy `vcpkg/ports/openblas` to another location
+2. Edit the vcpkg portfile (`openblas/portfile.cmake`) and add a `list(APPEND OPENBLAS_EXTRA_OPTIONS -DTARGET=HASWELL)` line before `vcpkg_cmake_configure`.
+3. Set the `VCPKG_OVERLAY_PORTS` environment variable to the patched copy of `openblas` (same directory as `PATH_TO_NEW_OPENBLAS_DIRECTORY`)
 
 ## External libraries or dependencies
 
