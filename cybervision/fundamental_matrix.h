@@ -12,11 +12,15 @@ typedef struct {
     int x1,y1;
     int x2,y2;
 } ransac_match;
-typedef void* ransac_task_internal;
-typedef float matrix_3x3[3*3];
 typedef struct {
     ransac_match *matches;
     size_t matches_count;
+} ransac_match_bucket;
+typedef void* ransac_task_internal;
+typedef float matrix_3x3[3*3];
+typedef struct {
+    ransac_match_bucket *match_buckets;
+    size_t match_buckets_count;
 
     projection_mode proj_mode;
     float keypoint_scale;

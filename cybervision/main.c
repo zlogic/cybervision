@@ -13,6 +13,8 @@
 #include "surface.h"
 #include "image.h"
 
+#define MATCH_BUCKET_GROW_SIZE 1000
+
 double diff_seconds(struct timespec end, struct timespec start)
 {
     return (double)(end.tv_nsec-start.tv_nsec)*1E-9 + (double)(end.tv_sec-start.tv_sec);
@@ -189,24 +191,66 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     }
 
     {
+        const size_t grid_size = cybervision_ransac_match_grid_size;
+        const size_t grid_step_x = img1->width/grid_size, grid_step_y = img1->height/grid_size;
+        size_t *bucket_match_limit = malloc(sizeof(size_t)*grid_size*grid_size);
         r_task.num_threads = num_threads;
         r_task.proj_mode = proj_mode;
-        r_task.matches = malloc(sizeof(ransac_match)*m_task.matches_count);
-        r_task.matches_count = m_task.matches_count;
+        r_task.match_buckets = malloc(sizeof(ransac_match_bucket)*grid_size*grid_size);
         r_task.keypoint_scale = keypoint_scale;
+        for (size_t i=0;i<grid_size*grid_size;i++)
+        {
+            bucket_match_limit[i] = 0;
+            r_task.match_buckets[i].matches = NULL;
+            r_task.match_buckets[i].matches_count = 0;
+        }
         for (size_t i=0;i<m_task.matches_count;i++)
         {
-            correlation_match m = m_task.matches[i];
-            int p1 = m.point1, p2 = m.point2;
+            correlation_match *m = &m_task.matches[i];
+            int p1 = m->point1, p2 = m->point2;
 
-            ransac_match *converted_match = &(r_task.matches[i]);
-            converted_match->x1 = (int)roundf((float)points1[p1].x/keypoint_scale);
-            converted_match->y1 = (int)roundf((float)points1[p1].y/keypoint_scale);
-            converted_match->x2 = (int)roundf((float)points2[p2].x/keypoint_scale);
-            converted_match->y2 = (int)roundf((float)points2[p2].y/keypoint_scale);
+            ransac_match converted_match;
+            converted_match.x1 = (int)roundf((float)points1[p1].x/keypoint_scale);
+            converted_match.y1 = (int)roundf((float)points1[p1].y/keypoint_scale);
+            converted_match.x2 = (int)roundf((float)points2[p2].x/keypoint_scale);
+            converted_match.y2 = (int)roundf((float)points2[p2].y/keypoint_scale);
+            
+            size_t grid_x = converted_match.x1/grid_step_x;
+            size_t grid_y = converted_match.x1/grid_step_y;
+            grid_x = grid_x<grid_size?grid_x:grid_size-1;
+            grid_y = grid_y<grid_size?grid_y:grid_size-1;
+            size_t grid_pos = grid_y*grid_size+grid_x;
+            ransac_match_bucket *bucket = &r_task.match_buckets[grid_pos];
+            if (bucket->matches_count >= bucket_match_limit[grid_pos])
+            {
+                bucket_match_limit[grid_pos] += MATCH_BUCKET_GROW_SIZE;
+                size_t new_size = sizeof(ransac_match)*bucket_match_limit[grid_pos];
+                bucket->matches = bucket->matches == NULL ? malloc(new_size) : realloc(bucket->matches, new_size);
+            }
+            bucket->matches[bucket->matches_count++] = converted_match;
+        }
+        r_task.match_buckets_count = 0;
+        for (size_t i=0;i<grid_size*grid_size;i++)
+        {
+            if (r_task.match_buckets[i].matches != NULL)
+            {
+                r_task.match_buckets_count++;
+                continue;
+            }
+            for (size_t j=i+1;j<grid_size*grid_size;j++)
+            {
+                if (r_task.match_buckets[j].matches == NULL)
+                    continue;
+                r_task.match_buckets_count++;
+                r_task.match_buckets[i] = r_task.match_buckets[j];
+                r_task.match_buckets[j].matches = NULL;
+                break;
+            }
         }
         free(m_task.matches);
         m_task.matches = NULL;
+        free(bucket_match_limit);
+        r_task.match_buckets = realloc(r_task.match_buckets, sizeof(ransac_match_bucket)*r_task.match_buckets_count);
 
         timespec_get(&last_operation_time, TIME_UTC);
         if (!correlation_ransac_start(&r_task))
@@ -242,8 +286,13 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         points1 = NULL;
         free(points2);
         points2 = NULL;
-        free(r_task.matches);
-        r_task.matches = NULL;
+        for(size_t i=0;i<r_task.match_buckets_count;i++)
+        {
+            free(r_task.match_buckets[i].matches);
+            r_task.match_buckets[i].matches = NULL;
+        }
+        free(r_task.match_buckets);
+        r_task.match_buckets = NULL;
     }
 
     {
@@ -389,8 +438,12 @@ cleanup:
         free(m_task.img1.img);
     if (m_task.img2.img != NULL)
         free(m_task.img2.img);
-    if (r_task.matches != NULL)
-        free(r_task.matches);
+    if (r_task.match_buckets != NULL)
+        for(size_t i=0;i<r_task.match_buckets_count;i++)
+            if (r_task.match_buckets[i].matches != NULL)
+                free(r_task.match_buckets[i].matches);
+    if (r_task.match_buckets != NULL)
+        free(r_task.match_buckets);
     if (points1 != NULL)
         free(points1);
     if (points2 != NULL)
