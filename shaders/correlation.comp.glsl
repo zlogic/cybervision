@@ -336,13 +336,16 @@ void main() {
         }
         corr = corr/(stdev1*stdev2*kernel_point_count);
 
+        if (corr >= threshold)
+        {
+            match_count++;
+            internals_int[match_count_offset+out_pos] = match_count;
+        }
         if (corr >= threshold && corr > best_corr)
         {
             best_match.x = round(float(x2)/scale);
             best_match.y = round(float(y2)/scale);
             best_corr = corr;
-            match_count++;
-            internals_int[match_count_offset+out_pos] = match_count;
         }
     }
 

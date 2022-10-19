@@ -369,12 +369,13 @@ static inline void correlate_corridor_area(cross_correlate_task *t, corridor_are
         }
         corr = corr/(c->stdev1*stdev2*(float)kernel_point_count);
         
+        if (corr >= cybervision_crosscorrelation_threshold)
+            c->match_count++;
         if (corr >= cybervision_crosscorrelation_threshold && corr > c->best_corr)
         {
             c->best_match_x = (int)roundf(inv_scale*x2);
             c->best_match_y = (int)roundf(inv_scale*y2);
             c->best_corr = corr;
-            c->match_count++;
         }
     }
 }

@@ -122,10 +122,6 @@ static inline int ransac_calculate_model_perspective(ransac_memory *ctx, ransac_
     if (!svdd(ctx->svd, a, 3, 3, u, s, vt))
         return 0;
 
-    // Check if matrix rank is too low
-    if (fabs(s[8])<cybervision_ransac_rank_epsilon)
-        return 0;
-
     matrix_3x3 u_float, v_float;
     for(size_t i=0;i<3;i++)
     {
@@ -187,10 +183,6 @@ static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_task 
     float vt_float[4];
     for(size_t i=0;i<4;i++)
         vt_float[i] = vt[4*i+3];
-
-    // Check if matrix rank is too low
-    if (fabs(s[3])<cybervision_ransac_rank_epsilon)
-        return 0;
 
     f[0] = 0.0F; f[1] = 0.0F; f[2] = vt[0];
     f[3] = 0.0F; f[4] = 0.0F; f[5] = vt[1];

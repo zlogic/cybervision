@@ -101,6 +101,13 @@ To fix this,
 2. Edit the vcpkg portfile (`openblas/portfile.cmake`) and add a `list(APPEND OPENBLAS_EXTRA_OPTIONS -DTARGET=HASWELL)` line before `vcpkg_cmake_configure`.
 3. Set the `VCPKG_OVERLAY_PORTS` environment variable to the patched copy of `openblas` (same directory as `PATH_TO_NEW_OPENBLAS_DIRECTORY`)
 
+## Known issues
+
+Sometimes the `dgesdd_` function from OpenBLAS (or maybe LAPACK?) returns an error and replaces the input matrix with NaNs.
+OpenBLAS will also print a `** On entry to DLASCL parameter number  4 had an illegal value` log message.
+This is not a critical issue because the RANSAC method will still converge.
+Possibly, this is caused by an early test that indicates that the matrix cannot be processed: https://github.com/Reference-LAPACK/lapack/issues/469
+
 ## External libraries or dependencies
 
 * [fast](https://www.edwardrosten.com/work/fast.html) keypoint detector
