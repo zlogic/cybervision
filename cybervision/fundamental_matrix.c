@@ -192,7 +192,6 @@ void* correlate_ransac_task(void *args)
     ransac_task_ctx *ctx = t->internal;
     size_t ransac_n;
     ransac_match *inliers;
-    size_t *inlier_buckets;
     float ransac_t;
     matrix_3x3 fundamental_matrix;
     size_t extended_inliers_count = 0;
@@ -219,7 +218,6 @@ void* correlate_ransac_task(void *args)
         ransac_t = cybervision_ransac_t_perspective/(t->keypoint_scale*t->keypoint_scale);
     }
     inliers = malloc(sizeof(ransac_match)*ransac_n);
-    inlier_buckets = malloc(sizeof(size_t)*ransac_n);
     ctx_memory.svd = init_svd(&rand_seed);
     ctx_memory.a = malloc(sizeof(double)*(ransac_n*9));
     ctx_memory.u = malloc(sizeof(double)*(ransac_n*ransac_n));
@@ -249,27 +247,13 @@ void* correlate_ransac_task(void *args)
             ransac_match *match;
             ransac_match_bucket *bucket;
             size_t bucket_i, match_i;
-            int unique_bucket = 0;
-            while(!unique_bucket)
-            {
-                bucket_i = rand_r(&rand_seed)%t->match_buckets_count;
-                unique_bucket = 1;
-                for(size_t j=0;j<i;j++)
-                {
-                    if(inlier_buckets[j] == inlier_buckets[bucket_i])
-                    {
-                        unique_bucket = 0;
-                        break;
-                    }
-                }
-            }
+            bucket_i = rand_r(&rand_seed)%t->match_buckets_count;
 
             bucket = &t->match_buckets[bucket_i];
             match_i = rand_r(&rand_seed)%bucket->matches_count;
 
             match = &bucket->matches[match_i];
             inliers[i] = *match;
-            inlier_buckets[i] = bucket_i;
         }
 
         if (!ransac_calculate_model(&ctx_memory, inliers, ransac_n, fundamental_matrix))
@@ -350,7 +334,6 @@ void* correlate_ransac_task(void *args)
     }
 cleanup:
     free(inliers);
-    free(inlier_buckets);
     free(ctx_memory.a);
     free(ctx_memory.u);
     free(ctx_memory.s);
