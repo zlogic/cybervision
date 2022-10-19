@@ -54,8 +54,15 @@ void sleep_ms(int milliseconds)
 }
 
 #ifdef _WIN32
+// Windows stores random generator state in TLS
 int rand_r(unsigned int *seedp)
 {
     return (int)rand();
 }
+void srand_thread(unsigned int *seedp)
+{
+    srand(*seedp);
+}
+#else
+void srand_thread(unsigned int *seedp){}
 #endif

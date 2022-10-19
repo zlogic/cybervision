@@ -7,6 +7,7 @@
 #include "fundamental_matrix.h"
 #include "linmath.h"
 #include "configuration.h"
+#include "system.h"
 
 typedef struct {
     size_t iteration;
@@ -202,6 +203,7 @@ void* correlate_ransac_task(void *args)
     if (pthread_mutex_lock(&ctx->lock) != 0)
         goto cleanup;
     rand_seed = (ctx->thread_id++) ^ (unsigned int)time(NULL);
+    srand_thread(&rand_seed);
     if (pthread_mutex_unlock(&ctx->lock) != 0)
         goto cleanup;
 
@@ -218,7 +220,7 @@ void* correlate_ransac_task(void *args)
         ransac_t = cybervision_ransac_t_perspective/(t->keypoint_scale*t->keypoint_scale);
     }
     inliers = malloc(sizeof(ransac_match)*ransac_n);
-    ctx_memory.svd = init_svd(&rand_seed);
+    ctx_memory.svd = init_svd();
     ctx_memory.a = malloc(sizeof(double)*(ransac_n*9));
     ctx_memory.u = malloc(sizeof(double)*(ransac_n*ransac_n));
     ctx_memory.s = malloc(sizeof(double)*(ransac_n>9?ransac_n:9));

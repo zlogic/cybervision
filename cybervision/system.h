@@ -11,4 +11,6 @@ void sleep_ms();
 int rand_r(unsigned int *seedp);
 #endif
 
+void srand_thread(unsigned int *seedp);
+
 #endif
