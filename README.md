@@ -112,7 +112,7 @@ Possibly, this is caused by an early test that indicates that the matrix cannot 
 
 * [fast](https://www.edwardrosten.com/work/fast.html) keypoint detector
 * [qhull](http://www.qhull.org) for Delaunay triangulation
-* [LAPACK](https://netlib.org/lapack/) for linear algebra routines and its [OpenBLAS](https://www.openblas.net) dependency
+* [LAPACK](https://netlib.org/lapack/) for linear algebra routines and its [OpenBLAS](https://www.openblas.net) dependency - in Windows and Linux (macOS version uses the builtin version of LAPACK)
 * [libtiff](http://libtiff.maptools.org/) to load `tiff` files
 * [libjpeg-turbo](https://libjpeg-turbo.org) to load `jpeg` files
 * [libpng](http://libpng.org/pub/png/libpng.html) to load and save `png` files
