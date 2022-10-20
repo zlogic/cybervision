@@ -2,7 +2,7 @@ name: CMake
 
 on:
   push:
-    branches: [ "master", "experimental-photo-support" ]
+    branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
 
