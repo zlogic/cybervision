@@ -132,7 +132,7 @@ jobs:
           ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
           ~\AppData\Local\vcpkg\archives
           ~\AppData\Roaming\vcpkg\archives
-        key: vcpkgs-${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}-${{ hashFiles('vcpkg.json') }}
+        key: vcpkgs-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}-${{ hashFiles('vcpkg.json') }}
 
     - name: Install NASM
       if: steps.cache-vcpkg.outputs.cache-hit != 'true'
