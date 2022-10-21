@@ -56,7 +56,7 @@ typedef struct {
     float threshold;
     int32_t neighbor_distance;
     float extend_range;
-    int32_t match_limit;
+    float min_range;
 } shader_params;
 
 VkResult gpu_vk_create(vulkan_context* ctx)
@@ -502,7 +502,7 @@ int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev, int corr
     payload->threshold = cybervision_crosscorrelation_threshold;
     payload->neighbor_distance = cybervision_crosscorrelation_neighbor_distance;
     payload->extend_range = cybervision_crosscorrelation_corridor_extend_range;
-    payload->match_limit = cybervision_crosscorrelation_match_limit;
+    payload->min_range = cybervision_crosscorrelation_corridor_min_range;
 
     vkUnmapMemory(dev->device, dev->params_bufferMemory);
     return 1;

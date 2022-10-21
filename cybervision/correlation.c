@@ -262,7 +262,6 @@ typedef struct {
     int corridor_offset;
     float best_corr;
     int best_match_x, best_match_y;
-    int match_count;
 } corridor_area_ctx;
 int estimate_search_range(cross_correlate_task *t, corridor_area_ctx *ctx, int x1, int y1, int *corridor_start, int *corridor_end)
 {
@@ -307,7 +306,7 @@ int estimate_search_range(cross_correlate_task *t, corridor_area_ctx *ctx, int x
     range_stdev = sqrtf(range_stdev/(float)neighbor_count);
     
     int corridor_center = (int)roundf(mid_corridor);
-    int corridor_length = (int)roundf(range_stdev*cybervision_crosscorrelation_corridor_extend_range);
+    int corridor_length = (int)roundf(cybervision_crosscorrelation_corridor_min_range+range_stdev*cybervision_crosscorrelation_corridor_extend_range);
     *corridor_start = fit_range(corridor_center - corridor_length, *corridor_start, *corridor_end);
     *corridor_end = fit_range(corridor_center + corridor_length, *corridor_start, *corridor_end);
     return 1;
@@ -368,9 +367,7 @@ static inline void correlate_corridor_area(cross_correlate_task *t, corridor_are
             }
         }
         corr = corr/(c->stdev1*stdev2*(float)kernel_point_count);
-        
-        if (corr >= cybervision_crosscorrelation_threshold)
-            c->match_count++;
+
         if (corr >= cybervision_crosscorrelation_threshold && corr > c->best_corr)
         {
             c->best_match_x = (int)roundf(inv_scale*x2);
@@ -438,7 +435,6 @@ void* cross_correlation_task(void *args)
             corr_ctx.best_corr = 0;
             corr_ctx.x1 = x1;
             corr_ctx.y1 = y1;
-            corr_ctx.match_count = 0;
 
             compute_correlation_data(&t->img1, kernel_size, x1, y1, &corr_ctx.stdev1, corr_ctx.delta1);
             if (!isfinite(corr_ctx.stdev1))
@@ -459,13 +455,6 @@ void* cross_correlation_task(void *args)
             {
                 corr_ctx.corridor_offset = corridor_offset;
                 correlate_corridor_area(t, &corr_ctx, corridor_start, corridor_end);
-                if (corr_ctx.match_count>cybervision_crosscorrelation_match_limit)
-                {
-                    corr_ctx.best_match_x = -1;
-                    corr_ctx.best_match_y = -1;
-                    corr_ctx.best_corr = 0;
-                    break;
-                }
             }
             if (corr_ctx.best_match_x>=0 && corr_ctx.best_match_y>=0)
             {

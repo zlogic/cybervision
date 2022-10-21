@@ -21,7 +21,7 @@ struct Parameters
     float threshold;
     int neighbor_distance;
     float extend_range;
-    int match_limit;
+    float min_range;
 };
 
 kernel void prepare_initialdata_searchdata(const device Parameters& p [[buffer(0)]], device float* internals[[buffer(3)]], device int* internals_int[[buffer(4)]], uint2 index [[thread_position_in_grid]]) {
@@ -32,16 +32,16 @@ kernel void prepare_initialdata_searchdata(const device Parameters& p [[buffer(0
 
     const int mean_coeff_offset = 0;
     const int corridor_stdev_offset = mean_coeff_offset + img1_width*img1_height;
-    const int neighbor_count_offset = 0;
-    const int corridor_range_offset = neighbor_count_offset + img1_width*img1_height;
+    const int corridor_range_offset = 0;
+    const int neighbor_count_offset = corridor_range_offset + img1_width*img1_height*2;
 
     if (x < img1_width && y < img1_height)
     {
         internals[mean_coeff_offset + img1_width*y+x] = 0;
         internals[corridor_stdev_offset + img1_width*y+x] = 0;
-        internals_int[neighbor_count_offset + img1_width*y+x] = 0;
         internals_int[corridor_range_offset + (img1_width*y+x)*2] = -1;
         internals_int[corridor_range_offset + (img1_width*y+x)*2+1] = -1;
+        internals_int[neighbor_count_offset + img1_width*y+x] = 0;
     }
 }
 
@@ -63,12 +63,10 @@ kernel void prepare_initialdata_correlation(const device Parameters& p [[buffer(
     const int img2_avg_offset = img1_stdev_offset + img1_width*img1_height;
     const int img2_stdev_offset = img2_avg_offset + img2_width*img2_height;
     const int correlation_offset = img2_stdev_offset + img2_width*img2_height;
-    const int match_count_offset = 0;
 
     if (x < img1_width && y < img1_height)
     {
         internals[correlation_offset + img1_width*y+x] = 0;
-        internals_int[match_count_offset + img1_width*y+x] = 0;
         result[(img1_width*y+x)*2] = -1;
         result[(img1_width*y+x)*2+1] = -1;
     }
@@ -167,9 +165,10 @@ kernel void prepare_searchdata(const device Parameters& p [[buffer(0)]], const d
     const int corridor_end = p.corridor_end;
     const int neighbor_distance = p.neighbor_distance;
     const float extend_range = p.extend_range;
+    const float min_range = p.min_range;
     const int pass = p.pass;
-    const int neighbor_count_offset = 0;
-    const int corridor_range_offset = neighbor_count_offset + img1_width*img1_height;
+    const int corridor_range_offset = 0;
+    const int neighbor_count_offset = corridor_range_offset + img1_width*img1_height*2;
     const int mean_coeff_offset = 0;
     const int corridor_stdev_offset = mean_coeff_offset + img1_width*img1_height;
     float2 coeff, add_const;
@@ -227,7 +226,7 @@ kernel void prepare_searchdata(const device Parameters& p [[buffer(0)]], const d
 
     internals[corridor_stdev_offset + y*img1_width+x] = range_stdev;
     const int corridor_center = int(round(mid_corridor));
-    const int corridor_length = int(round(sqrt(range_stdev)*extend_range));
+    const int corridor_length = int(round(min_range+sqrt(range_stdev)*extend_range));
     int min_pos = kernel_size;
     int max_pos = corridor_vertical? img2_height-kernel_size : img2_width-kernel_size;
     min_pos = min(max(min_pos, corridor_center - corridor_length), max_pos);
@@ -251,7 +250,6 @@ kernel void cross_correlate(const device Parameters& p [[buffer(0)]], const devi
     const int kernel_size = p.kernel_size;
     const float threshold = p.threshold;
     const float kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
-    const int match_limit = p.match_limit;
 
     if(x1 < kernel_size || x1 >= img1_width-kernel_size || y1 < kernel_size ||  y1 >= img1_height-kernel_size)
         return;
@@ -264,18 +262,12 @@ kernel void cross_correlate(const device Parameters& p [[buffer(0)]], const devi
     const int img2_avg_offset = img1_stdev_offset + img1_width*img1_height;
     const int img2_stdev_offset = img2_avg_offset + img2_width*img2_height;
     const int correlation_offset = img2_stdev_offset + img2_width*img2_height;
-    const int match_count_offset = 0;
-    const int corridor_range_offset = match_count_offset + img1_width*img1_height;
+    const int corridor_range_offset = 0;
     const int out_pos = img1_width*y1 + x1;
     
     const int min_pos = internals_int[corridor_range_offset + out_pos*2];
     const int max_pos = internals_int[corridor_range_offset + out_pos*2+1];
     if (iteration > 0 && (min_pos<0 || max_pos<0))
-        return;
-
-    int match_count = internals_int[match_count_offset+out_pos];
-
-    if (match_count > match_limit)
         return;
 
     float avg1 = internals[img1_avg_offset + img1_width*y1+x1];
@@ -311,11 +303,6 @@ kernel void cross_correlate(const device Parameters& p [[buffer(0)]], const devi
         }
         corr = corr/(stdev1*stdev2*kernel_point_count);
 
-        if (corr >= threshold)
-        {
-            match_count++;
-            internals_int[match_count_offset+out_pos] = match_count;
-        }
         if (corr >= threshold && corr > best_corr)
         {
             best_match.x = round(float(x2)/scale);
@@ -325,18 +312,10 @@ kernel void cross_correlate(const device Parameters& p [[buffer(0)]], const devi
     }
 
     float current_corr = internals[correlation_offset + img1_width*y1 + x1];
-    if (best_corr >= threshold)
+    if (best_corr >= threshold && best_corr > current_corr)
     {
-        if (match_count > match_limit)
-        {
-            result[out_pos*2] = -1;
-            result[out_pos*2+1] = -1;
-        }
-        else if (best_corr > current_corr)
-        {
-            internals[correlation_offset + img1_width*y1 + x1] = best_corr;
-            result[out_pos*2] = int(best_match.x);
-            result[out_pos*2+1] = int(best_match.y);
-        }
+        internals[correlation_offset + img1_width*y1 + x1] = best_corr;
+        result[out_pos*2] = int(best_match.x);
+        result[out_pos*2+1] = int(best_match.y);
     }
 }

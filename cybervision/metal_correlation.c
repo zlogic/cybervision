@@ -57,7 +57,7 @@ typedef struct {
     float threshold;
     int32_t neighbor_distance;
     float extend_range;
-    int32_t match_limit;
+    float min_range;
 } shader_params;
 
 const char* nserror_localized_description(id error)
@@ -313,7 +313,7 @@ void* gpu_correlate_cross_correlation_task(void *args)
     params.threshold = cybervision_crosscorrelation_threshold;
     params.neighbor_distance = cybervision_crosscorrelation_neighbor_distance;
     params.extend_range = cybervision_crosscorrelation_corridor_extend_range;
-    params.match_limit = cybervision_crosscorrelation_match_limit;
+    params.min_range = cybervision_crosscorrelation_corridor_min_range;
 
     id autoreleasepool = init_autoreleasepool();
     if (!gpu_transfer_in_images(t, ctx->dev.buffer_img))

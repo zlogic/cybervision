@@ -31,7 +31,7 @@ extern const int cybervision_crosscorrelation_corridor_segment_length;
 extern const int cybervision_crosscorrelation_search_area_segment_length;
 extern const int cybervision_crosscorrelation_neighbor_distance;
 extern const float cybervision_crosscorrelation_corridor_extend_range;
-extern const int cybervision_crosscorrelation_match_limit;
+extern const float cybervision_crosscorrelation_corridor_min_range;
 
 typedef enum 
 { 
