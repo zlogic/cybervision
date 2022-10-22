@@ -579,7 +579,9 @@ void* gpu_correlate_cross_correlation_task(void *args)
         t->percent_complete = 2.0F;
         for(int y=-y_limit;y<=y_limit;y+=batch_size)
         {
-            if (!gpu_transfer_in_params(t, &ctx->dev, 0, y, y+batch_size, 2))
+            int corridor_end = y+batch_size;
+            corridor_end = corridor_end<y_limit?corridor_end:y_limit;
+            if (!gpu_transfer_in_params(t, &ctx->dev, 0, y, corridor_end, 2))
             {
                 t->error = "Failed to transfer input parameters (search area estimation stage phase 0)";
                 t->completed = 1;
@@ -596,7 +598,9 @@ void* gpu_correlate_cross_correlation_task(void *args)
         t->percent_complete = 31.0F;
         for(int y=-y_limit;y<=y_limit;y+=batch_size)
         {
-            if (!gpu_transfer_in_params(t, &ctx->dev, 0, y, y+batch_size, 3))
+            int corridor_end = y+batch_size;
+            corridor_end = corridor_end<y_limit?corridor_end:y_limit;
+            if (!gpu_transfer_in_params(t, &ctx->dev, 0, y, corridor_end, 3))
             {
                 t->error = "Failed to transfer input parameters (search area estimation stage phase 1)";
                 t->completed = 1;
@@ -690,12 +694,12 @@ int gpu_correlation_cross_correlate_init(cross_correlate_task *t, size_t img1_pi
         t->error = "Failed to create buffer (previous results)";
         return 0;
     }
-    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*(img1_pixels*3+img2_pixels*2), &ctx->dev.internal_buffer, &ctx->dev.internal_bufferMemory, 1))
+    if (!gpu_create_buffer(&ctx->dev, sizeof(float)*(img1_pixels*3+img2_pixels*2), &ctx->dev.internal_buffer, &ctx->dev.internal_bufferMemory, 0))
     {
         t->error = "Failed to create buffer (internal float)";
         return 0;
     }
-    if (!gpu_create_buffer(&ctx->dev, sizeof(int32_t)*img1_pixels*3, &ctx->dev.internal_int_buffer, &ctx->dev.internal_int_bufferMemory, 1))
+    if (!gpu_create_buffer(&ctx->dev, sizeof(int32_t)*img1_pixels*3, &ctx->dev.internal_int_buffer, &ctx->dev.internal_int_bufferMemory, 0))
     {
         t->error = "Failed to create buffer (internal int)";
         return 0;

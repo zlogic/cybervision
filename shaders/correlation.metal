@@ -207,8 +207,7 @@ kernel void prepare_searchdata(const device Parameters& p [[buffer(0)]], const d
                 continue;
 
             int corridor_pos = int(corridor_vertical? round((y2-add_const.y)/coeff.y):round((x2-add_const.x)/coeff.x));
-            if (pass == 0)
-            {
+            if (pass == 0) {
                 mid_corridor += float(corridor_pos);
                 neighbor_count++;
             } else if (pass == 1) {

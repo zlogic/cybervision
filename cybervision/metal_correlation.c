@@ -343,6 +343,7 @@ void* gpu_correlate_cross_correlation_task(void *args)
         {
             params.corridor_start = y;
             params.corridor_end = y+batch_size;
+            params.corridor_end = params.corridor_end<y_limit?params.corridor_end:y_limit;
             if (!gpu_run_command(&ctx->dev, t->img1.width, t->img1.height, &params, ctx->dev.pso_prepare_searchdata))
             {
                 t->error = "Failed to run kernel (search area estimation stage phase 0)";
@@ -356,6 +357,7 @@ void* gpu_correlate_cross_correlation_task(void *args)
         {
             params.corridor_start = y;
             params.corridor_end = y+batch_size;
+            params.corridor_end = params.corridor_end<y_limit?params.corridor_end:y_limit;
             if (!gpu_run_command(&ctx->dev, t->img1.width, t->img1.height, &params, ctx->dev.pso_prepare_searchdata))
             {
                 t->error = "Failed to run kernel (search area estimation stage phase 1)";
