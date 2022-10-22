@@ -245,8 +245,8 @@ static inline int fit_range(int val, int min, int max)
 }
 
 typedef struct {
-    float coeff_x, coeff_y;
-    float add_x, add_y;
+    double coeff_x, coeff_y;
+    double add_x, add_y;
     int corridor_offset_x, corridor_offset_y;
 
     int kernel_size;
@@ -273,7 +273,7 @@ int estimate_search_range(cross_correlate_task *t, corridor_area_ctx *ctx, int x
     int x_max = (int)ceilf((x1+cybervision_crosscorrelation_neighbor_distance)*inv_scale);
     int y_min = (int)floorf((y1-cybervision_crosscorrelation_neighbor_distance)*inv_scale);
     int y_max = (int)ceilf((y1+cybervision_crosscorrelation_neighbor_distance)*inv_scale);
-    int corridor_vertical = fabsf(ctx->coeff_y) > fabsf(ctx->coeff_x);
+    int corridor_vertical = fabs(ctx->coeff_y) > fabs(ctx->coeff_x);
 
     x_min = fit_range(x_min, 0, t->out_width);
     x_max = fit_range(x_max, 0, t->out_width);
@@ -289,7 +289,7 @@ int estimate_search_range(cross_correlate_task *t, corridor_area_ctx *ctx, int x
             if (x2<0 || y2<0)
                 continue;
 
-            int corridor_pos = (int)(corridor_vertical? roundf((y2-ctx->add_y)/ctx->coeff_y):roundf((x2-ctx->add_x)/ctx->coeff_x));
+            int corridor_pos = (int)(corridor_vertical? round((y2-ctx->add_y)/ctx->coeff_y):round((x2-ctx->add_x)/ctx->coeff_x));
             ctx->stdev_range[neighbor_count++] = corridor_pos;
             mid_corridor += corridor_pos;
         }
@@ -314,26 +314,26 @@ int estimate_search_range(cross_correlate_task *t, corridor_area_ctx *ctx, int x
 
 static inline void calculate_epipolar_line(cross_correlate_task *t, corridor_area_ctx* c)
 {
-    float scale = t->scale;
-    float p1[3] = {(float)c->x1/scale, (float)c->y1/scale, 1.0F};
-    float Fp1[3];
+    double scale = t->scale;
+    double p1[3] = {(double)c->x1/scale, (double)c->y1/scale, 1.0};
+    double Fp1[3];
     multiply_f_vector(t->fundamental_matrix, p1, Fp1);
     if (fabs(Fp1[0])>fabs(Fp1[1])) 
     {
-        c->coeff_x = (float)(-Fp1[1]/Fp1[0]);
-        c->add_x = (float)(-scale*Fp1[2]/Fp1[0]);
+        c->coeff_x = -Fp1[1]/Fp1[0];
+        c->add_x = -scale*Fp1[2]/Fp1[0];
         c->corridor_offset_x = 1;
-        c->coeff_y = 1.0F;
-        c->add_y = 0.0F;
+        c->coeff_y = 1.0;
+        c->add_y = 0.0;
         c->corridor_offset_y = 0;
     }
     else
     {
-        c->coeff_x = 1.0F;
-        c->add_x = 0.0F;
+        c->coeff_x = 1.0;
+        c->add_x = 0.0;
         c->corridor_offset_x = 0;
-        c->coeff_y = (float)(-Fp1[0]/Fp1[1]);
-        c->add_y = (float)(-scale*Fp1[2]/Fp1[1]);
+        c->coeff_y = -Fp1[0]/Fp1[1];
+        c->add_y = -scale*Fp1[2]/Fp1[1];
         c->corridor_offset_y = 1;
     }
 }
@@ -444,7 +444,7 @@ void* cross_correlation_task(void *args)
             if (!isfinite(corr_ctx.coeff_x) || !isfinite(corr_ctx.coeff_y) || !isfinite(corr_ctx.add_x) || !isfinite(corr_ctx.add_y))
                 continue;
 
-            int corridor_vertical = fabsf(corr_ctx.coeff_y) > fabsf(corr_ctx.coeff_x);
+            int corridor_vertical = fabs(corr_ctx.coeff_y) > fabs(corr_ctx.coeff_x);
             corridor_end = corridor_vertical? h2-kernel_size : w2-kernel_size;
             processed_points++;
             if (t->iteration > 0)

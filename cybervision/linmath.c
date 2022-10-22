@@ -9,28 +9,28 @@ typedef __CLPK_integer integer;
 
 #include "linmath.h"
 
-void multiply_matrix_3x3(float a[9], float b[9], float output[9])
+void multiply_matrix_3x3(double a[9], double b[9], double output[9])
 {
     for(size_t i=0;i<3;i++)
         for(size_t j=0;j<3;j++)
             output[i*3+j] = a[i*3+0]*b[0*3+j] + a[i*3+1]*b[1*3+j] + a[i*3+2]*b[2*3+j];
 }
 
-void multiply_matrix_3tx3(float at[9], float b[9], float output[9])
+void multiply_matrix_3tx3(double at[9], double b[9], double output[9])
 {
     for(size_t i=0;i<3;i++)
         for(size_t j=0;j<3;j++)
             output[i*3+j] = at[0*3+i]*b[0*3+j] + at[1*3+i]*b[1*3+j] + at[2*3+i]*b[2*3+j];
 }
 
-void multiply_f_vector(float f[9], float p[3], float target[3])
+void multiply_f_vector(double f[9], double p[3], double target[3])
 {
     target[0] = f[0]*p[0]+f[1]*p[1]+f[2]*p[2];
     target[1] = f[3]*p[0]+f[4]*p[1]+f[5]*p[2];
     target[2] = f[6]*p[0]+f[7]*p[1]+f[8]*p[2];
 }
 
-void multiply_ft_vector(float f[9], float p[3], float target[3])
+void multiply_ft_vector(double f[9], double p[3], double target[3])
 {
     target[0] = f[0]*p[0]+f[3]*p[1]+f[6]*p[2];
     target[1] = f[1]*p[0]+f[4]*p[1]+f[7]*p[2];

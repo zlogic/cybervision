@@ -3,11 +3,11 @@
 
 #include <stddef.h>
 
-void multiply_matrix_3x3(float a[9], float b[9], float output[9]);
-void multiply_matrix_3tx3(float at[9], float b[9], float output[9]);
+void multiply_matrix_3x3(double a[9], double b[9], double output[9]);
+void multiply_matrix_3tx3(double at[9], double b[9], double output[9]);
 
-void multiply_f_vector(float fundamental_matrix[9], float point[3], float target[3]);
-void multiply_ft_vector(float fundamental_matrix[9], float point[3], float target[3]);
+void multiply_f_vector(double fundamental_matrix[9], double point[3], double target[3]);
+void multiply_ft_vector(double fundamental_matrix[9], double point[3], double target[3]);
 
 void multiplyd(double *a, double *b, double *output, int m, int n, int k, int transposeA, int transposeB);
 

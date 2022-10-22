@@ -14,7 +14,7 @@ typedef struct {
     triangulation_projection_mode proj_mode;
     float depth_scale;
     
-    float fundamental_matrix[9];
+    double fundamental_matrix[9];
     float tilt_angle;
 
     int num_threads;
