@@ -412,7 +412,7 @@ void* cross_correlation_task(void *args)
     corr_ctx.avg2 = ctx->avg2;
     corr_ctx.stdev2 = ctx->stdev2;
     corr_ctx.stdev_range = malloc(sizeof(float)*neighbor_size*neighbor_size);
-    
+
     while (!t->completed)
     {
         int y1;

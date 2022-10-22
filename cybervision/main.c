@@ -387,7 +387,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
 
     timespec_get(&last_operation_time, TIME_UTC);
     {
-        cc_task.num_threads = num_threads;
+        t_task.num_threads = num_threads;
         t_task.correlated_points = cc_task.correlated_points;
         t_task.out_depth = malloc(sizeof(float)*cc_task.out_width*cc_task.out_height);
         t_task.width = cc_task.out_width;
