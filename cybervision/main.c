@@ -10,6 +10,7 @@
 #include "fundamental_matrix.h"
 #include "gpu_correlation.h"
 #include "configuration.h"
+#include "triangulation.h"
 #include "surface.h"
 #include "image.h"
 
@@ -93,6 +94,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     match_task m_task = {0};
     ransac_task r_task = {0};
     cross_correlate_task cc_task = {0};
+    triangulation_task t_task = {0};
 
     int (*cross_correlate_start)(cross_correlate_task*);
     int (*cross_correlate_complete)(cross_correlate_task*);
@@ -385,29 +387,53 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
 
     timespec_get(&last_operation_time, TIME_UTC);
     {
-        surface_data surf = {0};
+        cc_task.num_threads = num_threads;
+        t_task.correlated_points = cc_task.correlated_points;
+        t_task.out_depth = malloc(sizeof(float)*cc_task.out_width*cc_task.out_height);
+        t_task.width = cc_task.out_width;
+        t_task.height = cc_task.out_height;
+        t_task.depth_scale = depth_scale;
+        for (size_t i=0;i<9;i++)
+            t_task.fundamental_matrix[i] = r_task.fundamental_matrix[i];
+        if (proj_mode == PROJECTION_MODE_PARALLEL)
+            t_task.proj_mode = TRIANGULATION_PROJECTION_MODE_PARALLEL;
+        else if (proj_mode == PROJECTION_MODE_PERSPECTIVE)
+            t_task.proj_mode = TRIANGULATION_PROJECTION_MODE_PERSPECTIVE;
 
-        surf.depth = malloc(sizeof(float)*cc_task.out_width*cc_task.out_height);
-        surf.width = cc_task.out_width;
-        surf.height = cc_task.out_height;
-        for (int y1=0;y1<cc_task.out_height;y1++)
+        if (!triangulation_start(&t_task))
         {
-            for (int x1=0;x1<cc_task.out_width;x1++)
-            {
-                size_t pos = y1*cc_task.out_width+x1;
-                int x2 = cc_task.correlated_points[pos*2];
-                int y2 = cc_task.correlated_points[pos*2+1];
-                if (x2<0 || y2<0)
-                {
-                    surf.depth[y1*surf.width+x1] = NAN;
-                    continue;
-                }
-                float dx = (float)x1-(float)x2, dy = (float)y1-(float)y2;
-                surf.depth[y1*surf.width+x1] = sqrtf(dx*dx+dy*dy)*depth_scale;
-            }
+            fprintf(stderr, "Failed to start point triangulation task\n");
+            result_code = 1;
+            goto cleanup;
         }
+        while(!t_task.completed)
+        {
+            sleep_ms(200);
+            show_progressbar(t_task.percent_complete);
+        }
+        reset_progressbar();
+        if (!triangulation_complete(&t_task))
+        {
+            fprintf(stderr, "Failed to complete point triangulation task: %s\n", t_task.error!=NULL? t_task.error : "unknown error");
+            result_code = 1;
+            goto cleanup;
+        }
+        
+        timespec_get(&current_operation_time, TIME_UTC);
+        printf("Completed point triangulation in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
+
         free(cc_task.correlated_points);
         cc_task.correlated_points = NULL;
+    }
+
+    timespec_get(&last_operation_time, TIME_UTC);
+    {
+        surface_data surf = {0};
+
+        surf.depth = t_task.out_depth;
+        t_task.out_depth = NULL;
+        surf.width = t_task.width;
+        surf.height = t_task.height;
 
         if (!surface_output(surf, output_filename, interp_mode))
         {
@@ -454,6 +480,8 @@ cleanup:
         free(cc_task.img2.img);
     if (cc_task.correlated_points != NULL)
         free(cc_task.correlated_points);
+    if (t_task.out_depth != NULL)
+        free(t_task.out_depth);
     return result_code;
 }
 

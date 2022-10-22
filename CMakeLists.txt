@@ -13,9 +13,10 @@ set(CYBERVISION_SOURCES
     cybervision/fundamental_matrix.c
     cybervision/linmath.c
     cybervision/fast_detector.c
+    cybervision/triangulation.c
+    cybervision/surface.c
     cybervision/configuration.c
     cybervision/system.c
-    cybervision/surface.c
     cybervision/image.c
     cybervision/main.c
 )
