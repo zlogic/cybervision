@@ -1,6 +1,6 @@
 {
     "name": "cybervision",
-    "version-string": "0.9.0",
+    "version-string": "0.10.0",
     "dependencies": [
         {"name": "libjpeg-turbo", "default-features": false},
         {"name": "tiff", "default-features": false},
