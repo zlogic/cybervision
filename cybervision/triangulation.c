@@ -227,7 +227,7 @@ void* triangulation_perspective_task(void *args)
             */
 
             float dx = (float)x1-(float)x2, dy = (float)y1-(float)y2;
-            if (fabs(denominator)>1E-3)
+            if (fabs(denominator)>1E-2)
             {
                 float depth = point[2]/point[3];
                 t->out_depth[y1*t->width+x1] = depth;

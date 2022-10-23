@@ -113,6 +113,10 @@ static inline int ransac_calculate_model_perspective(ransac_memory *ctx, ransac_
     if (!svdd(ctx->svd, a, matches_count, 9, u, s, vt))
         return 0;
 
+    // Check if matrix rank is too low
+    if (fabs(s[7])<cybervision_ransac_rank_epsilon)
+        return 0;
+
    for(size_t i=0;i<9;i++)
         a[i] = vt[9*i+8];
 
@@ -176,6 +180,11 @@ static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_match
     }
     if (!svdd(ctx->svd, a, matches_count, 4, u, s, vt))
         return 0;
+
+    // Check if matrix rank is too low
+    if (fabs(s[3])<cybervision_ransac_rank_epsilon)
+        return 0;
+
     double vt_lastcol[4];
     for(size_t i=0;i<4;i++)
         vt_lastcol[i] = vt[4*i+3];
@@ -193,6 +202,7 @@ void* correlate_ransac_task(void *args)
     ransac_task_ctx *ctx = t->internal;
     size_t ransac_n;
     ransac_match *inliers;
+    size_t ransac_k;
     double ransac_t;
     matrix_3x3 fundamental_matrix;
     size_t extended_inliers_count = 0;
@@ -210,12 +220,14 @@ void* correlate_ransac_task(void *args)
     if (t->proj_mode == PROJECTION_MODE_PARALLEL)
     {
         ransac_calculate_model = ransac_calculate_model_affine;
+        ransac_k = cybervision_ransac_k_affine;
         ransac_n = cybervision_ransac_n_affine;
         ransac_t = cybervision_ransac_t_affine;
     }
     else if (t->proj_mode == PROJECTION_MODE_PERSPECTIVE)
     {
         ransac_calculate_model = ransac_calculate_model_perspective;
+        ransac_k = cybervision_ransac_k_perspective;
         ransac_n = cybervision_ransac_n_perspective;
         ransac_t = cybervision_ransac_t_perspective/(t->keypoint_scale*t->keypoint_scale);
     }
@@ -232,11 +244,11 @@ void* correlate_ransac_task(void *args)
         if (pthread_mutex_lock(&ctx->lock) != 0)
             goto cleanup;
         iteration = ctx->iteration++;
-        t->percent_complete = 100.0F*(float)iteration/cybervision_ransac_k;
+        t->percent_complete = 100.0F*(float)iteration/ransac_k;
         if (pthread_mutex_unlock(&ctx->lock) != 0)
             goto cleanup;
 
-        if (iteration > cybervision_ransac_k)
+        if (iteration > ransac_k)
             break;
 
         if (iteration % cybervision_ransac_check_interval == 0 && t->result_matches_count > cybervision_ransac_d_early_exit)

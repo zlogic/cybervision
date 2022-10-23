@@ -19,10 +19,11 @@ typedef enum
 } projection_mode;
 
 extern const size_t cybervision_ransac_match_grid_size;
-extern const size_t cybervision_ransac_k;
+extern const size_t cybervision_ransac_k_affine;
+extern const size_t cybervision_ransac_k_perspective;
 extern const size_t cybervision_ransac_n_affine;
 extern const size_t cybervision_ransac_n_perspective;
-extern const float cybervision_ransac_rank_epsilon;
+extern const double cybervision_ransac_rank_epsilon;
 extern const double cybervision_ransac_t_affine;
 extern const double cybervision_ransac_t_perspective;
 extern const size_t cybervision_ransac_d;
