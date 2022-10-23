@@ -200,20 +200,9 @@ void* triangulation_perspective_task(void *args)
             for(size_t i=0;i<4;i++)
                 point[i] = vt[i*4+3];
 
-            if (fabs(point[3])<1E-3)
+            if (fabs(point[3])<cybervision_triangulation_min_scale)
                 continue;
-            const double point_x = point[0]/point[3];
-            const double point_y = point[1]/point[3];
-            const double point_z = point[2]/point[3];
-            const double sgn = point[3]>0?1.0:-1.0;
-            //const int target_x1 = x1;//(int)round(point_x/point_z);
-            //const int target_y1 = y1;//(int)round(point_y/point_z);
-            //if (target_x1<0 || target_x1>=t->width || target_y1<0 || target_y1>=t->height)
-            //    continue;
-            //t->out_depth[y2*t->width+x2] = point_z/sqrt(point_x*point_x+point_y*point_y+point_z*point_z);
-            //t->out_depth[y2*t->width+x2] = point[2]*sgn;
-            //t->out_depth[y1*t->width+x1] = point_z/(point_x+point_y);
-            t->out_depth[y1*t->width+x1] = point_z;
+            t->out_depth[y1*t->width+x1] = point[2]/point[3];
         }
     }
 cleanup:
