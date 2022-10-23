@@ -30,6 +30,11 @@ const int cybervision_crosscorrelation_neighbor_distance = 10;
 const float cybervision_crosscorrelation_corridor_extend_range = 1.0F;
 const float cybervision_crosscorrelation_corridor_min_range = 2.5F;
 
+const size_t cybervision_histogram_filter_bins = 100;
+const float cybervision_histogram_filter_discard_percentile_parallel = 0.025F;
+const float cybervision_histogram_filter_discard_percentile_perspective = 0.2F;
+const float cybervision_histogram_filter_epsilon = 1E-6;
+
 #ifndef CYBERVISION_DISABLE_GPU
 const correlation_mode cybervision_crosscorrelation_default_mode = CORRELATION_MODE_GPU;
 #else

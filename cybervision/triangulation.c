@@ -4,6 +4,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
+#include "configuration.h"
 #include "triangulation.h"
 #include "linmath.h"
 
@@ -11,12 +12,76 @@ typedef struct {
     int y;
 
     double camera_2[4*3];
-    float min_depth, max_depth;
 
     int threads_completed;
     pthread_mutex_t lock;
     pthread_t *threads;
 } triangulation_task_ctx;
+
+void find_min_max_depth(triangulation_task *t, float *min_depth, float *max_depth)
+{
+    float min = NAN, max = NAN;
+    for(size_t i=0;i<t->width*t->height;i++)
+    {
+        float depth = t->out_depth[i];
+        if (!isfinite(depth))
+            continue;
+        min = (depth<min || !isfinite(min))? depth:min;
+        max = (depth>max || !isfinite(max))? depth:max;
+    }
+    *min_depth = min;
+    *max_depth = max;
+}
+
+void filter_depth_histogram(triangulation_task *t, const float histogram_discard_percentile, float *min_depth, float *max_depth)
+{
+    const size_t histogram_bins = cybervision_histogram_filter_bins;
+    const float histogram_depth_epsilon = cybervision_histogram_filter_epsilon;
+    float min, max;
+    size_t *histogram = malloc(sizeof(size_t)*histogram_bins);
+    size_t histogram_sum = 0;
+    size_t current_histogram_sum;
+    find_min_max_depth(t, &min, &max);
+    *min_depth = min;
+    *max_depth = max;
+    for(int i=0;i<histogram_bins;i++)
+        histogram[i] = 0;
+    for(size_t i=0;i<t->width*t->height;i++)
+    {
+        float depth = t->out_depth[i];
+        if (!isfinite(depth))
+            continue;
+        int pos = (int)roundf((depth-min)*histogram_bins/(max-min));
+        pos = pos>=0? pos:0;
+        pos = pos<histogram_bins? pos:histogram_bins-1;
+        histogram[pos]++;
+        histogram_sum++;
+    }
+    current_histogram_sum = 0;
+    for(size_t i=0;i<histogram_bins;i++)
+    {
+        current_histogram_sum += histogram[i];
+        if (((float)current_histogram_sum/(float)histogram_sum)>histogram_discard_percentile)
+            break;
+        *min_depth = min + ((float)i/(float)histogram_bins)*(max-min) - histogram_depth_epsilon*(max-min);
+    }
+    current_histogram_sum = 0;
+    for(size_t i=histogram_bins-1;i>=0;i--)
+    {
+        current_histogram_sum += histogram[i];
+        if (((float)current_histogram_sum/(float)histogram_sum)>histogram_discard_percentile)
+            break;
+        *max_depth = min + ((float)i/(float)histogram_bins)*(max-min) + histogram_depth_epsilon*(max-min);
+    }
+    for(size_t i=0;i<t->width*t->height;i++)
+    {
+        float depth = t->out_depth[i];
+        if (!isfinite(depth))
+            continue;
+        if (depth<*min_depth || depth>*max_depth)
+            t->out_depth[i] = NAN;
+    }
+}
 
 void triangulation_parallel(triangulation_task *t)
 {
@@ -37,6 +102,8 @@ void triangulation_parallel(triangulation_task *t)
             t->out_depth[y1*t->width+x1] = sqrtf(dx*dx+dy*dy)*t->depth_scale;
         }
     }
+    float min_depth, max_depth;
+    filter_depth_histogram(t, cybervision_histogram_filter_discard_percentile_parallel, &min_depth, &max_depth);
     t->completed = 1;
 }
 
@@ -87,7 +154,6 @@ void* triangulation_perspective_task(void *args)
     double u[4*4], s[4], vt[4*4];
     double *p2 = ctx->camera_2; 
     svd_internal svd_ctx = init_svd();
-    float min_depth = ctx->min_depth, max_depth = ctx->max_depth;
 
     while (!t->completed)
     {
@@ -141,13 +207,30 @@ void* triangulation_perspective_task(void *args)
             for(size_t i=0;i<4;i++)
                 point[i] = vt[i*4+3];
 
+            double p1[3] = {x1, y1, 1.0};
+            double p2[3]= {x2, y2, 1.0};
+            double Fp1[3];
+            double Ftp2[3];
+            multiply_f_vector(t->fundamental_matrix, p1, Fp1);
+            multiply_ft_vector(t->fundamental_matrix, p2, Ftp2);
+            //double denominator = Fp1[0]*Fp1[0]+Fp1[1]*Fp1[1]+Ftp2[0]*Ftp2[0]+Ftp2[1]*Ftp2[1];
+            double denominator = Ftp2[0]*Ftp2[0]+Ftp2[1]*Ftp2[1]+Ftp2[2]*Ftp2[2];
+            /*
+            float epipole_dx = x2 - p2[3]/p2[11];
+            float epipole_dy = y2 - p2[7]/p2[11];
+
+            if(sqrtf(epipole_dx*epipole_dx + epipole_dy*epipole_dy)<50.0F)
+            {
+                printf("\n\n%i %i %f %f %f %f %f\n", x1, y1, point[3], point[0]/point[3], point[1]/point[3], t->depth_scale*point[2]/point[3], s[3]);
+                continue;
+            }
+            */
+
             float dx = (float)x1-(float)x2, dy = (float)y1-(float)y2;
-            if (fabs(point[3])>1.0E-3)
+            if (fabs(denominator)>1E-3)
             {
                 float depth = point[2]/point[3];
                 t->out_depth[y1*t->width+x1] = depth;
-                min_depth = (depth<min_depth || !isfinite(min_depth))?depth:min_depth;
-                max_depth = (depth>max_depth || !isfinite(max_depth))?depth:max_depth;
             }
         }
     }
@@ -155,8 +238,6 @@ cleanup:
     free_svd(svd_ctx);
     pthread_mutex_lock(&ctx->lock);
     ctx->threads_completed++;
-    ctx->min_depth = (min_depth<ctx->min_depth || !isfinite(ctx->min_depth))?min_depth:ctx->min_depth;
-    ctx->max_depth = (max_depth>ctx->max_depth || !isfinite(ctx->max_depth))?max_depth:ctx->max_depth;
     pthread_mutex_unlock(&ctx->lock);
     if (ctx->threads_completed >= t->num_threads)
         t->completed = 1;
@@ -178,8 +259,6 @@ int triangulation_start(triangulation_task *task)
         triangulation_task_ctx *ctx = malloc(sizeof(triangulation_task_ctx));
         task->internal = ctx;
         ctx->y = 0;
-        ctx->min_depth = NAN;
-        ctx->max_depth = NAN;
         ctx->threads= malloc(sizeof(pthread_t)*task->num_threads);
         ctx->threads_completed = 0;
 
@@ -222,14 +301,16 @@ int triangulation_complete(triangulation_task *t)
 
     if (t->proj_mode == TRIANGULATION_PROJECTION_MODE_PERSPECTIVE)
     {
+        float min_depth, max_depth;
+        filter_depth_histogram(t, cybervision_histogram_filter_discard_percentile_perspective, &min_depth, &max_depth);
         float min_size = (float)(t->width<t->height? t->width:t->height);
-        float depth_scale = t->depth_scale*min_size/(ctx->max_depth-ctx->min_depth);
+        float depth_scale = t->depth_scale*min_size/(max_depth-min_depth);
         for(size_t i=0;i<t->width*t->height;i++)
         {
             float depth = t->out_depth[i];
             if (!isfinite(depth))
                 continue;
-            depth = (depth-ctx->min_depth)*depth_scale;
+            depth = (depth-min_depth)*depth_scale;
             t->out_depth[i] = depth;
         }
     }
