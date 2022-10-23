@@ -310,7 +310,7 @@ void* gpu_correlate_cross_correlation_task(void *args)
     params.scale = t->scale;
     params.iteration = t->iteration;
     params.kernel_size = cybervision_crosscorrelation_kernel_size;
-    params.threshold = cybervision_crosscorrelation_threshold;
+    params.threshold = t->proj_mode==PROJECTION_MODE_PARALLEL? cybervision_crosscorrelation_threshold_parallel : cybervision_crosscorrelation_threshold_perspective;
     params.neighbor_distance = cybervision_crosscorrelation_neighbor_distance;
     params.extend_range = cybervision_crosscorrelation_corridor_extend_range;
     params.min_range = cybervision_crosscorrelation_corridor_min_range;

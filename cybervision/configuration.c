@@ -21,7 +21,8 @@ const size_t cybervision_ransac_check_interval = 1E5;
 
 const int cybervision_crosscorrelation_scale_min_size = 64;
 const int cybervision_crosscorrelation_kernel_size = 5;
-const float cybervision_crosscorrelation_threshold = 0.6F;
+const float cybervision_crosscorrelation_threshold_parallel = 0.6F;
+const float cybervision_crosscorrelation_threshold_perspective = 0.8F;
 const int cybervision_crosscorrelation_corridor_size = 20;
 // Decrease when using a low-powered GPU
 const int cybervision_crosscorrelation_corridor_segment_length = 256;

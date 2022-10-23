@@ -2,12 +2,8 @@
 #define FUNDAMENTAL_MATRIX_H
 
 #include <stddef.h>
+#include "configuration.h"
 
-typedef enum
-{ 
-    PROJECTION_MODE_PARALLEL = 0,
-    PROJECTION_MODE_PERSPECTIVE = 1
-} projection_mode;
 typedef struct { 
     int x1,y1;
     int x2,y2;

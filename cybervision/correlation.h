@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include "fundamental_matrix.h"
+#include "configuration.h"
 
 typedef struct {
     int width, height;
@@ -38,6 +39,7 @@ typedef struct {
     correlation_image img1, img2;
     matrix_3x3 fundamental_matrix;
     float scale;
+    projection_mode proj_mode;
 
     int num_threads;
     int iteration;

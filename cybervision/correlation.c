@@ -251,6 +251,7 @@ typedef struct {
 
     int kernel_size;
     int kernel_point_count;
+    float correlation_threshold;
     int x1, y1;
 
     float stdev1;
@@ -368,7 +369,7 @@ static inline void correlate_corridor_area(cross_correlate_task *t, corridor_are
         }
         corr = corr/(c->stdev1*stdev2*(float)kernel_point_count);
 
-        if (corr >= cybervision_crosscorrelation_threshold && corr > c->best_corr)
+        if (corr >= c->correlation_threshold && corr > c->best_corr)
         {
             c->best_match_x = (int)roundf(inv_scale*x2);
             c->best_match_y = (int)roundf(inv_scale*y2);
@@ -407,6 +408,7 @@ void* cross_correlation_task(void *args)
     int neighbor_size = 2*(int)(ceilf(cybervision_crosscorrelation_neighbor_distance*inv_scale))+1;
     corr_ctx.kernel_size = kernel_size;
     corr_ctx.kernel_point_count = kernel_point_count;
+    corr_ctx.correlation_threshold = t->proj_mode==PROJECTION_MODE_PARALLEL? cybervision_crosscorrelation_threshold_parallel : cybervision_crosscorrelation_threshold_perspective;
 
     corr_ctx.delta1 = malloc(sizeof(float)*kernel_point_count);
     corr_ctx.avg2 = ctx->avg2;

@@ -310,6 +310,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         cc_task.num_threads = num_threads;
         cc_task.out_width = img1->width;
         cc_task.out_height = img1->height;
+        cc_task.proj_mode = proj_mode;
         cc_task.correlated_points = malloc(sizeof(int)*cc_task.out_width*cc_task.out_height*2);
         for (size_t i=0;i<(size_t)cc_task.out_width*cc_task.out_height*2;i++)
             cc_task.correlated_points[i] = -1;
@@ -393,12 +394,9 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         t_task.width = cc_task.out_width;
         t_task.height = cc_task.out_height;
         t_task.depth_scale = depth_scale;
+        t_task.proj_mode = proj_mode;
         for (size_t i=0;i<9;i++)
             t_task.fundamental_matrix[i] = r_task.fundamental_matrix[i];
-        if (proj_mode == PROJECTION_MODE_PARALLEL)
-            t_task.proj_mode = TRIANGULATION_PROJECTION_MODE_PARALLEL;
-        else if (proj_mode == PROJECTION_MODE_PERSPECTIVE)
-            t_task.proj_mode = TRIANGULATION_PROJECTION_MODE_PERSPECTIVE;
 
         if (!triangulation_start(&t_task))
         {

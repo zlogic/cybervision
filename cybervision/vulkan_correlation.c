@@ -499,7 +499,7 @@ int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev, int corr
     payload->corridor_end = corridor_end;
     payload->phase = phase;
     payload->kernel_size = cybervision_crosscorrelation_kernel_size;
-    payload->threshold = cybervision_crosscorrelation_threshold;
+    payload->threshold = t->proj_mode==PROJECTION_MODE_PARALLEL? cybervision_crosscorrelation_threshold_parallel : cybervision_crosscorrelation_threshold_perspective;
     payload->neighbor_distance = cybervision_crosscorrelation_neighbor_distance;
     payload->extend_range = cybervision_crosscorrelation_corridor_extend_range;
     payload->min_range = cybervision_crosscorrelation_corridor_min_range;

@@ -248,13 +248,13 @@ int triangulation_start(triangulation_task *task)
     task->percent_complete = 0.0F;
     task->completed = 0;
     task->error = NULL;
-    if (task->proj_mode == TRIANGULATION_PROJECTION_MODE_PARALLEL)
+    if (task->proj_mode == PROJECTION_MODE_PARALLEL)
     {
         task->internal = NULL;
         triangulation_parallel(task);
         return 1;
     }
-    if(task->proj_mode == TRIANGULATION_PROJECTION_MODE_PERSPECTIVE)
+    if(task->proj_mode == PROJECTION_MODE_PERSPECTIVE)
     {
         triangulation_task_ctx *ctx = malloc(sizeof(triangulation_task_ctx));
         task->internal = ctx;
@@ -299,7 +299,7 @@ int triangulation_complete(triangulation_task *t)
     pthread_mutex_destroy(&ctx->lock);
     free(ctx->threads);
 
-    if (t->proj_mode == TRIANGULATION_PROJECTION_MODE_PERSPECTIVE)
+    if (t->proj_mode == PROJECTION_MODE_PERSPECTIVE)
     {
         float min_depth, max_depth;
         filter_depth_histogram(t, cybervision_histogram_filter_discard_percentile_perspective, &min_depth, &max_depth);

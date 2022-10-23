@@ -1,17 +1,13 @@
 #ifndef TRIANGULATION_H
 #define TRIANGULATION_H
 
-typedef enum
-{ 
-    TRIANGULATION_PROJECTION_MODE_PARALLEL = 0,
-    TRIANGULATION_PROJECTION_MODE_PERSPECTIVE = 1
-} triangulation_projection_mode;
+#include "configuration.h"
 
 typedef void* triangulation_task_internal;
 typedef struct {
     int width, height;
     int *correlated_points;
-    triangulation_projection_mode proj_mode;
+    projection_mode proj_mode;
     float depth_scale;
     
     double fundamental_matrix[9];

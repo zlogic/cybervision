@@ -12,6 +12,12 @@ extern const int cybervision_correlation_kernel_size;
 
 extern const int cybervision_keypoint_scale_min_size;
 
+typedef enum
+{ 
+    PROJECTION_MODE_PARALLEL = 0,
+    PROJECTION_MODE_PERSPECTIVE = 1
+} projection_mode;
+
 extern const size_t cybervision_ransac_match_grid_size;
 extern const size_t cybervision_ransac_k;
 extern const size_t cybervision_ransac_n_affine;
@@ -25,7 +31,8 @@ extern const size_t cybervision_ransac_check_interval;
 
 extern const int cybervision_crosscorrelation_scale_min_size;
 extern const int cybervision_crosscorrelation_kernel_size;
-extern const float cybervision_crosscorrelation_threshold;
+extern const float cybervision_crosscorrelation_threshold_parallel;
+extern const float cybervision_crosscorrelation_threshold_perspective;
 extern const int cybervision_crosscorrelation_corridor_size;
 extern const int cybervision_crosscorrelation_corridor_segment_length;
 extern const int cybervision_crosscorrelation_search_area_segment_length;
