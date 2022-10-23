@@ -129,9 +129,6 @@ int triangulation_perspective_cameras(triangulation_task *t)
         e2[i] = u[3*2+i];
         norm_e2 += e2[i]*e2[i];
     }
-    norm_e2 = sqrt(norm_e2) * (e2[2]>0?1.0:-1.0);
-    for(size_t i=0;i<3;i++)
-        e2[i] /= norm_e2;
     double e2_skewsymmetric[9] = {0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0};
     double e2sf[9];
     multiply_matrix_3x3(e2_skewsymmetric, t->fundamental_matrix, e2sf);
@@ -229,8 +226,9 @@ void* triangulation_perspective_task(void *args)
             float dx = (float)x1-(float)x2, dy = (float)y1-(float)y2;
             if (fabs(denominator)>1E-2)
             {
-                float depth = point[2]/point[3];
-                t->out_depth[y1*t->width+x1] = depth;
+                float depth = point[2]/(point[3]*point[3]);
+                float sgn = point[3]>0?1.0F:-1.0F;
+                t->out_depth[y1*t->width+x1] = depth*sgn;//sgn*1.0F/depth;
             }
         }
     }

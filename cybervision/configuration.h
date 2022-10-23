@@ -13,7 +13,7 @@ extern const int cybervision_correlation_kernel_size;
 extern const int cybervision_keypoint_scale_min_size;
 
 typedef enum
-{ 
+{
     PROJECTION_MODE_PARALLEL = 0,
     PROJECTION_MODE_PERSPECTIVE = 1
 } projection_mode;
