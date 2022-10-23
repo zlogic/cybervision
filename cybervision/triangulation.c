@@ -168,7 +168,7 @@ void* triangulation_perspective_task(void *args)
             int x2 = t->correlated_points[pos*2];
             int y2 = t->correlated_points[pos*2+1];
             t->out_depth[y1*t->width+x1] = NAN;
-            if (x2<0 || y2<0)
+            if (x2<0 || y2<0 || x2>=t->width || y2>=t->height)
                 continue;
 
             // Linear triangulation method
@@ -200,7 +200,7 @@ void* triangulation_perspective_task(void *args)
             for(size_t i=0;i<4;i++)
                 point[i] = vt[i*4+3];
 
-            if (fabs(point[3])<1E-2)
+            if (fabs(point[3])<1E-3)
                 continue;
             const double point_x = point[0]/point[3];
             const double point_y = point[1]/point[3];
@@ -209,7 +209,7 @@ void* triangulation_perspective_task(void *args)
             //const int target_y1 = y1;//(int)round(point_y/point_z);
             //if (target_x1<0 || target_x1>=t->width || target_y1<0 || target_y1>=t->height)
             //    continue;
-            t->out_depth[y1*t->width+x1] = point_z;
+            t->out_depth[y2*t->width+x2] = point_z;
         }
     }
 cleanup:
