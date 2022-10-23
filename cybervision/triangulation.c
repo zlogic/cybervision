@@ -123,12 +123,8 @@ int triangulation_perspective_cameras(triangulation_task *t)
 
     // Using e' (epipole in second image) to calculate projection matrix for second image
     double e2[3];
-    double norm_e2 = 0;
     for(size_t i=0;i<3;i++)
-    {
         e2[i] = u[3*2+i];
-        norm_e2 += e2[i]*e2[i];
-    }
     double e2_skewsymmetric[9] = {0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0};
     double e2sf[9];
     multiply_matrix_3x3(e2_skewsymmetric, t->fundamental_matrix, e2sf);
@@ -204,32 +200,16 @@ void* triangulation_perspective_task(void *args)
             for(size_t i=0;i<4;i++)
                 point[i] = vt[i*4+3];
 
-            double p1[3] = {x1, y1, 1.0};
-            double p2[3]= {x2, y2, 1.0};
-            double Fp1[3];
-            double Ftp2[3];
-            multiply_f_vector(t->fundamental_matrix, p1, Fp1);
-            multiply_ft_vector(t->fundamental_matrix, p2, Ftp2);
-            //double denominator = Fp1[0]*Fp1[0]+Fp1[1]*Fp1[1]+Ftp2[0]*Ftp2[0]+Ftp2[1]*Ftp2[1];
-            double denominator = Ftp2[0]*Ftp2[0]+Ftp2[1]*Ftp2[1]+Ftp2[2]*Ftp2[2];
-            /*
-            float epipole_dx = x2 - p2[3]/p2[11];
-            float epipole_dy = y2 - p2[7]/p2[11];
-
-            if(sqrtf(epipole_dx*epipole_dx + epipole_dy*epipole_dy)<50.0F)
-            {
-                printf("\n\n%i %i %f %f %f %f %f\n", x1, y1, point[3], point[0]/point[3], point[1]/point[3], t->depth_scale*point[2]/point[3], s[3]);
+            if (fabs(point[3])<1E-2)
                 continue;
-            }
-            */
-
-            float dx = (float)x1-(float)x2, dy = (float)y1-(float)y2;
-            if (fabs(denominator)>1E-2)
-            {
-                float depth = point[2]/(point[3]*point[3]);
-                float sgn = point[3]>0?1.0F:-1.0F;
-                t->out_depth[y1*t->width+x1] = depth*sgn;//sgn*1.0F/depth;
-            }
+            const double point_x = point[0]/point[3];
+            const double point_y = point[1]/point[3];
+            const double point_z = point[2]/point[3];
+            //const int target_x1 = x1;//(int)round(point_x/point_z);
+            //const int target_y1 = y1;//(int)round(point_y/point_z);
+            //if (target_x1<0 || target_x1>=t->width || target_y1<0 || target_y1>=t->height)
+            //    continue;
+            t->out_depth[y1*t->width+x1] = point_z;
         }
     }
 cleanup:
