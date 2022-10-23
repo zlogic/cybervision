@@ -124,15 +124,15 @@ int triangulation_perspective_cameras(triangulation_task *t)
     // Using e' (epipole in second image) to calculate projection matrix for second image
     double e2[3];
     for(size_t i=0;i<3;i++)
-        e2[i] = u[3*2+i];
+        e2[i] = u[3*2+i]/u[8];
     double e2_skewsymmetric[9] = {0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0};
     double e2sf[9];
     multiply_matrix_3x3(e2_skewsymmetric, t->fundamental_matrix, e2sf);
     for (size_t i=0;i<3;i++)
         for (size_t j=0;j<3;j++)
-            ctx->camera_2[4*i+j] = e2sf[3*i+j]/e2[2];
+            ctx->camera_2[4*i+j] = e2sf[3*i+j];
     for (size_t i=0;i<3;i++)
-        ctx->camera_2[4*i+3] = e2[i]/e2[2];
+        ctx->camera_2[4*i+3] = e2[i];
     result = 1;
 cleanup:
     free_svd(svd_ctx);
@@ -168,7 +168,7 @@ void* triangulation_perspective_task(void *args)
             int x2 = t->correlated_points[pos*2];
             int y2 = t->correlated_points[pos*2+1];
             t->out_depth[y1*t->width+x1] = NAN;
-            if (x2<0 || y2<0 || x2>=t->width || y2>=t->height)
+            if (x2<0 || y2<0)
                 continue;
 
             // Linear triangulation method
@@ -187,7 +187,7 @@ void* triangulation_perspective_task(void *args)
             a[2+4*1]= (double)x2*p2[2*4+1]-p2[0+1];
             a[2+4*2]= (double)x2*p2[2*4+2]-p2[0+2];
             a[2+4*3]= (double)x2*p2[2*4+3]-p2[0+3];
-            // Fourch row of A: y2*camera_2[2]-camera_2[1]
+            // Fourth row of A: y2*camera_2[2]-camera_2[1]
             a[3+4*0]= (double)y2*p2[2*4+0]-p2[4+0];
             a[3+4*1]= (double)y2*p2[2*4+1]-p2[4+1];
             a[3+4*2]= (double)y2*p2[2*4+2]-p2[4+2];
@@ -205,11 +205,15 @@ void* triangulation_perspective_task(void *args)
             const double point_x = point[0]/point[3];
             const double point_y = point[1]/point[3];
             const double point_z = point[2]/point[3];
+            const double sgn = point[3]>0?1.0:-1.0;
             //const int target_x1 = x1;//(int)round(point_x/point_z);
             //const int target_y1 = y1;//(int)round(point_y/point_z);
             //if (target_x1<0 || target_x1>=t->width || target_y1<0 || target_y1>=t->height)
             //    continue;
-            t->out_depth[y2*t->width+x2] = point_z;
+            //t->out_depth[y2*t->width+x2] = point_z/sqrt(point_x*point_x+point_y*point_y+point_z*point_z);
+            //t->out_depth[y2*t->width+x2] = point[2]*sgn;
+            //t->out_depth[y1*t->width+x1] = point_z/(point_x+point_y);
+            t->out_depth[y1*t->width+x1] = point_z;
         }
     }
 cleanup:
