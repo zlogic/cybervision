@@ -87,14 +87,6 @@ void triangulation_parallel(triangulation_task *t)
 {
     const double cos_angle = cosf(t->tilt_angle);
     const float depth_scale = t->scale_z*((t->scale_x+t->scale_y)/2.0F)/sinf(t->tilt_angle);
-    // Epipolar line through (0, 0)
-    double p1[3] = {0.0, 0.0, 1.0};
-    double Fp1[3];
-    multiply_f_vector(t->fundamental_matrix, p1, Fp1);
-    // l=(Fp1[1], -Fp1[0], 0) is perpendicular to epipolar line through (0, 0)
-    // l is supposed to be identical for all points
-    const float a = Fp1[1];
-    const float b = -Fp1[0];
     for (int y1=0;y1<t->height;y1++)
     {
         for (int x1=0;x1<t->width;x1++)
@@ -107,10 +99,18 @@ void triangulation_parallel(triangulation_task *t)
                 t->out_depth[y1*t->width+x1] = NAN;
                 continue;
             }
-            // Distance from points to l
-            const float projection_1 = (a*x1+b*y1)/sqrtf(a*a+b*b);
-            const float projection_2 = (a*x2+b*y2)/sqrtf(a*a+b*b);
-            t->out_depth[y1*t->width+x1] = fabs(projection_1*cos_angle-projection_2)*depth_scale;
+            // Epipole for point 1 on image 2
+            double p1[3] = {x1, y1, 1.0};
+            double Fp1[3];
+            multiply_f_vector(t->fundamental_matrix, p1, Fp1);
+            const float a = Fp1[0];
+            const float b = Fp1[1];
+            const float c = Fp1[2];
+            // Project first point onto epipolar line
+            const float x1_projected = (b*(b*x1-a*y1)-a*c)/(a*a+b*b);
+            const float y1_projected = (a*(-b*x1+a*y1)-b*c)/(a*a+b*b);
+            float dx = (float)x1_projected*cos_angle-(float)x2, dy = (float)y1_projected*cos_angle-(float)y2;
+            t->out_depth[y1*t->width+x1] = fabs(dy)*depth_scale;
         }
     }
     float min_depth, max_depth;
