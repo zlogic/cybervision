@@ -7,6 +7,7 @@
 
 typedef struct {
     int width, height;
+    float scale_x, scale_y, tilt_angle;
     unsigned char* img;
 } correlation_image;
 

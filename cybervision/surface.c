@@ -43,20 +43,19 @@ coordT* convert_points_qhull(surface_data surf, int *num_points)
     return points;
 }
 
-void output_point_obj(int x, int y, float z, FILE* output_file)
+void output_point_obj(float x, float y, float z, FILE* output_file)
 {
-    fprintf(output_file, "v %i %i %f\n", x, y, z);
+    fprintf(output_file, "v %g %g %g\n", x, y, z);
 }
 
-void output_point_ply(int x, int y, float z, FILE* output_file)
+void output_point_ply(float x, float y, float z, FILE* output_file)
 {
-    float x_out = x, y_out = y;
-    fwrite(&x_out, sizeof(x), 1, output_file);
-    fwrite(&y_out, sizeof(y), 1, output_file);
+    fwrite(&x, sizeof(x), 1, output_file);
+    fwrite(&y, sizeof(y), 1, output_file);
     fwrite(&z, sizeof(z), 1, output_file);
 }
 
-typedef void (*output_point_fn)(int x, int y, float z, FILE* output_file);
+typedef void (*output_point_fn)(float x, float y, float z, FILE* output_file);
 int output_points_qhull(qhT *qh, surface_data surf, FILE* output_file, output_point_fn output_fn)
 {
     coordT *point, *pointtemp;
@@ -72,7 +71,7 @@ int output_points_qhull(qhT *qh, surface_data surf, FILE* output_file, output_po
         if (!isfinite(z))
             return 0;
         
-        output_fn(x, surf.height-y, z, output_file);
+        output_fn(surf.scale_x*x, surf.scale_y*(surf.height-y), z, output_file);
     }
     return 1;
 }

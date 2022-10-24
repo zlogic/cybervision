@@ -3,6 +3,7 @@
 
 typedef struct {
     int width, height;
+    float scale_x, scale_y;
     float* depth;
 } surface_data;
 

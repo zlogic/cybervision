@@ -86,6 +86,7 @@ void filter_depth_histogram(triangulation_task *t, const float histogram_discard
 void triangulation_parallel(triangulation_task *t)
 {
     // TODO: use tilt angle factorization instead of this simple 
+    const float depth_scale = t->scale_z*((t->scale_x+t->scale_y)/2.0F);
     for (int y1=0;y1<t->height;y1++)
     {
         for (int x1=0;x1<t->width;x1++)
@@ -99,7 +100,7 @@ void triangulation_parallel(triangulation_task *t)
                 continue;
             }
             float dx = (float)x1-(float)x2, dy = (float)y1-(float)y2;
-            t->out_depth[y1*t->width+x1] = sqrtf(dx*dx+dy*dy)*t->depth_scale;
+            t->out_depth[y1*t->width+x1] = sqrtf(dx*dx+dy*dy)*depth_scale;
         }
     }
     float min_depth, max_depth;
@@ -275,7 +276,7 @@ int triangulation_complete(triangulation_task *t)
         float min_depth, max_depth;
         filter_depth_histogram(t, cybervision_histogram_filter_discard_percentile_perspective, &min_depth, &max_depth);
         float min_size = (float)(t->width<t->height? t->width:t->height);
-        float depth_scale = t->depth_scale*min_size/(max_depth-min_depth);
+        float depth_scale = t->scale_z*min_size/(max_depth-min_depth);
         for(size_t i=0;i<t->width*t->height;i++)
         {
             float depth = t->out_depth[i];

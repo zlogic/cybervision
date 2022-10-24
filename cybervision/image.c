@@ -30,7 +30,7 @@ static inline char convert_grayscale(int r, int g, int b)
     return (char)((19595*r + 38470*g + 7471*b)>>16);
 }
 
-int read_tiff_tags(TIFF* tif, int* databar_height)
+int read_tiff_tags(TIFF* tif, correlation_image* img, int* databar_height)
 {
     void* tag_data = NULL;
     uint32_t tag_count;
@@ -54,32 +54,20 @@ int read_tiff_tags(TIFF* tif, int* databar_height)
         line[line_len] = '\0';
         if (line[0]== '[')
             section = line;
-        /*
-        // TODO: parse and use scale
         if (strcmp(section, "[Scan]") == 0)
         {
             if (strncmp(line, "PixelWidth=", 11) == 0)
-            {
-                float pixel_width = strtof(line+11, NULL);
-                printf("width=%f\n", pixel_width);
-            }
+                img->scale_x = strtof(line+11, NULL);
             else if (strncmp(line, "PixelHeight=", 12) == 0)
-            {
-                float pixel_height = strtof(line+12, NULL);
-                printf("height=%f\n", pixel_height);
-            }
+                img->scale_y = strtof(line+12, NULL);
         }
         // TODO: use rotation (see "Real scale (Tomasi) stuff.pdf")
         // or allow to specify a custom depth scale (e.g. a negative one)
         if (strcmp(section, "[Stage]") == 0)
         {
             if (strncmp(line, "StageT=", 7) == 0)
-            {
-                float rotation = strtof(line+7, NULL);
-                printf("rotation=%f\n", rotation);
-            }
+                img->tilt_angle = strtof(line+7, NULL);
         }
-        */
         if (strcmp(section, "[PrivateFei]") == 0)
             if (strncmp(line, "DatabarHeight=", 14) == 0)
                 *databar_height = atoi(line+14);
@@ -101,23 +89,25 @@ correlation_image* load_image(char *filename)
         if (!tif)
             return NULL;
         uint32_t w, h;
-        int databar_height = 0;
 
         size_t npixels;
         uint32_t* raster;
 
         TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &w);
         TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &h);
-        
-        read_tiff_tags(tif, &databar_height);
 
         npixels = w * h;
         raster = (uint32_t*) _TIFFmalloc(npixels * sizeof (uint32_t));
         if (raster != NULL)
         {
+            int databar_height = 0;
+            img = malloc(sizeof(correlation_image));
+            img->scale_x = 1.0;
+            img->scale_y = 1.0;
+            img->tilt_angle = NAN;
+            read_tiff_tags(tif, img, &databar_height);
             if (TIFFReadRGBAImage(tif, w, h, raster, 0))
             {
-                img = malloc(sizeof(correlation_image));
                 img->width = w;
                 img->height = h-databar_height;
                 img->img = malloc(sizeof(unsigned)*img->width*img->height);
@@ -129,6 +119,11 @@ correlation_image* load_image(char *filename)
                         img->img[y*w+x] = convert_grayscale(TIFFGetR(pixel), TIFFGetB(pixel), TIFFGetB(pixel));
                     }
                 }
+            }
+            else
+            {
+                free(img);
+                img = NULL;
             }
             _TIFFfree(raster);
         }
@@ -158,6 +153,9 @@ correlation_image* load_image(char *filename)
         img->width = cinfo.output_width;
         img->height = cinfo.output_height;
         img->img = malloc(sizeof(unsigned)*img->width*img->height);
+        img->scale_x = 1.0;
+        img->scale_y = 1.0;
+        img->tilt_angle = NAN;
 
         while (cinfo.output_scanline < cinfo.output_height) {
             int y = cinfo.output_scanline;
@@ -209,6 +207,9 @@ correlation_image* load_image(char *filename)
         img->width = png_get_image_width(png_ptr, info_ptr);
         img->height = png_get_image_height(png_ptr, info_ptr);
         img->img = malloc(sizeof(unsigned)*img->width*img->height);
+        img->scale_x = 1.0;
+        img->scale_y = 1.0;
+        img->tilt_angle = NAN;
 
         row_pointers = malloc(sizeof(png_bytep)*img->height);
         for (size_t i=0;i<img->height;i++)

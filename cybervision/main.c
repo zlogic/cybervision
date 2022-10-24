@@ -84,6 +84,16 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     int result_code = 0;
     correlation_image *img1 = load_image(img1_filename);
     correlation_image *img2 = load_image(img2_filename);
+    printf("Image %s has scale width %g, height %g\n", img1_filename, img1->scale_x, img1->scale_y);
+    printf("Image %s has scale width %g, height %g\n", img2_filename, img2->scale_x, img2->scale_y);
+    float scale_x = img1->scale_x;
+    float scale_y = img1->scale_y;
+    const float tilt_angle = (isfinite(img1->tilt_angle) && isfinite(img2->tilt_angle))? img2->tilt_angle-img1->tilt_angle:NAN;
+    if (isfinite(tilt_angle))
+        printf("Relative tilt angle is %g\n", tilt_angle);
+    // Most 3D viewers don't coordinates below 0, reset to default 1.0
+    scale_x = 1.0F;
+    scale_y = 1.0F;
     struct timespec start_time, last_operation_time, current_operation_time;
     int num_threads = cpu_cores();
     progressbar_str = malloc(sizeof(char)*(progressbar_str_width()+1));
@@ -393,8 +403,11 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         t_task.out_depth = malloc(sizeof(float)*cc_task.out_width*cc_task.out_height);
         t_task.width = cc_task.out_width;
         t_task.height = cc_task.out_height;
-        t_task.depth_scale = depth_scale;
+        t_task.scale_x = scale_x;
+        t_task.scale_y = scale_y;
+        t_task.scale_z = depth_scale;
         t_task.proj_mode = proj_mode;
+        t_task.tilt_angle = tilt_angle;
         for (size_t i=0;i<9;i++)
             t_task.fundamental_matrix[i] = r_task.fundamental_matrix[i];
 
@@ -432,6 +445,8 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         t_task.out_depth = NULL;
         surf.width = t_task.width;
         surf.height = t_task.height;
+        surf.scale_x = scale_x;
+        surf.scale_y = scale_y;
 
         if (!surface_output(surf, output_filename, interp_mode))
         {

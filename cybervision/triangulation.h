@@ -8,7 +8,7 @@ typedef struct {
     int width, height;
     int *correlated_points;
     projection_mode proj_mode;
-    float depth_scale;
+    float scale_x, scale_y, scale_z;
     
     double fundamental_matrix[9];
     float tilt_angle;
