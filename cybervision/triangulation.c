@@ -211,20 +211,10 @@ void* triangulation_perspective_task(void *args)
             for(size_t i=0;i<4;i++)
                 point[i] = vt[i*4+3];
 
-            float point_x = point[0]/point[3];
-            float point_y = point[1]/point[3];
-            float point_z = point[2]/point[3];
-            float dx = x2n-ctx->epipole_2[0]/ctx->epipole_2[2];
-            float dy = y2n-ctx->epipole_2[1]/ctx->epipole_2[2];
-            double epipole_distance = sqrtf(dx*dx+dy*dy);
             if (fabs(point[3])<cybervision_triangulation_min_scale)
                 continue;
-    
-            //printf("\n%g %g %g %g\n", x1n/(point_x/point_z), y1n/(point_y/point_z), x2n/(point_projection_2[0]/point_projection_2[2]), y2n/(point_projection_2[1]/point_projection_2[2]));
-            float sgn = point_z>0?1.0F:-1.0F;
-            //t->out_depth[pos] = sgn*sqrtf(dx*dx/(point_x*point_x)+dy*dy/(point_y*point_y)+point_z*point_z);
-            //t->out_depth[pos] = sgn*sqrtf((x1n/point_x)*(x1n/point_x)+(y1n/point_y)*(y1n/point_y)+(x2n/point_x)*(x2n/point_x)+(y2n/point_y)*(y2n/point_y)+point_z*point_z);
-            t->out_depth[pos] = point_z;
+
+            t->out_depth[pos] = point[2]/point[3];
         }
     }
 cleanup:
