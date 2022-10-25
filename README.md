@@ -53,7 +53,6 @@ Cybervision was tested to support CPU-only and GPU-accelerated processing on:
 * Apple Macbook Pro M1 Max (2021)
 * Windows 11, i7-11800H, Geforce RTX 3070 (mobile)
 * Windows 11, i7-8750H, Geforce GTX 1050 (mobile)
-* Fedora CoreOS 36, Celeron N3350 (digital signage appliance)
 
 To run Cybervision, you will need the Vulkan runtime library:
 
