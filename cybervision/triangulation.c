@@ -11,6 +11,8 @@
 typedef struct {
     int y;
 
+    double epipole_2[3];
+    double camera_1[4*3];
     double camera_2[4*3];
 
     int threads_completed;
@@ -121,10 +123,15 @@ int triangulation_perspective_cameras(triangulation_task *t)
     if (!svdd(svd_ctx, f, 3, 3, u, s, vt))
         goto cleanup;
 
+    for (size_t i=0;i<4*3;i++)
+        ctx->camera_1[i] = 0;
+    ctx->camera_1[0] = 1;
+    ctx->camera_1[4*1+1] = 1;
+    ctx->camera_1[4*2+2] = 1;
     // Using e' (epipole in second image) to calculate projection matrix for second image
-    double e2[3];
+    double *e2 = ctx->epipole_2;
     for(size_t i=0;i<3;i++)
-        e2[i] = u[3*2+i]/u[8];
+        e2[i] = u[3*2+i];
     double e2_skewsymmetric[9] = {0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0};
     double e2sf[9];
     multiply_matrix_3x3(e2_skewsymmetric, t->fundamental_matrix, e2sf);
@@ -145,6 +152,7 @@ void* triangulation_perspective_task(void *args)
     triangulation_task_ctx *ctx = t->internal;
     double a[4*4];
     double u[4*4], s[4], vt[4*4];
+    double *p1 = ctx->camera_1; 
     double *p2 = ctx->camera_2; 
     svd_internal svd_ctx = init_svd();
 
@@ -167,31 +175,34 @@ void* triangulation_perspective_task(void *args)
             size_t pos = y1*t->width+x1;
             int x2 = t->correlated_points[pos*2];
             int y2 = t->correlated_points[pos*2+1];
-            t->out_depth[y1*t->width+x1] = NAN;
+            t->out_depth[pos] = NAN;
             if (x2<0 || y2<0)
                 continue;
-
             // Linear triangulation method
-            // First row of A: x1*[0 0 1 0]-[1 0 0 0]
-            a[0+4*0]= -1.0;
-            a[0+4*1]= 0.0;
-            a[0+4*2]= x1;
-            a[0+4*3]= 0.0;
-            // Second row of A: y1*[0 0 1 0]-[0 1 0 0]
-            a[1+4*0]= 0.0;
-            a[1+4*1]= -1.0;
-            a[1+4*2]= y1;
-            a[1+4*3]= 0.0;
+            float x1n = x1;
+            float y1n = y1;
+            float x2n = x2;
+            float y2n = y2;
+            // First row of A: x1*camera_1[2]-camera_1[0]
+            a[0+4*0]= x1n*p1[2*4+0]-p1[0+0];
+            a[0+4*1]= x1n*p1[2*4+1]-p1[0+1];
+            a[0+4*2]= x1n*p1[2*4+2]-p1[0+2];
+            a[0+4*3]= x1n*p1[2*4+3]-p1[0+3];
+            // Second row of A: y1*camera_1[2]-camera_1[0]
+            a[1+4*0]= y1n*p1[2*4+0]-p1[4+0];
+            a[1+4*1]= y1n*p1[2*4+1]-p1[4+1];
+            a[1+4*2]= y1n*p1[2*4+2]-p1[4+2];
+            a[1+4*3]= y1n*p1[2*4+3]-p1[4+3];
             // Third row of A: x2*camera_2[2]-camera_2[0]
-            a[2+4*0]= (double)x2*p2[2*4+0]-p2[0+0];
-            a[2+4*1]= (double)x2*p2[2*4+1]-p2[0+1];
-            a[2+4*2]= (double)x2*p2[2*4+2]-p2[0+2];
-            a[2+4*3]= (double)x2*p2[2*4+3]-p2[0+3];
+            a[2+4*0]= x2n*p2[2*4+0]-p2[0+0];
+            a[2+4*1]= x2n*p2[2*4+1]-p2[0+1];
+            a[2+4*2]= x2n*p2[2*4+2]-p2[0+2];
+            a[2+4*3]= x2n*p2[2*4+3]-p2[0+3];
             // Fourth row of A: y2*camera_2[2]-camera_2[1]
-            a[3+4*0]= (double)y2*p2[2*4+0]-p2[4+0];
-            a[3+4*1]= (double)y2*p2[2*4+1]-p2[4+1];
-            a[3+4*2]= (double)y2*p2[2*4+2]-p2[4+2];
-            a[3+4*3]= (double)y2*p2[2*4+3]-p2[4+3];
+            a[3+4*0]= y2n*p2[2*4+0]-p2[4+0];
+            a[3+4*1]= y2n*p2[2*4+1]-p2[4+1];
+            a[3+4*2]= y2n*p2[2*4+2]-p2[4+2];
+            a[3+4*3]= y2n*p2[2*4+3]-p2[4+3];
 
             if (!svdd(svd_ctx, a, 4, 4, u, s, vt))
                 continue;
@@ -200,9 +211,20 @@ void* triangulation_perspective_task(void *args)
             for(size_t i=0;i<4;i++)
                 point[i] = vt[i*4+3];
 
+            float point_x = point[0]/point[3];
+            float point_y = point[1]/point[3];
+            float point_z = point[2]/point[3];
+            float dx = x2n-ctx->epipole_2[0]/ctx->epipole_2[2];
+            float dy = y2n-ctx->epipole_2[1]/ctx->epipole_2[2];
+            double epipole_distance = sqrtf(dx*dx+dy*dy);
             if (fabs(point[3])<cybervision_triangulation_min_scale)
                 continue;
-            t->out_depth[y1*t->width+x1] = point[2]/point[3];
+    
+            //printf("\n%g %g %g %g\n", x1n/(point_x/point_z), y1n/(point_y/point_z), x2n/(point_projection_2[0]/point_projection_2[2]), y2n/(point_projection_2[1]/point_projection_2[2]));
+            float sgn = point_z>0?1.0F:-1.0F;
+            //t->out_depth[pos] = sgn*sqrtf(dx*dx/(point_x*point_x)+dy*dy/(point_y*point_y)+point_z*point_z);
+            //t->out_depth[pos] = sgn*sqrtf((x1n/point_x)*(x1n/point_x)+(y1n/point_y)*(y1n/point_y)+(x2n/point_x)*(x2n/point_x)+(y2n/point_y)*(y2n/point_y)+point_z*point_z);
+            t->out_depth[pos] = point_z;
         }
     }
 cleanup:
