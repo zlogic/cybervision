@@ -41,10 +41,8 @@ extern const int cybervision_crosscorrelation_neighbor_distance;
 extern const float cybervision_crosscorrelation_corridor_extend_range;
 extern const float cybervision_crosscorrelation_corridor_min_range;
 
-extern const double cybervision_triangulation_min_scale;
 extern const size_t cybervision_histogram_filter_bins;
 extern const float cybervision_histogram_filter_discard_percentile_parallel;
-extern const float cybervision_histogram_filter_discard_percentile_perspective;
 extern const float cybervision_histogram_filter_epsilon;
 
 typedef enum 

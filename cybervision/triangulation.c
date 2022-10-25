@@ -64,6 +64,7 @@ void filter_depth_histogram(triangulation_task *t, const float histogram_discard
             break;
         max_depth = min + ((float)i/(float)histogram_bins+histogram_depth_epsilon)*(max-min);
     }
+    free(histogram);
     for(size_t i=0;i<t->width*t->height;i++)
     {
         float depth = t->out_depth[i];
@@ -93,5 +94,5 @@ void triangulation_triangulate(triangulation_task *t)
             t->out_depth[y1*t->width+x1] = sqrtf(dx*dx+dy*dy)*depth_scale;
         }
     }
-    filter_depth_histogram(t, cybervision_histogram_filter_discard_percentile_perspective);
+    filter_depth_histogram(t, cybervision_histogram_filter_discard_percentile_parallel);
 }
