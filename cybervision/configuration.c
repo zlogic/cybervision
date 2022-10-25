@@ -37,7 +37,7 @@ const double cybervision_triangulation_min_scale = 1E-3;
 const size_t cybervision_histogram_filter_bins = 100;
 const float cybervision_histogram_filter_discard_percentile_parallel = 0.025F;
 const float cybervision_histogram_filter_discard_percentile_perspective = 0.2F;
-const float cybervision_histogram_filter_epsilon = 0.0;
+const float cybervision_histogram_filter_epsilon = 1E-3;
 
 #ifndef CYBERVISION_DISABLE_GPU
 const correlation_mode cybervision_crosscorrelation_default_mode = CORRELATION_MODE_GPU;

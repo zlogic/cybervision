@@ -63,7 +63,7 @@ void filter_depth_histogram(triangulation_task *t, const float histogram_discard
         current_histogram_sum += histogram[i];
         if (((float)current_histogram_sum/(float)histogram_sum)>histogram_discard_percentile)
             break;
-        *min_depth = min + ((float)i/(float)histogram_bins)*(max-min) - histogram_depth_epsilon*(max-min);
+        *min_depth = min + ((float)i/(float)histogram_bins-histogram_depth_epsilon)*(max-min);
     }
     current_histogram_sum = 0;
     for(size_t i=histogram_bins-1;i>=0;i--)
@@ -71,7 +71,7 @@ void filter_depth_histogram(triangulation_task *t, const float histogram_discard
         current_histogram_sum += histogram[i];
         if (((float)current_histogram_sum/(float)histogram_sum)>histogram_discard_percentile)
             break;
-        *max_depth = min + ((float)i/(float)histogram_bins)*(max-min) + histogram_depth_epsilon*(max-min);
+        *max_depth = min + ((float)i/(float)histogram_bins+histogram_depth_epsilon)*(max-min);
     }
     for(size_t i=0;i<t->width*t->height;i++)
     {
