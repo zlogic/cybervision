@@ -2,7 +2,7 @@ name: CMake
 
 on:
   push:
-    branches: [ "master", "photo-triangulation" ]
+    branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
 
