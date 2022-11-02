@@ -146,7 +146,7 @@ void output_header_ply(int num_points, int num_simplices, FILE *output_file)
     fprintf(output_file, "end_header\n");
 }
 
-int surface_triangulate_delaunay(surface_data surf, char* output_filename)
+int triangulation_triangulate_delaunay(surface_data surf, char* output_filename)
 {
     coordT *points;
     qhT *qh = malloc(sizeof(qhT));
@@ -210,7 +210,7 @@ static inline void add_point_to_index(int *indices, int* point_count)
         *indices = (*point_count)++;
 }
 
-int surface_triangulate(surface_data surf, char* output_filename)
+int triangulation_triangulate(surface_data surf, char* output_filename)
 {
     int *indices = malloc(sizeof(int)*surf.width*surf.height);
     int point_count = 0;
@@ -385,7 +385,7 @@ void interpolate_points_delaunay(qhT *qh, surface_data surf)
     }
 }
 
-int surface_interpolate_delaunay(surface_data surf)
+int triangulation_interpolate_delaunay(surface_data surf)
 {
     coordT *points;
     qhT qh = {0};
@@ -411,11 +411,11 @@ int surface_output(surface_data surf, char* output_filename, interpolation_mode 
     {
         if (strcasecmp(output_fileextension, "obj") == 0 || strcasecmp(output_fileextension, "ply") == 0)
         {
-            return surface_triangulate_delaunay(surf, output_filename);
+            return triangulation_triangulate_delaunay(surf, output_filename);
         }
         else if (strcasecmp(output_fileextension, "png") == 0)
         {
-            return surface_interpolate_delaunay(surf) && save_surface_image(surf, output_filename);
+            return triangulation_interpolate_delaunay(surf) && save_surface_image(surf, output_filename);
         }
         else
         {
@@ -426,7 +426,7 @@ int surface_output(surface_data surf, char* output_filename, interpolation_mode 
     {
         if (strcasecmp(output_fileextension, "obj") == 0 || strcasecmp(output_fileextension, "ply") == 0)
         {
-            return surface_triangulate(surf, output_filename);
+            return triangulation_triangulate(surf, output_filename);
         }
         else if (strcasecmp(output_fileextension, "png") == 0)
         {
