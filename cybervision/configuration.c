@@ -11,7 +11,7 @@ const int cybervision_keypoint_scale_min_size = 512;
 
 const size_t cybervision_ransac_match_grid_size = 8;
 const size_t cybervision_ransac_k_affine = 1E7;
-const size_t cybervision_ransac_k_perspective = 1E7;
+const size_t cybervision_ransac_k_perspective = 1E6;
 const size_t cybervision_ransac_n_affine = 4;
 const size_t cybervision_ransac_n_perspective = 8;
 const double cybervision_ransac_rank_epsilon = 0.0;

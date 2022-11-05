@@ -5,6 +5,7 @@
 #include <math.h>
 
 #include "fundamental_matrix.h"
+#include "triangulation.h"
 #include "linmath.h"
 #include "configuration.h"
 #include "system.h"
@@ -41,8 +42,15 @@ static inline double ransac_calculate_error(ransac_match *selected_match, matrix
 
 typedef struct {
     svd_internal svd;
+    invert_internal invert;
     double *a;
     double *u, *s, *vt;
+    double *lm_residuals;
+    double *lm_points3d;
+    double *lm_j_1;
+    double *lm_j_2;
+    double *lm_j_3;
+    size_t lm_matches_count;
 } ransac_memory;
 
 static inline void normalize_points(ransac_match *matches, size_t matches_count, matrix_3x3 m1, matrix_3x3 m2)
@@ -85,7 +93,201 @@ static inline void normalize_points(ransac_match *matches, size_t matches_count,
     m2[6] = 0.0; m2[6+1] = 0.0; m2[6+2] = 1.0;
 }
 
-static inline int ransac_calculate_model_perspective(ransac_memory *ctx, ransac_match *matches, size_t matches_count, matrix_3x3 f)
+static inline void point_reprojection_error(matrix_4x3 projection_matrix_2, double point3d[4], double x1, double y1, double x2, double y2, double error[4])
+{
+    // Project point to image 1 (with identity projection matrix)
+    error[0] = x1-point3d[0]/point3d[2];
+    error[1] = y1-point3d[1]/point3d[2];
+    // Project point to image 2
+    double point_2[3];
+    multiply_p_vector(projection_matrix_2, point3d, point_2);
+    error[2] = x2-point_2[0]/point_2[2];
+    error[3] = y2-point_2[1]/point_2[2];
+}
+
+static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *matches, size_t matches_count, matrix_3x3 fundamental_matrix, matrix_4x3 projection_matrix_2)
+{
+    // Gold standard optimization of fundamental matrix
+    const size_t max_iterations = 30;
+    const double jacobian_h = 0.001;
+    //const double lambda_start = 1E-2;
+    const double lambda_start = 0.0;
+    const double lambda_up = 11.0;
+    const double lambda_down = 9.0;
+
+    matrix_3x3 f;
+    double *p2 = projection_matrix_2;
+    for (size_t i=0;i<3;i++)
+        for (size_t j=0;j<3;j++)
+            f[j*3+i] = fundamental_matrix[i*3+j];
+
+    double u[9], s[3], vt[9];
+    if (!svdd(ctx->svd, f, 3, 3, u, s, vt))
+        return 0;
+
+    // Using e' (epipole in second image) to calculate projection matrix for second image
+    double e2[3];
+    for(size_t i=0;i<3;i++)
+        e2[i] = u[3*2+i];
+    double e2_skewsymmetric[9] = {0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0};
+    double e2sf[9];
+    multiply_matrix_3x3(e2_skewsymmetric, fundamental_matrix, e2sf);
+    for (size_t i=0;i<3;i++)
+        for (size_t j=0;j<3;j++)
+            p2[4*i+j] = e2sf[3*i+j];
+    for (size_t i=0;i<3;i++)
+        p2[4*i+3] = e2[i];
+    
+    if (ctx->lm_matches_count<matches_count)
+    {
+        size_t j_rows = matches_count*4, j_cols = 4*3+matches_count*3;
+        size_t max_dimension = j_rows>j_cols?j_rows:j_cols;
+        size_t jacobian_size = sizeof(double)*max_dimension*max_dimension;
+        size_t points3d_size = sizeof(double)*matches_count*4;
+        size_t residuals_size = sizeof(double)*j_rows;
+        ctx->lm_points3d = ctx->lm_points3d==NULL? malloc(points3d_size) : realloc(ctx->lm_points3d, points3d_size);
+        ctx->lm_residuals = ctx->lm_residuals==NULL? malloc(residuals_size) : realloc(ctx->lm_residuals, residuals_size);
+        ctx->lm_j_1 = ctx->lm_j_1==NULL? malloc(jacobian_size) : realloc(ctx->lm_j_1, jacobian_size);
+        ctx->lm_j_2 = ctx->lm_j_2==NULL? malloc(jacobian_size) : realloc(ctx->lm_j_2, jacobian_size);
+        ctx->lm_j_3 = ctx->lm_j_3==NULL? malloc(jacobian_size) : realloc(ctx->lm_j_3, jacobian_size);
+    }
+    size_t jacobian_rows = matches_count*4;
+    double *points3d = ctx->lm_points3d;
+    double *residuals = ctx->lm_residuals;
+    double sum_error = 0.0;
+    double s_previous = 0.0;
+    double lambda = lambda_start;
+    int completed = 0;
+    // Levenberg-Marquardt error minimization with matches_count*4 residuals:
+    // For each point, a residual for every reprojected coordinate
+    for (size_t iter=0;iter<max_iterations;iter++)
+    {
+        sum_error = 0.0;
+        // Triangulate points
+        for (size_t m_i=0;m_i<matches_count;m_i++)
+        {
+            double point3d[4];
+            ransac_match *match = &matches[m_i];
+            if (!triangulation_triangulate_point(ctx->svd, p2, match->x1, match->y1, match->x2, match->y2, point3d))
+                return 0;
+            for(size_t i=0;i<4;i++)
+            {
+                point3d[i] /= point3d[3];
+                points3d[m_i*4+i] = point3d[i];
+            }
+            double projection_error[4];
+            point_reprojection_error(p2, point3d, match->x1, match->y1, match->x2, match->y2, projection_error);
+            for (size_t i=0;i<4;i++)
+            {
+                residuals[m_i*4+i] = projection_error[i];
+                sum_error += projection_error[i]*projection_error[i];
+            }
+        }
+        // Calculate Jacobian using finite differences (central difference)
+        double *jacobian = ctx->lm_j_1;
+        // Jacobian is column-major
+        // Modify all parameters of p2
+        matrix_4x3 p2_modified;
+        for (size_t p2_i=0;p2_i<4*3;p2_i++)
+        {
+            for(size_t i=0;i<4*3;i++)
+                p2_modified[i] = p2[i];
+            p2_modified[p2_i] = p2[p2_i]+jacobian_h;
+            double projection_error[4];
+            for (size_t m_i=0;m_i<matches_count;m_i++)
+            {
+                double *point3d = &points3d[m_i*4];
+                ransac_match *match = &matches[m_i];
+                point_reprojection_error(p2_modified, point3d, match->x1, match->y1, match->x2, match->y2, projection_error);
+                for (size_t e_i=0;e_i<4;e_i++)
+                    jacobian[p2_i*jacobian_rows+m_i*4+e_i] = projection_error[e_i];
+            }
+            p2_modified[p2_i] = p2[p2_i]-jacobian_h;
+            for (size_t m_i=0;m_i<matches_count;m_i++)
+            {
+                double *point3d = &points3d[m_i*4];
+                ransac_match *match = &matches[m_i];
+                point_reprojection_error(p2_modified, point3d, match->x1, match->y1, match->x2, match->y2, projection_error);
+                for (size_t e_i=0;e_i<4;e_i++)
+                {
+                    double error_top = jacobian[p2_i*jacobian_rows+m_i*4+e_i];
+                    jacobian[p2_i*jacobian_rows+m_i*4+e_i] = (error_top-projection_error[e_i])/(2.0*jacobian_h);
+                }
+            }
+        }
+        // Modify all points
+        // Warning: Jacobian needs to have more rows than columns, this only works when number of points is > 12
+        /*
+        for (size_t p_i=0;p_i<3;p_i++)
+        {
+            for (size_t m_i=0;m_i<matches_count;m_i++)
+            {
+                const size_t jacobian_column = 4*3+m_i*3+p_i;
+                double *point3d = &points3d[m_i*4];
+                double point3d_modified[4];
+                ransac_match *match = &matches[m_i];
+                for (size_t i=0;i<4;i++)
+                    point3d_modified[i] = point3d[i];
+                point3d_modified[p_i] = point3d[p_i]+jacobian_h;
+                // A point only affects its own differential, so most differentials will be zero
+                for(size_t i=0;i<jacobian_rows;i++)
+                    jacobian[jacobian_column*jacobian_rows+i] = 0.0;
+                double projection_error[4];
+                point_reprojection_error(p2, point3d_modified, match->x1, match->y1, match->x2, match->y2, projection_error);
+                for (size_t e_i=0;e_i<4;e_i++)
+                    jacobian[jacobian_column*jacobian_rows+m_i*4+e_i] = projection_error[e_i];
+                point3d_modified[p_i] = point3d[p_i]-jacobian_h;
+                point_reprojection_error(p2, point3d_modified, match->x1, match->y1, match->x2, match->y2, projection_error);
+                for (size_t e_i=0;e_i<4;e_i++)
+                {
+                    double error_top = jacobian[jacobian_column*jacobian_rows+m_i*4+e_i];
+                    jacobian[jacobian_column*jacobian_rows+m_i*4+e_i] = (error_top-projection_error[e_i])/(2.0*jacobian_h);
+                }
+            }
+        }
+        */
+        // Calculate JtJ
+        size_t jacobian_rows = matches_count*4;
+        //size_t jacobian_cols = 4*3+matches_count*3;
+        size_t jacobian_cols = 4*3;
+        double *jt_j_lambda = ctx->lm_j_2;
+        multiplyd(jacobian, jacobian, jt_j_lambda, jacobian_cols, jacobian_cols, jacobian_rows, 1, 0);
+        // Add lambda*diag(JtJ)
+        for (size_t i=0;i<jacobian_cols;i++)
+            jt_j_lambda[i*jacobian_cols+i] += jt_j_lambda[i*jacobian_cols+i]*lambda;
+        // Calculate delta
+        if(!invertd(ctx->invert, jt_j_lambda, jacobian_cols))
+            return 0;
+        double *jt_left_pseudoinverse = ctx->lm_j_3;
+        multiplyd(jt_j_lambda, jacobian, jt_left_pseudoinverse, jacobian_cols, jacobian_rows, jacobian_cols, 0, 1);
+        double *delta = ctx->lm_j_2;
+        multiplyd(jt_left_pseudoinverse, residuals, delta, jacobian_cols, 1, jacobian_rows, 0, 0);
+        // Check if lambda needs adjustment
+        // Update projection matrix
+        // TODO: why -delta works, but +delta doesn't?
+        for (size_t i=0;i<4*3;i++)
+            p2[i] -= delta[i];
+        completed = 1;
+    }
+
+    if (!completed)
+        return 0;
+
+    // Update fundamental matrix from p2
+    double t[3];
+    for(size_t i=0;i<3;i++)
+        t[i] = p2[i*4+3];
+    double t_skewsymmetric[9] = {0.0, -t[2], t[1], t[2], 0.0, -t[0], -t[1], t[0], 0.0};
+    matrix_3x3 M;
+    for(size_t i=0;i<3;i++)
+        for(size_t j=0;j<3;j++)
+            M[i*3+j] = p2[i*4+j];
+    multiply_matrix_3x3(t_skewsymmetric, M, fundamental_matrix);
+
+    return 1;
+}
+
+static inline int ransac_calculate_model_perspective(ransac_memory *ctx, ransac_match *matches, size_t matches_count, matrix_3x3 f, matrix_4x3 p2)
 {
     matrix_3x3 m1;
     matrix_3x3 m2;
@@ -140,10 +342,10 @@ static inline int ransac_calculate_model_perspective(ransac_memory *ctx, ransac_
     // Scale back to image coordinates
     multiply_matrix_3tx3(m2, f, f_temp);
     multiply_matrix_3x3(f_temp, m1, f);
-    return 1;
+    return optimize_fundamental_matrix(ctx, matches, matches_count, f, p2);
 }
 
-static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_match *matches, size_t matches_count, matrix_3x3 f)
+static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_match *matches, size_t matches_count, matrix_3x3 f, matrix_4x3 p2)
 {
     matrix_3x3 m1;
     matrix_3x3 m2;
@@ -205,9 +407,10 @@ void* correlate_ransac_task(void *args)
     size_t ransac_k;
     double ransac_t;
     matrix_3x3 fundamental_matrix;
+    matrix_4x3 projection_matrix_2;
     size_t extended_inliers_count = 0;
     ransac_memory ctx_memory = {0};
-    int (*ransac_calculate_model)(ransac_memory *ctx, ransac_match *matches, size_t matches_count, matrix_3x3 f);
+    int (*ransac_calculate_model)(ransac_memory *ctx, ransac_match *matches, size_t matches_count, matrix_3x3 f, matrix_4x3 projection_matrix_2);
     unsigned int rand_seed;
 
     if (pthread_mutex_lock(&ctx->lock) != 0)
@@ -233,10 +436,17 @@ void* correlate_ransac_task(void *args)
     }
     inliers = malloc(sizeof(ransac_match)*ransac_n);
     ctx_memory.svd = init_svd();
+    ctx_memory.invert = init_invert();
     ctx_memory.a = malloc(sizeof(double)*(ransac_n*9));
     ctx_memory.u = malloc(sizeof(double)*(ransac_n*ransac_n));
     ctx_memory.s = malloc(sizeof(double)*(ransac_n>9?ransac_n:9));
     ctx_memory.vt = malloc(sizeof(double)*9*9);
+    ctx_memory.lm_matches_count = 0;
+    ctx_memory.lm_points3d = NULL;
+    ctx_memory.lm_residuals = NULL;
+    ctx_memory.lm_j_1 = NULL;
+    ctx_memory.lm_j_2 = NULL;
+    ctx_memory.lm_j_3 = NULL;
     
     while (!t->completed)
     {
@@ -270,7 +480,7 @@ void* correlate_ransac_task(void *args)
             inliers[i] = *match;
         }
 
-        if (!ransac_calculate_model(&ctx_memory, inliers, ransac_n, fundamental_matrix))
+        if (!ransac_calculate_model(&ctx_memory, inliers, ransac_n, fundamental_matrix, projection_matrix_2))
             continue;
 
         double fundamental_matrix_sum = 0.0;
@@ -340,6 +550,8 @@ void* correlate_ransac_task(void *args)
         {
             for (size_t i=0;i<9;i++)
                 t->fundamental_matrix[i] = fundamental_matrix[i];
+            for (size_t i=0;i<12;i++)
+                t->projection_matrix_2[i] = projection_matrix_2[i];
             t->result_matches_count = extended_inliers_count;
             ctx->best_error = inliers_error;
         }
@@ -352,7 +564,18 @@ cleanup:
     free(ctx_memory.u);
     free(ctx_memory.s);
     free(ctx_memory.vt);
+    if (ctx_memory.lm_points3d != NULL)
+        free(ctx_memory.lm_points3d);
+    if (ctx_memory.lm_residuals != NULL)
+        free(ctx_memory.lm_residuals);
+    if (ctx_memory.lm_j_1 != NULL)
+        free(ctx_memory.lm_j_1);
+    if (ctx_memory.lm_j_2 != NULL)
+        free(ctx_memory.lm_j_2);
+    if (ctx_memory.lm_j_3 != NULL)
+        free(ctx_memory.lm_j_3);
     free_svd(ctx_memory.svd);
+    free_invert(ctx_memory.invert);
     pthread_mutex_lock(&ctx->lock);
     ctx->threads_completed++;
     pthread_mutex_unlock(&ctx->lock);

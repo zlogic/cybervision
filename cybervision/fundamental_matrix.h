@@ -14,6 +14,7 @@ typedef struct {
 } ransac_match_bucket;
 typedef void* ransac_task_internal;
 typedef double matrix_3x3[3*3];
+typedef double matrix_4x3[4*3];
 typedef struct {
     ransac_match_bucket *match_buckets;
     size_t match_buckets_count;
@@ -28,6 +29,7 @@ typedef struct {
     int completed;
 
     matrix_3x3 fundamental_matrix;
+    matrix_4x3 projection_matrix_2;
     size_t result_matches_count;
 
     ransac_task_internal internal;

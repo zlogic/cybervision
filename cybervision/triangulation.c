@@ -11,10 +11,6 @@
 typedef struct {
     int y;
 
-    double epipole_2[3];
-    double camera_1[4*3];
-    double camera_2[4*3];
-
     int threads_completed;
     pthread_mutex_t lock;
     pthread_t *threads;
@@ -33,6 +29,40 @@ void find_min_max_depth(triangulation_task *t, float *min_depth, float *max_dept
     }
     *min_depth = min;
     *max_depth = max;
+}
+
+int triangulation_triangulate_point(svd_internal svd_ctx, double projection2[4*3], double x1, double y1, double x2, double y2, double result[4])
+{
+    // Linear triangulation method
+    double a[4*4];
+    double u[4*4], s[4], vt[4*4];
+    // First row of A: x1*[0 0 1 0]-[1 0 0 0]
+    a[0+4*0]= -1.0;
+    a[0+4*1]= 0.0;
+    a[0+4*2]= x1;
+    a[0+4*3]= 0.0;
+    // Second row of A: y1*[0 0 1 0]-[0 1 0 0]
+    a[1+4*0]= 0.0;
+    a[1+4*1]= -1.0;
+    a[1+4*2]= y1;
+    a[1+4*3]= 0.0;
+    // Third row of A: x2*camera_2[2]-camera_2[0]
+    a[2+4*0]= x2*projection2[2*4+0]-projection2[0+0];
+    a[2+4*1]= x2*projection2[2*4+1]-projection2[0+1];
+    a[2+4*2]= x2*projection2[2*4+2]-projection2[0+2];
+    a[2+4*3]= x2*projection2[2*4+3]-projection2[0+3];
+    // Fourth row of A: y2*camera_2[2]-camera_2[1]
+    a[3+4*0]= y2*projection2[2*4+0]-projection2[4+0];
+    a[3+4*1]= y2*projection2[2*4+1]-projection2[4+1];
+    a[3+4*2]= y2*projection2[2*4+2]-projection2[4+2];
+    a[3+4*3]= y2*projection2[2*4+3]-projection2[4+3];
+
+    if (!svdd(svd_ctx, a, 4, 4, u, s, vt))
+        return 0;
+
+    for(size_t i=0;i<4;i++)
+        result[i] = vt[i*4+3];
+    return 1;
 }
 
 void filter_depth_histogram(triangulation_task *t, const float histogram_discard_percentile, float *min_depth, float *max_depth)
@@ -110,51 +140,10 @@ void triangulation_parallel(triangulation_task *t)
     t->completed = 1;
 }
 
-int triangulation_perspective_cameras(triangulation_task *t)
-{
-    triangulation_task_ctx *ctx = t->internal;
-    svd_internal svd_ctx = init_svd();
-    double f[9];
-    int result = 0;
-    for (size_t i=0;i<3;i++)
-        for (size_t j=0;j<3;j++)
-            f[j*3+i] = t->fundamental_matrix[i*3+j];
-
-    double u[9], s[3], vt[9];
-    if (!svdd(svd_ctx, f, 3, 3, u, s, vt))
-        goto cleanup;
-
-    for (size_t i=0;i<4*3;i++)
-        ctx->camera_1[i] = 0;
-    ctx->camera_1[0] = 1;
-    ctx->camera_1[4*1+1] = 1;
-    ctx->camera_1[4*2+2] = 1;
-    // Using e' (epipole in second image) to calculate projection matrix for second image
-    double *e2 = ctx->epipole_2;
-    for(size_t i=0;i<3;i++)
-        e2[i] = u[3*2+i];
-    double e2_skewsymmetric[9] = {0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0};
-    double e2sf[9];
-    multiply_matrix_3x3(e2_skewsymmetric, t->fundamental_matrix, e2sf);
-    for (size_t i=0;i<3;i++)
-        for (size_t j=0;j<3;j++)
-            ctx->camera_2[4*i+j] = e2sf[3*i+j];
-    for (size_t i=0;i<3;i++)
-        ctx->camera_2[4*i+3] = e2[i];
-    result = 1;
-cleanup:
-    free_svd(svd_ctx);
-    return result;
-}
-
 void* triangulation_perspective_task(void *args)
 {
     triangulation_task *t = args;
     triangulation_task_ctx *ctx = t->internal;
-    double a[4*4];
-    double u[4*4], s[4], vt[4*4];
-    double *p1 = ctx->camera_1; 
-    double *p2 = ctx->camera_2; 
     svd_internal svd_ctx = init_svd();
 
     while (!t->completed)
@@ -179,38 +168,10 @@ void* triangulation_perspective_task(void *args)
             t->out_depth[pos] = NAN;
             if (x2<0 || y2<0)
                 continue;
-            // Linear triangulation method
-            float x1n = x1;
-            float y1n = y1;
-            float x2n = x2;
-            float y2n = y2;
-            // First row of A: x1*camera_1[2]-camera_1[0]
-            a[0+4*0]= x1n*p1[2*4+0]-p1[0+0];
-            a[0+4*1]= x1n*p1[2*4+1]-p1[0+1];
-            a[0+4*2]= x1n*p1[2*4+2]-p1[0+2];
-            a[0+4*3]= x1n*p1[2*4+3]-p1[0+3];
-            // Second row of A: y1*camera_1[2]-camera_1[0]
-            a[1+4*0]= y1n*p1[2*4+0]-p1[4+0];
-            a[1+4*1]= y1n*p1[2*4+1]-p1[4+1];
-            a[1+4*2]= y1n*p1[2*4+2]-p1[4+2];
-            a[1+4*3]= y1n*p1[2*4+3]-p1[4+3];
-            // Third row of A: x2*camera_2[2]-camera_2[0]
-            a[2+4*0]= x2n*p2[2*4+0]-p2[0+0];
-            a[2+4*1]= x2n*p2[2*4+1]-p2[0+1];
-            a[2+4*2]= x2n*p2[2*4+2]-p2[0+2];
-            a[2+4*3]= x2n*p2[2*4+3]-p2[0+3];
-            // Fourth row of A: y2*camera_2[2]-camera_2[1]
-            a[3+4*0]= y2n*p2[2*4+0]-p2[4+0];
-            a[3+4*1]= y2n*p2[2*4+1]-p2[4+1];
-            a[3+4*2]= y2n*p2[2*4+2]-p2[4+2];
-            a[3+4*3]= y2n*p2[2*4+3]-p2[4+3];
 
-            if (!svdd(svd_ctx, a, 4, 4, u, s, vt))
-                continue;
-            
             double point[4];
-            for(size_t i=0;i<4;i++)
-                point[i] = vt[i*4+3];
+            if(!triangulation_triangulate_point(svd_ctx, t->projection_matrix_2, x1, y1, x2, y2, point))
+                continue;
 
             if (fabs(point[3])<cybervision_triangulation_min_scale)
                 continue;
@@ -245,12 +206,6 @@ int triangulation_start(triangulation_task *task)
         ctx->y = 0;
         ctx->threads= malloc(sizeof(pthread_t)*task->num_threads);
         ctx->threads_completed = 0;
-
-        if (!triangulation_perspective_cameras(task))
-        {
-            task->error = "Failed to compute projection matrices";
-            return 0;
-        }
             
         if (pthread_mutex_init(&ctx->lock, NULL) != 0)
             return 0;

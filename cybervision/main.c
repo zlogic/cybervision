@@ -408,8 +408,8 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         t_task.scale_z = depth_scale;
         t_task.proj_mode = proj_mode;
         t_task.tilt_angle = tilt_angle;
-        for (size_t i=0;i<9;i++)
-            t_task.fundamental_matrix[i] = r_task.fundamental_matrix[i];
+        for (size_t i=0;i<12;i++)
+            t_task.projection_matrix_2[i] = r_task.projection_matrix_2[i];
 
         if (!triangulation_start(&t_task))
         {

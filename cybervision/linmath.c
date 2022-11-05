@@ -37,6 +37,13 @@ void multiply_ft_vector(double f[9], double p[3], double target[3])
     target[2] = f[2]*p[0]+f[5]*p[1]+f[8]*p[2];
 }
 
+void multiply_p_vector(double p[12], double v[4], double target[3])
+{
+    target[0] = p[0]*v[0]+p[1]*v[1]+ p[2]*v[2]+ p[3]*v[3];
+    target[1] = p[4]*v[0]+p[5]*v[1]+ p[6]*v[2]+ p[7]*v[3];
+    target[2] = p[8]*v[0]+p[9]*v[1]+p[10]*v[2]+p[11]*v[3];
+}
+
 typedef struct {
     integer work_size, iwork_size;
     double *work;
@@ -95,6 +102,7 @@ int svdd(svd_internal svd, double *matrix, int rows, int cols, double *u, double
 
 void multiplyd(double *a, double *b, double *output, int m, int n, int k, int transposeA, int transposeB)
 {
+    // Warning: LAPACK needs column-major matrices (iterate by columns, first, then by rows)
     integer m_in = m, n_in = n, k_in = k;
     double alpha = 1.0;
     double beta = 0.0;
@@ -102,4 +110,65 @@ void multiplyd(double *a, double *b, double *output, int m, int n, int k, int tr
     integer ldb = transposeB? n:k;
     integer ldc = m;
     dgemm_(transposeA? "T":"N", transposeB? "T":"N", &m_in, &n_in, &k_in, &alpha, a, &lda, b, &ldb, &beta, output, &ldc);
+}
+
+typedef struct {
+    integer ipiv_size;
+    integer lwork_size;
+    integer *ipiv;
+    double *lwork;
+} invert_ctx;
+invert_internal init_invert()
+{
+    invert_ctx *ctx = malloc(sizeof(invert_ctx));
+    ctx->ipiv = NULL;
+    ctx->lwork = NULL;
+    ctx->ipiv_size = 0;
+    ctx->lwork_size = 0;
+    return ctx;
+}
+void free_invert(invert_internal invert)
+{
+    invert_ctx *ctx = invert;
+    if (ctx == NULL)
+        return;
+    if (ctx->ipiv != NULL)
+        free(ctx->ipiv);
+    if (ctx->lwork != NULL)
+        free(ctx->lwork);
+    free(ctx);
+}
+int invertd(invert_internal invert, double *a, int n)
+{
+    // Warning: LAPACK needs column-major matrices (iterate by columns, first, then by rows)
+    int result = 0;
+    integer info = 0;
+    integer n_in = n;
+    integer lda = n;
+    integer lwork = -1;
+    double optimal_work = 0.0;
+    invert_ctx *ctx = invert;
+    if (ctx->ipiv_size < n)
+    {
+        ctx->ipiv_size = n;
+        size_t ipiv_size = sizeof(integer)*ctx->ipiv_size;
+        ctx->ipiv = ctx->ipiv == NULL? malloc(ipiv_size) : realloc(ctx->ipiv, ipiv_size);
+    }
+    dgetrf_(&n_in, &n_in, a, &lda, ctx->ipiv, &info);
+    if (info != 0)
+        return 0;
+
+    dgetri_(&n_in, a, &lda, ctx->ipiv, &optimal_work, &lwork, &info);
+    if (info != 0)
+        return 0;
+    lwork = (int)optimal_work;
+
+    if (ctx->lwork_size < lwork)
+    {
+        ctx->lwork_size = lwork;
+        size_t lwork_size = sizeof(double)*lwork;
+        ctx->lwork = ctx->lwork == NULL? malloc(lwork_size) : realloc(ctx->lwork, lwork_size);
+    }
+    dgetri_(&n_in, a, &lda, ctx->ipiv, ctx->lwork, &lwork, &info);
+    return info == 0;
 }
