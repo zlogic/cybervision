@@ -8,7 +8,7 @@
         {"name": "qhull", "default-features": false},
         {"name": "fastfeat", "default-features": false},
         {"name": "pthreads", "default-features": false, "platform": "windows"},
-        {"name": "openblas", "default-features": false, "platform": "windows | linux"},
+        {"name": "openblas", "default-features": false, "features": ["threads", "simplethread"], "platform": "windows | linux"},
         {"name": "clapack", "default-features": false, "platform": "windows | linux"}
     ]
 }

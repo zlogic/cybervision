@@ -91,21 +91,21 @@ To build it:
 2. Install Vulkan SDK (Windows and Linux only), see [gpu.md](gpu.md) for mode details.
 3. Configure and build the project with CMake.
 
-## Valgrind workarounds
+## OpenBLAS workarounds
 
-If LAPACK is compiled with support for AVX-512 instructions, Valgrind will crash with a `SIGILL` signal.
+If OpenBLAS is compiled with support for AVX-512 instructions, Valgrind will crash with a `SIGILL` signal.
 
 To fix this, 
 1. Copy `vcpkg/ports/openblas` to another location
 2. Edit the vcpkg portfile (`openblas/portfile.cmake`) and add a `list(APPEND OPENBLAS_EXTRA_OPTIONS -DTARGET=HASWELL)` line before `vcpkg_cmake_configure`.
 3. Set the `VCPKG_OVERLAY_PORTS` environment variable to the patched copy of `openblas` (same directory as `PATH_TO_NEW_OPENBLAS_DIRECTORY`)
 
-## Known issues
+To fix a `** On entry to DLASCL parameter number  4 had an illegal value` error, enable threading support and, add the following lines before `vcpkg_cmake_configure` on step 2:
 
-Sometimes the `dgesdd_` function from OpenBLAS (or maybe LAPACK?) returns an error and replaces the input matrix with NaNs.
-OpenBLAS will also print a `** On entry to DLASCL parameter number  4 had an illegal value` log message.
-This is not a critical issue because the RANSAC method will still converge.
-Possibly, this is caused by an early test that indicates that the matrix cannot be processed: https://github.com/Reference-LAPACK/lapack/issues/469
+```
+string(APPEND VCPKG_C_FLAGS " -DNUM_THREADS=1")
+string(APPEND VCPKG_CXX_FLAGS " -DNUM_THREADS=1")
+```
 
 ## External libraries or dependencies
 
