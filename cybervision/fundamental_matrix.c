@@ -489,6 +489,7 @@ void* correlate_ransac_task(void *args)
     ransac_match *inliers;
     size_t ransac_k;
     double ransac_t;
+    size_t ransac_d_early_exit;
     matrix_3x3 fundamental_matrix;
     matrix_4x3 projection_matrix_2;
     size_t extended_inliers_count = 0;
@@ -511,6 +512,7 @@ void* correlate_ransac_task(void *args)
         ransac_k = cybervision_ransac_k_affine;
         ransac_n = cybervision_ransac_n_affine;
         ransac_t = cybervision_ransac_t_affine;
+        ransac_d_early_exit = cybervision_ransac_d_early_exit_parallel;
     }
     else if (t->proj_mode == PROJECTION_MODE_PERSPECTIVE)
     {
@@ -518,6 +520,7 @@ void* correlate_ransac_task(void *args)
         ransac_k = cybervision_ransac_k_perspective;
         ransac_n = cybervision_ransac_n_perspective;
         ransac_t = cybervision_ransac_t_perspective/(t->keypoint_scale*t->keypoint_scale);
+        ransac_d_early_exit = cybervision_ransac_d_early_exit_perspective;
     }
     inliers = malloc(sizeof(ransac_match)*ransac_n);
     extended_inliers_limit = ransac_n;
@@ -550,7 +553,7 @@ void* correlate_ransac_task(void *args)
         if (iteration > ransac_k)
             break;
 
-        if (iteration % cybervision_ransac_check_interval == 0 && t->result_matches_count > cybervision_ransac_d_early_exit)
+        if (iteration % cybervision_ransac_check_interval == 0 && t->result_matches_count > ransac_d_early_exit)
             t->completed = 1;
 
         extended_inliers_count = 0;

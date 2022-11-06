@@ -11,14 +11,15 @@ const int cybervision_keypoint_scale_min_size = 512;
 
 const size_t cybervision_ransac_match_grid_size = 8;
 const size_t cybervision_ransac_k_affine = 1E7;
-const size_t cybervision_ransac_k_perspective = 1E6;
+const size_t cybervision_ransac_k_perspective = 1E7;
 const size_t cybervision_ransac_n_affine = 4;
 const size_t cybervision_ransac_n_perspective = 8;
 const double cybervision_ransac_rank_epsilon = 0.0;
 const double cybervision_ransac_t_affine = 0.1;
 const double cybervision_ransac_t_perspective = 1.0;
 const size_t cybervision_ransac_d = 10;
-const size_t cybervision_ransac_d_early_exit = 1000;
+const size_t cybervision_ransac_d_early_exit_parallel = 1000;
+const size_t cybervision_ransac_d_early_exit_perspective = 20;
 const size_t cybervision_ransac_check_interval = 1E5;
 
 const int cybervision_crosscorrelation_scale_min_size = 64;

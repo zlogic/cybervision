@@ -27,7 +27,8 @@ extern const double cybervision_ransac_rank_epsilon;
 extern const double cybervision_ransac_t_affine;
 extern const double cybervision_ransac_t_perspective;
 extern const size_t cybervision_ransac_d;
-extern const size_t cybervision_ransac_d_early_exit;
+extern const size_t cybervision_ransac_d_early_exit_parallel;
+extern const size_t cybervision_ransac_d_early_exit_perspective;
 extern const size_t cybervision_ransac_check_interval;
 
 extern const int cybervision_crosscorrelation_scale_min_size;
