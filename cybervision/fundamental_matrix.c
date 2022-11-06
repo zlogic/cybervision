@@ -10,6 +10,8 @@
 #include "configuration.h"
 #include "system.h"
 
+#define EXTENDED_INLIERS_GROW_SIZE 1000
+
 typedef struct {
     size_t iteration;
     unsigned int thread_id;
@@ -333,7 +335,7 @@ static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *
         {
             lambda = lambda/lambda_down;
             lambda = lambda>lambda_min? lambda:lambda_min;
-        for (size_t i=0;i<4*3;i++)
+            for (size_t i=0;i<4*3;i++)
                 p2[i] = p2_new[i];
         }
         // Check for convergence
@@ -341,7 +343,7 @@ static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *
             continue;
         if (max_jt_residual<jt_residual_epsilon)
         {
-        completed = 1;
+            completed = 1;
             break;
         }
         else if (isfinite(max_ratio) && max_ratio<ratio_epsilon)
@@ -490,6 +492,8 @@ void* correlate_ransac_task(void *args)
     matrix_3x3 fundamental_matrix;
     matrix_4x3 projection_matrix_2;
     size_t extended_inliers_count = 0;
+    ransac_match *extended_inliers = NULL;
+    size_t extended_inliers_limit = 0;
     ransac_memory ctx_memory = {0};
     int (*ransac_calculate_model)(ransac_memory *ctx, ransac_match *matches, size_t matches_count, matrix_3x3 f, matrix_4x3 projection_matrix_2);
     unsigned int rand_seed;
@@ -516,6 +520,8 @@ void* correlate_ransac_task(void *args)
         ransac_t = cybervision_ransac_t_perspective/(t->keypoint_scale*t->keypoint_scale);
     }
     inliers = malloc(sizeof(ransac_match)*ransac_n);
+    extended_inliers_limit = ransac_n;
+    extended_inliers = malloc(sizeof(ransac_match)*extended_inliers_limit);
     ctx_memory.svd = init_svd();
     ctx_memory.invert = init_invert();
     ctx_memory.a = malloc(sizeof(double)*(ransac_n*9));
@@ -604,7 +610,12 @@ void* correlate_ransac_task(void *args)
                 if (inlier_error > ransac_t)
                     continue;
 
-                extended_inliers_count++;
+                if (extended_inliers_count >= extended_inliers_limit)
+                {
+                    extended_inliers_limit += EXTENDED_INLIERS_GROW_SIZE;
+                    extended_inliers = realloc(extended_inliers, sizeof(ransac_match)*extended_inliers_limit);
+                }
+                extended_inliers[extended_inliers_count++] = *check_match;
                 inliers_error += inlier_error;
             }
         }
@@ -620,7 +631,7 @@ void* correlate_ransac_task(void *args)
                 inliers_error = NAN;
                 break;
             }
-            extended_inliers_count++;
+            extended_inliers[extended_inliers_count++] = inliers[i];
             inliers_error += inlier_error;
         }
         if (!isfinite(inliers_error))
@@ -631,6 +642,8 @@ void* correlate_ransac_task(void *args)
             goto cleanup;
         if (extended_inliers_count >= t->result_matches_count && inliers_error <= ctx->best_error)
         {
+            if (t->proj_mode == PROJECTION_MODE_PERSPECTIVE)
+                optimize_fundamental_matrix(&ctx_memory, extended_inliers, extended_inliers_count, fundamental_matrix, projection_matrix_2);
             for (size_t i=0;i<9;i++)
                 t->fundamental_matrix[i] = fundamental_matrix[i];
             for (size_t i=0;i<12;i++)
@@ -643,6 +656,7 @@ void* correlate_ransac_task(void *args)
     }
 cleanup:
     free(inliers);
+    free(extended_inliers);
     free(ctx_memory.a);
     free(ctx_memory.u);
     free(ctx_memory.s);
