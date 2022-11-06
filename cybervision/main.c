@@ -23,39 +23,23 @@ double diff_seconds(struct timespec end, struct timespec start)
 
 const int progressbar_width = 60;
 char* progressbar_str = NULL;
-
-static inline int progressbar_str_width()
-{
-    return 1+progressbar_width+2+7;
-}
+int progressbar_chars = 0;
 
 void reset_progressbar()
 {
-    char *progressbar_curr = progressbar_str;
-    if (*progressbar_str != '\0')
-        printf("\r");
-    for (int i=0;i<progressbar_str_width();i++)
-        progressbar_str[i] = ' ';
-    progressbar_str[progressbar_str_width()] = '\0';
-    printf("%s\r", progressbar_curr);
+    printf("\r%*s\r", progressbar_chars, " ");
     fflush(stdout);
-    progressbar_str[0] = '\0';
+    progressbar_chars = 0;
 }
 
 void show_progressbar(float percent)
 {
     int x = (int)(percent/100.0*progressbar_width);
-    char* progressbar_curr = progressbar_str;
     
-    if (*progressbar_str != '\0')
-        printf("\r");
-    progressbar_str[0] = '\0';
+    if (progressbar_chars != 0)
+        reset_progressbar();
 
-    *(progressbar_curr++) = '[';
-    for (int i=0;i<progressbar_width;i++)
-        *(progressbar_curr++) = i<=x? '#':' ';
-    sprintf(progressbar_curr, "] %2.1f%%", percent);
-    printf("%s", progressbar_str);
+    progressbar_chars = printf("[%*.*s%*s] %2.1f%%", x, x, progressbar_str, progressbar_width-x, " ", percent);
     fflush(stdout);
 }
 
@@ -96,8 +80,10 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     scale_y = 1.0F;
     struct timespec start_time, last_operation_time, current_operation_time;
     int num_threads = cpu_cores();
-    progressbar_str = malloc(sizeof(char)*(progressbar_str_width()+1));
-    progressbar_str[0] = '\0';
+    progressbar_str = malloc(sizeof(char)*(progressbar_width+1));
+    for(int i=0;i<progressbar_width;i++)
+        progressbar_str[i] = '#';
+    progressbar_str[progressbar_width] = '\0';
     
     correlation_point *points1 = NULL, *points2 = NULL;
 
@@ -275,6 +261,12 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         {
             sleep_ms(200);
             show_progressbar(r_task.percent_complete);
+            size_t found_matches = r_task.result_matches_count;
+            if (found_matches>0)
+            {
+                progressbar_chars += printf(" (%zi matches)", found_matches);
+                fflush(stdout);
+            }
         }
         reset_progressbar();
         if (!correlation_ransac_complete(&r_task))
