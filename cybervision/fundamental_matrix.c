@@ -47,6 +47,8 @@ typedef struct {
     double *u, *s, *vt;
     double *lm_residuals;
     double *lm_points3d;
+    double *lm_jacobian;
+    double *lm_lambda_jtj;
     double *lm_j_1;
     double *lm_j_2;
     double *lm_j_3;
@@ -110,10 +112,15 @@ static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *
     // Gold standard optimization of fundamental matrix
     const size_t max_iterations = 30;
     const double jacobian_h = 0.001;
-    //const double lambda_start = 1E-2;
-    const double lambda_start = 0.0;
+    const double lambda_start = 1E-2;
     const double lambda_up = 11.0;
     const double lambda_down = 9.0;
+    const double lambda_min = 1E-7;
+    const double lambda_max = 1E7;
+    const double rho_epsilon = 1E-1;
+    const double jt_residual_epsilon = 1E-3;
+    const double ratio_epsilon = 1E-3;
+    const double division_epsilon = 1E-12;
 
     matrix_3x3 f;
     double *p2 = projection_matrix_2;
@@ -142,27 +149,35 @@ static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *
     {
         size_t j_rows = matches_count*4, j_cols = 4*3+matches_count*3;
         size_t max_dimension = j_rows>j_cols?j_rows:j_cols;
-        size_t jacobian_size = sizeof(double)*max_dimension*max_dimension;
+        size_t jacobian_size = sizeof(double)*j_rows*j_cols;
+        size_t jacobian_extra_size = sizeof(double)*max_dimension*max_dimension;
+        size_t jtj_labmbda_size = sizeof(double)*j_cols*j_cols;
         size_t points3d_size = sizeof(double)*matches_count*4;
         size_t residuals_size = sizeof(double)*j_rows;
         ctx->lm_points3d = ctx->lm_points3d==NULL? malloc(points3d_size) : realloc(ctx->lm_points3d, points3d_size);
         ctx->lm_residuals = ctx->lm_residuals==NULL? malloc(residuals_size) : realloc(ctx->lm_residuals, residuals_size);
-        ctx->lm_j_1 = ctx->lm_j_1==NULL? malloc(jacobian_size) : realloc(ctx->lm_j_1, jacobian_size);
-        ctx->lm_j_2 = ctx->lm_j_2==NULL? malloc(jacobian_size) : realloc(ctx->lm_j_2, jacobian_size);
-        ctx->lm_j_3 = ctx->lm_j_3==NULL? malloc(jacobian_size) : realloc(ctx->lm_j_3, jacobian_size);
+        ctx->lm_jacobian = ctx->lm_jacobian==NULL? malloc(jacobian_size) : realloc(ctx->lm_jacobian, jacobian_size);
+        ctx->lm_lambda_jtj = ctx->lm_lambda_jtj==NULL? malloc(jtj_labmbda_size) : realloc(ctx->lm_lambda_jtj, jtj_labmbda_size);
+        ctx->lm_j_1 = ctx->lm_j_1==NULL? malloc(jacobian_extra_size) : realloc(ctx->lm_j_1, jacobian_extra_size);
+        ctx->lm_j_2 = ctx->lm_j_2==NULL? malloc(jacobian_extra_size) : realloc(ctx->lm_j_2, jacobian_extra_size);
+        ctx->lm_j_3 = ctx->lm_j_3==NULL? malloc(jacobian_extra_size) : realloc(ctx->lm_j_3, jacobian_extra_size);
     }
-    size_t jacobian_rows = matches_count*4;
+    const size_t jacobian_rows = matches_count*4;
+    //size_t jacobian_cols = 4*3+matches_count*3;
+    const size_t jacobian_cols = 4*3;
     double *points3d = ctx->lm_points3d;
     double *residuals = ctx->lm_residuals;
-    double sum_error = 0.0;
+    double *jacobian = ctx->lm_jacobian;
     double s_previous = 0.0;
     double lambda = lambda_start;
     int completed = 0;
     // Levenberg-Marquardt error minimization with matches_count*4 residuals:
     // For each point, a residual for every reprojected coordinate
+    for (size_t i=0;i<jacobian_cols*jacobian_cols;i++)
+        ctx->lm_lambda_jtj[i] = 0.0;
     for (size_t iter=0;iter<max_iterations;iter++)
     {
-        sum_error = 0.0;
+        double chi_squared = 0.0;
         // Triangulate points
         for (size_t m_i=0;m_i<matches_count;m_i++)
         {
@@ -180,11 +195,10 @@ static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *
             for (size_t i=0;i<4;i++)
             {
                 residuals[m_i*4+i] = projection_error[i];
-                sum_error += projection_error[i]*projection_error[i];
+                chi_squared += projection_error[i]*projection_error[i];
             }
         }
         // Calculate Jacobian using finite differences (central difference)
-        double *jacobian = ctx->lm_j_1;
         // Jacobian is column-major
         // Modify all parameters of p2
         matrix_4x3 p2_modified;
@@ -246,28 +260,95 @@ static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *
             }
         }
         */
+        // TODO: optimize math or memory usage - most of this is direct conversion from math formulas, can be optimized
         // Calculate JtJ
-        size_t jacobian_rows = matches_count*4;
-        //size_t jacobian_cols = 4*3+matches_count*3;
-        size_t jacobian_cols = 4*3;
-        double *jt_j_lambda = ctx->lm_j_2;
-        multiplyd(jacobian, jacobian, jt_j_lambda, jacobian_cols, jacobian_cols, jacobian_rows, 1, 0);
+        double *jt_j_plus_lambda = ctx->lm_j_1;
+        double *lambda_jt_j = ctx->lm_lambda_jtj;
+        multiplyd(jacobian, jacobian, jt_j_plus_lambda, jacobian_cols, jacobian_cols, jacobian_rows, 1, 0);
         // Add lambda*diag(JtJ)
         for (size_t i=0;i<jacobian_cols;i++)
-            jt_j_lambda[i*jacobian_cols+i] += jt_j_lambda[i*jacobian_cols+i]*lambda;
-        // Calculate delta
-        if(!invertd(ctx->invert, jt_j_lambda, jacobian_cols))
+        {
+            lambda_jt_j[i*jacobian_cols+i] = jt_j_plus_lambda[i*jacobian_cols+i]*lambda;
+            jt_j_plus_lambda[i*jacobian_cols+i] += lambda_jt_j[i*jacobian_cols+i];
+        }
+        // Calculate delta (h_lm)
+        if(!invertd(ctx->invert, jt_j_plus_lambda, jacobian_cols))
             return 0;
-        double *jt_left_pseudoinverse = ctx->lm_j_3;
-        multiplyd(jt_j_lambda, jacobian, jt_left_pseudoinverse, jacobian_cols, jacobian_rows, jacobian_cols, 0, 1);
-        double *delta = ctx->lm_j_2;
+        double *jt_left_pseudoinverse = ctx->lm_j_2; // (JtJ+lambda*diag(JtJ))^-1*Jt
+        multiplyd(jt_j_plus_lambda, jacobian, jt_left_pseudoinverse, jacobian_cols, jacobian_rows, jacobian_cols, 0, 1);
+        jt_j_plus_lambda = NULL; // lm_j_1 is available
+        double *delta = ctx->lm_j_1;
         multiplyd(jt_left_pseudoinverse, residuals, delta, jacobian_cols, 1, jacobian_rows, 0, 0);
         // Check if lambda needs adjustment
+        jt_left_pseudoinverse = NULL; // lm_j_2 is available
+        double *jt_residual = ctx->lm_j_2; // Jt*residual
+        multiplyd(jacobian, residuals, jt_residual, jacobian_cols, 1, jacobian_rows, 1, 0);
+        double *lambda_jt_j_delta = ctx->lm_j_3; // lambda*diag(JtJ)*delta
+        multiplyd(lambda_jt_j, delta, lambda_jt_j_delta, jacobian_cols, 1, jacobian_cols, 0, 0);
+        double max_jt_residual = NAN;
+        for (size_t i=0;i<jacobian_cols;i++)
+        {
+            const double val = jt_residual[i];
+            // lambda*diag(JtJ)*delta+Jt*residual
+            lambda_jt_j_delta[i] += val;
+            // Find max value in Jt*resudual to test for convergence
+            if (!isfinite(max_jt_residual) || fabs(val)<max_jt_residual)
+                max_jt_residual = fabs(val);
+        }
+        jt_residual = NULL; // lm_j_2 is available
+        double rho_denominator = 0.0; // delta_t*(lambda*diag(JtJ)*delta+Jt*residual)
+        multiplyd(delta, lambda_jt_j_delta, &rho_denominator, 1, 1, jacobian_cols, 1, 0);
         // Update projection matrix
-        // TODO: why -delta works, but +delta doesn't?
+        matrix_4x3 p2_new;
+        double max_ratio = NAN;
         for (size_t i=0;i<4*3;i++)
-            p2[i] -= delta[i];
+        {
+            double ratio = fabs(delta[i])/(fabs(p2[i])+division_epsilon);
+            p2_new[i] = p2[i]+delta[i];
+            if (isfinite(ratio) && (!isfinite(max_ratio) || ratio<max_ratio))
+                max_ratio = ratio;
+        }
+        double chi_squared_new = 0.0;
+        // Calculate new chi squared
+        for (size_t m_i=0;m_i<matches_count;m_i++)
+        {
+            double point3d[4];
+            ransac_match *match = &matches[m_i];
+            if (!triangulation_triangulate_point(ctx->svd, p2_new, match->x1, match->y1, match->x2, match->y2, point3d))
+                return 0;
+            for(size_t i=0;i<4;i++)
+                point3d[i] /= point3d[3];
+            double projection_error[4];
+            point_reprojection_error(p2_new, point3d, match->x1, match->y1, match->x2, match->y2, projection_error);
+            for (size_t i=0;i<4;i++)
+                chi_squared_new += projection_error[i]*projection_error[i];
+        }
+        double rho = (chi_squared-chi_squared_new)/rho_denominator;
+        if (rho<rho_epsilon)
+        {
+            lambda = lambda*lambda_up;
+            lambda = lambda<lambda_max? lambda:lambda_max;
+        }
+        else
+        {
+            lambda = lambda/lambda_down;
+            lambda = lambda>lambda_min? lambda:lambda_min;
+        for (size_t i=0;i<4*3;i++)
+                p2[i] = p2_new[i];
+        }
+        // Check for convergence
+        if (iter<=2)
+            continue;
+        if (max_jt_residual<jt_residual_epsilon)
+        {
         completed = 1;
+            break;
+        }
+        else if (isfinite(max_ratio) && max_ratio<ratio_epsilon)
+        {
+            completed = 1;
+            break;
+        }
     }
 
     if (!completed)
@@ -444,6 +525,8 @@ void* correlate_ransac_task(void *args)
     ctx_memory.lm_matches_count = 0;
     ctx_memory.lm_points3d = NULL;
     ctx_memory.lm_residuals = NULL;
+    ctx_memory.lm_jacobian = NULL;
+    ctx_memory.lm_lambda_jtj = NULL;
     ctx_memory.lm_j_1 = NULL;
     ctx_memory.lm_j_2 = NULL;
     ctx_memory.lm_j_3 = NULL;
@@ -568,6 +651,10 @@ cleanup:
         free(ctx_memory.lm_points3d);
     if (ctx_memory.lm_residuals != NULL)
         free(ctx_memory.lm_residuals);
+    if (ctx_memory.lm_jacobian != NULL)
+        free(ctx_memory.lm_jacobian);
+    if (ctx_memory.lm_lambda_jtj != NULL)
+        free(ctx_memory.lm_lambda_jtj);
     if (ctx_memory.lm_j_1 != NULL)
         free(ctx_memory.lm_j_1);
     if (ctx_memory.lm_j_2 != NULL)
