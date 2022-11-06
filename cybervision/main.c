@@ -35,9 +35,9 @@ void reset_progressbar()
 void show_progressbar(float percent)
 {
     int x = (int)(percent/100.0*progressbar_width);
-    
+
     if (progressbar_chars != 0)
-        reset_progressbar();
+        printf("\r");
 
     progressbar_chars = printf("[%*.*s%*s] %2.1f%%", x, x, progressbar_str, progressbar_width-x, " ", percent);
     fflush(stdout);
@@ -84,7 +84,7 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
     for(int i=0;i<progressbar_width;i++)
         progressbar_str[i] = '#';
     progressbar_str[progressbar_width] = '\0';
-    
+
     correlation_point *points1 = NULL, *points2 = NULL;
 
     match_task m_task = {0};
