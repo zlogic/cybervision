@@ -100,12 +100,8 @@ To fix this,
 2. Edit the vcpkg portfile (`openblas/portfile.cmake`) and add a `list(APPEND OPENBLAS_EXTRA_OPTIONS -DTARGET=HASWELL)` line before `vcpkg_cmake_configure`.
 3. Set the `VCPKG_OVERLAY_PORTS` environment variable to the patched copy of `openblas` (same directory as `PATH_TO_NEW_OPENBLAS_DIRECTORY`)
 
-To fix a `** On entry to DLASCL parameter number  4 had an illegal value` error, enable threading support and, add the following lines before `vcpkg_cmake_configure` on step 2:
-
-```
-string(APPEND VCPKG_C_FLAGS " -DNUM_THREADS=1")
-string(APPEND VCPKG_CXX_FLAGS " -DNUM_THREADS=1")
-```
+To fix a `** On entry to DLASCL parameter number  4 had an illegal value` error, enable threading support and also add `-DNUM_THREADS=1` to `OPENBLAS_EXTRA_OPTIONS`.
+It seems to improve the situation in Linux, but Windows might still be affected.
 
 ## External libraries or dependencies
 
