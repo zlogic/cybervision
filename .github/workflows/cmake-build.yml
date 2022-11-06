@@ -2,7 +2,7 @@ name: CMake
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "optimal-photo-support" ]
   pull_request:
     branches: [ "master" ]
 
@@ -79,6 +79,12 @@ jobs:
 
     - name: Configure vcpkg
       run: echo "CMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
+
+    - name: Patch OpenBLAS options
+      run: |
+        cp -rf $VCPKG_INSTALLATION_ROOT/ports/openblas ${{github.workspace}}/openblas
+        git apply -p2 .github/build-tools/openblas-${{ matrix.arch }}.patch
+        echo "VCPKG_OVERLAY_PORTS=${{github.workspace}}/openblas" >> $GITHUB_ENV
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
@@ -159,6 +165,14 @@ jobs:
 
     - name: Configure vcpkg
       run: echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
+
+    - name: Patch OpenBLAS options
+      run: |
+        $OPENBLAS_PATCH_ARCH="${{ matrix.arch }}"
+        If ($OPENBLAS_PATCH_ARCH -eq "x64") { $OPENBLAS_PATCH_ARCH="amd64" }
+        Copy-Item -Path $env:VCPKG_INSTALLATION_ROOT/ports/openblas -Destination ${{github.workspace}}/openblas -Recurse
+        git apply --ignore-space-change --ignore-whitespace -p2 .github/build-tools/openblas-$OPENBLAS_PATCH_ARCH.patch
+        echo "VCPKG_OVERLAY_PORTS=${{github.workspace}}/openblas" >> $GITHUB_ENV
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
