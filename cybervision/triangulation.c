@@ -145,6 +145,7 @@ void* triangulation_perspective_task(void *args)
     triangulation_task *t = args;
     triangulation_task_ctx *ctx = t->internal;
     svd_internal svd_ctx = init_svd();
+    const float depth_scale = t->scale_z;
 
     while (!t->completed)
     {
@@ -176,7 +177,10 @@ void* triangulation_perspective_task(void *args)
             if (fabs(point[3])<cybervision_triangulation_min_scale)
                 continue;
 
-            t->out_depth[pos] = point[2]/point[3];
+            for (size_t p_i=0;p_i<4;p_i++)
+                point[p_i] = point[p_i]/point[3];
+            // Projection appears to be very precise, with x1==point[0]/point[2] and y==point[1]/point[2]
+            t->out_depth[pos] = depth_scale*point[2];
         }
     }
 cleanup:
@@ -243,16 +247,6 @@ int triangulation_complete(triangulation_task *t)
     {
         float min_depth, max_depth;
         filter_depth_histogram(t, cybervision_histogram_filter_discard_percentile, &min_depth, &max_depth);
-        float min_size = (float)(t->width<t->height? t->width:t->height);
-        float depth_scale = t->scale_z*min_size/(max_depth-min_depth);
-        for(size_t i=0;i<t->width*t->height;i++)
-        {
-            float depth = t->out_depth[i];
-            if (!isfinite(depth))
-                continue;
-            depth = (depth-min_depth)*depth_scale;
-            t->out_depth[i] = depth;
-        }
     }
 
     free(t->internal);
