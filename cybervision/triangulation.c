@@ -186,6 +186,7 @@ cleanup:
     pthread_mutex_unlock(&ctx->lock);
     if (ctx->threads_completed >= t->num_threads)
         t->completed = 1;
+    return NULL;
 }
 
 int triangulation_start(triangulation_task *task)
