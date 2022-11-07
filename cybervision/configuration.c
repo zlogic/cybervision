@@ -20,7 +20,7 @@ const double cybervision_ransac_t_perspective = 1.0;
 const size_t cybervision_ransac_d = 10;
 const size_t cybervision_ransac_d_early_exit_parallel = 1000;
 const size_t cybervision_ransac_d_early_exit_perspective = 20;
-const size_t cybervision_ransac_check_interval = 1E5;
+const size_t cybervision_ransac_check_interval = 5E5;
 
 const int cybervision_crosscorrelation_scale_min_size = 64;
 const int cybervision_crosscorrelation_kernel_size = 5;
