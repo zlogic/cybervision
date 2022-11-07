@@ -19,6 +19,7 @@ struct Parameters
     int pass;
     int kernel_size;
     float threshold;
+    float min_stdev;
     int neighbor_distance;
     float extend_range;
     float min_range;
@@ -248,6 +249,7 @@ kernel void cross_correlate(const device Parameters& p [[buffer(0)]], const devi
     const int corridor_end = p.corridor_end;
     const int kernel_size = p.kernel_size;
     const float threshold = p.threshold;
+    const float min_stdev = p.min_stdev;
     const float kernel_point_count = (2*kernel_size+1)*(2*kernel_size+1);
 
     if(x1 < kernel_size || x1 >= img1_width-kernel_size || y1 < kernel_size ||  y1 >= img1_height-kernel_size)
@@ -271,6 +273,8 @@ kernel void cross_correlate(const device Parameters& p [[buffer(0)]], const devi
 
     float avg1 = internals[img1_avg_offset + img1_width*y1+x1];
     float stdev1 = internals[img1_stdev_offset + img1_width*y1+x1];
+    if (isnan(stdev1) || abs(stdev1)<min_stdev)
+        return;
 
     float best_corr = 0;
     float2 best_match = float2(-1, -1);
@@ -289,6 +293,8 @@ kernel void cross_correlate(const device Parameters& p [[buffer(0)]], const devi
 
         const float avg2 = internals[img2_avg_offset + img2_width*y2 + x2];
         const float stdev2 = internals[img2_stdev_offset + img2_width*y2 + x2];
+        if (isnan(stdev2) || abs(stdev2)<min_stdev)
+            continue;
 
         float corr = 0;
         for (int j=-kernel_size;j<=kernel_size;j++)

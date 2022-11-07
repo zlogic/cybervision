@@ -20,6 +20,7 @@ layout(std430, binding = 0) buffer readonly Parameters
     int phase;
     int kernel_size;
     float threshold;
+    float min_stdev;
     int neighbor_distance;
     float extend_range;
     float min_range;
@@ -58,8 +59,6 @@ layout(std430, binding = 5) buffer writeonly Result
 {
     int result[];
 };
-
-const float NAN = 0.0f/0.0f;
 
 void prepare_initialdata_searchdata() {
     const uint x = gl_GlobalInvocationID.x;
@@ -296,6 +295,8 @@ void main() {
     
     float avg1 = internals[img1_avg_offset + img1_width*y1+x1];
     float stdev1 = internals[img1_stdev_offset + img1_width*y1+x1];
+    if (isnan(stdev1) || abs(stdev1)<min_stdev)
+        return;
 
     float best_corr = 0;
     vec2 best_match = vec2(-1, -1);
@@ -314,6 +315,8 @@ void main() {
 
         const float avg2 = internals[img2_avg_offset + img2_width*y2 + x2];
         const float stdev2 = internals[img2_stdev_offset + img2_width*y2 + x2];
+        if (isnan(stdev2) || abs(stdev2)<min_stdev)
+            continue;
 
         float corr = 0;
         for (int j=-kernel_size;j<=kernel_size;j++)

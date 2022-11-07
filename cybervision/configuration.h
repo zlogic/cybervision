@@ -35,6 +35,8 @@ extern const int cybervision_crosscorrelation_scale_min_size;
 extern const int cybervision_crosscorrelation_kernel_size;
 extern const float cybervision_crosscorrelation_threshold_parallel;
 extern const float cybervision_crosscorrelation_threshold_perspective;
+extern const float cybervision_crosscorrelation_min_stdev_parallel;
+extern const float cybervision_crosscorrelation_min_stdev_perspective;
 extern const int cybervision_crosscorrelation_corridor_size;
 extern const int cybervision_crosscorrelation_corridor_segment_length;
 extern const int cybervision_crosscorrelation_search_area_segment_length;
@@ -44,8 +46,7 @@ extern const float cybervision_crosscorrelation_corridor_min_range;
 
 extern const double cybervision_triangulation_min_scale;
 extern const size_t cybervision_histogram_filter_bins;
-extern const float cybervision_histogram_filter_discard_percentile_parallel;
-extern const float cybervision_histogram_filter_discard_percentile_perspective;
+extern const float cybervision_histogram_filter_discard_percentile;
 extern const float cybervision_histogram_filter_epsilon;
 
 typedef enum 

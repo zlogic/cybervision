@@ -136,7 +136,7 @@ void triangulation_parallel(triangulation_task *t)
         }
     }
     float min_depth, max_depth;
-    filter_depth_histogram(t, cybervision_histogram_filter_discard_percentile_parallel, &min_depth, &max_depth);
+    filter_depth_histogram(t, cybervision_histogram_filter_discard_percentile, &min_depth, &max_depth);
     t->completed = 1;
 }
 
@@ -241,7 +241,7 @@ int triangulation_complete(triangulation_task *t)
     if (t->proj_mode == PROJECTION_MODE_PERSPECTIVE)
     {
         float min_depth, max_depth;
-        filter_depth_histogram(t, cybervision_histogram_filter_discard_percentile_perspective, &min_depth, &max_depth);
+        filter_depth_histogram(t, cybervision_histogram_filter_discard_percentile, &min_depth, &max_depth);
         float min_size = (float)(t->width<t->height? t->width:t->height);
         float depth_scale = t->scale_z*min_size/(max_depth-min_depth);
         for(size_t i=0;i<t->width*t->height;i++)

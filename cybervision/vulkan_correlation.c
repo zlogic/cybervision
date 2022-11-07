@@ -54,6 +54,7 @@ typedef struct {
     int32_t phase;
     int32_t kernel_size;
     float threshold;
+    float min_stdev;
     int32_t neighbor_distance;
     float extend_range;
     float min_range;
@@ -500,6 +501,7 @@ int gpu_transfer_in_params(cross_correlate_task *t, vulkan_device *dev, int corr
     payload->phase = phase;
     payload->kernel_size = cybervision_crosscorrelation_kernel_size;
     payload->threshold = t->proj_mode==PROJECTION_MODE_PARALLEL? cybervision_crosscorrelation_threshold_parallel : cybervision_crosscorrelation_threshold_perspective;
+    payload->min_stdev = t->proj_mode==PROJECTION_MODE_PARALLEL? cybervision_crosscorrelation_min_stdev_parallel : cybervision_crosscorrelation_min_stdev_perspective;
     payload->neighbor_distance = cybervision_crosscorrelation_neighbor_distance;
     payload->extend_range = cybervision_crosscorrelation_corridor_extend_range;
     payload->min_range = cybervision_crosscorrelation_corridor_min_range;

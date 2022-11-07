@@ -26,6 +26,8 @@ const int cybervision_crosscorrelation_scale_min_size = 64;
 const int cybervision_crosscorrelation_kernel_size = 5;
 const float cybervision_crosscorrelation_threshold_parallel = 0.6F;
 const float cybervision_crosscorrelation_threshold_perspective = 0.7F;
+const float cybervision_crosscorrelation_min_stdev_parallel = 1.0F;
+const float cybervision_crosscorrelation_min_stdev_perspective = 25.0F;
 const int cybervision_crosscorrelation_corridor_size = 20;
 // Decrease when using a low-powered GPU
 const int cybervision_crosscorrelation_corridor_segment_length = 256;
@@ -36,8 +38,7 @@ const float cybervision_crosscorrelation_corridor_min_range = 2.5F;
 
 const double cybervision_triangulation_min_scale = 1E-3;
 const size_t cybervision_histogram_filter_bins = 100;
-const float cybervision_histogram_filter_discard_percentile_parallel = 0.025F;
-const float cybervision_histogram_filter_discard_percentile_perspective = 0.2F;
+const float cybervision_histogram_filter_discard_percentile = 0.025F;
 const float cybervision_histogram_filter_epsilon = 1E-3;
 
 #ifndef CYBERVISION_DISABLE_GPU

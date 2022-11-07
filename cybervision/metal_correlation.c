@@ -55,6 +55,7 @@ typedef struct {
     int32_t phase;
     int32_t kernel_size;
     float threshold;
+    float min_stdev;
     int32_t neighbor_distance;
     float extend_range;
     float min_range;
@@ -311,6 +312,7 @@ void* gpu_correlate_cross_correlation_task(void *args)
     params.iteration = t->iteration;
     params.kernel_size = cybervision_crosscorrelation_kernel_size;
     params.threshold = t->proj_mode==PROJECTION_MODE_PARALLEL? cybervision_crosscorrelation_threshold_parallel : cybervision_crosscorrelation_threshold_perspective;
+    params.min_stdev = t->proj_mode==PROJECTION_MODE_PARALLEL? cybervision_crosscorrelation_min_stdev_parallel : cybervision_crosscorrelation_min_stdev_perspective;
     params.neighbor_distance = cybervision_crosscorrelation_neighbor_distance;
     params.extend_range = cybervision_crosscorrelation_corridor_extend_range;
     params.min_range = cybervision_crosscorrelation_corridor_min_range;

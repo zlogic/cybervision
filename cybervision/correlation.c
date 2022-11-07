@@ -252,6 +252,7 @@ typedef struct {
     int kernel_size;
     int kernel_point_count;
     float correlation_threshold;
+    float min_stdev;
     int x1, y1;
 
     float stdev1;
@@ -358,6 +359,8 @@ static inline void correlate_corridor_area(cross_correlate_task *t, corridor_are
 
         float avg2 = c->avg2[y2*w2+x2];
         float stdev2 = c->stdev2[y2*w2+x2];
+        if (!isfinite(stdev2) || fabsf(stdev2)<c->min_stdev)
+            continue;
         for (int j=-kernel_size;j<=kernel_size;j++)
         {
             for (int k=-kernel_size;k<=kernel_size;k++)
@@ -409,6 +412,7 @@ void* cross_correlation_task(void *args)
     corr_ctx.kernel_size = kernel_size;
     corr_ctx.kernel_point_count = kernel_point_count;
     corr_ctx.correlation_threshold = t->proj_mode==PROJECTION_MODE_PARALLEL? cybervision_crosscorrelation_threshold_parallel : cybervision_crosscorrelation_threshold_perspective;
+    corr_ctx.min_stdev = t->proj_mode==PROJECTION_MODE_PARALLEL? cybervision_crosscorrelation_min_stdev_parallel : cybervision_crosscorrelation_min_stdev_perspective;
 
     corr_ctx.delta1 = malloc(sizeof(float)*kernel_point_count);
     corr_ctx.avg2 = ctx->avg2;
@@ -439,7 +443,7 @@ void* cross_correlation_task(void *args)
             corr_ctx.y1 = y1;
 
             compute_correlation_data(&t->img1, kernel_size, x1, y1, &corr_ctx.stdev1, corr_ctx.delta1);
-            if (!isfinite(corr_ctx.stdev1))
+            if (!isfinite(corr_ctx.stdev1) || fabsf(corr_ctx.stdev1)<corr_ctx.min_stdev)
                 continue;
 
             calculate_epipolar_line(t, &corr_ctx);
