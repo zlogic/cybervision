@@ -395,7 +395,7 @@ int triangulation_interpolate_delaunay(surface_data surf)
 
     points = convert_points_qhull(surf, &num_points);
     
-    result = qh_new_qhull(&qh, 2, num_points, points, True, "qhull d Qbb Qc Q12", NULL, NULL) == 0;
+    result = qh_new_qhull(&qh, 2, num_points, points, True, "qhull d Qt Qbb Qc Qz Q12", NULL, NULL) == 0;
     if (result)
         interpolate_points_delaunay(&qh, surf);
 
