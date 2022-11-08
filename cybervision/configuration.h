@@ -31,6 +31,18 @@ extern const size_t cybervision_ransac_d_early_exit_parallel;
 extern const size_t cybervision_ransac_d_early_exit_perspective;
 extern const size_t cybervision_ransac_check_interval;
 
+extern const size_t cybervision_lm_max_iterations;
+extern const double cybervision_lm_jacobian_h;
+extern const double cybervision_lm_lambda_start;
+extern const double cybervision_lm_lambda_up;
+extern const double cybervision_lm_lambda_down;
+extern const double cybervision_lm_lambda_min;
+extern const double cybervision_lm_lambda_max;
+extern const double cybervision_lm_rho_epsilon;
+extern const double cybervision_lm_jt_residual_epsilon;
+extern const double cybervision_lm_ratio_epsilon;
+extern const double cybervision_lm_division_epsilon;
+
 extern const int cybervision_crosscorrelation_scale_min_size;
 extern const int cybervision_crosscorrelation_kernel_size;
 extern const float cybervision_crosscorrelation_threshold_parallel;

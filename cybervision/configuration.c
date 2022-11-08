@@ -22,6 +22,18 @@ const size_t cybervision_ransac_d_early_exit_parallel = 1000;
 const size_t cybervision_ransac_d_early_exit_perspective = 20;
 const size_t cybervision_ransac_check_interval = 5E5;
 
+const size_t cybervision_lm_max_iterations = 30;
+const double cybervision_lm_jacobian_h = 0.001;
+const double cybervision_lm_lambda_start = 1E-2;
+const double cybervision_lm_lambda_up = 11.0;
+const double cybervision_lm_lambda_down = 9.0;
+const double cybervision_lm_lambda_min = 1E-7;
+const double cybervision_lm_lambda_max = 1E7;
+const double cybervision_lm_rho_epsilon = 1E-1;
+const double cybervision_lm_jt_residual_epsilon = 1E-3;
+const double cybervision_lm_ratio_epsilon = 1E-3;
+const double cybervision_lm_division_epsilon = 1E-12;
+
 const int cybervision_crosscorrelation_scale_min_size = 64;
 const int cybervision_crosscorrelation_kernel_size = 5;
 const float cybervision_crosscorrelation_threshold_parallel = 0.6F;

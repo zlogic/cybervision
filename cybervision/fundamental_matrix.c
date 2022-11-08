@@ -113,17 +113,17 @@ int optimize_fundamental_matrix(fundamendal_matrix_internal internal_ctx, ransac
 {
     ransac_memory *ctx = internal_ctx;
     // Gold standard optimization of fundamental matrix
-    const size_t max_iterations = 30;
-    const double jacobian_h = 0.001;
-    const double lambda_start = 1E-2;
-    const double lambda_up = 11.0;
-    const double lambda_down = 9.0;
-    const double lambda_min = 1E-7;
-    const double lambda_max = 1E7;
-    const double rho_epsilon = 1E-1;
-    const double jt_residual_epsilon = 1E-3;
-    const double ratio_epsilon = 1E-3;
-    const double division_epsilon = 1E-12;
+    const size_t max_iterations = cybervision_lm_max_iterations;
+    const double jacobian_h = cybervision_lm_jacobian_h;
+    const double lambda_start = cybervision_lm_lambda_start;
+    const double lambda_up = cybervision_lm_lambda_up;
+    const double lambda_down = cybervision_lm_lambda_down;
+    const double lambda_min = cybervision_lm_lambda_min;
+    const double lambda_max = cybervision_lm_lambda_max;
+    const double rho_epsilon = cybervision_lm_rho_epsilon;
+    const double jt_residual_epsilon = cybervision_lm_jt_residual_epsilon;
+    const double ratio_epsilon = cybervision_lm_ratio_epsilon;
+    const double division_epsilon = cybervision_lm_division_epsilon;
     if (internal_ctx == NULL)
     {
         ctx = malloc(sizeof(ransac_memory));
