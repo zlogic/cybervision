@@ -630,10 +630,15 @@ void* correlate_ransac_task(void *args)
         {
             double inlier_error = fabs(ransac_calculate_error(&inliers[i], fundamental_matrix));
             if (inlier_error > ransac_t)
-                continue;
+            {
+                inliers_error = NAN;
+                break;
+            }
             extended_inliers[extended_inliers_count++] = inliers[i];
             inliers_error += inlier_error;
         }
+        if (!isfinite(inliers_error))
+            continue;
         inliers_error = fabs(inliers_error/(double)extended_inliers_count);
 
         if (pthread_mutex_lock(&ctx->lock) != 0)
