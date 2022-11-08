@@ -109,8 +109,9 @@ static inline void point_reprojection_error(matrix_4x3 projection_matrix_2, doub
     error[3] = y2-point_2[1]/point_2[2];
 }
 
-static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *matches, size_t matches_count, matrix_3x3 fundamental_matrix, matrix_4x3 projection_matrix_2)
+int optimize_fundamental_matrix(fundamendal_matrix_internal internal_ctx, ransac_match *matches, size_t matches_count, matrix_3x3 fundamental_matrix, matrix_4x3 projection_matrix_2)
 {
+    ransac_memory *ctx = internal_ctx;
     // Gold standard optimization of fundamental matrix
     const size_t max_iterations = 30;
     const double jacobian_h = 0.001;
@@ -123,29 +124,46 @@ static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *
     const double jt_residual_epsilon = 1E-3;
     const double ratio_epsilon = 1E-3;
     const double division_epsilon = 1E-12;
+    if (internal_ctx == NULL)
+    {
+        ctx = malloc(sizeof(ransac_memory));
+        ctx->svd = init_svd();
+        ctx->invert = init_invert();
+        ctx->lm_matches_count = 0;
+        ctx->lm_points3d = NULL;
+        ctx->lm_residuals = NULL;
+        ctx->lm_jacobian = NULL;
+        ctx->lm_lambda_jtj = NULL;
+        ctx->lm_j_1 = NULL;
+        ctx->lm_j_2 = NULL;
+        ctx->lm_j_3 = NULL;
+    }
 
-    matrix_3x3 f;
     double *p2 = projection_matrix_2;
-    for (size_t i=0;i<3;i++)
-        for (size_t j=0;j<3;j++)
-            f[j*3+i] = fundamental_matrix[i*3+j];
+    if (fundamental_matrix != NULL)
+    {
+        matrix_3x3 f;
+        for (size_t i=0;i<3;i++)
+            for (size_t j=0;j<3;j++)
+                f[j*3+i] = fundamental_matrix[i*3+j];
 
-    double u[9], s[3], vt[9];
-    if (!svdd(ctx->svd, f, 3, 3, u, s, vt))
-        return 0;
+        double u[9], s[3], vt[9];
+        if (!svdd(ctx->svd, f, 3, 3, u, s, vt))
+            return 0;
 
-    // Using e' (epipole in second image) to calculate projection matrix for second image
-    double e2[3];
-    for(size_t i=0;i<3;i++)
-        e2[i] = u[3*2+i];
-    double e2_skewsymmetric[9] = {0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0};
-    double e2sf[9];
-    multiply_matrix_3x3(e2_skewsymmetric, fundamental_matrix, e2sf);
-    for (size_t i=0;i<3;i++)
-        for (size_t j=0;j<3;j++)
-            p2[4*i+j] = e2sf[3*i+j];
-    for (size_t i=0;i<3;i++)
-        p2[4*i+3] = e2[i];
+        // Using e' (epipole in second image) to calculate projection matrix for second image
+        double e2[3];
+        for(size_t i=0;i<3;i++)
+            e2[i] = u[3*2+i];
+        double e2_skewsymmetric[9] = {0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0};
+        double e2sf[9];
+        multiply_matrix_3x3(e2_skewsymmetric, fundamental_matrix, e2sf);
+        for (size_t i=0;i<3;i++)
+            for (size_t j=0;j<3;j++)
+                p2[4*i+j] = e2sf[3*i+j];
+        for (size_t i=0;i<3;i++)
+            p2[4*i+3] = e2[i];
+    }
     
     if (ctx->lm_matches_count<matches_count)
     {
@@ -173,6 +191,7 @@ static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *
     double s_previous = 0.0;
     double lambda = lambda_start;
     int completed = 0;
+    int result = 0;
     // Levenberg-Marquardt error minimization with matches_count*4 residuals:
     // For each point, a residual for every reprojected coordinate
     for (size_t i=0;i<jacobian_cols*jacobian_cols;i++)
@@ -186,7 +205,7 @@ static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *
             double point3d[4];
             ransac_match *match = &matches[m_i];
             if (!triangulation_triangulate_point(ctx->svd, p2, match->x1, match->y1, match->x2, match->y2, point3d))
-                return 0;
+                goto cleanup;
             for(size_t i=0;i<4;i++)
             {
                 point3d[i] /= point3d[3];
@@ -275,7 +294,7 @@ static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *
         }
         // Calculate delta (h_lm)
         if(!invertd(ctx->invert, jt_j_plus_lambda, jacobian_cols))
-            return 0;
+            goto cleanup;
         double *jt_left_pseudoinverse = ctx->lm_j_2; // (JtJ+lambda*diag(JtJ))^-1*Jt
         multiplyd(jt_j_plus_lambda, jacobian, jt_left_pseudoinverse, jacobian_cols, jacobian_rows, jacobian_cols, 0, 1);
         jt_j_plus_lambda = NULL; // lm_j_1 is available
@@ -317,7 +336,7 @@ static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *
             double point3d[4];
             ransac_match *match = &matches[m_i];
             if (!triangulation_triangulate_point(ctx->svd, p2_new, match->x1, match->y1, match->x2, match->y2, point3d))
-                return 0;
+                goto cleanup;
             for(size_t i=0;i<4;i++)
                 point3d[i] /= point3d[3];
             double projection_error[4];
@@ -354,20 +373,45 @@ static inline int optimize_fundamental_matrix(ransac_memory *ctx, ransac_match *
     }
 
     if (!completed)
-        return 0;
+        goto cleanup;
 
     // Update fundamental matrix from p2
-    double t[3];
-    for(size_t i=0;i<3;i++)
-        t[i] = p2[i*4+3];
-    double t_skewsymmetric[9] = {0.0, -t[2], t[1], t[2], 0.0, -t[0], -t[1], t[0], 0.0};
-    matrix_3x3 M;
-    for(size_t i=0;i<3;i++)
-        for(size_t j=0;j<3;j++)
-            M[i*3+j] = p2[i*4+j];
-    multiply_matrix_3x3(t_skewsymmetric, M, fundamental_matrix);
+    if (fundamental_matrix != NULL)
+    {
+        double t[3];
+        for(size_t i=0;i<3;i++)
+            t[i] = p2[i*4+3];
+        double t_skewsymmetric[9] = {0.0, -t[2], t[1], t[2], 0.0, -t[0], -t[1], t[0], 0.0};
+        matrix_3x3 M;
+        for(size_t i=0;i<3;i++)
+            for(size_t j=0;j<3;j++)
+                M[i*3+j] = p2[i*4+j];
+        multiply_matrix_3x3(t_skewsymmetric, M, fundamental_matrix);
+    }
 
-    return 1;
+    result = 1;
+cleanup:
+    if (internal_ctx == NULL)
+    {
+        free_svd(ctx->svd);
+        free_invert(ctx->invert);
+        if (ctx->lm_points3d != NULL)
+            free(ctx->lm_points3d);
+        if (ctx->lm_residuals != NULL)
+            free(ctx->lm_residuals);
+        if (ctx->lm_jacobian != NULL)
+            free(ctx->lm_jacobian);
+        if (ctx->lm_lambda_jtj != NULL)
+            free(ctx->lm_lambda_jtj);
+        if (ctx->lm_j_1 != NULL)
+            free(ctx->lm_j_1);
+        if (ctx->lm_j_2 != NULL)
+            free(ctx->lm_j_2);
+        if (ctx->lm_j_3 != NULL)
+            free(ctx->lm_j_3);
+        free(ctx);
+    }
+    return result;
 }
 
 static inline int ransac_calculate_model_perspective(ransac_memory *ctx, ransac_match *matches, size_t matches_count, matrix_3x3 f, matrix_4x3 p2)

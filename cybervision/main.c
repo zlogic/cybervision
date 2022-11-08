@@ -390,7 +390,6 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
 
     timespec_get(&last_operation_time, TIME_UTC);
     {
-        t_task.num_threads = num_threads;
         t_task.correlated_points = cc_task.correlated_points;
         t_task.out_depth = malloc(sizeof(float)*cc_task.out_width*cc_task.out_height);
         t_task.width = cc_task.out_width;
@@ -403,25 +402,12 @@ int do_reconstruction(char *img1_filename, char *img2_filename, char *output_fil
         for (size_t i=0;i<12;i++)
             t_task.projection_matrix_2[i] = r_task.projection_matrix_2[i];
 
-        if (!triangulation_start(&t_task))
+        if (!triangulation_triangulate(&t_task))
         {
-            fprintf(stderr, "Failed to start point triangulation task\n");
+            fprintf(stderr, "Failed to triangulate points: %s\n", t_task.error!=NULL? t_task.error : "unknown error");
             result_code = 1;
             goto cleanup;
         }
-        while(!t_task.completed)
-        {
-            sleep_ms(200);
-            show_progressbar(t_task.percent_complete);
-        }
-        reset_progressbar();
-        if (!triangulation_complete(&t_task))
-        {
-            fprintf(stderr, "Failed to complete point triangulation task: %s\n", t_task.error!=NULL? t_task.error : "unknown error");
-            result_code = 1;
-            goto cleanup;
-        }
-        
         timespec_get(&current_operation_time, TIME_UTC);
         printf("Completed point triangulation in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
 

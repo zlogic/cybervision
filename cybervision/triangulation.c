@@ -6,15 +6,8 @@
 
 #include "configuration.h"
 #include "triangulation.h"
+#include "fundamental_matrix.h"
 #include "linmath.h"
-
-typedef struct {
-    int y;
-
-    int threads_completed;
-    pthread_mutex_t lock;
-    pthread_t *threads;
-} triangulation_task_ctx;
 
 void find_min_max_depth(triangulation_task *t, float *min_depth, float *max_depth)
 {
@@ -136,30 +129,56 @@ void triangulation_parallel(triangulation_task *t)
             t->out_depth[y1*t->width+x1] = sqrtf(dx*dx+dy*dy)*depth_scale;
         }
     }
-    t->completed = 1;
 }
 
-void* triangulation_perspective_task(void *args)
+int triangulation_optimize(triangulation_task *t)
 {
-    triangulation_task *t = args;
-    triangulation_task_ctx *ctx = t->internal;
+    const size_t block_count = cybervision_triangulation_optimization_block_count;
+    const size_t block_width = t->width/block_count;
+    const size_t block_height = t->height/block_count;
+    ransac_match *matches = malloc(sizeof(ransac_match)*block_count*block_count);
+    size_t matches_count = 0;
+    for (int j=0;j<block_count;j++)
+    {
+        for (int i=0;i<block_count;i++)
+        {
+            int found = 0;
+            for (int y1=(j*block_height);(y1<t->height)&&(y1<(j+1)*block_height);y1++)
+            {
+                for (int x1=(i*block_width);(x1<t->width)&&x1<((i+1)*block_width);x1++)
+                {
+                    size_t pos = y1*t->width+x1;
+                    int x2 = t->correlated_points[pos*2];
+                    int y2 = t->correlated_points[pos*2+1];
+                    if (x2<0 || y2<0)
+                        continue;
+                    matches[matches_count].x1 = x1;
+                    matches[matches_count].y1 = y1;
+                    matches[matches_count].x2 = x2;
+                    matches[matches_count].y2 = y2;
+                    matches_count++;
+                    found = 1;
+                    break;
+                }
+            }
+            if (found)
+                break;
+        }
+    }
+    matches = realloc(matches, sizeof(ransac_match)*matches_count);
+    int result = optimize_fundamental_matrix(NULL, matches, matches_count, NULL, t->projection_matrix_2);
+
+    free(matches);
+    return result;
+}
+
+int triangulation_perspective(triangulation_task *t)
+{
     svd_internal svd_ctx = init_svd();
     const float depth_scale = t->scale_z;
 
-    while (!t->completed)
+    for(int y1=0;y1<t->height;y1++)
     {
-        int y1;
-        if (pthread_mutex_lock(&ctx->lock) != 0)
-            goto cleanup;
-        y1 = ctx->y++;
-        if (pthread_mutex_unlock(&ctx->lock) != 0)
-            goto cleanup;
-
-        if (y1>=t->height)
-            break;
-
-        t->percent_complete = 100.0F*(float)ctx->y/(t->height);
-   
         for (int x1=0;x1<t->width;x1++)
         {
             size_t pos = y1*t->width+x1;
@@ -184,66 +203,28 @@ void* triangulation_perspective_task(void *args)
     }
 cleanup:
     free_svd(svd_ctx);
-    pthread_mutex_lock(&ctx->lock);
-    ctx->threads_completed++;
-    pthread_mutex_unlock(&ctx->lock);
-    if (ctx->threads_completed >= t->num_threads)
-        t->completed = 1;
-    return NULL;
 }
 
-int triangulation_start(triangulation_task *task)
+int triangulation_triangulate(triangulation_task *task)
 {
-    task->percent_complete = 0.0F;
-    task->completed = 0;
     task->error = NULL;
     if (task->proj_mode == PROJECTION_MODE_PARALLEL)
     {
-        task->internal = NULL;
         triangulation_parallel(task);
+        filter_depth_histogram(task, cybervision_histogram_filter_discard_percentile);
         return 1;
     }
     if(task->proj_mode == PROJECTION_MODE_PERSPECTIVE)
     {
-        triangulation_task_ctx *ctx = malloc(sizeof(triangulation_task_ctx));
-        task->internal = ctx;
-        ctx->y = 0;
-        ctx->threads= malloc(sizeof(pthread_t)*task->num_threads);
-        ctx->threads_completed = 0;
-            
-        if (pthread_mutex_init(&ctx->lock, NULL) != 0)
+        triangulation_perspective(task);
+        if (!triangulation_optimize(task))
+        {
+            task->error = "Failed to optimize projection matrix";
             return 0;
-
-        for (int i = 0; i < task->num_threads; i++)
-            pthread_create(&ctx->threads[i], NULL, triangulation_perspective_task, task);
+        }
+        filter_depth_histogram(task, cybervision_histogram_filter_discard_percentile);
         return 1;
     }
     task->error = "Unsupported projection mode";
-    task->completed = 1;
     return 0;
-}
-
-void triangulation_cancel(triangulation_task *t)
-{
-    if (t == NULL)
-        return;
-    t->completed = 1;
-}
-
-int triangulation_complete(triangulation_task *t)
-{
-    triangulation_task_ctx *ctx;
-    filter_depth_histogram(t, cybervision_histogram_filter_discard_percentile);
-    if (t == NULL || t->internal == NULL)
-        return 1;
-    ctx = t->internal;
-    for (int i = 0; i < t->num_threads; i++)
-        pthread_join(ctx->threads[i], NULL);
-
-    pthread_mutex_destroy(&ctx->lock);
-    free(ctx->threads);
-
-    free(t->internal);
-    t->internal = NULL;
-    return t->error == NULL;
 }

@@ -38,4 +38,7 @@ int correlation_ransac_start(ransac_task*);
 void correlation_ransac_cancel(ransac_task*);
 int correlation_ransac_complete(ransac_task*);
 
+typedef void* fundamendal_matrix_internal;
+int optimize_fundamental_matrix(fundamendal_matrix_internal ctx, ransac_match *matches, size_t matches_count, matrix_3x3 fundamental_matrix, matrix_4x3 projection_matrix_2);
+
 #endif
