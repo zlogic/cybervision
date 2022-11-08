@@ -34,12 +34,12 @@ void reset_progressbar()
 
 void show_progressbar(float percent)
 {
-    int x = (int)(percent/100.0*progressbar_width);
+    int x = (int)(roundf(progressbar_width*percent/100.0F));
 
     if (progressbar_chars != 0)
         printf("\r");
 
-    progressbar_chars = printf("[%*.*s%*s] %2.1f%%", x, x, progressbar_str, progressbar_width-x, " ", percent);
+    progressbar_chars = printf("[%*.*s%*.*s] %2.1f%%", x, x, progressbar_str, progressbar_width-x, progressbar_width-x, " ", percent);\
     fflush(stdout);
 }
 
