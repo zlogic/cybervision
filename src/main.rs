@@ -1,26 +1,27 @@
 use clap::Parser;
+mod reconstruction;
 
 #[derive(clap::ValueEnum, Clone)]
-enum HardwareMode {
+pub enum HardwareMode {
     GPU,
     CPU,
 }
 
 #[derive(clap::ValueEnum, Clone)]
-enum InterpolationMode {
+pub enum InterpolationMode {
     Delaunay,
     None,
 }
 
 #[derive(clap::ValueEnum, Clone)]
-enum ProjectionMode {
+pub enum ProjectionMode {
     Parallel,
     Perspective,
 }
 
 /// Cybervision commandline arguments
 #[derive(Parser)]
-struct Cli {
+pub struct Cli {
     /// Image scale
     #[arg(long, default_value_t = 1.0)]
     scale: f32,
@@ -43,12 +44,12 @@ struct Cli {
     /// Image 2
     img2: String,
 
-    /// Image 3
-    img3: String,
+    /// Output image
+    img_out: String,
 }
 
 fn main() {
     let args = Cli::parse();
 
-    println!("Hello {}!", args.scale)
+    reconstruction::reconstruct(&args);
 }
