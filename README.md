@@ -1,6 +1,6 @@
 # Cybervision
 
-![Build status](https://github.com/zlogic/cybervision/actions/workflows/cmake-build.yml/badge.svg)
+![Build status](https://github.com/zlogic/cybervision/actions/workflows/cargo-build.yml/badge.svg)
 
 Cybervision is a 3D reconstruction software for Scanning Electron Microscope images.
 

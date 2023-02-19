@@ -1,0 +1,140 @@
+name: Cargo build
+
+on:
+  push:
+    branches: [ "master", "port-to-rust" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+        - arch: amd64
+          mode: gpu
+          os: ubuntu
+        - arch: amd64
+          mode: cpu
+          os: ubuntu
+        - arch: arm64
+          mode: gpu
+          os: ubuntu
+        - arch: arm64
+          mode: cpu
+          os: ubuntu
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Cache Rust dependencies and artifacts
+      id: cache-rust
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          ${{ github.workspace }}/target
+        key: rust-${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}-${{ hashFiles('Cargo.lock') }}
+
+    - name: Build
+      run: cargo build --release
+  
+    - name: Package application
+      run: tar -cvjf cybervision-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}.tar.bz2 -C target/release cybervision
+  
+    - name: Upload application
+      uses: actions/upload-artifact@v3
+      with:
+        name: cybervision-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}
+        path: cybervision-*.tar.bz2
+
+  build-windows:
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+        - arch: x64
+          mode: gpu
+        - arch: x64
+          mode: cpu
+        - arch: arm64
+          mode: cpu
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Cache Rust dependencies and artifacts
+      id: cache-rust
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~\.cargo\registry\index
+          ~\.cargo\registry\cache
+          ~\.cargo\git\db
+          ${{ github.workspace }}\target
+        key: rust-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}-${{ hashFiles('Cargo.lock') }}
+
+    - name: Build
+      run: cargo build --release
+
+    - name: Package application
+      run: Compress-Archive -Path .\target\release\cybervision.exe -DestinationPath cybervision-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}.zip
+
+    - name: Upload application
+      uses: actions/upload-artifact@v3
+      with:
+        name: cybervision-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}
+        path: cybervision-*.zip
+
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        arch: [arm64, x64]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Cache Rust dependencies and artifacts
+      id: cache-rust
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          ${{ github.workspace }}/target
+        key: rust-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('Cargo.lock') }}
+
+    - name: Cache shaders
+      id: cache-shaders
+      uses: actions/cache@v3
+      with:
+        path: cybervision/shaders_metal.h
+        key: shaders-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('shaders/correlation.metal') }}
+  
+    - name: Compile shaders
+      if: steps.cache-shaders.outputs.cache-hit != 'true'
+      run: |
+        xcrun -sdk macosx metal -c shaders/correlation.metal -o correlation.air
+        xcrun -sdk macosx metallib correlation.air -o correlation.metallib
+        xxd -i correlation.metallib cybervision/shaders_metal.h
+
+    - name: Build
+      run: cargo build --release
+
+    - name: Package application
+      run: tar -cvjf cybervision-${{ runner.os }}-${{ matrix.arch }}.tar.bz2 -C target/release cybervision
+
+    - name: Upload application
+      uses: actions/upload-artifact@v3
+      with:
+        name: cybervision-${{ runner.os }}-${{ matrix.arch }}
+        path: cybervision-*.tar.bz2

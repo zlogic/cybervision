@@ -1,5 +1,8 @@
 # CMake build directory
 /build/
 
+# Rust build directory
+/target
+
 # Visual Studio Code configuration
 /.vscode/
