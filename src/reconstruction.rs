@@ -136,4 +136,5 @@ pub fn reconstruct(args: &Cli) {
     if tilt_angle.is_some() {
         println!("Relative tilt angle is {}", tilt_angle.unwrap());
     }
+    // Most 3D viewers don't display coordinates below 0, reset to default 1.0
 }

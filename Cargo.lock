@@ -163,7 +163,7 @@ version = "0.13.0"
 dependencies = [
  "clap",
  "image",
- "tiff 0.9.0",
+ "tiff",
 ]
 
 [[package]]
@@ -313,7 +313,7 @@ dependencies = [
  "num-traits",
  "png",
  "scoped_threadpool",
- "tiff 0.8.1",
+ "tiff",
 ]
 
 [[package]]
@@ -655,17 +655,6 @@ name = "tiff"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7449334f9ff2baf290d55d73983a7d6fa15e01198faef72af07e2a8db851e471"
-dependencies = [
- "flate2",
- "jpeg-decoder",
- "weezl",
-]
-
-[[package]]
-name = "tiff"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d172b0f4d3fba17ba89811858b9d3d97f928aece846475bbda076ca46736211"
 dependencies = [
  "flate2",
  "jpeg-decoder",
