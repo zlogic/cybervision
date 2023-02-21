@@ -119,22 +119,22 @@ impl FastExtractor {
     }
 
     #[inline]
-    unsafe fn get_pixel_offset(img: &GrayImage, x: u32, y: u32, offset: (i8, i8)) -> i16 {
+    fn get_pixel_offset(img: &GrayImage, x: u32, y: u32, offset: (i8, i8)) -> i16 {
         let x_new = x.saturating_add_signed(offset.0 as i32);
         let y_new = y.saturating_add_signed(offset.1 as i32);
-        return img.unsafe_get_pixel(x_new, y_new)[0] as i16;
+        return img.get_pixel(x_new, y_new)[0] as i16;
     }
 
     #[inline]
     fn is_keypoint(&self, img: &GrayImage, threshold: i16, x: u32, y: u32) -> bool {
-        let val: i16 = unsafe { img.unsafe_get_pixel(x, y)[0] as i16 };
+        let val: i16 = img.get_pixel(x, y)[0] as i16;
         let mut last_more_pos: Option<usize> = None;
         let mut last_less_pos: Option<usize> = None;
         let mut max_length = 0;
 
         for i in 0..self.circle_length {
             let p = self.circle_points[i % self.circle_points.len()];
-            let c_val = unsafe { FastExtractor::get_pixel_offset(&img, x, y, p) };
+            let c_val = FastExtractor::get_pixel_offset(&img, x, y, p);
             if c_val > val + threshold {
                 last_more_pos = last_more_pos.or(Some(i));
                 let length = last_more_pos.map(|p| i - p).unwrap_or(0) + 1;

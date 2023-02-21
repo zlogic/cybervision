@@ -6,6 +6,7 @@ use crate::Cli;
 use std::fs::File;
 use std::io::BufReader;
 use std::str::FromStr;
+use std::time::SystemTime;
 
 const TIFFTAG_META_PHENOM: tiff::tags::Tag = tiff::tags::Tag::Unknown(34683);
 const TIFFTAG_META_QUANTA: tiff::tags::Tag = tiff::tags::Tag::Unknown(34682);
@@ -126,14 +127,24 @@ pub fn reconstruct(args: &Cli) {
     if tilt_angle.is_some() {
         println!("Relative tilt angle is {}", tilt_angle.unwrap());
     }
+    let start_time = SystemTime::now();
     // Most 3D viewers don't display coordinates below 0, reset to default 1.0
     {
+        let start_time = SystemTime::now();
         let fast = FastExtractor::new();
         let pts1 = fast.find_points(&img1.img);
         let pts2 = fast.find_points(&img2.img);
 
-        //printf("Extracted feature points in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
+        match start_time.elapsed() {
+            Ok(t) => println!("Extracted feature points in {:.3} seconds", t.as_secs_f32(),),
+            Err(_) => {}
+        }
         println!("Image {} has {} feature points", args.img1, pts1.len());
         println!("Image {} has {} feature points", args.img2, pts2.len());
+    }
+
+    match start_time.elapsed() {
+        Ok(t) => println!("Completed reconstruction in {:.3} seconds", t.as_secs_f32(),),
+        Err(_) => {}
     }
 }
