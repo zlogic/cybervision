@@ -1,4 +1,5 @@
 use clap::Parser;
+mod fast;
 mod reconstruction;
 
 #[derive(clap::ValueEnum, Clone)]

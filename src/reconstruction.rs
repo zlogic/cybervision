@@ -1,5 +1,7 @@
 use image::GenericImageView;
+use image::GrayImage;
 
+use crate::fast::FastExtractor;
 use crate::Cli;
 use std::fs::File;
 use std::io::BufReader;
@@ -8,9 +10,8 @@ use std::str::FromStr;
 const TIFFTAG_META_PHENOM: tiff::tags::Tag = tiff::tags::Tag::Unknown(34683);
 const TIFFTAG_META_QUANTA: tiff::tags::Tag = tiff::tags::Tag::Unknown(34682);
 
-struct Image {
-    img: Vec<u8>,
-    dimensions: (usize, usize),
+struct SourceImage {
+    img: GrayImage,
     scale: (f32, f32),
     tilt_angle: Option<f32>,
 }
@@ -21,25 +22,14 @@ struct ImageMeta {
     databar_height: u32,
 }
 
-impl Image {
-    fn load(path: &String) -> Result<Image, image::ImageError> {
-        let metadata = Image::get_metadata(&path);
-        let img_full = image::open(&path)?.into_luma8();
-        let img = img_full.view(
-            0,
-            0,
-            img_full.width(),
-            img_full.height() - metadata.databar_height,
-        );
+impl SourceImage {
+    fn load(path: &String) -> Result<SourceImage, image::ImageError> {
+        let metadata = SourceImage::get_metadata(&path);
+        let img = image::open(&path)?.into_luma8();
+        let img = img.view(0, 0, img.width(), img.height() - metadata.databar_height);
 
-        let mut bytes = Vec::with_capacity((img.width() * img.height()) as usize);
-        bytes.resize(bytes.capacity(), 0);
-        for pixel in img.pixels() {
-            bytes[(pixel.1 * img.width() + pixel.0) as usize] = pixel.2[0];
-        }
-        Ok(Image {
-            img: bytes,
-            dimensions: (img.width() as usize, img.height() as usize),
+        Ok(SourceImage {
+            img: img.to_image(),
             scale: metadata.scale,
             tilt_angle: metadata.tilt_angle,
         })
@@ -54,7 +44,7 @@ impl Image {
         match image::ImageFormat::from_path(&path) {
             Ok(format) => match format {
                 image::ImageFormat::Tiff => {
-                    Image::get_metadata_tiff(&path).unwrap_or(default_metadata)
+                    SourceImage::get_metadata_tiff(&path).unwrap_or(default_metadata)
                 }
                 _ => default_metadata,
             },
@@ -90,19 +80,19 @@ impl Image {
                     }
                     if section.eq("[Scan]") {
                         if line.starts_with("PixelWidth") {
-                            scale_width = scale_width.or(Image::tag_value(line));
+                            scale_width = scale_width.or(SourceImage::tag_value(line));
                         } else if line.starts_with("PixelHeight") {
-                            scale_height = scale_height.or(Image::tag_value(line));
+                            scale_height = scale_height.or(SourceImage::tag_value(line));
                         }
                     } else if section.eq("[Stage]") {
                         if line.starts_with("StageT=") {
                             // TODO: use rotation (see "Real scale (Tomasi) stuff.pdf")
                             // or allow to specify a custom depth scale (e.g. a negative one)
-                            tilt_angle = tilt_angle.or(Image::tag_value(line))
+                            tilt_angle = tilt_angle.or(SourceImage::tag_value(line))
                         }
                     } else if section.eq("[PrivateFei]") {
                         if line.starts_with("DatabarHeight=") {
-                            databar_height = databar_height.or(Image::tag_value(line))
+                            databar_height = databar_height.or(SourceImage::tag_value(line))
                         }
                     }
                 }
@@ -119,8 +109,8 @@ impl Image {
 }
 
 pub fn reconstruct(args: &Cli) {
-    let img1 = Image::load(&args.img1).unwrap();
-    let img2 = Image::load(&args.img2).unwrap();
+    let img1 = SourceImage::load(&args.img1).unwrap();
+    let img2 = SourceImage::load(&args.img2).unwrap();
     println!(
         "Image {} has scale width {:e}, height {:e}",
         args.img1, img1.scale.0, img1.scale.1
@@ -137,4 +127,13 @@ pub fn reconstruct(args: &Cli) {
         println!("Relative tilt angle is {}", tilt_angle.unwrap());
     }
     // Most 3D viewers don't display coordinates below 0, reset to default 1.0
+    {
+        let fast = FastExtractor::new();
+        let pts1 = fast.find_points(&img1.img);
+        let pts2 = fast.find_points(&img2.img);
+
+        //printf("Extracted feature points in %.1f seconds\n", diff_seconds(current_operation_time, last_operation_time));
+        println!("Image {} has {} feature points", args.img1, pts1.len());
+        println!("Image {} has {} feature points", args.img2, pts2.len());
+    }
 }
