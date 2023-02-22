@@ -1,8 +1,9 @@
 use std::i8;
 
 use image::imageops::FilterType;
-use image::GenericImageView;
 use image::GrayImage;
+
+use rayon::prelude::*;
 
 type Point = (u32, u32);
 
@@ -52,70 +53,89 @@ impl FastExtractor {
     pub fn find_points(&self, img: &GrayImage) -> Vec<Point> {
         let img = self.adjust_image(img);
         let kernel_size = KERNEL_SIZE;
-        let mut keypoints = Vec::<Point>::new();
-        let mut scores = Vec::<u8>::new();
         // Detect points
-        for y in kernel_size..(img.height() - kernel_size) {
-            for x in kernel_size..(img.width() - kernel_size) {
-                if self.is_keypoint(&img, self.threshold.into(), x, y) {
-                    keypoints.push((x, y));
-                }
-            }
-        }
+        let keypoints: Vec<(u32, u32)> = (kernel_size..(img.height() - kernel_size))
+            .into_par_iter()
+            .map(|y| {
+                let kp: Vec<(u32, u32)> = (kernel_size..(img.width() - kernel_size))
+                    .into_iter()
+                    .filter_map(
+                        |x| match self.is_keypoint(&img, self.threshold.into(), x, y) {
+                            true => Some((x, y)),
+                            false => None,
+                        },
+                    )
+                    .collect();
+                return kp;
+            })
+            .flatten()
+            .collect();
         // Add scores
-        for (x, y) in &keypoints {
-            let mut threshold_min = self.threshold as i16;
-            let mut threshold_max = std::u8::MAX as i16;
-            let mut threshold = (threshold_max as i16 + threshold_min as i16) / 2;
-            while threshold_max > threshold_min + 1 {
-                if self.is_keypoint(&img, threshold, *x, *y) {
-                    threshold_min = threshold;
-                } else {
-                    threshold_max = threshold;
+        let scores: Vec<u8> = keypoints
+            .par_iter()
+            .map(|p| {
+                let mut threshold_min = self.threshold as i16;
+                let mut threshold_max = std::u8::MAX as i16;
+                let mut threshold = (threshold_max as i16 + threshold_min as i16) / 2;
+                while threshold_max > threshold_min + 1 {
+                    if self.is_keypoint(&img, threshold, p.0, p.1) {
+                        threshold_min = threshold;
+                    } else {
+                        threshold_max = threshold;
+                    }
+                    threshold = (threshold_min + threshold_max) / 2;
                 }
-                threshold = (threshold_min + threshold_max) / 2;
-            }
-            scores.push(threshold_min as u8);
-        }
+                return threshold_min as u8;
+            })
+            .collect();
         // Choose points with best scores
-        let mut filtered_points = Vec::<Point>::new();
-        'kp: for i in 0..keypoints.len() {
-            let p1 = &keypoints[i];
-            let score1 = scores[i];
-            if i > 0 && keypoints[i - 1] == (p1.0 - 1, p1.1) && scores[i - 1] >= score1 {
-                // Left point has better score
-                continue;
-            }
-            if i < keypoints.len() - 1
-                && keypoints[i + 1] == (p1.0 + 1, p1.1)
-                && scores[i + 1] >= score1
-            {
-                // Right point has better score
-                continue;
-            }
-            // Search for point above current
-            for j in (0..i).rev() {
-                let p2 = &keypoints[j];
-                if p2.1 < p1.1 - 1 {
-                    break;
+        return (0..keypoints.len())
+            .into_par_iter()
+            .filter_map(|i| {
+                let p1 = &keypoints[i];
+                let score1 = scores[i];
+                if i > 0 && keypoints[i - 1] == (p1.0 - 1, p1.1) && scores[i - 1] >= score1 {
+                    // Left point has better score
+                    return None;
                 }
-                if p2.1 == p1.1 - 1 && p2.0 >= p1.0 - 1 && p2.0 <= p1.0 + 1 && scores[j] >= score1 {
-                    continue 'kp;
+                if i < keypoints.len() - 1
+                    && keypoints[i + 1] == (p1.0 + 1, p1.1)
+                    && scores[i + 1] >= score1
+                {
+                    // Right point has better score
+                    return None;
                 }
-            }
-            // Search for point below current
-            for j in i + 1..keypoints.len() {
-                let p2 = &keypoints[j];
-                if p2.1 > p1.1 + 1 {
-                    break;
+                // Search for point above current
+                for j in (0..i).rev() {
+                    let p2 = &keypoints[j];
+                    if p2.1 < p1.1 - 1 {
+                        break;
+                    }
+                    if p2.1 == p1.1 - 1
+                        && p2.0 >= p1.0 - 1
+                        && p2.0 <= p1.0 + 1
+                        && scores[j] >= score1
+                    {
+                        return None;
+                    }
                 }
-                if p2.1 == p1.1 + 1 && p2.0 >= p1.0 - 1 && p2.0 <= p1.0 + 1 && scores[j] >= score1 {
-                    continue 'kp;
+                // Search for point below current
+                for j in i + 1..keypoints.len() {
+                    let p2 = &keypoints[j];
+                    if p2.1 > p1.1 + 1 {
+                        break;
+                    }
+                    if p2.1 == p1.1 + 1
+                        && p2.0 >= p1.0 - 1
+                        && p2.0 <= p1.0 + 1
+                        && scores[j] >= score1
+                    {
+                        return None;
+                    }
                 }
-            }
-            filtered_points.push(*p1);
-        }
-        return filtered_points;
+                return Some(*p1);
+            })
+            .collect();
     }
 
     #[inline]
