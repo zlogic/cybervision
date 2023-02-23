@@ -1,6 +1,8 @@
+use image::imageops::FilterType;
 use image::GenericImageView;
 use image::GrayImage;
 
+use crate::correlation::Correlator;
 use crate::fast::FastExtractor;
 use crate::Cli;
 use std::fs::File;
@@ -107,7 +109,18 @@ impl SourceImage {
             Err(e) => return Err(e),
         }
     }
+
+    fn resize(&self, scale: f32) -> GrayImage {
+        return image::imageops::resize(
+            &self.img,
+            (self.img.width() as f32 * scale) as u32,
+            (self.img.height() as f32 * scale) as u32,
+            FilterType::Lanczos3,
+        );
+    }
 }
+
+type Point = (u32, u32);
 
 pub fn reconstruct(args: &Cli) {
     let img1 = SourceImage::load(&args.img1).unwrap();
@@ -128,20 +141,45 @@ pub fn reconstruct(args: &Cli) {
         println!("Relative tilt angle is {}", tilt_angle.unwrap());
     }
     let start_time = SystemTime::now();
-    // Most 3D viewers don't display coordinates below 0, reset to default 1.0
+    let keypoint_scale: f32;
+    let img1_scaled: GrayImage;
+    let img2_scaled: GrayImage;
+    let points1: Vec<Point>;
+    let points2: Vec<Point>;
     {
         let start_time = SystemTime::now();
         let fast = FastExtractor::new();
-        let pts1 = fast.find_points(&img1.img);
-        let pts2 = fast.find_points(&img2.img);
+        keypoint_scale = fast.optimal_keypoint_scale(&img1.img);
+        img1_scaled = img1.resize(keypoint_scale);
+        img2_scaled = img2.resize(keypoint_scale);
+
+        points1 = fast.find_points(&img1_scaled);
+        points2 = fast.find_points(&img2_scaled);
 
         match start_time.elapsed() {
             Ok(t) => println!("Extracted feature points in {:.3} seconds", t.as_secs_f32(),),
             Err(_) => {}
         }
-        println!("Image {} has {} feature points", args.img1, pts1.len());
-        println!("Image {} has {} feature points", args.img2, pts2.len());
+        println!("Image {} has {} feature points", args.img1, points1.len());
+        println!("Image {} has {} feature points", args.img2, points2.len());
     }
+
+    let point_matches: Vec<(Point, Point)>;
+    {
+        let start_time = SystemTime::now();
+        let correlator = Correlator::new();
+        point_matches = correlator.match_points(&img1_scaled, &img2_scaled, &points1, &points2);
+        match start_time.elapsed() {
+            Ok(t) => println!("Matched keypoints in {:.3} seconds", t.as_secs_f32(),),
+            Err(_) => {}
+        }
+        println!("Found {} matches", point_matches.len());
+        drop(points1);
+        drop(points2);
+    }
+
+    // Most 3D viewers don't display coordinates below 0, reset to default 1.0
+    //let scale = (1.0, 1.0);
 
     match start_time.elapsed() {
         Ok(t) => println!("Completed reconstruction in {:.3} seconds", t.as_secs_f32(),),

@@ -1,4 +1,5 @@
 use clap::Parser;
+mod correlation;
 mod fast;
 mod reconstruction;
 

@@ -1,6 +1,3 @@
-use std::i8;
-
-use image::imageops::FilterType;
 use image::GrayImage;
 
 use rayon::prelude::*;
@@ -25,34 +22,27 @@ const FAST_CIRCLE_PIXELS: [(i8, i8); 16] = [
     (-2, -2),
     (-1, -3),
 ];
-const KERNEL_SIZE: u32 = 3;
 
-pub struct FastExtractor {
-    threshold: u8,
-    num_points: u8,
-    keypoint_scale_min_size: u32,
-    circle_points: [(i8, i8); 16],
-    circle_length: usize,
-}
+// TODO: allow to override configuration?
+const KERNEL_SIZE: u32 = 3;
+// TODO: update to match results from previous C version
+const FAST_THRESHOLD: u8 = 15;
+const KEYPOINT_SCALE_MIN_SIZE: u32 = 512;
+const FAST_NUM_POINTS: u8 = 12;
+const FAST_CIRCLE_LENGTH: usize = FAST_CIRCLE_PIXELS.len() + FAST_NUM_POINTS as usize - 1;
+
+pub struct FastExtractor {}
 
 impl FastExtractor {
     pub fn new() -> FastExtractor {
-        // TODO: allow to override configuration?
-        // TODO: update threshold since to match results from previous C version
-        let num_points = 12;
-        return FastExtractor {
-            threshold: 15,
-            num_points: num_points,
-            keypoint_scale_min_size: 512,
-            circle_points: FAST_CIRCLE_PIXELS,
-            circle_length: FAST_CIRCLE_PIXELS.len() + num_points as usize - 1,
-        };
+        return FastExtractor {};
     }
 
     /// Extract FAST features.
     pub fn find_points(&self, img: &GrayImage) -> Vec<Point> {
-        let img = self.adjust_image(img);
         let kernel_size = KERNEL_SIZE;
+        let mut img = img.clone();
+        self.adjust_contrast(&mut img);
         // Detect points
         let keypoints: Vec<(u32, u32)> = (kernel_size..(img.height() - kernel_size))
             .into_par_iter()
@@ -60,7 +50,7 @@ impl FastExtractor {
                 let kp: Vec<(u32, u32)> = (kernel_size..(img.width() - kernel_size))
                     .into_iter()
                     .filter_map(
-                        |x| match self.is_keypoint(&img, self.threshold.into(), x, y) {
+                        |x| match self.is_keypoint(&img, FAST_THRESHOLD.into(), x, y) {
                             true => Some((x, y)),
                             false => None,
                         },
@@ -74,7 +64,7 @@ impl FastExtractor {
         let scores: Vec<u8> = keypoints
             .par_iter()
             .map(|p| {
-                let mut threshold_min = self.threshold as i16;
+                let mut threshold_min = FAST_THRESHOLD as i16;
                 let mut threshold_max = std::u8::MAX as i16;
                 let mut threshold = (threshold_max as i16 + threshold_min as i16) / 2;
                 while threshold_max > threshold_min + 1 {
@@ -152,8 +142,8 @@ impl FastExtractor {
         let mut last_less_pos: Option<usize> = None;
         let mut max_length = 0;
 
-        for i in 0..self.circle_length {
-            let p = self.circle_points[i % self.circle_points.len()];
+        for i in 0..FAST_CIRCLE_LENGTH {
+            let p = FAST_CIRCLE_PIXELS[i % FAST_CIRCLE_PIXELS.len()];
             let c_val = FastExtractor::get_pixel_offset(&img, x, y, p);
             if c_val > val + threshold {
                 last_more_pos = last_more_pos.or(Some(i));
@@ -169,29 +159,17 @@ impl FastExtractor {
             } else {
                 last_less_pos = None;
             }
-            if max_length >= self.num_points.into() {
+            if max_length >= FAST_NUM_POINTS.into() {
                 return true;
             }
         }
         return false;
     }
 
-    fn adjust_image(&self, img: &GrayImage) -> GrayImage {
-        let optimal_scale = self.optimal_keypoint_scale(&img);
-        let mut img = image::imageops::resize(
-            img,
-            (img.width() as f32 * optimal_scale) as u32,
-            (img.height() as f32 * optimal_scale) as u32,
-            FilterType::Lanczos3,
-        );
-        self.adjust_contrast(&mut img);
-        return img;
-    }
-
-    fn optimal_keypoint_scale(&self, img: &GrayImage) -> f32 {
+    pub fn optimal_keypoint_scale(&self, img: &GrayImage) -> f32 {
         let min_dimension = img.width().min(img.height());
         let mut scale = 0;
-        while min_dimension / (1 << scale) > self.keypoint_scale_min_size {
+        while min_dimension / (1 << scale) > KEYPOINT_SCALE_MIN_SIZE {
             scale += 1;
         }
         scale = (scale - 1).max(0);
