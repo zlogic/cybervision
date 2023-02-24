@@ -11,7 +11,7 @@ license = "Apache-2.0"
 [dependencies]
 clap = { version = "4.1.6", features = ["derive"] }
 image = { version = "0.24.5", features = ["png", "jpeg", "tiff"] }
-indicatif = { version = "0.17.3", features = ["rayon"] }
+indicatif = { version = "0.17.3" }
 tiff = "*"
 rayon = "*"
 
