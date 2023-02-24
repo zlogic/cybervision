@@ -247,21 +247,21 @@ void resize_image(correlation_image *src, correlation_image *dst, float scale)
     {
         int y0 = (int)floor(y/scale);
         int y1 = (int)ceil((y+1)/scale);
-        y1 = y1<src->height? y1 : src->height-1;
         for (int x=0;x<dst->width;x++)
         {
             int x0 = (int)roundf((float)x/scale);
             int x1 = (int)ceil((x+1)/scale);
-            x1 = x1<src->width? x1 : src->width-1;
             float value = 0.0F;
             float coeffs = 0.0F;
             for (int j=y0;j<y1;j++)
             {
                 float y_coeff = 1.0F-(j-y0)*scale;
+                int value_y = j<src->height? j : src->height-1;
                 for (int i=x0;i<x1;i++)
                 {
                     float x_coeff = 1.0F-(i-x0)*scale;
-                    value += y_coeff*x_coeff*src->img[j*src->width + i];
+                    int value_x = i<src->width? i : src->width-1;
+                    value += y_coeff*x_coeff*src->img[value_y*src->width + value_x];
                     coeffs += y_coeff*x_coeff;
                 }
             }
