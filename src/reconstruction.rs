@@ -176,7 +176,8 @@ pub fn reconstruct(args: &Cli) {
 
         let pb = ProgressBar::new(100).with_style(pb_style);
         let cb = |counter| pb.set_position((counter * 100.0) as u64);
-        point_matches = correlator.match_points(&img1_scaled, &img2_scaled, &points1, &points2, cb);
+        point_matches =
+            correlator.match_points(&img1_scaled, &img2_scaled, &points1, &points2, Some(cb));
         pb.finish_and_clear();
         match start_time.elapsed() {
             Ok(t) => println!("Matched keypoints in {:.3} seconds", t.as_secs_f32(),),

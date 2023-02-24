@@ -30,7 +30,7 @@ impl Correlator {
         img2: &GrayImage,
         points1: &Vec<Point>,
         points2: &Vec<Point>,
-        pb: P,
+        pb: Option<P>,
     ) -> Vec<(Point, Point)>
     where
         P: Fn(f32) + Sync + Send,
@@ -43,7 +43,9 @@ impl Correlator {
             .into_par_iter()
             .enumerate()
             .flat_map(|(i1, p1)| {
-                pb(counter.fetch_add(1, Ordering::Relaxed) as f32 / points1.len() as f32);
+                pb.as_ref().map(|pb| {
+                    pb(counter.fetch_add(1, Ordering::Relaxed) as f32 / points1.len() as f32);
+                });
                 let data1 = match &data1[i1] {
                     Some(it) => it,
                     None => return vec![],
