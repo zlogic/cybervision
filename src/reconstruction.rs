@@ -1,10 +1,11 @@
-use image::imageops::FilterType;
-use image::GenericImageView;
-use image::GrayImage;
-
 use crate::correlation::Correlator;
 use crate::fast::FastExtractor;
 use crate::Cli;
+
+use image::imageops::FilterType;
+use image::GenericImageView;
+use image::GrayImage;
+use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::File;
 use std::io::BufReader;
 use std::str::FromStr;
@@ -164,11 +165,19 @@ pub fn reconstruct(args: &Cli) {
         println!("Image {} has {} feature points", args.img2, points2.len());
     }
 
+    let pb_style = ProgressStyle::default_bar()
+        .template("{wide_bar} {percent}/100% (eta: {eta})")
+        .unwrap();
+
     let point_matches: Vec<(Point, Point)>;
     {
         let start_time = SystemTime::now();
         let correlator = Correlator::new();
-        point_matches = correlator.match_points(&img1_scaled, &img2_scaled, &points1, &points2);
+
+        let pb = ProgressBar::new(100).with_style(pb_style);
+        let cb = |counter| pb.set_position((counter * 100.0) as u64);
+        point_matches = correlator.match_points(&img1_scaled, &img2_scaled, &points1, &points2, cb);
+        pb.finish_and_clear();
         match start_time.elapsed() {
             Ok(t) => println!("Matched keypoints in {:.3} seconds", t.as_secs_f32(),),
             Err(_) => {}

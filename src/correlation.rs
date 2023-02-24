@@ -1,6 +1,7 @@
 use image::{GenericImageView, GrayImage};
 
 use rayon::prelude::*;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 type Point = (u32, u32);
 
@@ -23,20 +24,26 @@ impl Correlator {
         return Correlator {};
     }
 
-    pub fn match_points(
+    pub fn match_points<P>(
         &self,
         img1: &GrayImage,
         img2: &GrayImage,
         points1: &Vec<Point>,
         points2: &Vec<Point>,
-    ) -> Vec<(Point, Point)> {
+        pb: P,
+    ) -> Vec<(Point, Point)>
+    where
+        P: Fn(f32) + Sync + Send,
+    {
         const K: usize = KEYPOINT_KERNEL_POINT_COUNT as usize;
         let data1: Vec<Option<PointData<K>>> = compute_points_data(img1, points1);
         let data2: Vec<Option<PointData<K>>> = compute_points_data(img2, points2);
+        let counter = AtomicUsize::new(0);
         let matches: Vec<((u32, u32), (u32, u32))> = points1
             .into_par_iter()
             .enumerate()
             .flat_map(|(i1, p1)| {
+                pb(counter.fetch_add(1, Ordering::Relaxed) as f32 / points1.len() as f32);
                 let data1 = match &data1[i1] {
                     Some(it) => it,
                     None => return vec![],
