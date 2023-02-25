@@ -13,18 +13,18 @@ jobs:
       fail-fast: true
       matrix:
         include:
-        - arch: amd64
+        #- arch: x86_64
+        #  mode: gpu
+        #  os: ubuntu
+        #- arch: x86_64
+        #  mode: cpu
+        #  os: ubuntu
+        - arch: aarch64
           mode: gpu
           os: ubuntu
-        - arch: amd64
-          mode: cpu
-          os: ubuntu
-        - arch: arm64
-          mode: gpu
-          os: ubuntu
-        - arch: arm64
-          mode: cpu
-          os: ubuntu
+        #- arch: aarch64
+        #  mode: cpu
+        #  os: ubuntu
 
     steps:
     - uses: actions/checkout@v3
@@ -40,15 +40,29 @@ jobs:
           ${{ github.workspace }}/target
         key: rust-${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}-${{ hashFiles('Cargo.lock') }}
 
+    - name: Install compiler and prepare for cross-compilation
+      if: matrix.arch == 'aarch64'
+      run: |
+        rustup target add ${{ matrix.arch }}-unknown-linux-gnu
+        sudo apt-get install -y crossbuild-essential-arm64 gfortran-11-aarch64-linux-gnu qemu-user-static
+        echo 'set(ENV{LD_LIBRARY_PATH} "/usr/aarch64-linux-gnu/lib:$ENV{LD_LIBRARY_PATH}")' >> $VCPKG_INSTALLATION_ROOT/triplets/community/arm64-linux.cmake
+        sudo ln -s /usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1 /lib/ld-linux-aarch64.so.1
+        echo "CC=/usr/bin/aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+        echo "CXX=/usr/bin/aarch64-linux-gnu-g++" >> $GITHUB_ENV
+        echo "FC=/usr/bin/aarch64-linux-gnu-gfortran-11" >> $GITHUB_ENV
+        echo "CFLAGS=-march=armv8.2-a"
+        echo "CXXFLAGS=-march=armv8.2-a"
+        echo "FFLAGS=-march=armv8.2-a -m64"
+
     - name: Build
       run: |
         if [ "${{ matrix.mode }}" == "gpu" ]; then
           FEATURES=gpu
         fi
-        cargo build --features=$FEATURES --release
+        cargo build --target=${{ matrix.arch }}-unknown-linux-gnu --features=$FEATURES --release
   
     - name: Package application
-      run: tar -cvjf cybervision-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}.tar.bz2 -C target/release cybervision
+      run: tar -cvjf cybervision-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}.tar.bz2 -C target/${{ matrix.arch }}-unknown-linux-gnu/release cybervision
   
     - name: Upload application
       uses: actions/upload-artifact@v3
@@ -63,12 +77,12 @@ jobs:
       fail-fast: true
       matrix:
         include:
-        - arch: x64
+        - arch: x86_64
           mode: gpu
-        - arch: x64
-          mode: cpu
-        - arch: arm64
-          mode: cpu
+        #- arch: x86_64
+        #  mode: cpu
+        #- arch: aarch64
+        #  mode: cpu
 
     steps:
     - uses: actions/checkout@v3
@@ -84,13 +98,24 @@ jobs:
           ${{ github.workspace }}\target
         key: rust-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}-${{ hashFiles('Cargo.lock') }}
 
+    - name: Install compiler and prepare for cross-compilation
+      if: matrix.arch == 'aarch64'
+      run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
+
+    - name: Install gfortran
+      id: install-gfortran
+      run: |
+        echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
+        echo "C:\msys64\usr\bin" >> $GITHUB_PATH
+        echo "FC=C:\msys64\mingw64\bin\gfortran.exe"
+
     - name: Build
       run: |
         If ("${{ matrix.mode }}" -eq "gpu") { $FEATURES="gpu" }
-        cargo build --features=$FEATURES --release
+        cargo build --target=${{ matrix.arch }}-pc-windows-msvc --features=$FEATURES --release
 
     - name: Package application
-      run: Compress-Archive -Path .\target\release\cybervision.exe -DestinationPath cybervision-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}.zip
+      run: Compress-Archive -Path .\target\${{ matrix.arch }}-pc-windows-msvc\release\cybervision.exe -DestinationPath cybervision-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}.zip
 
     - name: Upload application
       uses: actions/upload-artifact@v3
@@ -100,10 +125,11 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    if: false
     strategy:
       fail-fast: true
       matrix:
-        arch: [arm64, x64]
+        arch: [aarch64, x86_64]
 
     steps:
     - uses: actions/checkout@v3
@@ -133,15 +159,19 @@ jobs:
         xcrun -sdk macosx metallib correlation.air -o correlation.metallib
         xxd -i correlation.metallib cybervision/shaders_metal.h
 
+    - name: Install compiler and prepare for cross-compilation
+      if: matrix.arch == 'aarch64'
+      run: rustup target add ${{ matrix.arch }}-apple-darwin
+
     - name: Build
       run: |
         if [ "${{ matrix.mode }}" == "gpu" ]; then
           FEATURES=gpu
         fi
-        cargo build --features=$FEATURES --release
+        cargo build --target=${{ matrix.arch }}-apple-darwin --features=$FEATURES --release
 
     - name: Package application
-      run: tar -cvjf cybervision-${{ runner.os }}-${{ matrix.arch }}.tar.bz2 -C target/release cybervision
+      run: tar -cvjf cybervision-${{ runner.os }}-${{ matrix.arch }}.tar.bz2 -C target/${{ matrix.arch }}-apple-darwin/release cybervision
 
     - name: Upload application
       uses: actions/upload-artifact@v3

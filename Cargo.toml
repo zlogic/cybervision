@@ -27,7 +27,7 @@ lapack-src = { version = "0.8", default_features = false, features= ["accelerate
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 lapack-src = { version = "0.8", default_features = false, features= ["netlib"] }
-netlib-src = { version = "*", default_features = false, features = ["cblas", "static"] }
+netlib-src = { version = "*", default_features = false, features = ["static" ] }
 
 [profile.release]
 strip = true
