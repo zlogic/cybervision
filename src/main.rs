@@ -3,6 +3,8 @@ mod correlation;
 mod fast;
 mod reconstruction;
 
+extern crate lapack_src;
+
 #[derive(clap::ValueEnum, Clone)]
 pub enum HardwareMode {
     GPU,

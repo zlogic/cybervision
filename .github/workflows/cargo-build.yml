@@ -41,7 +41,11 @@ jobs:
         key: rust-${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}-${{ hashFiles('Cargo.lock') }}
 
     - name: Build
-      run: cargo build --release
+      run: |
+        if [ "${{ matrix.mode }}" == "gpu" ]; then
+          FEATURES=gpu
+        fi
+        cargo build --features=$FEATURES --release
   
     - name: Package application
       run: tar -cvjf cybervision-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}.tar.bz2 -C target/release cybervision
@@ -81,7 +85,9 @@ jobs:
         key: rust-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}-${{ hashFiles('Cargo.lock') }}
 
     - name: Build
-      run: cargo build --release
+      run: |
+        If ("${{ matrix.mode }}" -eq "gpu") { $FEATURES="gpu" }
+        cargo build --features=$FEATURES --release
 
     - name: Package application
       run: Compress-Archive -Path .\target\release\cybervision.exe -DestinationPath cybervision-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}.zip
@@ -128,7 +134,11 @@ jobs:
         xxd -i correlation.metallib cybervision/shaders_metal.h
 
     - name: Build
-      run: cargo build --release
+      run: |
+        if [ "${{ matrix.mode }}" == "gpu" ]; then
+          FEATURES=gpu
+        fi
+        cargo build --features=$FEATURES --release
 
     - name: Package application
       run: tar -cvjf cybervision-${{ runner.os }}-${{ matrix.arch }}.tar.bz2 -C target/release cybervision
