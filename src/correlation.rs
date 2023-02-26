@@ -11,64 +11,55 @@ const KEYPOINT_KERNEL_SIZE: usize = 7;
 const KEYPOINT_KERNEL_WIDTH: usize = KEYPOINT_KERNEL_SIZE * 2 + 1;
 const KEYPOINT_KERNEL_POINT_COUNT: usize = (KEYPOINT_KERNEL_WIDTH * KEYPOINT_KERNEL_WIDTH) as usize;
 
-pub struct Correlator {}
-
 struct PointData<const K: usize> {
     avg: f32,
     delta: [f32; K],
     stdev: f32,
 }
 
-impl Correlator {
-    pub fn new() -> Correlator {
-        return Correlator {};
-    }
-
-    pub fn match_points<P>(
-        &self,
-        img1: &GrayImage,
-        img2: &GrayImage,
-        points1: &Vec<Point>,
-        points2: &Vec<Point>,
-        pb: Option<P>,
-    ) -> Vec<(Point, Point)>
-    where
-        P: Fn(f32) + Sync + Send,
-    {
-        const K: usize = KEYPOINT_KERNEL_POINT_COUNT as usize;
-        let data1: Vec<Option<PointData<K>>> = compute_points_data(img1, points1);
-        let data2: Vec<Option<PointData<K>>> = compute_points_data(img2, points2);
-        let counter = AtomicUsize::new(0);
-        let matches: Vec<((u32, u32), (u32, u32))> = points1
-            .into_par_iter()
-            .enumerate()
-            .flat_map(|(i1, p1)| {
-                pb.as_ref().map(|pb| {
-                    pb(counter.fetch_add(1, Ordering::Relaxed) as f32 / points1.len() as f32);
-                });
-                let data1 = match &data1[i1] {
-                    Some(it) => it,
-                    None => return vec![],
-                };
-                let points2 = &points2;
-                let matches: Vec<((u32, u32), (u32, u32))> = points2
-                    .into_iter()
-                    .enumerate()
-                    .filter_map(|(i2, p2)| {
-                        let data2 = match &data2[i2] {
-                            Some(it) => it,
-                            None => return None,
-                        };
-                        return correlate_points(data1, data2)
-                            .filter(|corr| *corr > KEYPOINT_THRESHOLD)
-                            .map(|_| (*p1, *p2));
-                    })
-                    .collect();
-                return matches;
-            })
-            .collect();
-        return matches;
-    }
+pub fn match_points<P>(
+    img1: &GrayImage,
+    img2: &GrayImage,
+    points1: &Vec<Point>,
+    points2: &Vec<Point>,
+    pb: Option<P>,
+) -> Vec<(Point, Point)>
+where
+    P: Fn(f32) + Sync + Send,
+{
+    const K: usize = KEYPOINT_KERNEL_POINT_COUNT as usize;
+    let data1: Vec<Option<PointData<K>>> = compute_points_data(img1, points1);
+    let data2: Vec<Option<PointData<K>>> = compute_points_data(img2, points2);
+    let counter = AtomicUsize::new(0);
+    let matches: Vec<((u32, u32), (u32, u32))> = points1
+        .into_par_iter()
+        .enumerate()
+        .flat_map(|(i1, p1)| {
+            pb.as_ref().map(|pb| {
+                pb(counter.fetch_add(1, Ordering::Relaxed) as f32 / points1.len() as f32);
+            });
+            let data1 = match &data1[i1] {
+                Some(it) => it,
+                None => return vec![],
+            };
+            let points2 = &points2;
+            let matches: Vec<((u32, u32), (u32, u32))> = points2
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i2, p2)| {
+                    let data2 = match &data2[i2] {
+                        Some(it) => it,
+                        None => return None,
+                    };
+                    return correlate_points(data1, data2)
+                        .filter(|corr| *corr > KEYPOINT_THRESHOLD)
+                        .map(|_| (*p1, *p2));
+                })
+                .collect();
+            return matches;
+        })
+        .collect();
+    return matches;
 }
 
 #[inline]

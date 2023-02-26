@@ -1,6 +1,7 @@
 use clap::Parser;
 mod correlation;
 mod fast;
+mod fundamentalmatrix;
 mod reconstruction;
 
 #[derive(clap::ValueEnum, Clone)]

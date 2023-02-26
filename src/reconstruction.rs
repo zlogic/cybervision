@@ -1,11 +1,13 @@
-use crate::correlation::Correlator;
-use crate::fast::FastExtractor;
+use crate::correlation;
+use crate::fast;
+use crate::fundamentalmatrix;
 use crate::Cli;
 
 use image::imageops::FilterType;
 use image::GenericImageView;
 use image::GrayImage;
 use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
 use std::fs::File;
 use std::io::BufReader;
 use std::str::FromStr;
@@ -20,6 +22,7 @@ struct SourceImage {
     tilt_angle: Option<f32>,
 }
 
+#[derive(Debug)]
 struct ImageMeta {
     scale: (f32, f32),
     tilt_angle: Option<f32>,
@@ -149,13 +152,12 @@ pub fn reconstruct(args: &Cli) {
     let points2: Vec<Point>;
     {
         let start_time = SystemTime::now();
-        let fast = FastExtractor::new();
-        keypoint_scale = fast.optimal_keypoint_scale(&img1.img);
+        keypoint_scale = fast::optimal_keypoint_scale(&img1.img);
         img1_scaled = img1.resize(keypoint_scale);
         img2_scaled = img2.resize(keypoint_scale);
 
-        points1 = fast.find_points(&img1_scaled);
-        points2 = fast.find_points(&img2_scaled);
+        points1 = fast::find_points(&img1_scaled);
+        points2 = fast::find_points(&img2_scaled);
 
         match start_time.elapsed() {
             Ok(t) => println!("Extracted feature points in {:.3} seconds", t.as_secs_f32(),),
@@ -165,27 +167,69 @@ pub fn reconstruct(args: &Cli) {
         println!("Image {} has {} feature points", args.img2, points2.len());
     }
 
-    let pb_style = ProgressStyle::default_bar()
-        .template("{wide_bar} {percent}/100% (eta: {eta})")
-        .unwrap();
-
     let point_matches: Vec<(Point, Point)>;
     {
         let start_time = SystemTime::now();
-        let correlator = Correlator::new();
 
-        let pb = ProgressBar::new(100).with_style(pb_style);
+        let pb = new_progress_bar();
         let cb = |counter| pb.set_position((counter * 100.0) as u64);
         point_matches =
-            correlator.match_points(&img1_scaled, &img2_scaled, &points1, &points2, Some(cb));
+            correlation::match_points(&img1_scaled, &img2_scaled, &points1, &points2, Some(cb));
         pb.finish_and_clear();
+        drop(points1);
+        drop(points2);
         match start_time.elapsed() {
             Ok(t) => println!("Matched keypoints in {:.3} seconds", t.as_secs_f32(),),
             Err(_) => {}
         }
         println!("Found {} matches", point_matches.len());
-        drop(points1);
-        drop(points2);
+    }
+
+    let fm: fundamentalmatrix::RansacResult;
+    {
+        let start_time = SystemTime::now();
+        let point_matches = point_matches
+            .into_par_iter()
+            .map(|(p1, p2)| {
+                (
+                    (
+                        (p1.0 as f32 * keypoint_scale) as u32,
+                        (p1.1 as f32 * keypoint_scale) as u32,
+                    ),
+                    (
+                        (p2.0 as f32 * keypoint_scale) as u32,
+                        (p2.1 as f32 * keypoint_scale) as u32,
+                    ),
+                )
+            })
+            .collect();
+        let pb = new_progress_bar();
+        let cb = |counter| pb.set_position((counter * 100.0) as u64);
+        let projection_mode = match args.projection {
+            crate::ProjectionMode::Parallel => fundamentalmatrix::ProjectionMode::Affine,
+            crate::ProjectionMode::Perspective => fundamentalmatrix::ProjectionMode::Perspective,
+        };
+        let f = fundamentalmatrix::compute_fundamental_matrix(
+            projection_mode,
+            &point_matches,
+            img1.img.dimensions(),
+            Some(cb),
+        );
+        pb.finish_and_clear();
+        drop(point_matches);
+        match start_time.elapsed() {
+            Ok(t) => println!("Completed RANSAC fitting in {:.3} seconds", t.as_secs_f32(),),
+            Err(_) => {}
+        }
+        match f {
+            Ok(f) => fm = f,
+            Err(e) => {
+                eprintln!("Failed to complete RANSAC task: {}", e);
+                return;
+            }
+        }
+
+        println!("Kept {} matches", fm.matches_count);
     }
 
     // Most 3D viewers don't display coordinates below 0, reset to default 1.0
@@ -195,4 +239,11 @@ pub fn reconstruct(args: &Cli) {
         Ok(t) => println!("Completed reconstruction in {:.3} seconds", t.as_secs_f32(),),
         Err(_) => {}
     }
+}
+
+fn new_progress_bar() -> ProgressBar {
+    let pb_style = ProgressStyle::default_bar()
+        .template("{wide_bar} {percent}/100% (eta: {eta})")
+        .unwrap();
+    return ProgressBar::new(100).with_style(pb_style);
 }
