@@ -518,9 +518,9 @@ static inline int ransac_calculate_model_affine(ransac_memory *ctx, ransac_match
     for(size_t i=0;i<4;i++)
         vt_lastcol[i] = vt[4*i+3];
 
-    f[0] = 0.0; f[1] = 0.0; f[2] = vt[0];
-    f[3] = 0.0; f[4] = 0.0; f[5] = vt[1];
-    f[6] = vt[2]; f[7] = vt[3]; f[8] = -(vt_lastcol[0]*mean_x2+vt_lastcol[1]*mean_y2+vt_lastcol[2]*mean_x1+vt_lastcol[3]*mean_y1);
+    f[0] = 0.0; f[1] = 0.0; f[2] = vt_lastcol[0];
+    f[3] = 0.0; f[4] = 0.0; f[5] = vt_lastcol[1];
+    f[6] = vt_lastcol[2]; f[7] = vt_lastcol[3]; f[8] = -(vt_lastcol[0]*mean_x2+vt_lastcol[1]*mean_y2+vt_lastcol[2]*mean_x1+vt_lastcol[3]*mean_y1);
 
     return 1;
 }

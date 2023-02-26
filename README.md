@@ -100,8 +100,8 @@ To fix this,
 2. Edit the vcpkg portfile (`openblas/portfile.cmake`) and add a `list(APPEND OPENBLAS_EXTRA_OPTIONS -DTARGET=HASWELL)` line before `vcpkg_cmake_configure`.
 3. Set the `VCPKG_OVERLAY_PORTS` environment variable to the patched copy of `openblas` (same directory as `PATH_TO_NEW_OPENBLAS_DIRECTORY`)
 
-To fix a `** On entry to DLASCL parameter number  4 had an illegal value` error, enable threading support and also add `-DNUM_THREADS=1` to `OPENBLAS_EXTRA_OPTIONS`.
-It seems to improve the situation in Linux, but Windows might still be affected.
+The `** On entry to DLASCL parameter number  4 had an illegal value` error is caused by a [known bug in LAPACK](https://github.com/Reference-LAPACK/lapack/issues/469).
+It's fixed in the Fortran version of LAPACK, but hasn't yet been backported to CLAPACK.
 
 ## External libraries or dependencies
 
