@@ -36,15 +36,7 @@ pub struct RansacResult {
     best_error: f64,
 }
 
-pub fn compute_fundamental_matrix<P>(
-    projection: ProjectionMode,
-    point_matches: &Vec<Match>,
-    dimensions: (u32, u32),
-    pb: Option<P>,
-) -> Result<RansacResult, RansacError>
-where
-    P: Fn(f32) + Sync + Send,
-{
+pub fn matches_to_buckets(point_matches: &Vec<Match>, dimensions: (u32, u32)) -> Vec<Vec<Match>> {
     let width = dimensions.0;
     let height = dimensions.1;
     let mut match_buckets: Vec<Vec<Match>> = Vec::new();
@@ -55,12 +47,22 @@ where
         let pos = y_i * MATCH_GRID_SIZE + x_i;
         match_buckets[pos as usize].push((*p1, *p2));
     });
-    match_buckets = match_buckets
+    return match_buckets
         .into_iter()
         .filter(|l| !l.is_empty())
         .collect();
+}
+
+pub fn compute_fundamental_matrix<P>(
+    projection: ProjectionMode,
+    match_buckets: &Vec<Vec<Match>>,
+    pb: Option<P>,
+) -> Result<RansacResult, RansacError>
+where
+    P: Fn(f32) + Sync + Send,
+{
     let rt = RansacTask::new(projection, pb);
-    return rt.ransac_fundamental_matrix(point_matches, match_buckets);
+    return rt.ransac_fundamental_matrix(match_buckets);
 }
 
 #[derive(Debug)]
@@ -107,8 +109,7 @@ where
 
     fn ransac_fundamental_matrix(
         &self,
-        point_matches: &Vec<Match>,
-        match_buckets: Vec<Vec<Match>>,
+        match_buckets: &Vec<Vec<Match>>,
     ) -> Result<RansacResult, RansacError> {
         let ransac_outer = self.ransac_k / RANSAC_CHECK_INTERVAL;
         let mut best_result = None;
@@ -122,7 +123,7 @@ where
                             / self.ransac_k as f32;
                         pb(it);
                     });
-                    self.ransac_iteration(point_matches, &match_buckets)
+                    self.ransac_iteration(&match_buckets)
                 })
                 .max();
             best_result = best_result.max(result);
@@ -140,11 +141,7 @@ where
         };
     }
 
-    fn ransac_iteration(
-        &self,
-        point_matches: &Vec<Match>,
-        match_buckets: &Vec<Vec<Match>>,
-    ) -> Option<RansacResult> {
+    fn ransac_iteration(&self, match_buckets: &Vec<Vec<Match>>) -> Option<RansacResult> {
         let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
         // It's possible to select multiple points from the same bucket.
         let mut inliers = Vec::<Match>::with_capacity(self.ransac_n);
@@ -166,12 +163,21 @@ where
         if !inliers_pass {
             return None;
         }
-        let all_inliers: (usize, f64) = point_matches
+        let all_inliers: (usize, f64) = match_buckets
             .into_iter()
-            .filter_map(|m| self.fits_model(&f, m))
-            .fold((0, 0.0), |(count, error), match_error| {
-                (count + 1, error + match_error)
-            });
+            .map(|bucket| {
+                bucket
+                    .into_iter()
+                    .filter_map(|m| self.fits_model(&f, m))
+                    .fold((0, 0.0), |(count, error), match_error| {
+                        (count + 1, error + match_error)
+                    })
+            })
+            .fold((0, 0.0), |acc, err| (acc.0 + err.0, acc.1 + err.1));
+
+        if all_inliers.0 < RANSAC_D + self.ransac_n {
+            return None;
+        }
 
         let matches_count = all_inliers.0;
         let inliers_error = all_inliers.1 / matches_count as f64;

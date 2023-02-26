@@ -203,6 +203,9 @@ pub fn reconstruct(args: &Cli) {
                 )
             })
             .collect();
+        let match_buckets =
+            fundamentalmatrix::matches_to_buckets(&point_matches, img1.img.dimensions());
+        drop(point_matches);
         let pb = new_progress_bar();
         let cb = |counter| pb.set_position((counter * 100.0) as u64);
         let projection_mode = match args.projection {
@@ -211,12 +214,10 @@ pub fn reconstruct(args: &Cli) {
         };
         let f = fundamentalmatrix::compute_fundamental_matrix(
             projection_mode,
-            &point_matches,
-            img1.img.dimensions(),
+            &match_buckets,
             Some(cb),
         );
         pb.finish_and_clear();
-        drop(point_matches);
         match start_time.elapsed() {
             Ok(t) => println!("Completed RANSAC fitting in {:.3} seconds", t.as_secs_f32(),),
             Err(_) => {}
