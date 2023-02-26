@@ -13,18 +13,18 @@ jobs:
       fail-fast: true
       matrix:
         include:
-        #- arch: x86_64
-        #  mode: gpu
-        #  os: ubuntu
-        #- arch: x86_64
-        #  mode: cpu
-        #  os: ubuntu
+        - arch: x86_64
+          mode: gpu
+          os: ubuntu
+        - arch: x86_64
+          mode: cpu
+          os: ubuntu
         - arch: aarch64
           mode: gpu
           os: ubuntu
-        #- arch: aarch64
-        #  mode: cpu
-        #  os: ubuntu
+        - arch: aarch64
+          mode: cpu
+          os: ubuntu
 
     steps:
     - uses: actions/checkout@v3
@@ -44,15 +44,13 @@ jobs:
       if: matrix.arch == 'aarch64'
       run: |
         rustup target add ${{ matrix.arch }}-unknown-linux-gnu
-        sudo apt-get install -y crossbuild-essential-arm64 gfortran-11-aarch64-linux-gnu qemu-user-static
-        echo 'set(ENV{LD_LIBRARY_PATH} "/usr/aarch64-linux-gnu/lib:$ENV{LD_LIBRARY_PATH}")' >> $VCPKG_INSTALLATION_ROOT/triplets/community/arm64-linux.cmake
-        sudo ln -s /usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1 /lib/ld-linux-aarch64.so.1
+        sudo apt-get install -y crossbuild-essential-arm64 qemu-user-static
+        echo "LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=/usr/bin/aarch64-linux-gnu-gcc" >> $GITHUB_ENV
         echo "CC=/usr/bin/aarch64-linux-gnu-gcc" >> $GITHUB_ENV
         echo "CXX=/usr/bin/aarch64-linux-gnu-g++" >> $GITHUB_ENV
-        echo "FC=/usr/bin/aarch64-linux-gnu-gfortran-11" >> $GITHUB_ENV
-        echo "CFLAGS=-march=armv8.2-a"
-        echo "CXXFLAGS=-march=armv8.2-a"
-        echo "FFLAGS=-march=armv8.2-a -m64"
+        echo "CFLAGS=-march=armv8.2-a" >> $GITHUB_ENV
+        echo "CXXFLAGS=-march=armv8.2-a" >> $GITHUB_ENV
 
     - name: Build
       run: |
@@ -79,10 +77,10 @@ jobs:
         include:
         - arch: x86_64
           mode: gpu
-        #- arch: x86_64
-        #  mode: cpu
-        #- arch: aarch64
-        #  mode: cpu
+        - arch: x86_64
+          mode: cpu
+        - arch: aarch64
+          mode: cpu
 
     steps:
     - uses: actions/checkout@v3
@@ -102,13 +100,6 @@ jobs:
       if: matrix.arch == 'aarch64'
       run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
 
-    - name: Install gfortran
-      id: install-gfortran
-      run: |
-        echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
-        echo "C:\msys64\usr\bin" >> $GITHUB_PATH
-        echo "FC=C:\msys64\mingw64\bin\gfortran.exe"
-
     - name: Build
       run: |
         If ("${{ matrix.mode }}" -eq "gpu") { $FEATURES="gpu" }
@@ -125,7 +116,6 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
-    if: false
     strategy:
       fail-fast: true
       matrix:

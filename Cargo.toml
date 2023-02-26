@@ -15,19 +15,11 @@ indicatif = { version = "0.17.3", default_features = false }
 tiff = "*"
 rayon = "*"
 rand = { version = "0.8.5", default_features = false, features = ["std", "std_rng", "small_rng"] }
-ndarray = { version = "*", default_features = false, features = ["std"] }
-ndarray-linalg = { version = "0.16.0", default_features = false }
+nalgebra = { version = "0.32.1" }
 
 [features]
 default = []
 gpu = []
-
-[target.'cfg(target_os = "macos")'.dependencies]
-lapack-src = { version = "0.8", default_features = false, features= ["accelerate"] }
-
-[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
-lapack-src = { version = "0.8", default_features = false, features= ["netlib"] }
-netlib-src = { version = "*", default_features = false, features = ["static" ] }
 
 [profile.release]
 strip = true
