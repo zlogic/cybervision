@@ -20,7 +20,7 @@ const NEIGHBOR_DISTANCE: usize = 10;
 const CORRIDOR_EXTEND_RANGE: f64 = 1.0;
 const CORRIDOR_MIN_RANGE: f64 = 2.5;
 
-type Match = (usize, usize);
+type Match = (u32, u32);
 
 #[derive(Debug)]
 pub enum ProjectionMode {
@@ -321,8 +321,8 @@ impl CorrelationTask<'_> {
                 && best_match.corr.map_or(true, |best_corr| corr > best_corr)
             {
                 best_match.pos = Some((
-                    (self.inv_scale * row2 as f32).round() as usize,
-                    (self.inv_scale * col2 as f32).round() as usize,
+                    (self.inv_scale * row2 as f32).round() as u32,
+                    (self.inv_scale * col2 as f32).round() as u32,
                 ));
                 best_match.corr = Some(corr);
             }

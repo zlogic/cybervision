@@ -34,7 +34,7 @@ pub fn output_image(
 }
 
 #[inline]
-fn dist(row: usize, col: usize, value: &Option<(usize, usize)>) -> Option<f32> {
+fn dist(row: usize, col: usize, value: &Option<(u32, u32)>) -> Option<f32> {
     let value = match value {
         Some(v) => v,
         None => return None,
