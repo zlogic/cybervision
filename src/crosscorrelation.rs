@@ -1,7 +1,7 @@
 use crate::correlation;
 use nalgebra::{DMatrix, Matrix3, Vector3};
 use rayon::prelude::*;
-use std::{ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering};
+use std::{cell::RefCell, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering};
 
 const SCALE_MIN_SIZE: usize = 64;
 const KERNEL_SIZE: usize = 5;
@@ -17,8 +17,8 @@ const CORRIDOR_SIZE: usize = 20;
 const CORRIDOR_SEGMENT_LENGTH: usize = 256;
 const SEARCH_AREA_SEGMENT_LENGTH: usize = 8;
 const NEIGHBOR_DISTANCE: usize = 10;
-const CORRIDOR_EXTEND_RANGE: f32 = 1.0;
-const CORRIDOR_MIN_RANGE: f32 = 2.5;
+const CORRIDOR_EXTEND_RANGE: f64 = 1.0;
+const CORRIDOR_MIN_RANGE: f64 = 2.5;
 
 type Match = (usize, usize);
 
@@ -30,16 +30,17 @@ pub enum ProjectionMode {
 
 pub struct DepthImage {
     first_pass: bool,
-    pub data: DMatrix<Option<Match>>,
+    pub correlated_points: DMatrix<Option<Match>>,
 }
 
 impl DepthImage {
     pub fn new(dimensions: (u32, u32)) -> DepthImage {
         // Height specifies rows, width specifies columns.
-        let data = DMatrix::from_element(dimensions.1 as usize, dimensions.0 as usize, None);
+        let correlated_points =
+            DMatrix::from_element(dimensions.1 as usize, dimensions.0 as usize, None);
         return DepthImage {
             first_pass: true,
-            data,
+            correlated_points,
         };
     }
 }
@@ -56,7 +57,6 @@ pub fn correlate_images<P>(
     P: Fn(f32) + Sync + Send,
 {
     let inv_scale = 1.0 / scale;
-    //let neighbor_size = 2 * (NEIGHBOR_DISTANCE as f32 * inv_scale).ceil() as usize + 1;
     let (min_stdev, correlation_threshold) = match projection_mode {
         ProjectionMode::Affine => (MIN_STDEV_AFFINE, THRESHOLD_AFFINE),
         ProjectionMode::Perspective => (MIN_STDEV_PERSPECTIVE, THRESHOLD_PERSPECTIVE),
@@ -108,7 +108,7 @@ pub fn correlate_images<P>(
             }
             let out_row = (row as f32 * inv_scale) as usize;
             let out_col = (col as f32 * inv_scale) as usize;
-            destination.data[(out_row, out_col)] = point;
+            destination.correlated_points[(out_row, out_col)] = point;
         }
     }
     destination.first_pass = false;
@@ -136,7 +136,7 @@ fn compute_image_point_data(img: &DMatrix<u8>) -> ImagePointData {
         .par_bridge()
         .for_each(|(col, (mut avg, mut stdev))| {
             for (row, (avg, stdev)) in avg.iter_mut().zip(stdev.iter_mut()).enumerate() {
-                let p = match compute_compact_point_data(img, &(row, col)) {
+                let p = match compute_compact_point_data(img, row, col) {
                     Some(p) => p,
                     None => continue,
                 };
@@ -148,36 +148,34 @@ fn compute_image_point_data(img: &DMatrix<u8>) -> ImagePointData {
 }
 
 #[inline]
-fn compute_compact_point_data(img: &DMatrix<u8>, p: &(usize, usize)) -> Option<PointData> {
-    if !correlation::point_inside_bounds::<KERNEL_SIZE>(img.shape(), p.0, p.1) {
+fn compute_compact_point_data(img: &DMatrix<u8>, row: usize, col: usize) -> Option<PointData> {
+    if !correlation::point_inside_bounds::<KERNEL_SIZE>(img.shape(), row, col) {
         return None;
     };
-    const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
-    const KERNEL_POINT_COUNT: f32 = (KERNEL_WIDTH * KERNEL_WIDTH) as f32;
     let mut result = PointData {
         avg: 0.0,
         stdev: 0.0,
     };
-    for r in 0..KERNEL_SIZE * 2 + 1 {
-        let row = (p.0 + KERNEL_SIZE).saturating_sub(r);
-        for c in 0..KERNEL_SIZE * 2 + 1 {
-            let col = (p.1 + KERNEL_SIZE).saturating_sub(c);
-            let value = img[(row, col)];
+    for r in 0..KERNEL_WIDTH {
+        let srow = (row + r).saturating_sub(KERNEL_SIZE);
+        for c in 0..KERNEL_WIDTH {
+            let scol = (col + c).saturating_sub(KERNEL_SIZE);
+            let value = img[(srow, scol)];
             result.avg += value as f32;
         }
     }
-    result.avg /= KERNEL_POINT_COUNT;
+    result.avg /= KERNEL_POINT_COUNT as f32;
 
-    for r in 0..KERNEL_SIZE * 2 + 1 {
-        let row = (p.0 + KERNEL_SIZE).saturating_sub(r);
-        for c in 0..KERNEL_SIZE * 2 + 1 {
-            let col = (p.1 + KERNEL_SIZE).saturating_sub(c);
-            let value = img[(row, col)];
+    for r in 0..KERNEL_WIDTH {
+        let srow = (row + r).saturating_sub(KERNEL_SIZE);
+        for c in 0..KERNEL_WIDTH {
+            let scol = (col + c).saturating_sub(KERNEL_SIZE);
+            let value = img[(srow, scol)];
             let delta = value as f32 - result.avg;
             result.stdev += delta * delta;
         }
     }
-    result.stdev = (result.stdev / KERNEL_POINT_COUNT).sqrt();
+    result.stdev = (result.stdev / KERNEL_POINT_COUNT as f32).sqrt();
 
     return Some(result);
 }
@@ -226,14 +224,18 @@ impl CorrelationTask<'_> {
         {
             return;
         }
-        if !self.destination.first_pass {
-            // use thread_local!(static CONTENTS: RefCell<String> = RefCell::new(String::new()));
-            // and estimate search range
-        }
         const CORRIDOR_START: usize = KERNEL_SIZE;
         let corridor_end = match e_line.coeff.1.abs() > e_line.coeff.0.abs() {
             true => self.img2.ncols().saturating_sub(KERNEL_SIZE),
             false => self.img2.nrows().saturating_sub(KERNEL_SIZE),
+        };
+        let corridor_range = match self.destination.first_pass {
+            true => Some(CORRIDOR_START..corridor_end),
+            false => self.estimate_search_range(row, col, &e_line, CORRIDOR_START, corridor_end),
+        };
+        let corridor_range = match corridor_range {
+            Some(cr) => cr,
+            None => return,
         };
 
         let mut best_match = BestMatch {
@@ -247,14 +249,18 @@ impl CorrelationTask<'_> {
                 &p1_data,
                 &mut best_match,
                 corridor_offset,
-                CORRIDOR_START..corridor_end,
+                corridor_range.clone(),
             );
         }
         *out_point = best_match.pos
     }
 
     fn get_epipolar_line(&self, row: usize, col: usize) -> EpipolarLine {
-        let p1 = Vector3::new(col as f64, row as f64, 1.0);
+        let p1 = Vector3::new(
+            col as f64 / self.scale as f64,
+            row as f64 / self.scale as f64,
+            1.0,
+        );
         let f_p1 = self.fundamental_matrix * p1;
         if f_p1[0].abs() > f_p1[1].abs() {
             return EpipolarLine {
@@ -312,7 +318,7 @@ impl CorrelationTask<'_> {
             corr = corr / (p1_data.stdev * stdev2 * KERNEL_POINT_COUNT as f32);
 
             if corr >= self.correlation_threshold
-                && best_match.corr.map_or(true, |best_corr| corr >= best_corr)
+                && best_match.corr.map_or(true, |best_corr| corr > best_corr)
             {
                 best_match.pos = Some((
                     (self.inv_scale * row2 as f32).round() as usize,
@@ -321,6 +327,83 @@ impl CorrelationTask<'_> {
                 best_match.corr = Some(corr);
             }
         }
+    }
+
+    fn estimate_search_range(
+        &self,
+        row1: usize,
+        col1: usize,
+        e_line: &EpipolarLine,
+        corridor_start: usize,
+        corridor_end: usize,
+    ) -> Option<Range<usize>> {
+        let data = &self.destination.correlated_points;
+        thread_local! {static STDEV_RANGE: RefCell<Vec<f64>> = RefCell::new(Vec::new())};
+        let mut mid_corridor = 0.0;
+        let mut neighbor_count: usize = 0;
+        if row1 < NEIGHBOR_DISTANCE
+            || col1 < NEIGHBOR_DISTANCE
+            || row1 + NEIGHBOR_DISTANCE >= data.nrows()
+            || col1 + NEIGHBOR_DISTANCE >= data.ncols()
+        {
+            return None;
+        }
+        let row_min = ((row1 - NEIGHBOR_DISTANCE) as f32 * self.inv_scale).floor() as usize;
+        let row_max = ((row1 + NEIGHBOR_DISTANCE) as f32 * self.inv_scale).ceil() as usize;
+        let col_min = ((col1 - NEIGHBOR_DISTANCE) as f32 * self.inv_scale).floor() as usize;
+        let col_max = ((col1 + NEIGHBOR_DISTANCE) as f32 * self.inv_scale).ceil() as usize;
+        let corridor_vertical = e_line.coeff.0.abs() > e_line.coeff.1.abs();
+
+        let row_min = row_min.clamp(0, data.nrows());
+        let row_max = row_max.clamp(0, data.nrows());
+        let col_min = col_min.clamp(0, data.ncols());
+        let col_max = col_max.clamp(0, data.ncols());
+        STDEV_RANGE.with(|stdev_range| {
+            stdev_range
+                .borrow_mut()
+                .resize((row_max - row_min) * (col_max - col_min), 0.0)
+        });
+        for r in row_min..row_max {
+            for c in col_min..col_max {
+                let current_point = match data[(r, c)] {
+                    Some(p) => p,
+                    None => continue,
+                };
+                let row2 = self.scale as f64 * current_point.0 as f64;
+                let col2 = self.scale as f64 * current_point.1 as f64;
+
+                let corridor_pos = match corridor_vertical {
+                    true => (row2 - e_line.add.0) / e_line.coeff.0,
+                    false => (col2 - e_line.add.1) / e_line.coeff.1,
+                };
+                STDEV_RANGE
+                    .with(|stdev_range| stdev_range.borrow_mut()[neighbor_count] = corridor_pos);
+                neighbor_count += 1;
+                mid_corridor += corridor_pos;
+            }
+        }
+        if neighbor_count == 0 {
+            return None;
+        }
+
+        mid_corridor /= neighbor_count as f64;
+        let mut range_stdev = 0.0;
+        for i in 0..neighbor_count {
+            let delta = STDEV_RANGE.with(|stdev_range| stdev_range.borrow()[i] - mid_corridor);
+            range_stdev += delta * delta;
+        }
+        range_stdev = (range_stdev / neighbor_count as f64).sqrt();
+
+        let corridor_center = mid_corridor.round() as usize;
+        let corridor_length =
+            (CORRIDOR_MIN_RANGE + range_stdev * CORRIDOR_EXTEND_RANGE).round() as usize;
+        let corridor_start = corridor_center
+            .saturating_sub(corridor_length)
+            .clamp(corridor_start, corridor_end);
+        let corridor_end = corridor_center
+            .saturating_add(corridor_length)
+            .clamp(corridor_start, corridor_end);
+        return Some(corridor_start..corridor_end);
     }
 }
 

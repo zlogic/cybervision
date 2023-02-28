@@ -91,9 +91,9 @@ pub fn compute_point_data<const KS: usize, const KPC: usize>(
     };
     let mut avg = 0.0;
     for r in 0..KS * 2 + 1 {
-        let row = (row + KS).saturating_sub(r);
+        let row = (row + r).saturating_sub(KERNEL_SIZE);
         for c in 0..KS * 2 + 1 {
-            let col = (col + KS).saturating_sub(c);
+            let col = (col + c).saturating_sub(KERNEL_SIZE);
             let value = img[(row, col)];
             let delta_pos = r * kernel_width + c;
             result.delta[delta_pos] = value.into();

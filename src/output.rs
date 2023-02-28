@@ -4,11 +4,12 @@ use crate::crosscorrelation;
 
 pub fn output_image(
     depth_image: &crosscorrelation::DepthImage,
+    depth_scale: f32,
     path: &String,
 ) -> Result<(), image::ImageError> {
     let mut img = RgbaImage::from_pixel(
-        depth_image.data.ncols() as u32,
-        depth_image.data.nrows() as u32,
+        depth_image.correlated_points.ncols() as u32,
+        depth_image.correlated_points.nrows() as u32,
         Rgba::from([0, 0, 0, 0]),
     );
 
@@ -17,12 +18,15 @@ pub fn output_image(
     img.enumerate_pixels_mut().for_each(|(col, row, pixel)| {
         let row = row as usize;
         let col = col as usize;
-        let value = dist(row as usize, col as usize, &depth_image.data[(row, col)]);
-        let value = match value {
+        let value = dist(row, col, &depth_image.correlated_points[(row, col)]);
+        let mut value = match value {
             Some(v) => v,
             None => return,
         };
-        let value = (value - min) / (max - min);
+        value = (value - min) / (max - min);
+        if depth_scale.is_sign_negative() {
+            value = 1.0 - value;
+        }
         *pixel = map_depth(value);
     });
 
@@ -36,7 +40,7 @@ fn dist(row: usize, col: usize, value: &Option<(usize, usize)>) -> Option<f32> {
         None => return None,
     };
     return Some(
-        ((row as f32 - value.1 as f32).powi(2) + (col as f32 - value.0 as f32).powi(2)).sqrt(),
+        ((row as f32 - value.0 as f32).powi(2) + (col as f32 - value.1 as f32).powi(2)).sqrt(),
     );
 }
 
@@ -44,9 +48,9 @@ fn get_values_range(data: &crosscorrelation::DepthImage) -> (f32, f32) {
     let mut min = f32::MAX;
     let mut max = f32::MIN;
 
-    for row in 0..data.data.nrows() {
-        for col in 0..data.data.ncols() {
-            let dist = match dist(row, col, &data.data[(row, col)]) {
+    for row in 0..data.correlated_points.nrows() {
+        for col in 0..data.correlated_points.ncols() {
+            let dist = match dist(row, col, &data.correlated_points[(row, col)]) {
                 Some(d) => d,
                 None => continue,
             };

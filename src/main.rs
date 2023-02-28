@@ -34,8 +34,8 @@ pub enum ProjectionMode {
 /// Cybervision commandline arguments
 #[derive(Parser)]
 pub struct Cli {
-    /// Image scale
-    #[arg(long, default_value_t = 1.0)]
+    /// Depth scale
+    #[arg(long, default_value_t = -1.0)]
     scale: f32,
 
     /// Hardware mode

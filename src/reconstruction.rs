@@ -187,6 +187,8 @@ pub fn reconstruct(args: &Cli) {
         pb.finish_and_clear();
         drop(points1);
         drop(points2);
+        drop(img1_scaled);
+        drop(img2_scaled);
         match start_time.elapsed() {
             Ok(t) => println!("Matched keypoints in {:.3} seconds", t.as_secs_f32(),),
             Err(_) => {}
@@ -297,10 +299,11 @@ pub fn reconstruct(args: &Cli) {
     }
 
     // Most 3D viewers don't display coordinates below 0, reset to default 1.0 - instead of image metadata
-    //let depth_scale = img1.scale;
-    let depth_scale = (1.0, 1.0);
+    //let out_scale = img1.scale;
+    //let out_scale = (1.0, 1.0);
+    let depth_scale = args.scale;
     {
-        match output::output_image(&depth_image, &args.img_out) {
+        match output::output_image(&depth_image, depth_scale, &args.img_out) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!("Failed to save image: {}", e);
