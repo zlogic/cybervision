@@ -15,7 +15,7 @@ indicatif = { version = "0.17.3", default_features = false }
 tiff = "*"
 rayon = "*"
 rand = { version = "0.8.5", default_features = false, features = ["std", "std_rng", "small_rng"] }
-nalgebra = { version = "0.32.1" }
+nalgebra = { version = "0.32.1", features = ["rayon"] }
 
 [features]
 default = []

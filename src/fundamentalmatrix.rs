@@ -1,4 +1,3 @@
-use nalgebra::linalg::SVD;
 use nalgebra::{Matrix3, SMatrix, Vector3};
 use rand::rngs::SmallRng;
 use rand::seq::SliceRandom;
@@ -20,7 +19,7 @@ const RANSAC_D_EARLY_EXIT_AFFINE: usize = 1000;
 const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 20;
 const RANSAC_CHECK_INTERVAL: usize = 500_000;
 
-type Point = (u32, u32);
+type Point = (usize, usize);
 type Match = (Point, Point);
 
 #[derive(Debug)]
@@ -42,10 +41,10 @@ pub fn matches_to_buckets(point_matches: &Vec<Match>, dimensions: (u32, u32)) ->
     let mut match_buckets: Vec<Vec<Match>> = Vec::new();
     match_buckets.resize(MATCH_GRID_SIZE * MATCH_GRID_SIZE as usize, vec![]);
     point_matches.into_iter().for_each(|(p1, p2)| {
-        let x_i = ((MATCH_GRID_SIZE as u32 * p1.0) / (width as u32)) as usize;
-        let y_i = ((MATCH_GRID_SIZE as u32 * p1.1) / (height as u32)) as usize;
+        let x_i = (MATCH_GRID_SIZE * p1.0) / (width as usize);
+        let y_i = (MATCH_GRID_SIZE * p1.1) / (height as usize);
         let pos = y_i * MATCH_GRID_SIZE + x_i;
-        match_buckets[pos as usize].push((*p1, *p2));
+        match_buckets[pos].push((*p1, *p2));
     });
     return match_buckets
         .into_iter()
@@ -111,6 +110,11 @@ where
         &self,
         match_buckets: &Vec<Vec<Match>>,
     ) -> Result<RansacResult, RansacError> {
+        let matches_count: usize = match_buckets.into_iter().map(|b| b.len()).sum();
+        if matches_count < RANSAC_D + self.ransac_n {
+            return Err(RansacError::new("Not enough matches".to_owned()));
+        }
+
         let ransac_outer = self.ransac_k / RANSAC_CHECK_INTERVAL;
         let mut best_result = None;
         let counter = AtomicUsize::new(0);
@@ -199,7 +203,7 @@ where
         }
         let mean = a.row_mean();
         a.row_iter_mut().for_each(|mut r| r -= mean);
-        let usv = SVD::new(a, false, true);
+        let usv = a.svd(false, true);
         let s = usv.singular_values;
         let vt = &usv.v_t?;
         if s[RANSAC_N_AFFINE - 1].abs() < RANSAC_RANK_EPSILON {

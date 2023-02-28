@@ -1,8 +1,7 @@
-use image::GrayImage;
-
+use nalgebra::DMatrix;
 use rayon::prelude::*;
 
-type Point = (u32, u32);
+type Point = (usize, usize);
 
 const FAST_CIRCLE_PIXELS: [(i8, i8); 16] = [
     (0, -3),
@@ -24,28 +23,29 @@ const FAST_CIRCLE_PIXELS: [(i8, i8); 16] = [
 ];
 
 // TODO: allow to override configuration?
-const KERNEL_SIZE: u32 = 3;
+const KERNEL_SIZE: usize = 3;
 // TODO: update to match results from previous C version
 const FAST_THRESHOLD: u8 = 15;
-const KEYPOINT_SCALE_MIN_SIZE: u32 = 512;
-const FAST_NUM_POINTS: u8 = 12;
-const FAST_CIRCLE_LENGTH: usize = FAST_CIRCLE_PIXELS.len() + FAST_NUM_POINTS as usize - 1;
+const KEYPOINT_SCALE_MIN_SIZE: usize = 512;
+const FAST_NUM_POINTS: usize = 12;
+const FAST_CIRCLE_LENGTH: usize = FAST_CIRCLE_PIXELS.len() + FAST_NUM_POINTS - 1;
 
 /// Extract FAST features.
-pub fn find_points(img: &GrayImage) -> Vec<Point> {
-    let kernel_size = KERNEL_SIZE;
+pub fn find_points(img: &DMatrix<u8>) -> Vec<Point> {
     let mut img = img.clone();
     adjust_contrast(&mut img);
     // Detect points
-    let keypoints: Vec<(u32, u32)> = (kernel_size..(img.height() - kernel_size))
+    let keypoints: Vec<(usize, usize)> = (KERNEL_SIZE..(img.nrows() - KERNEL_SIZE))
         .into_par_iter()
-        .map(|y| {
-            let kp: Vec<(u32, u32)> = (kernel_size..(img.width() - kernel_size))
+        .map(|row| {
+            let kp: Vec<(usize, usize)> = (KERNEL_SIZE..(img.ncols() - KERNEL_SIZE))
                 .into_iter()
-                .filter_map(|x| match is_keypoint(&img, FAST_THRESHOLD.into(), x, y) {
-                    true => Some((x, y)),
-                    false => None,
-                })
+                .filter_map(
+                    |col| match is_keypoint(&img, FAST_THRESHOLD.into(), row, col) {
+                        true => Some((row, col)),
+                        false => None,
+                    },
+                )
                 .collect();
             return kp;
         })
@@ -75,12 +75,12 @@ pub fn find_points(img: &GrayImage) -> Vec<Point> {
         .filter_map(|i| {
             let p1 = &keypoints[i];
             let score1 = scores[i];
-            if i > 0 && keypoints[i - 1] == (p1.0 - 1, p1.1) && scores[i - 1] >= score1 {
+            if i > 0 && keypoints[i - 1] == (p1.0, p1.1 - 1) && scores[i - 1] >= score1 {
                 // Left point has better score
                 return None;
             }
             if i < keypoints.len() - 1
-                && keypoints[i + 1] == (p1.0 + 1, p1.1)
+                && keypoints[i + 1] == (p1.0, p1.1 + 1)
                 && scores[i + 1] >= score1
             {
                 // Right point has better score
@@ -89,45 +89,45 @@ pub fn find_points(img: &GrayImage) -> Vec<Point> {
             // Search for point above current
             for j in (0..i).rev() {
                 let p2 = &keypoints[j];
-                if p2.1 < p1.1 - 1 {
+                if p2.0 < p1.0 - 1 {
                     break;
                 }
-                if p2.1 == p1.1 - 1 && p2.0 >= p1.0 - 1 && p2.0 <= p1.0 + 1 && scores[j] >= score1 {
+                if p2.0 == p1.0 - 1 && p2.1 >= p1.1 - 1 && p2.1 <= p1.1 + 1 && scores[j] >= score1 {
                     return None;
                 }
             }
             // Search for point below current
             for j in i + 1..keypoints.len() {
                 let p2 = &keypoints[j];
-                if p2.1 > p1.1 + 1 {
+                if p2.0 > p1.0 + 1 {
                     break;
                 }
-                if p2.1 == p1.1 + 1 && p2.0 >= p1.0 - 1 && p2.0 <= p1.0 + 1 && scores[j] >= score1 {
+                if p2.0 == p1.0 + 1 && p2.1 >= p1.1 - 1 && p2.1 <= p1.1 + 1 && scores[j] >= score1 {
                     return None;
                 }
             }
-            return Some(*p1);
+            return Some((p1.1, p1.0));
         })
         .collect();
 }
 
 #[inline]
-fn get_pixel_offset(img: &GrayImage, x: u32, y: u32, offset: (i8, i8)) -> i16 {
-    let x_new = x.saturating_add_signed(offset.0 as i32);
-    let y_new = y.saturating_add_signed(offset.1 as i32);
-    return img.get_pixel(x_new, y_new)[0] as i16;
+fn get_pixel_offset(img: &DMatrix<u8>, row: usize, col: usize, offset: (i8, i8)) -> i16 {
+    let row_new = row.saturating_add_signed(offset.1 as isize);
+    let col_new = col.saturating_add_signed(offset.0 as isize);
+    return img[(row_new, col_new)] as i16;
 }
 
 #[inline]
-fn is_keypoint(img: &GrayImage, threshold: i16, x: u32, y: u32) -> bool {
-    let val: i16 = img.get_pixel(x, y)[0] as i16;
+fn is_keypoint(img: &DMatrix<u8>, threshold: i16, row: usize, col: usize) -> bool {
+    let val: i16 = img[(row, col)] as i16;
     let mut last_more_pos: Option<usize> = None;
     let mut last_less_pos: Option<usize> = None;
     let mut max_length = 0;
 
     for i in 0..FAST_CIRCLE_LENGTH {
         let p = FAST_CIRCLE_PIXELS[i % FAST_CIRCLE_PIXELS.len()];
-        let c_val = get_pixel_offset(&img, x, y, p);
+        let c_val = get_pixel_offset(&img, row, col, p);
         if c_val > val + threshold {
             last_more_pos = last_more_pos.or(Some(i));
             let length = last_more_pos.map(|p| i - p).unwrap_or(0) + 1;
@@ -149,8 +149,9 @@ fn is_keypoint(img: &GrayImage, threshold: i16, x: u32, y: u32) -> bool {
     return false;
 }
 
-pub fn optimal_keypoint_scale(img: &GrayImage) -> f32 {
-    let min_dimension = img.width().min(img.height());
+pub fn optimal_keypoint_scale(dimensions: (u32, u32)) -> f32 {
+    // TODO: replace this with log2
+    let min_dimension = dimensions.1.min(dimensions.0) as usize;
     let mut scale = 0;
     while min_dimension / (1 << scale) > KEYPOINT_SCALE_MIN_SIZE {
         scale += 1;
@@ -159,13 +160,13 @@ pub fn optimal_keypoint_scale(img: &GrayImage) -> f32 {
     return 1.0 / ((1 << scale) as f32);
 }
 
-fn adjust_contrast(img: &mut GrayImage) {
+fn adjust_contrast(img: &mut DMatrix<u8>) {
     let mut min: u8 = core::u8::MAX;
     let mut max: u8 = core::u8::MIN;
 
-    for p in img.pixels() {
-        min = min.min(p[0]);
-        max = max.max(p[0]);
+    for p in img.iter() {
+        min = min.min(*p);
+        max = max.max(*p);
     }
 
     if min >= max {
@@ -173,7 +174,7 @@ fn adjust_contrast(img: &mut GrayImage) {
     }
 
     let coeff = core::u8::MAX as f32 / ((max - min) as f32);
-    for p in img.pixels_mut() {
-        p[0] = (coeff * ((p[0] - min) as f32)).round() as u8;
+    for p in img.iter_mut() {
+        *p = (coeff * ((*p - min) as f32)).round() as u8;
     }
 }

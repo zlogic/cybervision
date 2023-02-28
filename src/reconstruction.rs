@@ -1,12 +1,15 @@
 use crate::correlation;
+use crate::crosscorrelation;
 use crate::fast;
 use crate::fundamentalmatrix;
+use crate::output;
 use crate::Cli;
 
 use image::imageops::FilterType;
 use image::GenericImageView;
 use image::GrayImage;
 use indicatif::{ProgressBar, ProgressStyle};
+use nalgebra::DMatrix;
 use rayon::prelude::*;
 use std::fs::File;
 use std::io::BufReader;
@@ -114,17 +117,23 @@ impl SourceImage {
         }
     }
 
-    fn resize(&self, scale: f32) -> GrayImage {
-        return image::imageops::resize(
+    fn resize(&self, scale: f32) -> DMatrix<u8> {
+        let img_resized = image::imageops::resize(
             &self.img,
             (self.img.width() as f32 * scale) as u32,
             (self.img.height() as f32 * scale) as u32,
             FilterType::Lanczos3,
         );
+        let mut img =
+            DMatrix::<u8>::zeros(img_resized.height() as usize, img_resized.width() as usize);
+        for (x, y, val) in img_resized.enumerate_pixels() {
+            img[(y as usize, x as usize)] = val[0];
+        }
+        return img;
     }
 }
 
-type Point = (u32, u32);
+type Point = (usize, usize);
 
 pub fn reconstruct(args: &Cli) {
     let img1 = SourceImage::load(&args.img1).unwrap();
@@ -146,13 +155,13 @@ pub fn reconstruct(args: &Cli) {
     }
     let start_time = SystemTime::now();
     let keypoint_scale: f32;
-    let img1_scaled: GrayImage;
-    let img2_scaled: GrayImage;
+    let img1_scaled: DMatrix<u8>;
+    let img2_scaled: DMatrix<u8>;
     let points1: Vec<Point>;
     let points2: Vec<Point>;
     {
         let start_time = SystemTime::now();
-        keypoint_scale = fast::optimal_keypoint_scale(&img1.img);
+        keypoint_scale = fast::optimal_keypoint_scale(img1.img.dimensions());
         img1_scaled = img1.resize(keypoint_scale);
         img2_scaled = img2.resize(keypoint_scale);
 
@@ -193,12 +202,12 @@ pub fn reconstruct(args: &Cli) {
             .map(|(p1, p2)| {
                 (
                     (
-                        (p1.0 as f32 * keypoint_scale) as u32,
-                        (p1.1 as f32 * keypoint_scale) as u32,
+                        (p1.0 as f32 * keypoint_scale) as usize,
+                        (p1.1 as f32 * keypoint_scale) as usize,
                     ),
                     (
-                        (p2.0 as f32 * keypoint_scale) as u32,
-                        (p2.1 as f32 * keypoint_scale) as u32,
+                        (p2.0 as f32 * keypoint_scale) as usize,
+                        (p2.1 as f32 * keypoint_scale) as usize,
                     ),
                 )
             })
@@ -233,8 +242,72 @@ pub fn reconstruct(args: &Cli) {
         println!("Kept {} matches", fm.matches_count);
     }
 
-    // Most 3D viewers don't display coordinates below 0, reset to default 1.0
-    //let scale = (1.0, 1.0);
+    let mut depth_image = crosscorrelation::DepthImage::new(img1.img.dimensions());
+    {
+        let start_time = SystemTime::now();
+        let scale_steps = crosscorrelation::optimal_scale_steps(img1.img.dimensions());
+        let total_percent: f32 = (0..scale_steps + 1)
+            .map(|step| 1.0 / ((1 << (scale_steps - step)) as f32).powi(2))
+            .sum();
+
+        let pb = new_progress_bar();
+
+        let mut total_percent_complete = 0.0;
+        for i in 0..scale_steps + 1 {
+            let scale = 1.0 / (1 << (scale_steps - i)) as f32;
+            let img1 = img1.resize(scale);
+            let img2 = img2.resize(scale);
+
+            let cb = |counter| {
+                // TODO: show a message with pb.set_message
+                let percent_complete =
+                    total_percent_complete + counter * scale * scale / total_percent;
+                pb.set_position((percent_complete * 100.0) as u64);
+            };
+
+            let projection_mode = match args.projection {
+                crate::ProjectionMode::Parallel => crosscorrelation::ProjectionMode::Affine,
+                crate::ProjectionMode::Perspective => crosscorrelation::ProjectionMode::Perspective,
+            };
+            crosscorrelation::correlate_images(
+                &img1,
+                &img2,
+                &fm.f,
+                scale,
+                projection_mode,
+                &mut depth_image,
+                Some(cb),
+            );
+            total_percent_complete += scale * scale / total_percent;
+        }
+
+        pb.finish_and_clear();
+
+        match start_time.elapsed() {
+            Ok(t) => println!(
+                "Completed surface generation in {:.3} seconds",
+                t.as_secs_f32()
+            ),
+            Err(_) => {}
+        }
+    }
+
+    {
+        // TODO: implement triangulation
+    }
+
+    // Most 3D viewers don't display coordinates below 0, reset to default 1.0 - instead of image metadata
+    //let depth_scale = img1.scale;
+    let depth_scale = (1.0, 1.0);
+    {
+        match output::output_image(&depth_image, &args.img_out) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("Failed to save image: {}", e);
+                return;
+            }
+        }
+    }
 
     match start_time.elapsed() {
         Ok(t) => println!("Completed reconstruction in {:.3} seconds", t.as_secs_f32(),),
