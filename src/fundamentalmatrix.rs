@@ -161,6 +161,9 @@ where
             ProjectionMode::Affine => self.calculate_model_affine(&inliers)?,
             ProjectionMode::Perspective => unimplemented!(),
         };
+        if !f.iter().all(|v| v.is_finite()) {
+            return None;
+        }
         let inliers_pass = inliers
             .into_iter()
             .all(|m| self.fits_model(&f, &m).is_some());
@@ -196,10 +199,10 @@ where
     fn calculate_model_affine(&self, inliers: &Vec<Match>) -> Option<Matrix3<f64>> {
         let mut a = SMatrix::<f64, RANSAC_N_AFFINE, 4>::zeros();
         for i in 0..RANSAC_N_AFFINE {
-            a[(i, 0)] = inliers[i].0 .0 as f64;
-            a[(i, 1)] = inliers[i].0 .1 as f64;
-            a[(i, 2)] = inliers[i].1 .0 as f64;
-            a[(i, 3)] = inliers[i].1 .1 as f64;
+            a[(0, i)] = inliers[i].1 .0 as f64;
+            a[(1, i)] = inliers[i].1 .1 as f64;
+            a[(2, i)] = inliers[i].0 .0 as f64;
+            a[(3, i)] = inliers[i].0 .1 as f64;
         }
         let mean = a.row_mean();
         a.row_iter_mut().for_each(|mut r| r -= mean);
@@ -222,10 +225,10 @@ where
         let p2t_f_p1 = p2.transpose() * f * p1;
         let f_p1 = f * p1;
         let ft_p2 = f.transpose() * p2;
-        let nominator = p2t_f_p1 * p2t_f_p1;
+        let nominator = (p2t_f_p1[0]) * (p2t_f_p1[0]);
         let denominator =
             f_p1[0] * f_p1[0] + f_p1[1] * f_p1[1] + ft_p2[0] * ft_p2[0] + ft_p2[1] * ft_p2[1];
-        let err = (nominator * nominator / denominator)[0];
+        let err = nominator / denominator;
         if !err.is_finite() || err.abs() > self.ransac_t {
             return None;
         }
@@ -246,9 +249,9 @@ impl Ord for RansacResult {
             .unwrap_or_else(|| {
                 // Errors should be minimized, so a normal value is preferred (should be greater)
                 // But the condition is reversed
-                if self.best_error.is_normal() {
+                if self.best_error.is_finite() {
                     return Ordering::Less;
-                } else if other.best_error.is_normal() {
+                } else if other.best_error.is_finite() {
                     return Ordering::Greater;
                 }
                 return Ordering::Equal;
