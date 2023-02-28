@@ -298,8 +298,8 @@ impl CorrelationTask<'_> {
             {
                 continue;
             }
-            let avg2 = self.img2_data.avg[(row2, col2)];
-            let stdev2 = self.img2_data.stdev[(row2, col2)];
+            let avg2 = unsafe { self.img2_data.avg.get_unchecked((row2, col2)) };
+            let stdev2 = unsafe { self.img2_data.stdev.get_unchecked((row2, col2)) };
             if !stdev2.is_finite() || stdev2.abs() < self.min_stdev {
                 continue;
             }
@@ -307,11 +307,12 @@ impl CorrelationTask<'_> {
             for c in 0..KERNEL_WIDTH {
                 for r in 0..KERNEL_WIDTH {
                     let delta1 = p1_data.delta[r * KERNEL_WIDTH + c];
-                    let delta2 = self.img2[(
-                        (row2 + r).saturating_sub(KERNEL_SIZE),
-                        (col2 + c).saturating_sub(KERNEL_SIZE),
-                    )] as f32
-                        - avg2;
+                    let delta2 = unsafe {
+                        *self.img2.get_unchecked((
+                            (row2 + r).saturating_sub(KERNEL_SIZE),
+                            (col2 + c).saturating_sub(KERNEL_SIZE),
+                        )) as f32
+                    } - avg2;
                     corr += delta1 * delta2;
                 }
             }
