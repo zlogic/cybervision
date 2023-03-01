@@ -135,20 +135,6 @@ jobs:
           ${{ github.workspace }}/target
         key: rust-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('Cargo.lock') }}
 
-    - name: Cache shaders
-      id: cache-shaders
-      uses: actions/cache@v3
-      with:
-        path: cybervision/shaders_metal.h
-        key: shaders-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('shaders/correlation.metal') }}
-  
-    - name: Compile shaders
-      if: steps.cache-shaders.outputs.cache-hit != 'true'
-      run: |
-        xcrun -sdk macosx metal -c shaders/correlation.metal -o correlation.air
-        xcrun -sdk macosx metallib correlation.air -o correlation.metallib
-        xxd -i correlation.metallib cybervision/shaders_metal.h
-
     - name: Install compiler and prepare for cross-compilation
       if: matrix.arch == 'aarch64'
       run: rustup target add ${{ matrix.arch }}-apple-darwin
