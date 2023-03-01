@@ -16,6 +16,7 @@ tiff = "*"
 rayon = "*"
 rand = { version = "0.8.5", default_features = false, features = ["std", "std_rng", "small_rng"] }
 nalgebra = { version = "0.32.1", features = ["rayon"] }
+spade = { version = "2.1.0", default_features = false }
 
 [features]
 default = []

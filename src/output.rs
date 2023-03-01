@@ -1,10 +1,116 @@
+use std::f32::EPSILON;
+
 use image::{Rgba, RgbaImage};
 use nalgebra::DMatrix;
+use spade::{DelaunayTriangulation, InsertionError, Point2, Triangulation};
 
-pub fn output_image(
-    surface: &DMatrix<Option<f32>>,
+#[derive(Debug, PartialEq)]
+pub enum InterpolationMode {
+    Delaunay,
+    None,
+}
+
+#[derive(Debug, PartialEq)]
+enum OutputFormat {
+    Image,
+    Obj,
+    Ply,
+}
+
+pub fn output(
+    mut surface: DMatrix<Option<f32>>,
     path: &String,
+    interpolation: InterpolationMode,
 ) -> Result<(), image::ImageError> {
+    let output_format = if path.to_lowercase().ends_with(".obj") {
+        OutputFormat::Obj
+    } else if path.to_lowercase().ends_with(".ply") {
+        OutputFormat::Ply
+    } else {
+        OutputFormat::Image
+    };
+    if output_format == OutputFormat::Image {
+        if interpolation == InterpolationMode::Delaunay {
+            if let Err(res) = interpolate_image(&mut surface) {
+                !unimplemented!();
+            }
+        }
+        return output_image(&surface, path);
+    }
+    return !unimplemented!();
+}
+
+fn interpolate_image(surface: &mut DMatrix<Option<f32>>) -> Result<(), InsertionError> {
+    let converted_points: Vec<Point2<f32>> = surface
+        .column_iter()
+        .enumerate()
+        .map(|(x, col)| {
+            let points: Vec<Point2<f32>> = col
+                .iter()
+                .enumerate()
+                .filter_map(|(y, v)| v.map(|_| Point2::new(x as f32, y as f32)))
+                .collect();
+            return points;
+        })
+        .flatten()
+        .collect();
+    let tr: DelaunayTriangulation<Point2<f32>> =
+        match DelaunayTriangulation::bulk_load(converted_points) {
+            Err(err) => return Err(err),
+            Ok(res) => res,
+        };
+
+    let frows = surface.nrows() as f32;
+    let fcols = surface.ncols() as f32;
+    tr.inner_faces().for_each(|f| {
+        let vertices = f.positions();
+        let depths: Vec<f32> = vertices
+            .iter()
+            .filter_map(|v| surface[(v.y as usize, v.x as usize)])
+            .collect();
+        if depths.len() < 3 {
+            return;
+        };
+        let (min_x, max_x) = vertices
+            .iter()
+            .fold((fcols, 0.0f32), |acc, f| (acc.0.min(f.x), acc.1.max(f.x)));
+        let (min_y, max_y) = vertices
+            .iter()
+            .fold((frows, 0.0f32), |acc, f| (acc.0.min(f.y), acc.1.max(f.y)));
+        let min_x = min_x.ceil() as usize;
+        let max_x = max_x.floor() as usize;
+        let min_y = min_y.ceil() as usize;
+        let max_y = max_y.floor() as usize;
+        for x in min_x..max_x + 1 {
+            for y in min_y..max_y + 1 {
+                if surface[(y, x)].is_some() {
+                    continue;
+                }
+                let lambda = f.barycentric_interpolation(Point2 {
+                    x: x as f32,
+                    y: y as f32,
+                });
+                if lambda
+                    .iter()
+                    .any(|lambda| *lambda > 1.0 + EPSILON || *lambda < 0.0 - EPSILON)
+                {
+                    continue;
+                }
+                let depths = &depths;
+                let value: f32 = depths
+                    .into_iter()
+                    .zip(lambda)
+                    .map(|(depth, lambda)| depth * lambda)
+                    .sum();
+                surface[(y, x)] = Some(value);
+            }
+        }
+    });
+
+    return Ok(());
+}
+
+fn output_image(surface: &DMatrix<Option<f32>>, path: &String) -> Result<(), image::ImageError> {
     let mut img = RgbaImage::from_pixel(
         surface.ncols() as u32,
         surface.nrows() as u32,

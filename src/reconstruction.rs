@@ -330,12 +330,23 @@ pub fn reconstruct(args: &Cli) {
     }
 
     {
-        match output::output_image(&surface.points, &args.img_out) {
+        let start_time = SystemTime::now();
+
+        let interpolation_mode = match args.interpolation {
+            crate::InterpolationMode::Delaunay => output::InterpolationMode::Delaunay,
+            crate::InterpolationMode::None => output::InterpolationMode::None,
+        };
+        match output::output(surface.points, &args.img_out, interpolation_mode) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!("Failed to save image: {}", e);
                 return;
             }
+        }
+
+        match start_time.elapsed() {
+            Ok(t) => println!("Saved result in {:.3} seconds", t.as_secs_f32()),
+            Err(_) => {}
         }
     }
 
