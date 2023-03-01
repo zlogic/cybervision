@@ -121,7 +121,7 @@ impl FundamentalMatrix {
     ) -> Result<RansacIterationResult, RansacError> {
         let matches_count: usize = match_buckets.into_iter().map(|b| b.len()).sum();
         if matches_count < RANSAC_D + self.ransac_n {
-            return Err(RansacError::new("Not enough matches".to_owned()));
+            return Err(RansacError::new("Not enough matches"));
         }
 
         let ransac_outer = self.ransac_k / RANSAC_CHECK_INTERVAL;
@@ -157,7 +157,7 @@ impl FundamentalMatrix {
         }
         return match best_result {
             Some(res) => Ok(res),
-            None => Err(RansacError::new("No reliable matches found".to_owned())),
+            None => Err(RansacError::new("No reliable matches found")),
         };
     }
 
@@ -292,11 +292,11 @@ impl Eq for RansacIterationResult {}
 
 #[derive(Debug)]
 pub struct RansacError {
-    msg: String,
+    msg: &'static str,
 }
 
 impl RansacError {
-    fn new(msg: String) -> RansacError {
+    fn new(msg: &'static str) -> RansacError {
         RansacError { msg }
     }
 }

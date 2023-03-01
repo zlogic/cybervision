@@ -1,4 +1,10 @@
-use std::f32::EPSILON;
+use std::{
+    error,
+    f32::EPSILON,
+    fmt,
+    fs::File,
+    io::{BufWriter, Write},
+};
 
 use image::{Rgba, RgbaImage};
 use nalgebra::DMatrix;
@@ -17,11 +23,13 @@ enum OutputFormat {
     Ply,
 }
 
+type TriangulatedSurface = DelaunayTriangulation<Point2<f32>>;
+
 pub fn output(
     mut surface: DMatrix<Option<f32>>,
     path: &String,
     interpolation: InterpolationMode,
-) -> Result<(), image::ImageError> {
+) -> Result<(), Box<dyn error::Error>> {
     let output_format = if path.to_lowercase().ends_with(".obj") {
         OutputFormat::Obj
     } else if path.to_lowercase().ends_with(".ply") {
@@ -31,16 +39,149 @@ pub fn output(
     };
     if output_format == OutputFormat::Image {
         if interpolation == InterpolationMode::Delaunay {
-            if let Err(res) = interpolate_image(&mut surface) {
-                !unimplemented!();
-            }
+            interpolate_image(&mut surface)?
         }
-        return output_image(&surface, path);
+        return match output_image(&surface, path) {
+            Ok(res) => Ok(res),
+            Err(err) => Err(Box::new(err)),
+        };
     }
-    return !unimplemented!();
+
+    let triangulated_surface = triangulate_image(&mut surface)?;
+    let mut writer = MeshWriter::new(surface, path, output_format)?;
+    writer.output_header(&triangulated_surface)?;
+    triangulated_surface
+        .vertices()
+        .into_iter()
+        .try_for_each(|v| writer.output_vertex(v.position().x, v.position().y))?;
+    triangulated_surface
+        .inner_faces()
+        .into_iter()
+        .try_for_each(|f| {
+            writer.output_face(
+                f.vertices()[2].index(),
+                f.vertices()[1].index(),
+                f.vertices()[0].index(),
+            )
+        })
 }
 
-fn interpolate_image(surface: &mut DMatrix<Option<f32>>) -> Result<(), InsertionError> {
+struct MeshWriter {
+    surface: DMatrix<Option<f32>>,
+    output_format: OutputFormat,
+    writer: BufWriter<File>,
+}
+
+impl MeshWriter {
+    fn new(
+        surface: DMatrix<Option<f32>>,
+        path: &String,
+        output_format: OutputFormat,
+    ) -> Result<MeshWriter, std::io::Error> {
+        let writer = BufWriter::new(File::create(path)?);
+        Ok(MeshWriter {
+            surface,
+            output_format,
+            writer,
+        })
+    }
+
+    fn output_header(&mut self, surface: &TriangulatedSurface) -> Result<(), std::io::Error> {
+        match self.output_format {
+            OutputFormat::Ply => self.output_header_ply(surface),
+            OutputFormat::Obj => Ok(()),
+            OutputFormat::Image => Ok(()),
+        }
+    }
+
+    fn output_header_ply(&mut self, surface: &TriangulatedSurface) -> Result<(), std::io::Error> {
+        let w = self.writer.get_mut();
+        writeln!(w, "ply")?;
+        writeln!(w, "format binary_big_endian 1.0")?;
+        writeln!(w, "comment Cybervision 3D surface")?;
+        writeln!(w, "element vertex {}", surface.num_vertices())?;
+        writeln!(w, "property float x")?;
+        writeln!(w, "property float y")?;
+        writeln!(w, "property float z")?;
+        writeln!(w, "element face {}", surface.num_inner_faces())?;
+        writeln!(w, "property list uchar int vertex_indices")?;
+        writeln!(w, "end_header")
+    }
+
+    fn output_vertex(&mut self, x: f32, y: f32) -> Result<(), Box<dyn error::Error>> {
+        match self.output_format {
+            OutputFormat::Ply => self.output_vertex_ply(x, y),
+            OutputFormat::Obj => self.output_vertex_obj(x, y),
+            OutputFormat::Image => Ok(()),
+        }
+    }
+
+    fn output_vertex_ply(&mut self, x: f32, y: f32) -> Result<(), Box<dyn error::Error>> {
+        let depth = match self.surface[(y.round() as usize, x.round() as usize)] {
+            Some(depth) => Ok(depth),
+            None => Err(OutputError::new("Point depth not found")),
+        }?;
+        let w = self.writer.get_mut();
+        w.write_all(&x.to_be_bytes())?;
+        w.write_all(&(self.surface.nrows() as f32 - y).to_be_bytes())?;
+        w.write_all(&depth.to_be_bytes())?;
+        Ok(())
+    }
+
+    fn output_vertex_obj(&mut self, x: f32, y: f32) -> Result<(), Box<dyn error::Error>> {
+        let depth = match self.surface[(y.round() as usize, x.round() as usize)] {
+            Some(depth) => Ok(depth),
+            None => Err(OutputError::new("Point depth not found")),
+        };
+        let depth = depth?;
+        let w = self.writer.get_mut();
+
+        writeln!(w, "v {} {} {}", x, self.surface.nrows() as f32 - y, depth)?;
+        Ok(())
+    }
+
+    fn output_face(
+        &mut self,
+        v0: usize,
+        v1: usize,
+        v2: usize,
+    ) -> Result<(), Box<dyn error::Error>> {
+        match self.output_format {
+            OutputFormat::Ply => self.output_face_ply(v0, v1, v2),
+            OutputFormat::Obj => self.output_face_obj(v0, v1, v2),
+            OutputFormat::Image => Ok(()),
+        }
+    }
+    fn output_face_ply(
+        &mut self,
+        v0: usize,
+        v1: usize,
+        v2: usize,
+    ) -> Result<(), Box<dyn error::Error>> {
+        let w = self.writer.get_mut();
+        const NUM_POINTS: [u8; 1] = 3u8.to_be_bytes();
+        w.write_all(&NUM_POINTS)?;
+        w.write_all(&(v0 as u32).to_be_bytes())?;
+        w.write_all(&(v1 as u32).to_be_bytes())?;
+        w.write_all(&(v2 as u32).to_be_bytes())?;
+        Ok(())
+    }
+
+    fn output_face_obj(
+        &mut self,
+        v0: usize,
+        v1: usize,
+        v2: usize,
+    ) -> Result<(), Box<dyn error::Error>> {
+        let w = self.writer.get_mut();
+        writeln!(w, "f {} {} {}", v0 + 1, v1 + 1, v2 + 1)?;
+        Ok(())
+    }
+}
+
+fn triangulate_image(
+    surface: &DMatrix<Option<f32>>,
+) -> Result<TriangulatedSurface, InsertionError> {
     let converted_points: Vec<Point2<f32>> = surface
         .column_iter()
         .enumerate()
@@ -54,14 +195,13 @@ fn interpolate_image(surface: &mut DMatrix<Option<f32>>) -> Result<(), Insertion
         })
         .flatten()
         .collect();
-    let tr: DelaunayTriangulation<Point2<f32>> =
-        match DelaunayTriangulation::bulk_load(converted_points) {
-            Err(err) => return Err(err),
-            Ok(res) => res,
-        };
+    DelaunayTriangulation::bulk_load(converted_points)
+}
 
+fn interpolate_image(surface: &mut DMatrix<Option<f32>>) -> Result<(), InsertionError> {
     let frows = surface.nrows() as f32;
     let fcols = surface.ncols() as f32;
+    let tr = triangulate_image(surface)?;
     tr.inner_faces().for_each(|f| {
         let vertices = f.positions();
         let depths: Vec<f32> = vertices
@@ -234,4 +374,23 @@ fn map_color(colormap: &[u8; 256], value: f32) -> u8 {
     let c1 = colormap[box_index] as f32;
     let c2 = colormap[box_index + 1] as f32;
     return (c2 * ratio + c1 * (1.0 - ratio)).round() as u8;
+}
+
+#[derive(Debug)]
+pub struct OutputError {
+    msg: &'static str,
+}
+
+impl OutputError {
+    fn new(msg: &'static str) -> OutputError {
+        OutputError { msg }
+    }
+}
+
+impl std::error::Error for OutputError {}
+
+impl fmt::Display for OutputError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        return write!(f, "{}", self.msg);
+    }
 }
