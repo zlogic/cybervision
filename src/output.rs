@@ -1,56 +1,40 @@
 use image::{Rgba, RgbaImage};
-
-use crate::crosscorrelation;
+use nalgebra::DMatrix;
 
 pub fn output_image(
-    point_correlations: &crosscorrelation::PointCorrelations,
-    depth_scale: f32,
+    surface: &DMatrix<Option<f32>>,
     path: &String,
 ) -> Result<(), image::ImageError> {
     let mut img = RgbaImage::from_pixel(
-        point_correlations.correlated_points.ncols() as u32,
-        point_correlations.correlated_points.nrows() as u32,
+        surface.ncols() as u32,
+        surface.nrows() as u32,
         Rgba::from([0, 0, 0, 0]),
     );
 
-    let (min, max) = get_values_range(point_correlations);
+    let (min, max) = get_values_range(surface);
 
     img.enumerate_pixels_mut().for_each(|(col, row, pixel)| {
         let row = row as usize;
         let col = col as usize;
-        let value = dist(row, col, &point_correlations.correlated_points[(row, col)]);
+        let value = surface[(row, col)];
         let mut value = match value {
             Some(v) => v,
             None => return,
         };
         value = (value - min) / (max - min);
-        if depth_scale.is_sign_negative() {
-            value = 1.0 - value;
-        }
         *pixel = map_depth(value);
     });
 
     return img.save(path);
 }
 
-#[inline]
-fn dist(row: usize, col: usize, value: &Option<(u32, u32)>) -> Option<f32> {
-    let value = match value {
-        Some(v) => v,
-        None => return None,
-    };
-    return Some(
-        ((row as f32 - value.0 as f32).powi(2) + (col as f32 - value.1 as f32).powi(2)).sqrt(),
-    );
-}
-
-fn get_values_range(data: &crosscorrelation::PointCorrelations) -> (f32, f32) {
+fn get_values_range(surface: &DMatrix<Option<f32>>) -> (f32, f32) {
     let mut min = f32::MAX;
     let mut max = f32::MIN;
 
-    for row in 0..data.correlated_points.nrows() {
-        for col in 0..data.correlated_points.ncols() {
-            let dist = match dist(row, col, &data.correlated_points[(row, col)]) {
+    for row in 0..surface.nrows() {
+        for col in 0..surface.ncols() {
+            let dist = match surface[(row, col)] {
                 Some(d) => d,
                 None => continue,
             };

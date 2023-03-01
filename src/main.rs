@@ -5,6 +5,7 @@ mod fast;
 mod fundamentalmatrix;
 mod output;
 mod reconstruction;
+mod triangulation;
 
 #[derive(clap::ValueEnum, Clone)]
 pub enum HardwareMode {

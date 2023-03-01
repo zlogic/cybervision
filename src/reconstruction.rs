@@ -5,6 +5,8 @@ use crate::fast::Fast;
 use crate::fundamentalmatrix;
 use crate::fundamentalmatrix::FundamentalMatrix;
 use crate::output;
+use crate::triangulation;
+use crate::triangulation::Surface;
 use crate::Cli;
 
 use image::imageops::FilterType;
@@ -300,16 +302,35 @@ pub fn reconstruct(args: &Cli) {
         }
     }
 
-    {
-        // TODO: implement triangulation
-    }
-
     // Most 3D viewers don't display coordinates below 0, reset to default 1.0 - instead of image metadata
     //let out_scale = img1.scale;
-    //let out_scale = (1.0, 1.0);
-    let depth_scale = args.scale;
+    let out_scale = (1.0, 1.0, args.scale);
+    let surface: triangulation::Surface;
     {
-        match output::output_image(&point_correlations, depth_scale, &args.img_out) {
+        let start_time = SystemTime::now();
+
+        let projection_mode = match args.projection {
+            crate::ProjectionMode::Parallel => triangulation::ProjectionMode::Affine,
+            crate::ProjectionMode::Perspective => triangulation::ProjectionMode::Perspective,
+        };
+        surface = Surface::new(
+            &point_correlations.correlated_points,
+            projection_mode,
+            out_scale,
+        );
+        drop(point_correlations);
+
+        match start_time.elapsed() {
+            Ok(t) => println!(
+                "Completed point triangulation in {:.3} seconds",
+                t.as_secs_f32()
+            ),
+            Err(_) => {}
+        }
+    }
+
+    {
+        match output::output_image(&surface.points, &args.img_out) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!("Failed to save image: {}", e);
