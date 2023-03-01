@@ -3,22 +3,22 @@ use image::{Rgba, RgbaImage};
 use crate::crosscorrelation;
 
 pub fn output_image(
-    depth_image: &crosscorrelation::DepthImage,
+    point_correlations: &crosscorrelation::PointCorrelations,
     depth_scale: f32,
     path: &String,
 ) -> Result<(), image::ImageError> {
     let mut img = RgbaImage::from_pixel(
-        depth_image.correlated_points.ncols() as u32,
-        depth_image.correlated_points.nrows() as u32,
+        point_correlations.correlated_points.ncols() as u32,
+        point_correlations.correlated_points.nrows() as u32,
         Rgba::from([0, 0, 0, 0]),
     );
 
-    let (min, max) = get_values_range(depth_image);
+    let (min, max) = get_values_range(point_correlations);
 
     img.enumerate_pixels_mut().for_each(|(col, row, pixel)| {
         let row = row as usize;
         let col = col as usize;
-        let value = dist(row, col, &depth_image.correlated_points[(row, col)]);
+        let value = dist(row, col, &point_correlations.correlated_points[(row, col)]);
         let mut value = match value {
             Some(v) => v,
             None => return,
@@ -44,7 +44,7 @@ fn dist(row: usize, col: usize, value: &Option<(u32, u32)>) -> Option<f32> {
     );
 }
 
-fn get_values_range(data: &crosscorrelation::DepthImage) -> (f32, f32) {
+fn get_values_range(data: &crosscorrelation::PointCorrelations) -> (f32, f32) {
     let mut min = f32::MAX;
     let mut max = f32::MIN;
 

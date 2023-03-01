@@ -1,7 +1,9 @@
 use crate::correlation;
 use crate::crosscorrelation;
-use crate::fast;
+use crate::crosscorrelation::PointCorrelations;
+use crate::fast::Fast;
 use crate::fundamentalmatrix;
+use crate::fundamentalmatrix::FundamentalMatrix;
 use crate::output;
 use crate::Cli;
 
@@ -157,23 +159,31 @@ pub fn reconstruct(args: &Cli) {
     let keypoint_scale: f32;
     let img1_scaled: DMatrix<u8>;
     let img2_scaled: DMatrix<u8>;
-    let points1: Vec<Point>;
-    let points2: Vec<Point>;
+    let keypoints1: Fast;
+    let keypoints2: Fast;
     {
         let start_time = SystemTime::now();
-        keypoint_scale = fast::optimal_keypoint_scale(img1.img.dimensions());
+        keypoint_scale = Fast::optimal_keypoint_scale(img1.img.dimensions());
         img1_scaled = img1.resize(keypoint_scale);
         img2_scaled = img2.resize(keypoint_scale);
 
-        points1 = fast::find_points(&img1_scaled);
-        points2 = fast::find_points(&img2_scaled);
+        keypoints1 = Fast::new(&img1_scaled);
+        keypoints2 = Fast::new(&img2_scaled);
 
         match start_time.elapsed() {
             Ok(t) => println!("Extracted feature points in {:.3} seconds", t.as_secs_f32(),),
             Err(_) => {}
         }
-        println!("Image {} has {} feature points", args.img1, points1.len());
-        println!("Image {} has {} feature points", args.img2, points2.len());
+        println!(
+            "Image {} has {} feature points",
+            args.img1,
+            keypoints1.keypoints().len()
+        );
+        println!(
+            "Image {} has {} feature points",
+            args.img2,
+            keypoints2.keypoints().len()
+        );
     }
 
     let point_matches: Vec<(Point, Point)>;
@@ -181,12 +191,17 @@ pub fn reconstruct(args: &Cli) {
         let start_time = SystemTime::now();
 
         let pb = new_progress_bar();
-        let cb = |counter| pb.set_position((counter * 100.0) as u64);
-        point_matches =
-            correlation::match_points(&img1_scaled, &img2_scaled, &points1, &points2, Some(cb));
+        let matcher = correlation::KeypointMatching::new(
+            &img1_scaled,
+            &img2_scaled,
+            keypoints1.keypoints(),
+            keypoints2.keypoints(),
+            Some(&pb),
+        );
         pb.finish_and_clear();
-        drop(points1);
-        drop(points2);
+        point_matches = matcher.matches;
+        drop(keypoints1);
+        drop(keypoints2);
         drop(img1_scaled);
         drop(img2_scaled);
         match start_time.elapsed() {
@@ -196,7 +211,7 @@ pub fn reconstruct(args: &Cli) {
         println!("Found {} matches", point_matches.len());
     }
 
-    let fm: fundamentalmatrix::RansacResult;
+    let fm: FundamentalMatrix;
     {
         let start_time = SystemTime::now();
         let point_matches = point_matches
@@ -215,19 +230,17 @@ pub fn reconstruct(args: &Cli) {
             })
             .collect();
         let match_buckets =
-            fundamentalmatrix::matches_to_buckets(&point_matches, img1.img.dimensions());
+            FundamentalMatrix::matches_to_buckets(&point_matches, img1.img.dimensions());
         drop(point_matches);
-        let pb = new_progress_bar();
-        let cb = |counter| pb.set_position((counter * 100.0) as u64);
+        let pb_style = ProgressStyle::default_bar()
+            .template("{bar} {percent}% (eta: {eta}{msg})")
+            .unwrap();
+        let pb = ProgressBar::new(10000).with_style(pb_style);
         let projection_mode = match args.projection {
             crate::ProjectionMode::Parallel => fundamentalmatrix::ProjectionMode::Affine,
             crate::ProjectionMode::Perspective => fundamentalmatrix::ProjectionMode::Perspective,
         };
-        let f = fundamentalmatrix::compute_fundamental_matrix(
-            projection_mode,
-            &match_buckets,
-            Some(cb),
-        );
+        let f = FundamentalMatrix::new(projection_mode, &match_buckets, Some(&pb));
         pb.finish_and_clear();
         match start_time.elapsed() {
             Ok(t) => println!("Completed RANSAC fitting in {:.3} seconds", t.as_secs_f32(),),
@@ -244,42 +257,35 @@ pub fn reconstruct(args: &Cli) {
         println!("Kept {} matches", fm.matches_count);
     }
 
-    let mut depth_image = crosscorrelation::DepthImage::new(img1.img.dimensions());
+    let mut point_correlations: PointCorrelations;
     {
         let start_time = SystemTime::now();
-        let scale_steps = crosscorrelation::optimal_scale_steps(img1.img.dimensions());
+        let scale_steps = PointCorrelations::optimal_scale_steps(img1.img.dimensions());
         let total_percent: f32 = (0..scale_steps + 1)
             .map(|step| 1.0 / ((1 << (scale_steps - step)) as f32).powi(2))
             .sum();
 
         let pb = new_progress_bar();
+        let projection_mode = match args.projection {
+            crate::ProjectionMode::Parallel => crosscorrelation::ProjectionMode::Affine,
+            crate::ProjectionMode::Perspective => crosscorrelation::ProjectionMode::Perspective,
+        };
 
         let mut total_percent_complete = 0.0;
+        point_correlations = PointCorrelations::new(img1.img.dimensions(), fm.f, projection_mode);
         for i in 0..scale_steps + 1 {
             let scale = 1.0 / (1 << (scale_steps - i)) as f32;
             let img1 = img1.resize(scale);
             let img2 = img2.resize(scale);
 
-            let cb = |counter| {
-                // TODO: show a message with pb.set_message
-                let percent_complete =
-                    total_percent_complete + counter * scale * scale / total_percent;
-                pb.set_position((percent_complete * 100.0) as u64);
+            let pb = CrossCorrelationProgressBar {
+                total_percent_complete,
+                total_percent,
+                pb: &pb,
+                scale,
             };
 
-            let projection_mode = match args.projection {
-                crate::ProjectionMode::Parallel => crosscorrelation::ProjectionMode::Affine,
-                crate::ProjectionMode::Perspective => crosscorrelation::ProjectionMode::Perspective,
-            };
-            crosscorrelation::correlate_images(
-                &img1,
-                &img2,
-                &fm.f,
-                scale,
-                projection_mode,
-                &mut depth_image,
-                Some(cb),
-            );
+            point_correlations.correlate_images(img1, img2, scale, Some(&pb));
             total_percent_complete += scale * scale / total_percent;
         }
 
@@ -303,7 +309,7 @@ pub fn reconstruct(args: &Cli) {
     //let out_scale = (1.0, 1.0);
     let depth_scale = args.scale;
     {
-        match output::output_image(&depth_image, depth_scale, &args.img_out) {
+        match output::output_image(&point_correlations, depth_scale, &args.img_out) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!("Failed to save image: {}", e);
@@ -320,7 +326,37 @@ pub fn reconstruct(args: &Cli) {
 
 fn new_progress_bar() -> ProgressBar {
     let pb_style = ProgressStyle::default_bar()
-        .template("{wide_bar} {percent}/100% (eta: {eta})")
+        .template("{bar} {percent}% (eta: {eta})")
         .unwrap();
-    return ProgressBar::new(100).with_style(pb_style);
+    return ProgressBar::new(10000).with_style(pb_style);
+}
+
+impl correlation::ProgressListener for ProgressBar {
+    fn report_status(&self, pos: f32) {
+        self.set_position((pos * 10000.0) as u64);
+    }
+}
+
+impl fundamentalmatrix::ProgressListener for ProgressBar {
+    fn report_status(&self, pos: f32) {
+        self.set_position((pos * 10000.0) as u64);
+    }
+    fn report_matches(&self, matches_count: usize) {
+        self.set_message(format!(", {} matches", matches_count));
+    }
+}
+
+struct CrossCorrelationProgressBar<'p> {
+    total_percent_complete: f32,
+    total_percent: f32,
+    scale: f32,
+    pb: &'p ProgressBar,
+}
+
+impl crosscorrelation::ProgressListener for CrossCorrelationProgressBar<'_> {
+    fn report_status(&self, pos: f32) {
+        let percent_complete =
+            self.total_percent_complete + pos * self.scale * self.scale / self.total_percent;
+        self.pb.set_position((percent_complete * 10000.0) as u64);
+    }
 }

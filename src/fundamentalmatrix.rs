@@ -28,57 +28,57 @@ pub enum ProjectionMode {
     Perspective,
 }
 
+pub trait ProgressListener
+where
+    Self: Sync + Sized,
+{
+    fn report_status(&self, pos: f32);
+    fn report_matches(&self, matches_count: usize);
+}
+
 #[derive(Debug)]
-pub struct RansacResult {
-    pub f: Matrix3<f64>,
-    pub matches_count: usize,
+struct RansacIterationResult {
+    f: Matrix3<f64>,
+    matches_count: usize,
     best_error: f64,
 }
 
-pub fn matches_to_buckets(point_matches: &Vec<Match>, dimensions: (u32, u32)) -> Vec<Vec<Match>> {
-    let width = dimensions.0;
-    let height = dimensions.1;
-    let mut match_buckets: Vec<Vec<Match>> = Vec::new();
-    match_buckets.resize(MATCH_GRID_SIZE * MATCH_GRID_SIZE as usize, vec![]);
-    point_matches.into_iter().for_each(|(p1, p2)| {
-        let x_i = (MATCH_GRID_SIZE * p1.0) / (width as usize);
-        let y_i = (MATCH_GRID_SIZE * p1.1) / (height as usize);
-        let pos = y_i * MATCH_GRID_SIZE + x_i;
-        match_buckets[pos].push((*p1, *p2));
-    });
-    return match_buckets
-        .into_iter()
-        .filter(|l| !l.is_empty())
-        .collect();
-}
-
-pub fn compute_fundamental_matrix<P>(
-    projection: ProjectionMode,
-    match_buckets: &Vec<Vec<Match>>,
-    pb: Option<P>,
-) -> Result<RansacResult, RansacError>
-where
-    P: Fn(f32) + Sync + Send,
-{
-    let rt = RansacTask::new(projection, pb);
-    return rt.ransac_fundamental_matrix(match_buckets);
-}
-
-#[derive(Debug)]
-struct RansacTask<P> {
+pub struct FundamentalMatrix {
+    pub f: Matrix3<f64>,
+    pub matches_count: usize,
     projection: ProjectionMode,
     ransac_k: usize,
     ransac_n: usize,
     ransac_t: f64,
     ransac_d_early_exit: usize,
-    pb: Option<P>,
 }
 
-impl<P> RansacTask<P>
-where
-    P: Fn(f32) + Sync + Send,
-{
-    fn new(projection: ProjectionMode, pb: Option<P>) -> RansacTask<P> {
+impl FundamentalMatrix {
+    pub fn matches_to_buckets(
+        point_matches: &Vec<Match>,
+        dimensions: (u32, u32),
+    ) -> Vec<Vec<Match>> {
+        let width = dimensions.0;
+        let height = dimensions.1;
+        let mut match_buckets: Vec<Vec<Match>> = Vec::new();
+        match_buckets.resize(MATCH_GRID_SIZE * MATCH_GRID_SIZE as usize, vec![]);
+        point_matches.into_iter().for_each(|(p1, p2)| {
+            let x_i = (MATCH_GRID_SIZE * p1.0) / (width as usize);
+            let y_i = (MATCH_GRID_SIZE * p1.1) / (height as usize);
+            let pos = y_i * MATCH_GRID_SIZE + x_i;
+            match_buckets[pos].push((*p1, *p2));
+        });
+        return match_buckets
+            .into_iter()
+            .filter(|l| !l.is_empty())
+            .collect();
+    }
+
+    pub fn new<PL: ProgressListener>(
+        projection: ProjectionMode,
+        match_buckets: &Vec<Vec<Match>>,
+        progress_listener: Option<&PL>,
+    ) -> Result<FundamentalMatrix, RansacError> {
         let ransac_k = match projection {
             ProjectionMode::Affine => RANSAC_K_AFFINE,
             ProjectionMode::Perspective => RANSAC_K_PERSPECTIVE,
@@ -95,21 +95,30 @@ where
             ProjectionMode::Affine => RANSAC_D_EARLY_EXIT_AFFINE,
             ProjectionMode::Perspective => RANSAC_D_EARLY_EXIT_PERSPECTIVE,
         };
-
-        return RansacTask::<P> {
+        let mut fm = FundamentalMatrix {
+            f: Matrix3::from_element(f64::NAN),
+            matches_count: 0,
             projection,
             ransac_k,
             ransac_n,
             ransac_t,
             ransac_d_early_exit,
-            pb,
         };
+        match fm.find_ransac(match_buckets, progress_listener) {
+            Ok(res) => {
+                fm.f = res.f;
+                fm.matches_count = res.matches_count;
+                Ok(fm)
+            }
+            Err(err) => Err(err),
+        }
     }
 
-    fn ransac_fundamental_matrix(
+    fn find_ransac<PL: ProgressListener>(
         &self,
         match_buckets: &Vec<Vec<Match>>,
-    ) -> Result<RansacResult, RansacError> {
+        progress_listener: Option<&PL>,
+    ) -> Result<RansacIterationResult, RansacError> {
         let matches_count: usize = match_buckets.into_iter().map(|b| b.len()).sum();
         if matches_count < RANSAC_D + self.ransac_n {
             return Err(RansacError::new("Not enough matches".to_owned()));
@@ -118,16 +127,23 @@ where
         let ransac_outer = self.ransac_k / RANSAC_CHECK_INTERVAL;
         let mut best_result = None;
         let counter = AtomicUsize::new(0);
+        let max_matches = AtomicUsize::new(0);
         for _ in 0..ransac_outer {
             let result = (0..RANSAC_CHECK_INTERVAL)
                 .into_par_iter()
                 .filter_map(|_| {
-                    self.pb.as_ref().map(|pb| {
-                        let it = (counter.fetch_add(1, AtomicOrdering::Relaxed)) as f32
+                    if let Some(pl) = progress_listener {
+                        let value = counter.fetch_add(1, AtomicOrdering::Relaxed) as f32
                             / self.ransac_k as f32;
-                        pb(it);
-                    });
+                        pl.report_status(value);
+                    }
                     self.ransac_iteration(&match_buckets)
+                })
+                .inspect(|m| {
+                    if let Some(pl) = progress_listener {
+                        let count = max_matches.fetch_max(m.matches_count, AtomicOrdering::Relaxed);
+                        pl.report_matches(count);
+                    }
                 })
                 .max();
             best_result = best_result.max(result);
@@ -145,7 +161,7 @@ where
         };
     }
 
-    fn ransac_iteration(&self, match_buckets: &Vec<Vec<Match>>) -> Option<RansacResult> {
+    fn ransac_iteration(&self, match_buckets: &Vec<Vec<Match>>) -> Option<RansacIterationResult> {
         let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
         // It's possible to select multiple points from the same bucket.
         let mut inliers = Vec::<Match>::with_capacity(self.ransac_n);
@@ -188,7 +204,7 @@ where
 
         let matches_count = all_inliers.0;
         let inliers_error = all_inliers.1 / matches_count as f64;
-        return Some(RansacResult {
+        return Some(RansacIterationResult {
             f,
             matches_count,
             best_error: inliers_error,
@@ -236,7 +252,7 @@ where
     }
 }
 
-impl Ord for RansacResult {
+impl Ord for RansacIterationResult {
     fn cmp(&self, other: &Self) -> Ordering {
         let mc_cmp = self.matches_count.cmp(&other.matches_count);
         if mc_cmp != Ordering::Equal {
@@ -260,19 +276,19 @@ impl Ord for RansacResult {
     }
 }
 
-impl PartialOrd for RansacResult {
+impl PartialOrd for RansacIterationResult {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl PartialEq for RansacResult {
+impl PartialEq for RansacIterationResult {
     fn eq(&self, other: &Self) -> bool {
         self.matches_count == other.matches_count && self.best_error == other.best_error
     }
 }
 
-impl Eq for RansacResult {}
+impl Eq for RansacIterationResult {}
 
 #[derive(Debug)]
 pub struct RansacError {

@@ -6,7 +6,6 @@ type Point = (usize, usize);
 
 const THRESHOLD: f32 = 0.95;
 const KERNEL_SIZE: usize = 7;
-
 const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
 const KERNEL_POINT_COUNT: usize = (KERNEL_WIDTH * KERNEL_WIDTH) as usize;
 
@@ -18,48 +17,71 @@ pub struct PointData<const KPC: usize> {
 
 type KeypointPointData = PointData<KERNEL_POINT_COUNT>;
 
-pub fn match_points<P>(
-    img1: &DMatrix<u8>,
-    img2: &DMatrix<u8>,
-    points1: &Vec<Point>,
-    points2: &Vec<Point>,
-    pb: Option<P>,
-) -> Vec<(Point, Point)>
+pub struct KeypointMatching {
+    pub matches: Vec<(Point, Point)>,
+}
+
+pub trait ProgressListener
 where
-    P: Fn(f32) + Sync + Send,
+    Self: Sync + Sized,
 {
-    let data1: Vec<Option<KeypointPointData>> = compute_points_data(img1, points1);
-    let data2: Vec<Option<KeypointPointData>> = compute_points_data(img2, points2);
-    let counter = AtomicUsize::new(0);
-    let matches: Vec<(Point, Point)> = points1
-        .into_par_iter()
-        .enumerate()
-        .flat_map(|(i1, p1)| {
-            pb.as_ref().map(|pb| {
-                pb(counter.fetch_add(1, Ordering::Relaxed) as f32 / points1.len() as f32);
-            });
-            let data1 = match &data1[i1] {
-                Some(it) => it,
-                None => return vec![],
-            };
-            let points2 = &points2;
-            let matches: Vec<(Point, Point)> = points2
-                .into_iter()
-                .enumerate()
-                .filter_map(|(i2, p2)| {
-                    let data2 = match &data2[i2] {
-                        Some(it) => it,
-                        None => return None,
-                    };
-                    return correlate_points(data1, data2)
-                        .filter(|corr| *corr > THRESHOLD)
-                        .map(|_| (*p1, *p2));
-                })
-                .collect();
-            return matches;
-        })
-        .collect();
-    return matches;
+    fn report_status(&self, pos: f32);
+}
+
+impl KeypointMatching {
+    pub fn new<PL: ProgressListener>(
+        img1: &DMatrix<u8>,
+        img2: &DMatrix<u8>,
+        points1: &Vec<Point>,
+        points2: &Vec<Point>,
+        progress_listener: Option<&PL>,
+    ) -> KeypointMatching {
+        let matches =
+            KeypointMatching::match_points(img1, img2, points1, points2, progress_listener);
+        return KeypointMatching { matches };
+    }
+
+    fn match_points<PL: ProgressListener>(
+        img1: &DMatrix<u8>,
+        img2: &DMatrix<u8>,
+        points1: &Vec<Point>,
+        points2: &Vec<Point>,
+        progress_listener: Option<&PL>,
+    ) -> Vec<(Point, Point)> {
+        let data1: Vec<Option<KeypointPointData>> = compute_points_data(img1, points1);
+        let data2: Vec<Option<KeypointPointData>> = compute_points_data(img2, points2);
+        let counter = AtomicUsize::new(0);
+        return points1
+            .into_par_iter()
+            .enumerate()
+            .flat_map(|(i1, p1)| {
+                if let Some(pl) = progress_listener {
+                    let value =
+                        counter.fetch_add(1, Ordering::Relaxed) as f32 / points1.len() as f32;
+                    pl.report_status(value);
+                }
+                let data1 = match &data1[i1] {
+                    Some(it) => it,
+                    None => return vec![],
+                };
+                let points2 = &points2;
+                let matches: Vec<(Point, Point)> = points2
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(i2, p2)| {
+                        let data2 = match &data2[i2] {
+                            Some(it) => it,
+                            None => return None,
+                        };
+                        return correlate_points(data1, data2)
+                            .filter(|corr| *corr > THRESHOLD)
+                            .map(|_| (*p1, *p2));
+                    })
+                    .collect();
+                return matches;
+            })
+            .collect();
+    }
 }
 
 #[inline]
