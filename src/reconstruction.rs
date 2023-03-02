@@ -332,11 +332,15 @@ pub fn reconstruct(args: &Cli) {
     {
         let start_time = SystemTime::now();
 
+        let pb = new_progress_bar();
         let interpolation_mode = match args.interpolation {
             crate::InterpolationMode::Delaunay => output::InterpolationMode::Delaunay,
             crate::InterpolationMode::None => output::InterpolationMode::None,
         };
-        match output::output(surface.points, &args.img_out, interpolation_mode) {
+
+        let result = output::output(surface.points, &args.img_out, interpolation_mode, Some(&pb));
+        pb.finish_and_clear();
+        match result {
             Ok(_) => {}
             Err(e) => {
                 eprintln!("Failed to save image: {}", e);
@@ -390,5 +394,11 @@ impl crosscorrelation::ProgressListener for CrossCorrelationProgressBar<'_> {
         let percent_complete =
             self.total_percent_complete + pos * self.scale * self.scale / self.total_percent;
         self.pb.set_position((percent_complete * 10000.0) as u64);
+    }
+}
+
+impl output::ProgressListener for ProgressBar {
+    fn report_status(&self, pos: f32) {
+        self.set_position((pos * 10000.0) as u64);
     }
 }
