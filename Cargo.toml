@@ -17,6 +17,9 @@ rayon = "*"
 rand = { version = "0.8.5", default_features = false, features = ["std", "std_rng", "small_rng"] }
 nalgebra = { version = "0.32.1", features = ["rayon"] }
 spade = { version = "2.1.0", default_features = false }
+wgpu = { version = "0.15.1", default-features = false, features = ["wgsl"] }
+pollster = { version = "0.3.0", default-features = false }
+bytemuck = { version= "*", features = ["derive"] }
 
 [features]
 default = []

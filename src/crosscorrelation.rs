@@ -1,7 +1,7 @@
 use crate::correlation;
 use nalgebra::{DMatrix, Matrix3, Vector3};
 use rayon::prelude::*;
-use std::{cell::RefCell, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering};
+use std::{cell::RefCell, error, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering};
 
 const SCALE_MIN_SIZE: usize = 64;
 const KERNEL_SIZE: usize = 5;
@@ -14,7 +14,9 @@ const MIN_STDEV_AFFINE: f32 = 1.0;
 const MIN_STDEV_PERSPECTIVE: f32 = 25.0;
 const CORRIDOR_SIZE: usize = 20;
 // Decrease when using a low-powered GPU
+#[cfg(feature = "gpu")]
 const CORRIDOR_SEGMENT_LENGTH: usize = 256;
+#[cfg(feature = "gpu")]
 const SEARCH_AREA_SEGMENT_LENGTH: usize = 8;
 const NEIGHBOR_DISTANCE: usize = 10;
 const CORRIDOR_EXTEND_RANGE: f64 = 1.0;
@@ -26,6 +28,13 @@ type Match = (u32, u32);
 pub enum ProjectionMode {
     Affine,
     Perspective,
+}
+
+#[derive(Debug)]
+pub enum HardwareMode {
+    #[cfg(feature = "gpu")]
+    GPU,
+    CPU,
 }
 
 pub trait ProgressListener
@@ -41,6 +50,9 @@ pub struct PointCorrelations {
     min_stdev: f32,
     correlation_threshold: f32,
     fundamental_matrix: Matrix3<f64>,
+    #[cfg(feature = "gpu")]
+    gpu_context: Option<gpu::GpuContext>,
+    selected_hardware: String,
 }
 
 struct EpipolarLine {
@@ -63,16 +75,51 @@ struct CorrelationStep {
 
 impl PointCorrelations {
     pub fn new(
-        dimensions: (u32, u32),
+        img1_dimensions: (u32, u32),
+        img2_dimensions: (u32, u32),
         fundamental_matrix: Matrix3<f64>,
         projection_mode: ProjectionMode,
+        hardware_mode: HardwareMode,
     ) -> PointCorrelations {
-        // Height specifies rows, width specifies columns.
-        let correlated_points =
-            DMatrix::from_element(dimensions.1 as usize, dimensions.0 as usize, None);
         let (min_stdev, correlation_threshold) = match projection_mode {
             ProjectionMode::Affine => (MIN_STDEV_AFFINE, THRESHOLD_AFFINE),
             ProjectionMode::Perspective => (MIN_STDEV_PERSPECTIVE, THRESHOLD_PERSPECTIVE),
+        };
+        #[cfg(feature = "gpu")]
+        let gpu_context = match hardware_mode {
+            HardwareMode::GPU => gpu::GpuContext::new(
+                (img1_dimensions.0 as usize, img1_dimensions.1 as usize),
+                (img2_dimensions.0 as usize, img2_dimensions.1 as usize),
+                min_stdev,
+                correlation_threshold,
+                fundamental_matrix,
+            )
+            .ok(),
+            HardwareMode::CPU => None,
+        };
+
+        let selected_hardware;
+        let hw_mode;
+        #[cfg(feature = "gpu")]
+        if let Some(gpu_context) = &gpu_context {
+            selected_hardware = format!("GPU ({})", gpu_context.get_device_name());
+            hw_mode = HardwareMode::GPU;
+        } else {
+            selected_hardware = "CPU".to_string();
+            hw_mode = HardwareMode::CPU;
+        }
+        #[cfg(not(feature = "gpu"))]
+        {
+            selected_hardware = "CPU".to_string();
+            hw_mode = HardwareMode::CPU;
+        }
+        // Height specifies rows, width specifies columns.
+        let correlated_points = match hw_mode {
+            HardwareMode::CPU => {
+                DMatrix::from_element(img1_dimensions.1 as usize, img1_dimensions.0 as usize, None)
+            }
+            #[cfg(feature = "gpu")]
+            HardwareMode::GPU => DMatrix::from_element(0, 0, None),
         };
         return PointCorrelations {
             correlated_points,
@@ -80,7 +127,25 @@ impl PointCorrelations {
             min_stdev,
             correlation_threshold,
             fundamental_matrix,
+            #[cfg(feature = "gpu")]
+            gpu_context,
+            selected_hardware,
         };
+    }
+
+    pub fn get_selected_hardware(&self) -> &String {
+        &self.selected_hardware
+    }
+
+    pub fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
+        #[cfg(feature = "gpu")]
+        if let Some(gpu_context) = &mut self.gpu_context {
+            match gpu_context.complete_process() {
+                Ok(correlated_points) => self.correlated_points = correlated_points,
+                Err(err) => return Err(err),
+            }
+        }
+        Ok(())
     }
 
     pub fn correlate_images<PL: ProgressListener>(
@@ -90,6 +155,11 @@ impl PointCorrelations {
         scale: f32,
         progress_listener: Option<&PL>,
     ) {
+        #[cfg(feature = "gpu")]
+        if let Some(gpu_context) = &mut self.gpu_context {
+            gpu_context.correlate_images(img1, img2, scale, progress_listener);
+            return;
+        };
         let img2_data = compute_image_point_data(&img2);
         let mut out_data: DMatrix<Option<Match>> =
             DMatrix::from_element(img1.shape().0, img1.shape().1, None);
@@ -439,4 +509,536 @@ fn compute_compact_point_data(img: &DMatrix<u8>, row: usize, col: usize) -> Opti
     result.stdev = (result.stdev / KERNEL_POINT_COUNT as f32).sqrt();
 
     return Some(result);
+}
+
+#[cfg(feature = "gpu")]
+mod gpu {
+    const MIN_BUFFER_SIZE: usize = 128;
+    const MAX_BINDINGS: u32 = 6;
+    const FUNDAMENTAL_MATRIX_PADDING: usize = 2;
+
+    use std::{borrow::Cow, error, fmt};
+
+    use bytemuck::{Pod, Zeroable};
+    use nalgebra::{DMatrix, Matrix3};
+    use pollster::FutureExt;
+    use std::sync::mpsc;
+
+    use super::{
+        CORRIDOR_EXTEND_RANGE, CORRIDOR_MIN_RANGE, CORRIDOR_SEGMENT_LENGTH, CORRIDOR_SIZE,
+        KERNEL_SIZE, NEIGHBOR_DISTANCE, SEARCH_AREA_SEGMENT_LENGTH,
+    };
+
+    #[repr(C)]
+    #[derive(Copy, Clone, Debug, PartialEq, Pod, Zeroable)]
+    struct ShaderParams {
+        img1_width: u32,
+        img1_height: u32,
+        img2_width: u32,
+        img2_height: u32,
+        out_width: u32,
+        out_height: u32,
+        fundamental_matrix: [f32; FUNDAMENTAL_MATRIX_PADDING + 3 * 4], // matrices are column-major and each column is aligned to 4-component vectors; first two bytes are padding, required to for alignment
+        scale: f32,
+        iteration_pass: u32,
+        corridor_offset: i32,
+        corridor_start: u32,
+        corridor_end: u32,
+        kernel_size: u32,
+        threshold: f32,
+        min_stdev: f32,
+        neighbor_distance: u32,
+        extend_range: f32,
+        min_range: f32,
+    }
+
+    pub struct GpuContext {
+        min_stdev: f32,
+        correlation_threshold: f32,
+        fundamental_matrix: Matrix3<f64>,
+        out_dimensions: (usize, usize),
+        first_pass: bool,
+
+        device_name: String,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        shader_module: wgpu::ShaderModule,
+        buffer_params: wgpu::Buffer,
+        buffer_img: wgpu::Buffer,
+        buffer_internal: wgpu::Buffer,
+        buffer_internal_int: wgpu::Buffer,
+        buffer_out: wgpu::Buffer,
+    }
+
+    impl GpuContext {
+        pub fn new(
+            img1_dimensions: (usize, usize),
+            img2_dimensions: (usize, usize),
+            min_stdev: f32,
+            correlation_threshold: f32,
+            fundamental_matrix: Matrix3<f64>,
+        ) -> Result<GpuContext, Box<dyn error::Error>> {
+            let out_dimensions = (img1_dimensions.1, img1_dimensions.0);
+
+            // Init adapter.
+            let instance = wgpu::Instance::default();
+            let adapter_options = wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                force_fallback_adapter: false,
+                compatible_surface: None,
+            };
+            let adapter = instance.request_adapter(&adapter_options).block_on();
+            let adapter = if let Some(adapter) = adapter {
+                adapter
+            } else {
+                return Err(GpuError::new("Adapter not found").into());
+            };
+            let mut limits = wgpu::Limits::downlevel_defaults();
+            limits.max_bindings_per_bind_group = MAX_BINDINGS;
+            limits.max_storage_buffers_per_shader_stage = MAX_BINDINGS;
+            let (device, queue) = adapter
+                .request_device(
+                    &wgpu::DeviceDescriptor {
+                        label: None,
+                        features: wgpu::Features::empty(),
+                        limits: limits,
+                    },
+                    None,
+                )
+                .block_on()?;
+
+            let info = adapter.get_info();
+            let device_name = info.driver_info;
+
+            let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("correlation.wgsl"))),
+            });
+
+            // Init buffers.
+            let img1_pixels = img1_dimensions.0 * img1_dimensions.1;
+            let img2_pixels = img2_dimensions.0 * img2_dimensions.1;
+            let out_pixels = img1_pixels;
+            let buffer_params = init_buffer(
+                &device,
+                std::mem::size_of::<ShaderParams>().max(MIN_BUFFER_SIZE),
+                false,
+            );
+            let buffer_img = init_buffer(
+                &device,
+                (img1_pixels + img2_pixels) * std::mem::size_of::<f32>(),
+                false,
+            );
+            let buffer_internal = init_buffer(
+                &device,
+                (img1_pixels * 3 + img2_pixels * 2) * std::mem::size_of::<f32>(),
+                true,
+            );
+            let buffer_internal_int =
+                init_buffer(&device, img1_pixels * 3 * std::mem::size_of::<i32>(), true);
+            let buffer_out =
+                init_buffer(&device, out_pixels * 2 * std::mem::size_of::<i32>(), false);
+
+            let result = GpuContext {
+                min_stdev,
+                correlation_threshold,
+                fundamental_matrix,
+                out_dimensions,
+                first_pass: true,
+                device_name,
+                device,
+                queue,
+                shader_module,
+                buffer_params,
+                buffer_img,
+                buffer_internal,
+                buffer_internal_int,
+                buffer_out,
+            };
+            Ok(result)
+        }
+
+        pub fn get_device_name(&self) -> &String {
+            return &self.device_name;
+        }
+
+        pub fn correlate_images<PL: super::ProgressListener>(
+            &mut self,
+            img1: DMatrix<u8>,
+            img2: DMatrix<u8>,
+            scale: f32,
+            progress_listener: Option<&PL>,
+        ) {
+            let corridor_stripes = 2 * CORRIDOR_SIZE + 1;
+            let max_width = img1.ncols().max(img2.ncols());
+            let max_height = img1.nrows().max(img2.nrows());
+            let max_shape = (max_height, max_width);
+            let img1_shape = img1.shape();
+            let corridor_length =
+                self.out_dimensions.0.max(self.out_dimensions.1) - (KERNEL_SIZE * 2);
+            let corridor_segments = corridor_length / CORRIDOR_SEGMENT_LENGTH + 1;
+
+            let mut progressbar_completed_percentage = 0.02;
+            let send_progress = |v| {
+                if let Some(pl) = progress_listener {
+                    pl.report_status(v);
+                }
+            };
+
+            let mut params = ShaderParams {
+                img1_width: img1.ncols() as u32,
+                img1_height: img1.nrows() as u32,
+                img2_width: img2.ncols() as u32,
+                img2_height: img2.nrows() as u32,
+                out_width: self.out_dimensions.1 as u32,
+                out_height: self.out_dimensions.0 as u32,
+                fundamental_matrix: self.convert_fundamental_matrix(),
+                scale,
+                iteration_pass: 0,
+                corridor_offset: 0,
+                corridor_start: 0,
+                corridor_end: 0,
+                kernel_size: KERNEL_SIZE as u32,
+                threshold: self.correlation_threshold,
+                min_stdev: self.min_stdev,
+                neighbor_distance: NEIGHBOR_DISTANCE as u32,
+                extend_range: CORRIDOR_EXTEND_RANGE as f32,
+                min_range: CORRIDOR_MIN_RANGE as f32,
+            };
+
+            self.transfer_in_images(img1, img2);
+
+            if self.first_pass {
+                self.run_shader(self.out_dimensions, "init_out_data", params);
+            } else {
+                self.run_shader(img1_shape, "prepare_initialdata_searchdata", params);
+                progressbar_completed_percentage = 0.02;
+                send_progress(progressbar_completed_percentage);
+
+                let y_limit = (NEIGHBOR_DISTANCE as f32 / scale).ceil() as u32 * 2;
+                let batch_size = SEARCH_AREA_SEGMENT_LENGTH as u32;
+                params.iteration_pass = 0;
+                for y in (0..y_limit + 1).step_by(batch_size as usize) {
+                    params.corridor_start = y;
+                    params.corridor_end = y + batch_size;
+                    if params.corridor_end > NEIGHBOR_DISTANCE as u32 {
+                        params.corridor_end = NEIGHBOR_DISTANCE as u32
+                    }
+                    self.run_shader(img1_shape, "prepare_searchdata", params);
+
+                    let percent_complete =
+                        progressbar_completed_percentage + 0.19 * (y as f32 / y_limit as f32);
+                    send_progress(percent_complete);
+                }
+                progressbar_completed_percentage = 0.31;
+                send_progress(progressbar_completed_percentage);
+
+                params.iteration_pass = 1;
+                for y in (0..y_limit + 1).step_by(batch_size as usize) {
+                    params.corridor_start = y;
+                    params.corridor_end = y + batch_size;
+                    if params.corridor_end > NEIGHBOR_DISTANCE as u32 {
+                        params.corridor_end = NEIGHBOR_DISTANCE as u32
+                    }
+                    self.run_shader(img1_shape, "prepare_searchdata", params);
+
+                    let percent_complete =
+                        progressbar_completed_percentage + 0.19 * (y as f32 / y_limit as f32);
+                    send_progress(percent_complete);
+                }
+
+                progressbar_completed_percentage = 0.40;
+            }
+            send_progress(progressbar_completed_percentage);
+            params.iteration_pass = if self.first_pass { 0 } else { 1 };
+
+            self.run_shader(max_shape, "prepare_initialdata_correlation", params);
+
+            for corridor_offset in -(CORRIDOR_SIZE as i32)..CORRIDOR_SIZE as i32 + 1 {
+                for l in 0u32..corridor_segments as u32 {
+                    params.corridor_offset = corridor_offset;
+                    params.corridor_start = KERNEL_SIZE as u32 + l * CORRIDOR_SEGMENT_LENGTH as u32;
+                    params.corridor_end =
+                        KERNEL_SIZE as u32 + (l + 1) * CORRIDOR_SEGMENT_LENGTH as u32;
+                    if params.corridor_end > corridor_length as u32 - KERNEL_SIZE as u32 {
+                        params.corridor_end = corridor_length as u32 - KERNEL_SIZE as u32;
+                    }
+                    self.run_shader(img1_shape, "cross_correlate", params);
+
+                    let corridor_complete = (params.corridor_end as usize - KERNEL_SIZE) as f32
+                        / corridor_length as f32;
+                    let percent_complete = progressbar_completed_percentage
+                        + (1.0 - progressbar_completed_percentage)
+                            * (corridor_offset as f32 + CORRIDOR_SIZE as f32 + corridor_complete)
+                            / corridor_stripes as f32;
+                    send_progress(percent_complete);
+                }
+            }
+
+            self.first_pass = false;
+        }
+
+        fn run_shader(
+            &self,
+            shape: (usize, usize),
+            entry_point: &str,
+            shader_params: ShaderParams,
+        ) {
+            let pipeline = self
+                .device
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: None,
+                    layout: None,
+                    module: &self.shader_module,
+                    entry_point,
+                });
+
+            let bind_group_layout = pipeline.get_bind_group_layout(0);
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &bind_group_layout,
+                entries: self.create_bind_group_entries(entry_point).as_slice(),
+            });
+
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            {
+                let workgroup_size = (
+                    (shape.1 as f32 / 16.0f32).round() as u32,
+                    (shape.0 as f32 / 16.0f32).round() as u32,
+                );
+                let mut cpass =
+                    encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+                cpass.set_pipeline(&pipeline);
+                cpass.set_bind_group(0, &bind_group, &[]);
+                cpass.dispatch_workgroups(workgroup_size.0, workgroup_size.1, 1);
+            }
+
+            self.queue.write_buffer(
+                &self.buffer_params,
+                0,
+                bytemuck::cast_slice(&[shader_params]),
+            );
+            self.queue.submit(Some(encoder.finish()));
+
+            self.device.poll(wgpu::Maintain::Wait);
+        }
+
+        fn convert_fundamental_matrix(&self) -> [f32; FUNDAMENTAL_MATRIX_PADDING + 3 * 4] {
+            let mut f = [0f32; FUNDAMENTAL_MATRIX_PADDING + 3 * 4];
+            for row in 0..3 {
+                for col in 0..3 {
+                    f[FUNDAMENTAL_MATRIX_PADDING + col * 4 + row] =
+                        self.fundamental_matrix[(row, col)] as f32;
+                }
+            }
+            return f;
+        }
+
+        fn transfer_in_images(&self, img1: DMatrix<u8>, img2: DMatrix<u8>) {
+            let mut img_slice = Vec::with_capacity(img1.nrows() * img1.ncols());
+            for row in 0..img1.nrows() {
+                for col in 0..img1.ncols() {
+                    img_slice.push(img1[(row, col)] as f32);
+                }
+            }
+            self.queue.write_buffer(
+                &self.buffer_img,
+                0,
+                bytemuck::cast_slice(img_slice.as_slice()),
+            );
+            let img1_bytes =
+                (std::mem::size_of::<u32>() * img1.nrows() * img1.ncols()) as wgpu::BufferAddress;
+            let mut img_slice = Vec::with_capacity(img2.nrows() * img2.ncols());
+            for row in 0..img2.nrows() {
+                for col in 0..img2.ncols() {
+                    img_slice.push(img2[(row, col)] as f32);
+                }
+            }
+            self.queue.write_buffer(
+                &self.buffer_img,
+                img1_bytes,
+                bytemuck::cast_slice(img_slice.as_slice()),
+            );
+        }
+
+        pub fn complete_process(
+            &mut self,
+        ) -> Result<DMatrix<Option<super::Match>>, Box<dyn error::Error>> {
+            self.buffer_params.destroy();
+            self.buffer_img.destroy();
+            self.buffer_internal.destroy();
+            self.buffer_internal_int.destroy();
+
+            let mut out_image =
+                DMatrix::from_element(self.out_dimensions.0, self.out_dimensions.1, None);
+
+            let out_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: self.buffer_out.size(),
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let out_buffer_slice = out_buffer.slice(..);
+            {
+                let mut encoder = self
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                encoder.copy_buffer_to_buffer(
+                    &self.buffer_out,
+                    0,
+                    &out_buffer,
+                    0,
+                    self.buffer_out.size(),
+                );
+                self.queue.submit(Some(encoder.finish()));
+                let (sender, receiver) = mpsc::channel();
+                out_buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
+                self.device.poll(wgpu::Maintain::Wait);
+
+                if let Err(err) = receiver.recv() {
+                    return Err(err.into());
+                }
+            }
+
+            let out_buffer_slice_mapped = out_buffer_slice.get_mapped_range();
+            let out_data: &[i32] = bytemuck::cast_slice(&out_buffer_slice_mapped);
+            for col in 0..out_image.ncols() {
+                for row in 0..out_image.nrows() {
+                    let pos = 2 * (row * out_image.ncols() + col);
+                    let point_match = (out_data[pos], out_data[pos + 1]);
+                    out_image[(row, col)] = if point_match.0 > 0 && point_match.1 > 0 {
+                        Some((point_match.1 as u32, point_match.0 as u32))
+                    } else {
+                        None
+                    };
+                }
+            }
+            drop(out_buffer_slice_mapped);
+            out_buffer.unmap();
+            Ok(out_image)
+        }
+
+        fn create_bind_group_entries(&self, entry_point: &str) -> Vec<wgpu::BindGroupEntry> {
+            match entry_point {
+                "init_out_data" => vec![
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.buffer_params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.buffer_out.as_entire_binding(),
+                    },
+                ],
+                "prepare_initialdata_searchdata" => vec![
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.buffer_params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.buffer_internal.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.buffer_internal_int.as_entire_binding(),
+                    },
+                ],
+                "prepare_searchdata" => vec![
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.buffer_params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.buffer_internal.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.buffer_internal_int.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.buffer_out.as_entire_binding(),
+                    },
+                ],
+                "prepare_initialdata_correlation" => vec![
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.buffer_params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.buffer_img.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.buffer_internal.as_entire_binding(),
+                    },
+                ],
+                "cross_correlate" => vec![
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.buffer_params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.buffer_img.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.buffer_internal.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.buffer_internal_int.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.buffer_out.as_entire_binding(),
+                    },
+                ],
+                &_ => vec![],
+            }
+        }
+    }
+
+    fn init_buffer(device: &wgpu::Device, size: usize, gpuonly: bool) -> wgpu::Buffer {
+        let size = size as wgpu::BufferAddress;
+
+        let buffer_usage = if !gpuonly {
+            wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::STORAGE
+        } else {
+            wgpu::BufferUsages::STORAGE
+        };
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size,
+            usage: buffer_usage,
+            mapped_at_creation: false,
+        })
+    }
+
+    #[derive(Debug)]
+    pub struct GpuError {
+        msg: &'static str,
+    }
+
+    impl GpuError {
+        fn new(msg: &'static str) -> GpuError {
+            GpuError { msg }
+        }
+    }
+
+    impl std::error::Error for GpuError {}
+
+    impl fmt::Display for GpuError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            return write!(f, "{}", self.msg);
+        }
+    }
 }

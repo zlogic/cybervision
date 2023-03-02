@@ -272,9 +272,24 @@ pub fn reconstruct(args: &Cli) {
             crate::ProjectionMode::Parallel => crosscorrelation::ProjectionMode::Affine,
             crate::ProjectionMode::Perspective => crosscorrelation::ProjectionMode::Perspective,
         };
+        let hardware_mode = match args.mode {
+            #[cfg(feature = "gpu")]
+            crate::HardwareMode::GPU => crosscorrelation::HardwareMode::GPU,
+            crate::HardwareMode::CPU => crosscorrelation::HardwareMode::CPU,
+        };
 
         let mut total_percent_complete = 0.0;
-        point_correlations = PointCorrelations::new(img1.img.dimensions(), fm.f, projection_mode);
+        point_correlations = PointCorrelations::new(
+            img1.img.dimensions(),
+            img2.img.dimensions(),
+            fm.f,
+            projection_mode,
+            hardware_mode,
+        );
+        println!(
+            "Selected hardware: {}",
+            point_correlations.get_selected_hardware()
+        );
         for i in 0..scale_steps + 1 {
             let scale = 1.0 / (1 << (scale_steps - i)) as f32;
             let img1 = img1.resize(scale);
@@ -290,7 +305,12 @@ pub fn reconstruct(args: &Cli) {
             point_correlations.correlate_images(img1, img2, scale, Some(&pb));
             total_percent_complete += scale * scale / total_percent;
         }
-
+        match point_correlations.complete() {
+            Ok(_) => {}
+            Err(err) => {
+                eprintln!("Failed to complete points correlation: {}", err)
+            }
+        }
         pb.finish_and_clear();
 
         match start_time.elapsed() {

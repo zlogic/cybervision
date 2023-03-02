@@ -7,6 +7,31 @@ on:
     branches: [ "master" ]
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Cache Rust dependencies and artifacts
+      id: cache-rust
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          ${{ github.workspace }}/target
+        key: lint-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+    - name: Install naga
+      run: cargo install naga-cli
+
+    - name: Validate shaders with naga
+      run: naga src/correlation.wgsl
+    - name: Validate Rust code with clippy
+      run: cargo clippy --all-features
+
   build-linux:
     runs-on: ubuntu-latest
     strategy:
@@ -74,13 +99,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        include:
-        - arch: x86_64
-          mode: gpu
-        - arch: x86_64
-          mode: cpu
-        - arch: aarch64
-          mode: cpu
+        arch: [aarch64, x86_64]
 
     steps:
     - uses: actions/checkout@v3
@@ -102,7 +121,7 @@ jobs:
 
     - name: Build
       run: |
-        If ("${{ matrix.mode }}" -eq "gpu") { $FEATURES="gpu" }
+        $FEATURES=gpu
         cargo build --target=${{ matrix.arch }}-pc-windows-msvc --features=$FEATURES --release
 
     - name: Package application
@@ -141,9 +160,7 @@ jobs:
 
     - name: Build
       run: |
-        if [ "${{ matrix.mode }}" == "gpu" ]; then
-          FEATURES=gpu
-        fi
+        FEATURES=gpu
         cargo build --target=${{ matrix.arch }}-apple-darwin --features=$FEATURES --release
 
     - name: Package application
