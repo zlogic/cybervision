@@ -8,6 +8,7 @@ use std::{
 
 use image::{Rgba, RgbaImage};
 use nalgebra::DMatrix;
+use rayon::prelude::*;
 use spade::{
     handles::{FaceHandle, InnerTag},
     DelaunayTriangulation, InsertionError, Point2, Triangulation,
@@ -17,13 +18,6 @@ use spade::{
 pub enum InterpolationMode {
     Delaunay,
     None,
-}
-
-#[derive(Debug, PartialEq)]
-enum OutputFormat {
-    Image,
-    Obj,
-    Ply,
 }
 
 pub trait ProgressListener
@@ -38,33 +32,35 @@ type TriangulatedSurface = DelaunayTriangulation<Point2<f32>>;
 type TriangulatedSurfaceFace<'a> = FaceHandle<'a, InnerTag, Point2<f32>, (), (), ()>;
 
 pub fn output<PL: ProgressListener>(
-    mut surface: DMatrix<Option<f32>>,
+    surface: DMatrix<Option<f32>>,
     path: &String,
     interpolation: InterpolationMode,
     progress_listener: Option<&PL>,
 ) -> Result<(), Box<dyn error::Error>> {
-    let output_format = if path.to_lowercase().ends_with(".obj") {
-        OutputFormat::Obj
-    } else if path.to_lowercase().ends_with(".ply") {
-        OutputFormat::Ply
-    } else {
-        OutputFormat::Image
+    let surface_points = surface_points(&surface);
+    let surface_vertices_uninterpolated = match interpolation {
+        InterpolationMode::None => triangulate_without_interpolation(&surface, &surface_points),
+        InterpolationMode::Delaunay => vec![],
     };
+    let mut writer = if path.to_lowercase().ends_with(".obj") {
+        ObjWriter::new(surface, path)
+    } else if path.to_lowercase().ends_with(".ply") {
+        PlyWriter::new(surface, path)
+    } else {
+        ImageWriter::new(surface, path)
+    }?;
 
     if interpolation == InterpolationMode::Delaunay {
-        let triangulated_surface = triangulate_image(&mut surface)?;
+        let triangulated_surface = triangulate_image(surface_points)?;
 
         if let Some(pl) = progress_listener {
             pl.report_status(0.2);
         }
 
-        let mut writer = match output_format {
-            OutputFormat::Obj => ObjWriter::new(surface, path),
-            OutputFormat::Ply => PlyWriter::new(surface, path),
-            OutputFormat::Image => ImageWriter::new(surface, path),
-        }?;
-
-        writer.output_header(&triangulated_surface)?;
+        writer.output_header(
+            triangulated_surface.num_vertices(),
+            triangulated_surface.num_inner_faces(),
+        )?;
         let nvertices = triangulated_surface.num_vertices() as f32;
         triangulated_surface
             .vertices()
@@ -89,14 +85,46 @@ pub fn output<PL: ProgressListener>(
             })?;
         return writer.complete();
     }
-    Ok(())
+
+    let npoints = surface_points.len() as f32;
+    writer.output_header(surface_points.len(), surface_vertices_uninterpolated.len())?;
+    surface_points.iter().enumerate().try_for_each(|(i, p)| {
+        if let Some(pl) = progress_listener {
+            pl.report_status(0.2 + 0.4 * (i as f32 / npoints));
+        }
+        writer.output_vertex(p.x, p.y)
+    })?;
+    surface_vertices_uninterpolated
+        .iter()
+        .enumerate()
+        .try_for_each(|(i, p)| {
+            if let Some(pl) = progress_listener {
+                pl.report_status(0.6 + 0.4 * (i as f32 / npoints));
+            }
+            writer.output_face_uninterpolated(p)
+        })?;
+    return writer.complete();
 }
 
 trait MeshWriter {
-    fn output_header(&mut self, surface: &TriangulatedSurface) -> Result<(), std::io::Error>;
-    fn output_vertex(&mut self, x: f32, y: f32) -> Result<(), Box<dyn error::Error>>;
-    fn output_face(&mut self, f: TriangulatedSurfaceFace) -> Result<(), Box<dyn error::Error>>;
-    fn complete(&mut self) -> Result<(), Box<dyn error::Error>>;
+    fn output_header(&mut self, _nvertices: usize, _nfaces: usize) -> Result<(), std::io::Error> {
+        Ok(())
+    }
+    fn output_vertex(&mut self, _x: f32, _y: f32) -> Result<(), Box<dyn error::Error>> {
+        Ok(())
+    }
+    fn output_face(&mut self, _f: TriangulatedSurfaceFace) -> Result<(), Box<dyn error::Error>> {
+        Ok(())
+    }
+    fn output_face_uninterpolated(
+        &mut self,
+        _indices: &[usize; 3],
+    ) -> Result<(), Box<dyn error::Error>> {
+        Ok(())
+    }
+    fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
+        Ok(())
+    }
 }
 
 struct PlyWriter {
@@ -115,16 +143,16 @@ impl PlyWriter {
 }
 
 impl MeshWriter for PlyWriter {
-    fn output_header(&mut self, surface: &TriangulatedSurface) -> Result<(), std::io::Error> {
+    fn output_header(&mut self, nvertices: usize, nfaces: usize) -> Result<(), std::io::Error> {
         let w = self.writer.get_mut();
         writeln!(w, "ply")?;
         writeln!(w, "format binary_big_endian 1.0")?;
         writeln!(w, "comment Cybervision 3D surface")?;
-        writeln!(w, "element vertex {}", surface.num_vertices())?;
+        writeln!(w, "element vertex {}", nvertices)?;
         writeln!(w, "property float x")?;
         writeln!(w, "property float y")?;
         writeln!(w, "property float z")?;
-        writeln!(w, "element face {}", surface.num_inner_faces())?;
+        writeln!(w, "element face {}", nfaces)?;
         writeln!(w, "property list uchar int vertex_indices")?;
         writeln!(w, "end_header")
     }
@@ -142,17 +170,20 @@ impl MeshWriter for PlyWriter {
     }
 
     fn output_face(&mut self, f: TriangulatedSurfaceFace) -> Result<(), Box<dyn error::Error>> {
+        let indices = f.vertices().map(|v| v.index());
+        self.output_face_uninterpolated(&indices)
+    }
+
+    fn output_face_uninterpolated(
+        &mut self,
+        indices: &[usize; 3],
+    ) -> Result<(), Box<dyn error::Error>> {
         let w = self.writer.get_mut();
         const NUM_POINTS: [u8; 1] = 3u8.to_be_bytes();
-        let indices = f.vertices().map(|v| v.index());
         w.write_all(&NUM_POINTS)?;
         w.write_all(&(indices[2] as u32).to_be_bytes())?;
         w.write_all(&(indices[1] as u32).to_be_bytes())?;
         w.write_all(&(indices[0] as u32).to_be_bytes())?;
-        Ok(())
-    }
-
-    fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
 }
@@ -173,9 +204,6 @@ impl ObjWriter {
 }
 
 impl MeshWriter for ObjWriter {
-    fn output_header(&mut self, _surface: &TriangulatedSurface) -> Result<(), std::io::Error> {
-        Ok(())
-    }
     fn output_vertex(&mut self, x: f32, y: f32) -> Result<(), Box<dyn error::Error>> {
         let depth = match self.surface[(y.round() as usize, x.round() as usize)] {
             Some(depth) => Ok(depth),
@@ -189,8 +217,16 @@ impl MeshWriter for ObjWriter {
     }
 
     fn output_face(&mut self, f: TriangulatedSurfaceFace) -> Result<(), Box<dyn error::Error>> {
-        let w = self.writer.get_mut();
         let indices = f.vertices().map(|v| v.index());
+        self.output_face_uninterpolated(&indices)
+    }
+
+    #[inline]
+    fn output_face_uninterpolated(
+        &mut self,
+        indices: &[usize; 3],
+    ) -> Result<(), Box<dyn error::Error>> {
+        let w = self.writer.get_mut();
         writeln!(
             w,
             "f {} {} {}",
@@ -198,10 +234,6 @@ impl MeshWriter for ObjWriter {
             indices[1] + 1,
             indices[0] + 1
         )?;
-        Ok(())
-    }
-
-    fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
 }
@@ -224,13 +256,6 @@ impl ImageWriter {
 }
 
 impl MeshWriter for ImageWriter {
-    fn output_header(&mut self, _surface: &TriangulatedSurface) -> Result<(), std::io::Error> {
-        Ok(())
-    }
-    fn output_vertex(&mut self, _x: f32, _y: f32) -> Result<(), Box<dyn error::Error>> {
-        Ok(())
-    }
-
     fn output_face(&mut self, f: TriangulatedSurfaceFace) -> Result<(), Box<dyn error::Error>> {
         let frows = self.surface.nrows() as f32;
         let fcols = self.surface.ncols() as f32;
@@ -305,10 +330,8 @@ impl MeshWriter for ImageWriter {
     }
 }
 
-fn triangulate_image(
-    surface: &DMatrix<Option<f32>>,
-) -> Result<TriangulatedSurface, InsertionError> {
-    let converted_points: Vec<Point2<f32>> = surface
+fn surface_points(surface: &DMatrix<Option<f32>>) -> Vec<Point2<f32>> {
+    surface
         .column_iter()
         .enumerate()
         .map(|(x, col)| {
@@ -320,8 +343,68 @@ fn triangulate_image(
             return points;
         })
         .flatten()
-        .collect();
-    DelaunayTriangulation::bulk_load(converted_points)
+        .collect()
+}
+
+fn triangulate_image(
+    surface_points: Vec<Point2<f32>>,
+) -> Result<TriangulatedSurface, InsertionError> {
+    Triangulation::bulk_load(surface_points)
+}
+
+fn triangulate_without_interpolation(
+    surface: &DMatrix<Option<f32>>,
+    points: &Vec<Point2<f32>>,
+) -> Vec<[usize; 3]> {
+    let mut indices: DMatrix<Option<usize>> =
+        DMatrix::from_element(surface.nrows(), surface.ncols(), None);
+    let mut index = 0usize;
+    for col in 0..indices.ncols() {
+        for row in 0..indices.nrows() {
+            if surface[(row, col)].is_some() {
+                indices[(row, col)] = Some(index);
+                index += 1;
+            }
+        }
+    }
+    points
+        .par_iter()
+        .flat_map(|p| {
+            let row = p.y as usize;
+            let col = p.x as usize;
+            let forward_neighbor = [(row, col), (row, col + 1), (row + 1, col)];
+            let back_neighbor = [(row, col), (row, col - 1), (row - 1, col)];
+
+            let mut has_forward_neighbor = true;
+            let mut has_back_neighbor = true;
+            let mut forward_neighbor_indices = [0; 3];
+            let mut back_neighbor_indices = [0; 3];
+            for i in 0..3 {
+                let forward_index = indices
+                    .get(forward_neighbor[i])
+                    .map(|v| v.to_owned())
+                    .unwrap_or_default();
+                let back_index = indices
+                    .get(back_neighbor[i])
+                    .map(|v| v.to_owned())
+                    .unwrap_or_default();
+                has_forward_neighbor &= forward_index.is_some();
+                has_back_neighbor &= back_index.is_some();
+                forward_neighbor_indices[i] = forward_index.unwrap_or(usize::MAX);
+                back_neighbor_indices[i] = back_index.unwrap_or(usize::MAX);
+            }
+
+            if has_forward_neighbor && has_back_neighbor {
+                vec![forward_neighbor_indices, back_neighbor_indices]
+            } else if has_forward_neighbor {
+                vec![forward_neighbor_indices]
+            } else if has_back_neighbor {
+                vec![back_neighbor_indices]
+            } else {
+                vec![]
+            }
+        })
+        .collect()
 }
 
 fn get_values_range(surface: &DMatrix<Option<f32>>) -> (f32, f32) {
