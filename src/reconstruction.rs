@@ -12,9 +12,11 @@ use crate::Cli;
 use image::imageops::FilterType;
 use image::GenericImageView;
 use image::GrayImage;
+use indicatif::ProgressState;
 use indicatif::{ProgressBar, ProgressStyle};
 use nalgebra::DMatrix;
 use rayon::prelude::*;
+use std::fmt::Write;
 use std::fs::File;
 use std::io::BufReader;
 use std::str::FromStr;
@@ -143,11 +145,11 @@ pub fn reconstruct(args: &Cli) {
     let img1 = SourceImage::load(&args.img1).unwrap();
     let img2 = SourceImage::load(&args.img2).unwrap();
     println!(
-        "Image {} has scale width {:e}, height {:e}",
+        "Image {} has scale width {:?}, height {:?}",
         args.img1, img1.scale.0, img1.scale.1
     );
     println!(
-        "Image {} has scale width {:e}, height {:e}",
+        "Image {} has scale width {:?}, height {:?}",
         args.img2, img2.scale.0, img1.scale.1
     );
     let tilt_angle = img1
@@ -192,7 +194,7 @@ pub fn reconstruct(args: &Cli) {
     {
         let start_time = SystemTime::now();
 
-        let pb = new_progress_bar();
+        let pb = new_progress_bar(false);
         let matcher = correlation::KeypointMatching::new(
             &img1_scaled,
             &img2_scaled,
@@ -234,10 +236,7 @@ pub fn reconstruct(args: &Cli) {
         let match_buckets =
             FundamentalMatrix::matches_to_buckets(&point_matches, img1.img.dimensions());
         drop(point_matches);
-        let pb_style = ProgressStyle::default_bar()
-            .template("{bar} {percent}% (eta: {eta}{msg})")
-            .unwrap();
-        let pb = ProgressBar::new(10000).with_style(pb_style);
+        let pb = new_progress_bar(true);
         let projection_mode = match args.projection {
             crate::ProjectionMode::Parallel => fundamentalmatrix::ProjectionMode::Affine,
             crate::ProjectionMode::Perspective => fundamentalmatrix::ProjectionMode::Perspective,
@@ -267,7 +266,7 @@ pub fn reconstruct(args: &Cli) {
             .map(|step| 1.0 / ((1 << (scale_steps - step)) as f32).powi(2))
             .sum();
 
-        let pb = new_progress_bar();
+        let pb = new_progress_bar(false);
         let projection_mode = match args.projection {
             crate::ProjectionMode::Parallel => crosscorrelation::ProjectionMode::Affine,
             crate::ProjectionMode::Perspective => crosscorrelation::ProjectionMode::Perspective,
@@ -351,7 +350,7 @@ pub fn reconstruct(args: &Cli) {
     {
         let start_time = SystemTime::now();
 
-        let pb = new_progress_bar();
+        let pb = new_progress_bar(false);
         let interpolation_mode = match args.interpolation {
             crate::InterpolationMode::Delaunay => output::InterpolationMode::Delaunay,
             crate::InterpolationMode::None => output::InterpolationMode::None,
@@ -379,10 +378,18 @@ pub fn reconstruct(args: &Cli) {
     }
 }
 
-fn new_progress_bar() -> ProgressBar {
+fn new_progress_bar(show_message: bool) -> ProgressBar {
+    let template = if show_message {
+        "{bar:40} {percent_decimal}% (eta: {eta}{msg})"
+    } else {
+        "{bar:40} {percent_decimal}% (eta: {eta})"
+    };
     let pb_style = ProgressStyle::default_bar()
-        .template("{bar} {percent}% (eta: {eta})")
-        .unwrap();
+        .template(template)
+        .unwrap()
+        .with_key("percent_decimal", |s: &ProgressState, w: &mut dyn Write| {
+            write!(w, "{:.2}", s.fraction() * 100.0).unwrap()
+        });
     return ProgressBar::new(10000).with_style(pb_style);
 }
 
