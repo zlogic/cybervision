@@ -22,9 +22,12 @@ jobs:
           ~/.cargo/registry/index
           ~/.cargo/registry/cache
           ~/.cargo/git/db
+          ~/.cargo/bin/naga
           ${{ github.workspace }}/target
         key: lint-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
     - name: Install naga
+      if: steps.cache-rust.outputs.cache-hit != 'true'
       run: cargo install naga-cli
 
     - name: Validate shaders with naga
