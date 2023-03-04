@@ -1,15 +1,9 @@
-use nalgebra::DMatrix;
+use nalgebra::{DMatrix, Matrix3x4};
 use rayon::prelude::*;
 
 const HISTOGRAM_FILTER_BINS: usize = 100;
 const HISTOGRAM_FILTER_DISCARD_PERCENTILE: f32 = 0.025;
 const HISTOGRAM_FILTER_EPSILON: f32 = 0.001;
-
-#[derive(Debug)]
-pub enum ProjectionMode {
-    Affine,
-    Perspective,
-}
 
 pub struct Surface {
     pub points: DMatrix<Option<f32>>,
@@ -17,20 +11,7 @@ pub struct Surface {
 
 type Match = (u32, u32);
 
-impl Surface {
-    pub fn new(
-        correlated_points: &DMatrix<Option<Match>>,
-        projection_mode: ProjectionMode,
-        scale: (f32, f32, f32),
-    ) -> Surface {
-        match projection_mode {
-            ProjectionMode::Affine => triangulate_affine(correlated_points, scale),
-            ProjectionMode::Perspective => unimplemented!(),
-        }
-    }
-}
-
-fn triangulate_affine(
+pub fn triangulate_affine(
     correlated_points: &DMatrix<Option<Match>>,
     scale: (f32, f32, f32),
 ) -> Surface {
@@ -54,6 +35,15 @@ fn triangulate_affine(
         });
     filter_histogram(&mut points);
     return Surface { points };
+}
+
+pub fn triangulate_perspective(
+    correlated_points: &DMatrix<Option<Match>>,
+    p2: Matrix3x4<f64>,
+    scale: (f32, f32, f32),
+) -> Surface {
+    // TODO: implement perspective triangulation
+    triangulate_affine(correlated_points, scale)
 }
 
 fn triangulate_point_affine(p1: (usize, usize), p2: Option<Match>) -> Option<f32> {

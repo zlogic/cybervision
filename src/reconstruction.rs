@@ -6,7 +6,6 @@ use crate::fundamentalmatrix;
 use crate::fundamentalmatrix::FundamentalMatrix;
 use crate::output;
 use crate::triangulation;
-use crate::triangulation::Surface;
 use crate::Cli;
 
 use image::imageops::FilterType;
@@ -327,15 +326,26 @@ pub fn reconstruct(args: &Cli) {
     {
         let start_time = SystemTime::now();
 
-        let projection_mode = match args.projection {
-            crate::ProjectionMode::Parallel => triangulation::ProjectionMode::Affine,
-            crate::ProjectionMode::Perspective => triangulation::ProjectionMode::Perspective,
+        surface = match args.projection {
+            crate::ProjectionMode::Parallel => {
+                triangulation::triangulate_affine(&point_correlations.correlated_points, out_scale)
+            }
+            crate::ProjectionMode::Perspective => {
+                let p2 = match fm.p2 {
+                    Some(p2) => p2,
+                    None => {
+                        eprintln!("No projection matrix available");
+                        return;
+                    }
+                };
+                triangulation::triangulate_perspective(
+                    &point_correlations.correlated_points,
+                    p2,
+                    out_scale,
+                )
+            }
         };
-        surface = Surface::new(
-            &point_correlations.correlated_points,
-            projection_mode,
-            out_scale,
-        );
+
         drop(point_correlations);
 
         match start_time.elapsed() {
@@ -404,7 +414,9 @@ impl fundamentalmatrix::ProgressListener for ProgressBar {
         self.set_position((pos * 10000.0) as u64);
     }
     fn report_matches(&self, matches_count: usize) {
-        self.set_message(format!(", {} matches", matches_count));
+        if matches_count > 0 {
+            self.set_message(format!(", {} matches", matches_count));
+        }
     }
 }
 

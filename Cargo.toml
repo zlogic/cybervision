@@ -19,7 +19,8 @@ nalgebra = { version = "0.32.1", features = ["rayon"] }
 spade = { version = "2.1.0", default_features = false }
 wgpu = { version = "0.15.1", default-features = false, features = ["wgsl"] }
 pollster = { version = "0.3.0", default-features = false }
-bytemuck = { version= "*", features = ["derive"] }
+bytemuck = { version = "*", features = ["derive"] }
+levenberg-marquardt = { version = "0.13.0", default-features = false }
 
 [profile.release]
 strip = true
