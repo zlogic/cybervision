@@ -54,6 +54,7 @@ Cybervision was tested to support CPU-only and GPU-accelerated processing on:
 * Apple Macbook Pro M1 Max (2021)
 * Windows 11, i7-11800H, Geforce RTX 3070 (mobile)
 * Fedora CoreOS 37, Celeron N3350 (digital signage appliance)
+* Oracle Linux 9, Ampere A1 (Oracle Cloud)
 
 To run Cybervision in Linux, you will need the Vulkan runtime library.
 It's called `libvulkan.so.1` and the package is typically called something like `vulkan`, `vulkan-loader`, `libvulkan` or `libvulkan1`.
@@ -83,4 +84,4 @@ anything else (like a UI) can be added separately.
 
 Cybervision uses CMake and should work on Linux, macOS and Windows.
 
-To build it, install Rust and run `carg build --release`.
+To build it, install Rust and run `cargo build --release`.

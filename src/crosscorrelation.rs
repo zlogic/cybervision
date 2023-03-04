@@ -129,7 +129,8 @@ impl PointCorrelations {
             match gpu_context.complete_process() {
                 Ok(correlated_points) => self.correlated_points = correlated_points,
                 Err(err) => return Err(err),
-            }
+            };
+            self.gpu_context = None;
         }
         Ok(())
     }
@@ -564,6 +565,9 @@ mod gpu {
         ) -> Result<GpuContext, Box<dyn error::Error>> {
             let out_shape = (img1_dimensions.1, img1_dimensions.0);
 
+            let img1_pixels = img1_dimensions.0 * img1_dimensions.1;
+            let img2_pixels = img2_dimensions.0 * img2_dimensions.1;
+
             // Init adapter.
             let instance = wgpu::Instance::default();
             let adapter_options = wgpu::RequestAdapterOptions {
@@ -580,6 +584,10 @@ mod gpu {
             let mut limits = wgpu::Limits::downlevel_defaults();
             limits.max_bindings_per_bind_group = MAX_BINDINGS;
             limits.max_storage_buffers_per_shader_stage = MAX_BINDINGS;
+            // Ensure there's enough memory for the largest buffer.
+            let max_buffer_size = (img1_pixels * 3 + img2_pixels * 2) * std::mem::size_of::<f32>();
+            limits.max_storage_buffer_binding_size = max_buffer_size as u32;
+            limits.max_buffer_size = max_buffer_size as u64;
             let (device, queue) = adapter
                 .request_device(
                     &wgpu::DeviceDescriptor {
@@ -600,8 +608,6 @@ mod gpu {
             });
 
             // Init buffers.
-            let img1_pixels = img1_dimensions.0 * img1_dimensions.1;
-            let img2_pixels = img2_dimensions.0 * img2_dimensions.1;
             let out_pixels = img1_pixels;
             let buffer_params = init_buffer(
                 &device,
