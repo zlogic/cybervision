@@ -73,7 +73,7 @@ fn prepare_initialdata_correlation(@builtin(global_invocation_id) global_id: vec
     let img2_height = parameters.img2_height;
     let kernel_size = parameters.kernel_size;
     let kernel_width = kernel_size*2u+1u;
-    let kernel_point_count = f32((2u*kernel_size+1u)*(2u*kernel_size+1u));
+    let kernel_point_count = f32(kernel_width*kernel_width);
 
     let img1_offset = 0u;
     let img2_offset = img1_width*img1_height;
@@ -110,6 +110,9 @@ fn prepare_initialdata_correlation(@builtin(global_invocation_id) global_id: vec
         stdev = sqrt(stdev/kernel_point_count);
         internals[img1_avg_offset + img1_width*y+x] = avg;
         internals[img1_stdev_offset + img1_width*y+x] = stdev;
+    } else if x < img1_width && y < img1_height {
+        internals[img1_avg_offset + img1_width*y+x] = 0.0;
+        internals[img1_stdev_offset + img1_width*y+x] = -1.0;
     }
 
     if x >= kernel_size && x < img2_width-kernel_size && y >= kernel_size && y < img2_height-kernel_size {
@@ -134,6 +137,9 @@ fn prepare_initialdata_correlation(@builtin(global_invocation_id) global_id: vec
         stdev = sqrt(stdev/kernel_point_count);
         internals[img2_avg_offset + img2_width*y+x] = avg;
         internals[img2_stdev_offset + img2_width*y+x] = stdev;
+    } else if x < img2_width && y < img2_height {
+        internals[img2_avg_offset + img2_width*y+x] = 0.0;
+        internals[img2_stdev_offset + img2_width*y+x] = -1.0;
     }
 }
 
@@ -171,7 +177,6 @@ fn prepare_searchdata(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let out_height = parameters.out_height;
     let scale = parameters.scale;
     let first_pass = parameters.iteration_pass == 0u;
-    let corridor_offset = parameters.corridor_offset;
     let corridor_start = i32(parameters.corridor_start);
     let corridor_end = i32(parameters.corridor_end);
     let kernel_size = parameters.kernel_size;
@@ -191,8 +196,8 @@ fn prepare_searchdata(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let x_min_signed = i32(floor(f32(i32(x)-neighbor_distance)/scale));
     let x_max_signed = i32(ceil(f32(i32(x)+neighbor_distance)/scale));
-    let y_min_signed = i32(f32(y)/scale)+corridor_start-neighbor_distance;
-    let y_max_signed = i32(f32(y)/scale)+corridor_end-neighbor_distance;
+    let y_min_signed = i32(f32(i32(y)-neighbor_distance)/scale)+corridor_start;
+    let y_max_signed = i32(f32(i32(y)-neighbor_distance)/scale)+corridor_end;
     let x_min = u32(clamp(x_min_signed, 0, i32(out_width)));
     let x_max = u32(clamp(x_max_signed, 0, i32(out_width)));
     let y_min = u32(clamp(y_min_signed, 0, i32(out_height)));
@@ -228,7 +233,7 @@ fn prepare_searchdata(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 neighbor_count++;
             } else {
                 let delta = corridor_pos-mid_corridor;
-                range_stdev += delta*delta/f32(neighbor_count);
+                range_stdev += delta*delta;
             }
         }
     }
@@ -240,8 +245,9 @@ fn prepare_searchdata(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
     internals[corridor_stdev_offset + y*img1_width+x] = range_stdev;
+    range_stdev = sqrt(range_stdev/f32(neighbor_count));
     let corridor_center = i32(round(mid_corridor));
-    let corridor_length = i32(round(min_range+sqrt(range_stdev)*extend_range));
+    let corridor_length = i32(round(min_range+range_stdev*extend_range));
     var min_pos = i32(kernel_size);
     var max_pos: i32;
     if corridor_vertical {
@@ -269,12 +275,9 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let scale = parameters.scale;
     let first_iteration = parameters.iteration_pass == 0u;
     let corridor_offset = parameters.corridor_offset;
-    let corridor_start = parameters.corridor_start;
-    let corridor_end = parameters.corridor_end;
     let kernel_size = parameters.kernel_size;
     let threshold = parameters.threshold;
     let min_stdev = parameters.min_stdev;
-
     let kernel_width = kernel_size*2u+1u;
     let kernel_point_count = f32((2u*kernel_size+1u)*(2u*kernel_size+1u));
 
@@ -293,22 +296,28 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let corridor_range_offset = 0u;
     let search_area_pos = img1_width*y1 + x1;
 
-    let min_pos_signed = internals_int[corridor_range_offset + search_area_pos*2u];
-    let max_pos_signed = internals_int[corridor_range_offset + search_area_pos*2u+1u];
-    if !first_iteration && (min_pos_signed<0 || max_pos_signed<0) {
-        return;
-    }
-    let min_pos = u32(min_pos_signed);
-    let max_pos = u32(max_pos_signed);
-
     let avg1 = internals[img1_avg_offset + img1_width*y1+x1];
     let stdev1 = internals[img1_stdev_offset + img1_width*y1+x1];
-    if stdev1 < 0.0 || abs(stdev1)<min_stdev {
+    if stdev1 < min_stdev {
         return;
     }
 
     var best_corr = 0.0;
-    var best_match = vec2<f32>(-1.0, -1.0);
+    var best_match = vec2<i32>(-1, -1);
+
+    var corridor_start = parameters.corridor_start;
+    var corridor_end = parameters.corridor_end;
+    if !first_iteration {
+        let min_pos_signed = internals_int[corridor_range_offset + search_area_pos*2u];
+        let max_pos_signed = internals_int[corridor_range_offset + search_area_pos*2u+1u];
+        if !first_iteration && (min_pos_signed<0 || max_pos_signed<0) {
+            return;
+        }
+        let min_pos = u32(min_pos_signed);
+        let max_pos = u32(max_pos_signed);
+        corridor_start = clamp(corridor_start, min_pos, max_pos);
+        corridor_end = clamp(corridor_end, min_pos, max_pos);
+    }
 
     var coeff: vec2<f32>;
     var add_const: vec2<f32>;
@@ -316,9 +325,6 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
     calculate_epipolar_line(x1, y1, corridor_offset, &coeff, &add_const, &corridor_offset_vector);
     for (var corridor_pos: u32=corridor_start;corridor_pos<corridor_end;corridor_pos++)
     {
-        if !first_iteration && (corridor_pos<min_pos || corridor_pos>max_pos) {
-            continue;
-        }
         let x2_signed = i32(round(coeff.x*f32(corridor_pos)+add_const.x)) + corridor_offset_vector.x;
         let y2_signed = i32(round(coeff.y*f32(corridor_pos)+add_const.y)) + corridor_offset_vector.y;
         if x2_signed < 0 || y2_signed < 0 {
@@ -332,7 +338,7 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
         let avg2 = internals[img2_avg_offset + img2_width*y2 + x2];
         let stdev2 = internals[img2_stdev_offset + img2_width*y2 + x2];
-        if stdev2 < 0.0 || abs(stdev2)<min_stdev {
+        if stdev2 < min_stdev {
             continue;
         }
 
@@ -347,8 +353,8 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
         corr = corr/(stdev1*stdev2*kernel_point_count);
 
         if corr >= threshold && corr > best_corr {
-            best_match.x = round(f32(x2)/scale);
-            best_match.y = round(f32(y2)/scale);
+            best_match.x = i32(round(f32(x2)/scale));
+            best_match.y = i32(round(f32(y2)/scale));
             best_corr = corr;
         }
     }
@@ -358,7 +364,7 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
     {
         let out_pos = out_width*u32((f32(y1)/scale)) + u32(f32(x1)/scale);
         internals[correlation_offset + img1_width*y1 + x1] = best_corr;
-        result[out_pos*2u] = i32(best_match.x);
-        result[out_pos*2u+1u] = i32(best_match.y);
+        result[out_pos*2u] = best_match.x;
+        result[out_pos*2u+1u] = best_match.y;
     }
 }

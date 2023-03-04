@@ -113,7 +113,7 @@ jobs:
           ~\.cargo\registry\cache
           ~\.cargo\git\db
           ${{ github.workspace }}\target
-        key: rust-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}-${{ hashFiles('Cargo.lock') }}
+        key: rust-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('Cargo.lock') }}
 
     - name: Install compiler and prepare for cross-compilation
       if: matrix.arch == 'aarch64'
@@ -121,7 +121,7 @@ jobs:
 
     - name: Build
       run: |
-        $FEATURES=gpu
+        $FEATURES="gpu"
         cargo build --target=${{ matrix.arch }}-pc-windows-msvc --features=$FEATURES --release
 
     - name: Package application
@@ -130,7 +130,7 @@ jobs:
     - name: Upload application
       uses: actions/upload-artifact@v3
       with:
-        name: cybervision-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}
+        name: cybervision-${{ runner.os }}-${{ matrix.arch }}
         path: cybervision-*.zip
 
   build-macos:

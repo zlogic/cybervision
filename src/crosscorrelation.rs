@@ -514,7 +514,7 @@ fn compute_compact_point_data(img: &DMatrix<u8>, row: usize, col: usize) -> Opti
 #[cfg(feature = "gpu")]
 mod gpu {
     const MIN_BUFFER_SIZE: usize = 128;
-    const MAX_BINDINGS: u32 = 6;
+    const MAX_BINDINGS: u32 = 5;
     const FUNDAMENTAL_MATRIX_PADDING: usize = 2;
 
     use std::{borrow::Cow, error, fmt};
@@ -556,7 +556,7 @@ mod gpu {
         min_stdev: f32,
         correlation_threshold: f32,
         fundamental_matrix: Matrix3<f64>,
-        out_dimensions: (usize, usize),
+        out_shape: (usize, usize),
         first_pass: bool,
 
         device_name: String,
@@ -578,7 +578,7 @@ mod gpu {
             correlation_threshold: f32,
             fundamental_matrix: Matrix3<f64>,
         ) -> Result<GpuContext, Box<dyn error::Error>> {
-            let out_dimensions = (img1_dimensions.1, img1_dimensions.0);
+            let out_shape = (img1_dimensions.1, img1_dimensions.0);
 
             // Init adapter.
             let instance = wgpu::Instance::default();
@@ -643,7 +643,7 @@ mod gpu {
                 min_stdev,
                 correlation_threshold,
                 fundamental_matrix,
-                out_dimensions,
+                out_shape,
                 first_pass: true,
                 device_name,
                 device,
@@ -674,8 +674,8 @@ mod gpu {
             let max_height = img1.nrows().max(img2.nrows());
             let max_shape = (max_height, max_width);
             let img1_shape = img1.shape();
-            let corridor_length =
-                self.out_dimensions.0.max(self.out_dimensions.1) - (KERNEL_SIZE * 2);
+            let max_length = self.out_shape.0.max(self.out_shape.1);
+            let corridor_length = max_length - (KERNEL_SIZE * 2);
             let corridor_segments = corridor_length / CORRIDOR_SEGMENT_LENGTH + 1;
 
             let mut progressbar_completed_percentage = 0.02;
@@ -690,8 +690,8 @@ mod gpu {
                 img1_height: img1.nrows() as u32,
                 img2_width: img2.ncols() as u32,
                 img2_height: img2.nrows() as u32,
-                out_width: self.out_dimensions.1 as u32,
-                out_height: self.out_dimensions.0 as u32,
+                out_width: self.out_shape.1 as u32,
+                out_height: self.out_shape.0 as u32,
                 fundamental_matrix: self.convert_fundamental_matrix(),
                 scale,
                 iteration_pass: 0,
@@ -709,45 +709,45 @@ mod gpu {
             self.transfer_in_images(img1, img2);
 
             if self.first_pass {
-                self.run_shader(self.out_dimensions, "init_out_data", params);
+                self.run_shader(self.out_shape, "init_out_data", params);
             } else {
-                self.run_shader(img1_shape, "prepare_initialdata_searchdata", params);
+                self.run_shader(max_shape, "prepare_initialdata_searchdata", params);
                 progressbar_completed_percentage = 0.02;
                 send_progress(progressbar_completed_percentage);
 
-                let y_limit = (NEIGHBOR_DISTANCE as f32 / scale).ceil() as u32 * 2;
+                let y_limit = (NEIGHBOR_DISTANCE as f32 / scale).ceil() as u32 * 2 + 1;
                 let batch_size = SEARCH_AREA_SEGMENT_LENGTH as u32;
                 params.iteration_pass = 0;
                 for y in (0..y_limit + 1).step_by(batch_size as usize) {
                     params.corridor_start = y;
                     params.corridor_end = y + batch_size;
-                    if params.corridor_end > NEIGHBOR_DISTANCE as u32 {
-                        params.corridor_end = NEIGHBOR_DISTANCE as u32
+                    if params.corridor_end > y_limit {
+                        params.corridor_end = y_limit
                     }
                     self.run_shader(img1_shape, "prepare_searchdata", params);
 
                     let percent_complete =
-                        progressbar_completed_percentage + 0.19 * (y as f32 / y_limit as f32);
+                        progressbar_completed_percentage + 0.09 * (y as f32 / y_limit as f32);
                     send_progress(percent_complete);
                 }
-                progressbar_completed_percentage = 0.31;
+                progressbar_completed_percentage = 0.11;
                 send_progress(progressbar_completed_percentage);
 
                 params.iteration_pass = 1;
                 for y in (0..y_limit + 1).step_by(batch_size as usize) {
                     params.corridor_start = y;
                     params.corridor_end = y + batch_size;
-                    if params.corridor_end > NEIGHBOR_DISTANCE as u32 {
-                        params.corridor_end = NEIGHBOR_DISTANCE as u32
+                    if params.corridor_end > y_limit {
+                        params.corridor_end = y_limit
                     }
                     self.run_shader(img1_shape, "prepare_searchdata", params);
 
                     let percent_complete =
-                        progressbar_completed_percentage + 0.19 * (y as f32 / y_limit as f32);
+                        progressbar_completed_percentage + 0.09 * (y as f32 / y_limit as f32);
                     send_progress(percent_complete);
                 }
 
-                progressbar_completed_percentage = 0.40;
+                progressbar_completed_percentage = 0.20;
             }
             send_progress(progressbar_completed_percentage);
             params.iteration_pass = if self.first_pass { 0 } else { 1 };
@@ -760,8 +760,8 @@ mod gpu {
                     params.corridor_start = KERNEL_SIZE as u32 + l * CORRIDOR_SEGMENT_LENGTH as u32;
                     params.corridor_end =
                         KERNEL_SIZE as u32 + (l + 1) * CORRIDOR_SEGMENT_LENGTH as u32;
-                    if params.corridor_end > corridor_length as u32 - KERNEL_SIZE as u32 {
-                        params.corridor_end = corridor_length as u32 - KERNEL_SIZE as u32;
+                    if params.corridor_end > (max_length - KERNEL_SIZE) as u32 {
+                        params.corridor_end = (max_length - KERNEL_SIZE) as u32;
                     }
                     self.run_shader(img1_shape, "cross_correlate", params);
 
@@ -804,15 +804,12 @@ mod gpu {
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
             {
-                let workgroup_size = (
-                    (shape.1 as f32 / 16.0f32).round() as u32,
-                    (shape.0 as f32 / 16.0f32).round() as u32,
-                );
+                let workgroup_size = (shape.1 / 16 + 1, shape.0 / 16 + 1);
                 let mut cpass =
                     encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
                 cpass.set_pipeline(&pipeline);
                 cpass.set_bind_group(0, &bind_group, &[]);
-                cpass.dispatch_workgroups(workgroup_size.0, workgroup_size.1, 1);
+                cpass.dispatch_workgroups(workgroup_size.0 as u32, workgroup_size.1 as u32, 1);
             }
 
             self.queue.write_buffer(
@@ -871,8 +868,7 @@ mod gpu {
             self.buffer_internal.destroy();
             self.buffer_internal_int.destroy();
 
-            let mut out_image =
-                DMatrix::from_element(self.out_dimensions.0, self.out_dimensions.1, None);
+            let mut out_image = DMatrix::from_element(self.out_shape.0, self.out_shape.1, None);
 
             let out_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: None,
