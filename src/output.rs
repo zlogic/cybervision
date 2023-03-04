@@ -94,6 +94,7 @@ pub fn output<PL: ProgressListener>(
         }
         writer.output_vertex(p.x, p.y)
     })?;
+    drop(surface_points);
     surface_vertices_uninterpolated
         .iter()
         .enumerate()
