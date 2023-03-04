@@ -81,27 +81,36 @@ impl PointCorrelations {
             ProjectionMode::Affine => (MIN_STDEV_AFFINE, THRESHOLD_AFFINE),
             ProjectionMode::Perspective => (MIN_STDEV_PERSPECTIVE, THRESHOLD_PERSPECTIVE),
         };
-        let gpu_context = match hardware_mode {
-            HardwareMode::GPU => gpu::GpuContext::new(
-                (img1_dimensions.0 as usize, img1_dimensions.1 as usize),
-                (img2_dimensions.0 as usize, img2_dimensions.1 as usize),
-                min_stdev,
-                correlation_threshold,
-                fundamental_matrix,
-            )
-            .ok(),
-            HardwareMode::CPU => None,
-        };
-
         let selected_hardware;
         let hw_mode;
-        if let Some(gpu_context) = &gpu_context {
-            selected_hardware = format!("GPU ({})", gpu_context.get_device_name());
-            hw_mode = HardwareMode::GPU;
-        } else {
-            selected_hardware = "CPU".to_string();
-            hw_mode = HardwareMode::CPU;
-        }
+        let gpu_context = match hardware_mode {
+            HardwareMode::GPU => {
+                match gpu::GpuContext::new(
+                    (img1_dimensions.0 as usize, img1_dimensions.1 as usize),
+                    (img2_dimensions.0 as usize, img2_dimensions.1 as usize),
+                    min_stdev,
+                    correlation_threshold,
+                    fundamental_matrix,
+                ) {
+                    Ok(gpu_context) => {
+                        hw_mode = HardwareMode::GPU;
+                        selected_hardware = format!("GPU {}", gpu_context.get_device_name());
+                        Some(gpu_context)
+                    }
+                    Err(err) => {
+                        hw_mode = HardwareMode::CPU;
+                        selected_hardware = format!("CPU fallback ({})", err);
+                        None
+                    }
+                }
+            }
+            HardwareMode::CPU => {
+                hw_mode = HardwareMode::CPU;
+                selected_hardware = format!("CPU",);
+                None
+            }
+        };
+
         // Height specifies rows, width specifies columns.
         let correlated_points = match hw_mode {
             HardwareMode::CPU => {
@@ -600,7 +609,7 @@ mod gpu {
                 .block_on()?;
 
             let info = adapter.get_info();
-            let device_name = info.driver_info;
+            let device_name = format!("{} ({}: {})", info.name, info.driver, info.driver_info);
 
             let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
