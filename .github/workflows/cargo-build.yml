@@ -30,25 +30,18 @@ jobs:
     - name: Validate shaders with naga
       run: naga src/correlation.wgsl
     - name: Validate Rust code with clippy
-      run: cargo clippy --all-features
+      run: cargo clippy
 
   build-linux:
-    runs-on: ubuntu-latest
+    # Older Ubuntu versions will link with an older GLIBC and provide better compatibility
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: true
       matrix:
         include:
         - arch: x86_64
-          mode: gpu
-          os: ubuntu
-        - arch: x86_64
-          mode: cpu
           os: ubuntu
         - arch: aarch64
-          mode: gpu
-          os: ubuntu
-        - arch: aarch64
-          mode: cpu
           os: ubuntu
 
     steps:
@@ -63,7 +56,7 @@ jobs:
           ~/.cargo/registry/cache
           ~/.cargo/git/db
           ${{ github.workspace }}/target
-        key: rust-${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}-${{ hashFiles('Cargo.lock') }}
+        key: rust-${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('Cargo.lock') }}
 
     - name: Install compiler and prepare for cross-compilation
       if: matrix.arch == 'aarch64'
@@ -78,19 +71,15 @@ jobs:
         echo "CXXFLAGS=-march=armv8.2-a" >> $GITHUB_ENV
 
     - name: Build
-      run: |
-        if [ "${{ matrix.mode }}" == "gpu" ]; then
-          FEATURES=gpu
-        fi
-        cargo build --target=${{ matrix.arch }}-unknown-linux-gnu --features=$FEATURES --release
+      run: cargo build --target=${{ matrix.arch }}-unknown-linux-gnu --release
   
     - name: Package application
-      run: tar -cvjf cybervision-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}.tar.bz2 -C target/${{ matrix.arch }}-unknown-linux-gnu/release cybervision
+      run: tar -cvjf cybervision-${{ matrix.os }}-${{ matrix.arch }}.tar.bz2 -C target/${{ matrix.arch }}-unknown-linux-gnu/release cybervision
   
     - name: Upload application
       uses: actions/upload-artifact@v3
       with:
-        name: cybervision-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.mode }}
+        name: cybervision-${{ matrix.os }}-${{ matrix.arch }}
         path: cybervision-*.tar.bz2
 
   build-windows:
@@ -120,12 +109,10 @@ jobs:
       run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
 
     - name: Build
-      run: |
-        $FEATURES="gpu"
-        cargo build --target=${{ matrix.arch }}-pc-windows-msvc --features=$FEATURES --release
+      run: cargo build --target=${{ matrix.arch }}-pc-windows-msvc --release
 
     - name: Package application
-      run: Compress-Archive -Path .\target\${{ matrix.arch }}-pc-windows-msvc\release\cybervision.exe -DestinationPath cybervision-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.mode }}.zip
+      run: Compress-Archive -Path .\target\${{ matrix.arch }}-pc-windows-msvc\release\cybervision.exe -DestinationPath cybervision-${{ runner.os }}-${{ matrix.arch }}.zip
 
     - name: Upload application
       uses: actions/upload-artifact@v3
@@ -159,9 +146,7 @@ jobs:
       run: rustup target add ${{ matrix.arch }}-apple-darwin
 
     - name: Build
-      run: |
-        FEATURES=gpu
-        cargo build --target=${{ matrix.arch }}-apple-darwin --features=$FEATURES --release
+      run: cargo build --target=${{ matrix.arch }}-apple-darwin --release
 
     - name: Package application
       run: tar -cvjf cybervision-${{ runner.os }}-${{ matrix.arch }}.tar.bz2 -C target/${{ matrix.arch }}-apple-darwin/release cybervision

@@ -9,16 +9,9 @@ mod triangulation;
 
 #[derive(clap::ValueEnum, Clone)]
 pub enum HardwareMode {
-    #[cfg(feature = "gpu")]
     GPU,
     CPU,
 }
-
-const DEFAULT_HARDWARE_MODE: HardwareMode = match cfg!(feature = "gpu") {
-    #[cfg(feature = "gpu")]
-    true => HardwareMode::GPU,
-    _ => HardwareMode::CPU,
-};
 
 #[derive(clap::ValueEnum, Clone)]
 pub enum InterpolationMode {
@@ -40,7 +33,7 @@ pub struct Cli {
     scale: f32,
 
     /// Hardware mode
-    #[arg(long, value_enum, default_value_t = DEFAULT_HARDWARE_MODE)]
+    #[arg(long, value_enum, default_value_t = HardwareMode::GPU)]
     mode: HardwareMode,
 
     /// Interpolation mode

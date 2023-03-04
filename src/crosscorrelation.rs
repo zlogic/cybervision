@@ -14,9 +14,7 @@ const MIN_STDEV_AFFINE: f32 = 1.0;
 const MIN_STDEV_PERSPECTIVE: f32 = 25.0;
 const CORRIDOR_SIZE: usize = 20;
 // Decrease when using a low-powered GPU
-#[cfg(feature = "gpu")]
 const CORRIDOR_SEGMENT_LENGTH: usize = 256;
-#[cfg(feature = "gpu")]
 const SEARCH_AREA_SEGMENT_LENGTH: usize = 8;
 const NEIGHBOR_DISTANCE: usize = 10;
 const CORRIDOR_EXTEND_RANGE: f64 = 1.0;
@@ -32,7 +30,6 @@ pub enum ProjectionMode {
 
 #[derive(Debug)]
 pub enum HardwareMode {
-    #[cfg(feature = "gpu")]
     GPU,
     CPU,
 }
@@ -50,7 +47,6 @@ pub struct PointCorrelations {
     min_stdev: f32,
     correlation_threshold: f32,
     fundamental_matrix: Matrix3<f64>,
-    #[cfg(feature = "gpu")]
     gpu_context: Option<gpu::GpuContext>,
     selected_hardware: String,
 }
@@ -85,7 +81,6 @@ impl PointCorrelations {
             ProjectionMode::Affine => (MIN_STDEV_AFFINE, THRESHOLD_AFFINE),
             ProjectionMode::Perspective => (MIN_STDEV_PERSPECTIVE, THRESHOLD_PERSPECTIVE),
         };
-        #[cfg(feature = "gpu")]
         let gpu_context = match hardware_mode {
             HardwareMode::GPU => gpu::GpuContext::new(
                 (img1_dimensions.0 as usize, img1_dimensions.1 as usize),
@@ -100,16 +95,10 @@ impl PointCorrelations {
 
         let selected_hardware;
         let hw_mode;
-        #[cfg(feature = "gpu")]
         if let Some(gpu_context) = &gpu_context {
             selected_hardware = format!("GPU ({})", gpu_context.get_device_name());
             hw_mode = HardwareMode::GPU;
         } else {
-            selected_hardware = "CPU".to_string();
-            hw_mode = HardwareMode::CPU;
-        }
-        #[cfg(not(feature = "gpu"))]
-        {
             selected_hardware = "CPU".to_string();
             hw_mode = HardwareMode::CPU;
         }
@@ -118,7 +107,6 @@ impl PointCorrelations {
             HardwareMode::CPU => {
                 DMatrix::from_element(img1_dimensions.1 as usize, img1_dimensions.0 as usize, None)
             }
-            #[cfg(feature = "gpu")]
             HardwareMode::GPU => DMatrix::from_element(0, 0, None),
         };
         return PointCorrelations {
@@ -127,7 +115,6 @@ impl PointCorrelations {
             min_stdev,
             correlation_threshold,
             fundamental_matrix,
-            #[cfg(feature = "gpu")]
             gpu_context,
             selected_hardware,
         };
@@ -138,7 +125,6 @@ impl PointCorrelations {
     }
 
     pub fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
-        #[cfg(feature = "gpu")]
         if let Some(gpu_context) = &mut self.gpu_context {
             match gpu_context.complete_process() {
                 Ok(correlated_points) => self.correlated_points = correlated_points,
@@ -155,7 +141,6 @@ impl PointCorrelations {
         scale: f32,
         progress_listener: Option<&PL>,
     ) {
-        #[cfg(feature = "gpu")]
         if let Some(gpu_context) = &mut self.gpu_context {
             gpu_context.correlate_images(img1, img2, scale, progress_listener);
             return;
@@ -511,7 +496,6 @@ fn compute_compact_point_data(img: &DMatrix<u8>, row: usize, col: usize) -> Opti
     return Some(result);
 }
 
-#[cfg(feature = "gpu")]
 mod gpu {
     const MIN_BUFFER_SIZE: usize = 128;
     const MAX_BINDINGS: u32 = 5;

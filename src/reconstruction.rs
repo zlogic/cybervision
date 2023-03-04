@@ -273,7 +273,6 @@ pub fn reconstruct(args: &Cli) {
             crate::ProjectionMode::Perspective => crosscorrelation::ProjectionMode::Perspective,
         };
         let hardware_mode = match args.mode {
-            #[cfg(feature = "gpu")]
             crate::HardwareMode::GPU => crosscorrelation::HardwareMode::GPU,
             crate::HardwareMode::CPU => crosscorrelation::HardwareMode::CPU,
         };

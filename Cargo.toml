@@ -21,10 +21,6 @@ wgpu = { version = "0.15.1", default-features = false, features = ["wgsl"] }
 pollster = { version = "0.3.0", default-features = false }
 bytemuck = { version= "*", features = ["derive"] }
 
-[features]
-default = []
-gpu = []
-
 [profile.release]
 strip = true
 lto = true
