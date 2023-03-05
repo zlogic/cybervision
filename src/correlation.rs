@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 type Point = (usize, usize);
 
-const THRESHOLD: f32 = 0.95;
+const THRESHOLD: f32 = 0.90;
 const KERNEL_SIZE: usize = 7;
 const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
 const KERNEL_POINT_COUNT: usize = (KERNEL_WIDTH * KERNEL_WIDTH) as usize;

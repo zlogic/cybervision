@@ -9,9 +9,9 @@ const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
 const KERNEL_POINT_COUNT: usize = (KERNEL_WIDTH * KERNEL_WIDTH) as usize;
 
 const THRESHOLD_AFFINE: f32 = 0.6;
-const THRESHOLD_PERSPECTIVE: f32 = 0.7;
+const THRESHOLD_PERSPECTIVE: f32 = 0.6;
 const MIN_STDEV_AFFINE: f32 = 1.0;
-const MIN_STDEV_PERSPECTIVE: f32 = 5.0;
+const MIN_STDEV_PERSPECTIVE: f32 = 1.0;
 const CORRIDOR_SIZE: usize = 20;
 // Decrease when using a low-powered GPU
 const CORRIDOR_SEGMENT_LENGTH: usize = 256;
@@ -318,8 +318,8 @@ impl PointCorrelations {
             {
                 continue;
             }
-            let avg2 = unsafe { img2_data.avg.get_unchecked((row2, col2)) };
-            let stdev2 = unsafe { img2_data.stdev.get_unchecked((row2, col2)) };
+            let avg2 = img2_data.avg[(row2, col2)];
+            let stdev2 = img2_data.stdev[(row2, col2)];
             if !stdev2.is_finite() || stdev2.abs() < self.min_stdev {
                 continue;
             }
@@ -327,12 +327,11 @@ impl PointCorrelations {
             for c in 0..KERNEL_WIDTH {
                 for r in 0..KERNEL_WIDTH {
                     let delta1 = p1_data.delta[r * KERNEL_WIDTH + c];
-                    let delta2 = unsafe {
-                        *img2.get_unchecked((
-                            (row2 + r).saturating_sub(KERNEL_SIZE),
-                            (col2 + c).saturating_sub(KERNEL_SIZE),
-                        )) as f32
-                    } - avg2;
+                    let delta2 = img2[(
+                        (row2 + r).saturating_sub(KERNEL_SIZE),
+                        (col2 + c).saturating_sub(KERNEL_SIZE),
+                    )] as f32
+                        - avg2;
                     corr += delta1 * delta2;
                 }
             }

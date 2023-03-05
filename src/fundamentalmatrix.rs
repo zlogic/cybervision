@@ -10,16 +10,16 @@ use std::cmp::Ordering;
 use std::{fmt, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
 
 const MATCH_GRID_SIZE: usize = 8;
-const RANSAC_K_AFFINE: usize = 10_000_000;
-const RANSAC_K_PERSPECTIVE: usize = 10_000_000;
-const RANSAC_N_AFFINE: usize = 4;
-const RANSAC_N_PERSPECTIVE: usize = 8;
+const RANSAC_K_AFFINE: usize = 1_000_000;
+const RANSAC_K_PERSPECTIVE: usize = 1_000_000;
+const RANSAC_N_AFFINE: usize = 8;
+const RANSAC_N_PERSPECTIVE: usize = 16;
 const RANSAC_T_AFFINE: f64 = 0.1;
 const RANSAC_T_PERSPECTIVE: f64 = 0.5;
 const RANSAC_D: usize = 10;
 const RANSAC_D_EARLY_EXIT_AFFINE: usize = 1000;
 const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 20;
-const RANSAC_CHECK_INTERVAL: usize = 500_000;
+const RANSAC_CHECK_INTERVAL: usize = 50_000;
 const PERSPECTIVE_OPTIMIZE_F: bool = true;
 const PERSPECTIVE_OPTIMIZE_POINTS: bool = true;
 
