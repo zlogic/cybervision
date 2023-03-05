@@ -2,6 +2,8 @@
 
 ![Build status](https://github.com/zlogic/cybervision/actions/workflows/cargo-build.yml/badge.svg)
 
+<img src="https://raw.githubusercontent.com/wiki/zlogic/cybervision/Cybervision.svg" width="100"/>
+
 Cybervision is a 3D reconstruction software for Scanning Electron Microscope images.
 
 The tool needs two images of an object taken from slighly different angles.
@@ -11,6 +13,8 @@ Cybervision can match those images and use the parallax effect to determine the 
 Regular photos with perspective projection can be reconstructed as well, but this is a secondary use case.
 
 More information is available in the [Wiki](https://github.com/zlogic/cybervision/wiki).
+
+<img src="https://raw.githubusercontent.com/wiki/zlogic/cybervision/Explanation/03_mesh_small.png"/>
 
 ## How to use it
 
