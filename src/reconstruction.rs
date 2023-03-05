@@ -331,13 +331,7 @@ pub fn reconstruct(args: &Cli) {
                 triangulation::triangulate_affine(&point_correlations.correlated_points, out_scale)
             }
             crate::ProjectionMode::Perspective => {
-                let p2 = match fm.p2 {
-                    Some(p2) => p2,
-                    None => {
-                        eprintln!("No projection matrix available");
-                        return;
-                    }
-                };
+                let p2 = FundamentalMatrix::f_to_projection_matrix(&fm.f).unwrap();
                 triangulation::triangulate_perspective(
                     &point_correlations.correlated_points,
                     &p2,
