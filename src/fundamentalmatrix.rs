@@ -16,12 +16,13 @@ const RANSAC_N_AFFINE: usize = 4;
 const RANSAC_N_PERSPECTIVE: usize = 8;
 const RANSAC_RANK_EPSILON: f64 = 0.0;
 const RANSAC_T_AFFINE: f64 = 0.1;
-const RANSAC_T_PERSPECTIVE: f64 = 1.0;
+const RANSAC_T_PERSPECTIVE: f64 = 0.5;
 const RANSAC_D: usize = 10;
 const RANSAC_D_EARLY_EXIT_AFFINE: usize = 1000;
 const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 20;
 const RANSAC_CHECK_INTERVAL: usize = 500_000;
-const RANSAC_PERSPECTIVE_OPTIMIZE_POINTS: bool = true;
+const PERSPECTIVE_OPTIMIZE_F: bool = true;
+const PERSPECTIVE_OPTIMIZE_POINTS: bool = true;
 
 type Point = (usize, usize);
 type Match = (Point, Point);
@@ -188,17 +189,19 @@ impl FundamentalMatrix {
                 FundamentalMatrix::calculate_model_perspective(&inliers)?
             }
         };
+        if !f.iter().all(|v| v.is_finite()) {
+            return None;
+        }
         let mut p2 = None;
         if self.projection == ProjectionMode::Perspective {
             p2 = FundamentalMatrix::f_to_projection_matrix(&f);
-            p2 = FundamentalMatrix::optimize_projection_matrix(&p2?, &inliers);
-            match p2 {
-                Some(p2) => f = FundamentalMatrix::projection_matrix_to_f(&p2),
-                None => return None,
+            if PERSPECTIVE_OPTIMIZE_F {
+                p2 = FundamentalMatrix::optimize_projection_matrix(&p2?, &inliers);
+                match p2 {
+                    Some(p2) => f = FundamentalMatrix::projection_matrix_to_f(&p2),
+                    None => return None,
+                }
             }
-        }
-        if !f.iter().all(|v| v.is_finite()) {
-            return None;
         }
         let inliers_pass = inliers
             .into_iter()
@@ -254,7 +257,7 @@ impl FundamentalMatrix {
         }
         let vtc = vt.row(vt.nrows() - 1);
         let e = vtc.dot(&mean);
-        let f = Matrix3::new(0.0, 0.0, vtc[0], 0.0, 0.0, vtc[1], vtc[2], vtc[3], -e).transpose();
+        let f = Matrix3::new(0.0, 0.0, vtc[0], 0.0, 0.0, vtc[1], vtc[2], vtc[3], -e);
         return Some(f);
     }
 
@@ -288,8 +291,7 @@ impl FundamentalMatrix {
         let vtc = vt.row(vt.nrows() - 1);
         let f = Matrix3::new(
             vtc[0], vtc[1], vtc[2], vtc[3], vtc[4], vtc[5], vtc[6], vtc[7], vtc[8],
-        )
-        .transpose();
+        );
         let usv = f.svd(true, true);
         let u = usv.u?;
         let s = usv.singular_values;
@@ -381,7 +383,8 @@ impl FundamentalMatrix {
     #[inline]
     fn projection_matrix_to_f(p2: &Matrix3x4<f64>) -> Matrix3<f64> {
         let t = p2.column(3);
-        let t_skewsymmetric = Matrix3::new(0.0, -t[2], t[1], t[2], 0.0, -t[0], -t[1], t[0], 0.0);
+        let t_skewsymmetric =
+            Matrix3::new(0.0, -t[2], t[1], t[2], 0.0, -t[0], -t[1], t[0], 0.0).transpose();
 
         t_skewsymmetric * p2.fixed_view(0, 0)
     }
@@ -390,11 +393,8 @@ impl FundamentalMatrix {
         p2: &Matrix3x4<f64>,
         inliers: &Vec<Match>,
     ) -> Option<Matrix3x4<f64>> {
-        let problem = ReprojectionErrorMinimization::new(
-            p2.clone(),
-            inliers,
-            RANSAC_PERSPECTIVE_OPTIMIZE_POINTS,
-        )?;
+        let problem =
+            ReprojectionErrorMinimization::new(p2.clone(), inliers, PERSPECTIVE_OPTIMIZE_POINTS)?;
         let (result, report) = LevenbergMarquardt::new().minimize(problem);
         if !report.termination.was_successful() {
             return None;
@@ -419,7 +419,7 @@ impl FundamentalMatrix {
         return Some(err);
     }
 
-    fn triangulate_point(p2: &Matrix3x4<f64>, m: &Match) -> Vector4<f64> {
+    pub fn triangulate_point(p2: &Matrix3x4<f64>, m: &Match) -> Vector4<f64> {
         let (x1, y1) = (m.0 .0 as f64, m.0 .1 as f64);
         let (x2, y2) = (m.1 .0 as f64, m.1 .1 as f64);
 

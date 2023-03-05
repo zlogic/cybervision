@@ -340,7 +340,7 @@ pub fn reconstruct(args: &Cli) {
                 };
                 triangulation::triangulate_perspective(
                     &point_correlations.correlated_points,
-                    p2,
+                    &p2,
                     out_scale,
                 )
             }

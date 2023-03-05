@@ -11,7 +11,7 @@ const KERNEL_POINT_COUNT: usize = (KERNEL_WIDTH * KERNEL_WIDTH) as usize;
 const THRESHOLD_AFFINE: f32 = 0.6;
 const THRESHOLD_PERSPECTIVE: f32 = 0.7;
 const MIN_STDEV_AFFINE: f32 = 1.0;
-const MIN_STDEV_PERSPECTIVE: f32 = 25.0;
+const MIN_STDEV_PERSPECTIVE: f32 = 5.0;
 const CORRIDOR_SIZE: usize = 20;
 // Decrease when using a low-powered GPU
 const CORRIDOR_SEGMENT_LENGTH: usize = 256;
