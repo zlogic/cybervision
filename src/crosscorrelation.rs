@@ -256,7 +256,7 @@ impl PointCorrelations {
             corr: None,
         };
 
-        for corridor_offset in -(CORRIDOR_SIZE as isize)..CORRIDOR_SIZE as isize + 1 {
+        for corridor_offset in -(CORRIDOR_SIZE as isize)..=CORRIDOR_SIZE as isize {
             self.correlate_corridor_area(
                 correlation_step,
                 &e_line,
@@ -716,7 +716,7 @@ mod gpu {
                 let y_limit = (NEIGHBOR_DISTANCE as f32 / scale).ceil() as u32 * 2 + 1;
                 let batch_size = SEARCH_AREA_SEGMENT_LENGTH as u32;
                 params.iteration_pass = 0;
-                for y in (0..y_limit + 1).step_by(batch_size as usize) {
+                for y in (0..=y_limit).step_by(batch_size as usize) {
                     params.corridor_start = y;
                     params.corridor_end = y + batch_size;
                     if params.corridor_end > y_limit {
@@ -752,7 +752,7 @@ mod gpu {
 
             self.run_shader(max_shape, "prepare_initialdata_correlation", params);
 
-            for corridor_offset in -(CORRIDOR_SIZE as i32)..CORRIDOR_SIZE as i32 + 1 {
+            for corridor_offset in -(CORRIDOR_SIZE as i32)..=CORRIDOR_SIZE as i32 {
                 for l in 0u32..corridor_segments as u32 {
                     params.corridor_offset = corridor_offset;
                     params.corridor_start = KERNEL_SIZE as u32 + l * CORRIDOR_SEGMENT_LENGTH as u32;

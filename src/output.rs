@@ -269,8 +269,8 @@ impl MeshWriter for ImageWriter {
         let max_x = max_x.floor() as usize;
         let min_y = min_y.ceil() as usize;
         let max_y = max_y.floor() as usize;
-        for x in min_x..max_x + 1 {
-            for y in min_y..max_y + 1 {
+        for x in min_x..=max_x {
+            for y in min_y..=max_y {
                 if self.surface[(y, x)].is_some() {
                     continue;
                 }

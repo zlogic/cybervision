@@ -251,7 +251,7 @@ pub fn reconstruct(args: &Cli) {
     {
         let start_time = SystemTime::now();
         let scale_steps = PointCorrelations::optimal_scale_steps(img1.img.dimensions());
-        let total_percent: f32 = (0..scale_steps + 1)
+        let total_percent: f32 = (0..=scale_steps)
             .map(|step| 1.0 / ((1 << (scale_steps - step)) as f32).powi(2))
             .sum();
 
@@ -277,7 +277,7 @@ pub fn reconstruct(args: &Cli) {
             "Selected hardware: {}",
             point_correlations.get_selected_hardware()
         );
-        for i in 0..scale_steps + 1 {
+        for i in 0..=scale_steps {
             let scale = 1.0 / (1 << (scale_steps - i)) as f32;
             let img1 = img1.resize(scale);
             let img2 = img2.resize(scale);

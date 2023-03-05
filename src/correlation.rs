@@ -112,9 +112,9 @@ pub fn compute_point_data<const KS: usize, const KPC: usize>(
         stdev: 0.0,
     };
     let mut avg = 0.0;
-    for r in 0..KS * 2 + 1 {
+    for r in 0..=KS * 2 {
         let row = (row + r).saturating_sub(KERNEL_SIZE);
-        for c in 0..KS * 2 + 1 {
+        for c in 0..=KS * 2 {
             let col = (col + c).saturating_sub(KERNEL_SIZE);
             let value = img[(row, col)];
             let delta_pos = r * kernel_width + c;
