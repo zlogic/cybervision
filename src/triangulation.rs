@@ -1,7 +1,5 @@
-use nalgebra::{DMatrix, Matrix3x4};
+use nalgebra::DMatrix;
 use rayon::prelude::*;
-
-use crate::fundamentalmatrix::FundamentalMatrix;
 
 const HISTOGRAM_FILTER_BINS: usize = 100;
 const HISTOGRAM_FILTER_DISCARD_PERCENTILE: f32 = 0.025;
@@ -43,58 +41,6 @@ pub fn triangulate_affine(
 #[inline]
 fn triangulate_point_affine(p1: (usize, usize), p2: Option<Match>) -> Option<f32> {
     p2.map(|p2| ((p1.0 as f32 - p2.0 as f32).powi(2) + (p1.1 as f32 - p2.1 as f32).powi(2)).sqrt())
-}
-
-pub fn triangulate_perspective(
-    correlated_points: &DMatrix<Option<Match>>,
-    p2: &Matrix3x4<f64>,
-    scale: (f32, f32, f32),
-) -> Surface {
-    let mut points = DMatrix::<Option<f32>>::from_element(
-        correlated_points.nrows(),
-        correlated_points.ncols(),
-        None,
-    );
-
-    let depth_scale = scale.2;
-
-    points
-        .column_iter_mut()
-        .enumerate()
-        .par_bridge()
-        .for_each(|(col, mut out_col)| {
-            out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                *out_point =
-                    triangulate_point_perspective(p2, (row, col), correlated_points[(row, col)])
-                        .map(|depth| depth * depth_scale);
-            })
-        });
-    filter_histogram(&mut points);
-    return Surface { points };
-}
-
-#[inline]
-fn triangulate_point_perspective(
-    p2: &Matrix3x4<f64>,
-    point1: (usize, usize),
-    point2: Option<Match>,
-) -> Option<f32> {
-    let point2 = if let Some(point2) = point2 {
-        point2
-    } else {
-        return None;
-    };
-
-    let point =
-        FundamentalMatrix::triangulate_point(p2, &(point1, (point2.0 as usize, point2.1 as usize)));
-
-    if point.w.abs() < TRIANGULATION_MIN_SCALE {
-        return None;
-    }
-
-    let point = point.unscale(point.w);
-    // Projection appears to be very precise, with x1==point.x/point.z and y1==point.y/point.z
-    Some(point.z as f32)
 }
 
 fn filter_histogram(points: &mut DMatrix<Option<f32>>) {

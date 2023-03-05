@@ -1,4 +1,4 @@
-use nalgebra::{Matrix3, Matrix3x4, Matrix4, SMatrix, Vector3, Vector4};
+use nalgebra::{Matrix3, SMatrix, Vector3};
 use rand::rngs::SmallRng;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
@@ -328,25 +328,6 @@ impl FundamentalMatrix {
         (m1, m2)
     }
 
-    pub fn f_to_projection_matrix(f: &Matrix3<f64>) -> Option<Matrix3x4<f64>> {
-        let usv = f.svd(true, true);
-        let u = usv.u?;
-        let e2 = u.row(2);
-        let e2_skewsymmetric =
-            Matrix3::new(0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0).transpose();
-        let e2s_f = e2_skewsymmetric * f;
-
-        let mut p2 = Matrix3x4::zeros();
-        for row in 0..3 {
-            for col in 0..3 {
-                p2[(row, col)] = e2s_f[(row, col)];
-            }
-            p2[(row, 3)] = e2[row];
-        }
-
-        Some(p2)
-    }
-
     #[inline]
     fn fits_model(&self, f: &Matrix3<f64>, m: &Match) -> Option<f64> {
         let p1 = Vector3::new(m.0 .0 as f64, m.0 .1 as f64, 1.0);
@@ -362,39 +343,6 @@ impl FundamentalMatrix {
             return None;
         }
         return Some(err);
-    }
-
-    pub fn triangulate_point(p2: &Matrix3x4<f64>, m: &Match) -> Vector4<f64> {
-        let (x1, y1) = (m.0 .0 as f64, m.0 .1 as f64);
-        let (x2, y2) = (m.1 .0 as f64, m.1 .1 as f64);
-
-        let a = Matrix4::new(
-            // First row of A: x1*[0 0 1 0]-[1 0 0 0]
-            -1.0,
-            0.0,
-            x1 as f64,
-            0.0,
-            // Second row of A: y1*[0 0 1 0]-[0 1 0 0]
-            0.0,
-            -1.0,
-            y1 as f64,
-            0.0,
-            // Third row of A: x2*camera_2[2]-camera_2[0]
-            x2 * p2[(2, 0)] - p2[(0, 0)],
-            x2 * p2[(2, 1)] - p2[(0, 1)],
-            x2 * p2[(2, 2)] - p2[(0, 2)],
-            x2 * p2[(2, 3)] - p2[(0, 3)],
-            // Fourth row of A: y2*camera_2[2]-camera_2[1]
-            y2 * p2[(2, 0)] - p2[(1, 0)],
-            y2 * p2[(2, 1)] - p2[(1, 1)],
-            y2 * p2[(2, 2)] - p2[(1, 2)],
-            y2 * p2[(2, 3)] - p2[(1, 3)],
-        );
-        let usv = a.svd(false, true);
-        let vt = usv.v_t.unwrap();
-        let mut point4d = vt.row(vt.nrows() - 1).transpose();
-        point4d.unscale_mut(point4d[3]);
-        point4d
     }
 }
 
