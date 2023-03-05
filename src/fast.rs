@@ -52,7 +52,7 @@ impl Fast {
                         },
                     )
                     .collect();
-                return kp;
+                kp
             })
             .flatten()
             .collect();
@@ -62,7 +62,7 @@ impl Fast {
             .map(|p| {
                 let mut threshold_min = FAST_THRESHOLD as i16;
                 let mut threshold_max = std::u8::MAX as i16;
-                let mut threshold = (threshold_max as i16 + threshold_min as i16) / 2;
+                let mut threshold = (threshold_max + threshold_min) / 2;
                 while threshold_max > threshold_min + 1 {
                     if is_keypoint(&img, threshold, p.0, p.1) {
                         threshold_min = threshold;
@@ -71,7 +71,7 @@ impl Fast {
                     }
                     threshold = (threshold_min + threshold_max) / 2;
                 }
-                return threshold_min as u8;
+                threshold_min as u8
             })
             .collect();
         // Choose points with best scores
@@ -119,10 +119,10 @@ impl Fast {
                         return None;
                     }
                 }
-                return Some((p1.1, p1.0));
+                Some((p1.1, p1.0))
             })
             .collect();
-        return Fast { points: keypoints };
+        Fast { points: keypoints }
     }
 
     pub fn keypoints(&self) -> &Vec<Point> {
@@ -137,7 +137,7 @@ impl Fast {
             scale += 1;
         }
         scale = (scale - 1).max(0);
-        return 1.0 / ((1 << scale) as f32);
+        1.0 / ((1 << scale) as f32)
     }
 }
 
@@ -145,7 +145,7 @@ impl Fast {
 fn get_pixel_offset(img: &DMatrix<u8>, row: usize, col: usize, offset: (i8, i8)) -> i16 {
     let row_new = row.saturating_add_signed(offset.1 as isize);
     let col_new = col.saturating_add_signed(offset.0 as isize);
-    return img[(row_new, col_new)] as i16;
+    img[(row_new, col_new)] as i16
 }
 
 #[inline]
@@ -157,7 +157,7 @@ fn is_keypoint(img: &DMatrix<u8>, threshold: i16, row: usize, col: usize) -> boo
 
     for i in 0..FAST_CIRCLE_LENGTH {
         let p = FAST_CIRCLE_PIXELS[i % FAST_CIRCLE_PIXELS.len()];
-        let c_val = get_pixel_offset(&img, row, col, p);
+        let c_val = get_pixel_offset(img, row, col, p);
         if c_val > val + threshold {
             last_more_pos = last_more_pos.or(Some(i));
             let length = last_more_pos.map(|p| i - p).unwrap_or(0) + 1;
@@ -172,11 +172,11 @@ fn is_keypoint(img: &DMatrix<u8>, threshold: i16, row: usize, col: usize) -> boo
         } else {
             last_less_pos = None;
         }
-        if max_length >= FAST_NUM_POINTS.into() {
+        if max_length >= FAST_NUM_POINTS {
             return true;
         }
     }
-    return false;
+    false
 }
 
 fn adjust_contrast(img: &mut DMatrix<u8>) {

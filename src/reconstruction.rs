@@ -39,8 +39,8 @@ struct ImageMeta {
 
 impl SourceImage {
     fn load(path: &String) -> Result<SourceImage, image::ImageError> {
-        let metadata = SourceImage::get_metadata(&path);
-        let img = image::open(&path)?.into_luma8();
+        let metadata = SourceImage::get_metadata(path);
+        let img = image::open(path)?.into_luma8();
         let img = img.view(0, 0, img.width(), img.height() - metadata.databar_height);
 
         Ok(SourceImage {
@@ -56,21 +56,17 @@ impl SourceImage {
             tilt_angle: None,
             databar_height: 0,
         };
-        match image::ImageFormat::from_path(&path) {
-            Ok(format) => match format {
-                image::ImageFormat::Tiff => {
-                    SourceImage::get_metadata_tiff(&path).unwrap_or(default_metadata)
-                }
-                _ => default_metadata,
-            },
+        match image::ImageFormat::from_path(path) {
+            Ok(image::ImageFormat::Tiff) => {
+                SourceImage::get_metadata_tiff(path).unwrap_or(default_metadata)
+            }
             _ => default_metadata,
         }
     }
 
     fn tag_value<F: FromStr>(line: &str) -> Option<F> {
-        line.split_once("=")
-            .map(|(_, value)| value.parse::<F>().ok())
-            .flatten()
+        line.split_once('=')
+            .and_then(|(_, value)| value.parse::<F>().ok())
     }
 
     fn get_metadata_tiff(path: &String) -> Result<ImageMeta, tiff::TiffError> {
@@ -89,7 +85,7 @@ impl SourceImage {
                 let mut tilt_angle = None;
                 let mut databar_height = None;
                 for line in data.split_terminator(&separators[..]) {
-                    if line.starts_with("[") && line.ends_with("]") {
+                    if line.starts_with('[') && line.ends_with(']') {
                         section = line;
                         continue;
                     }
@@ -105,20 +101,18 @@ impl SourceImage {
                             // or allow to specify a custom depth scale (e.g. a negative one)
                             tilt_angle = tilt_angle.or(SourceImage::tag_value(line))
                         }
-                    } else if section.eq("[PrivateFei]") {
-                        if line.starts_with("DatabarHeight=") {
-                            databar_height = databar_height.or(SourceImage::tag_value(line))
-                        }
+                    } else if section.eq("[PrivateFei]") && line.starts_with("DatabarHeight=") {
+                        databar_height = databar_height.or(SourceImage::tag_value(line))
                     }
                 }
                 let metadata = ImageMeta {
                     scale: (scale_width.unwrap_or(1.0), scale_height.unwrap_or(1.0)),
-                    tilt_angle: tilt_angle,
+                    tilt_angle,
                     databar_height: databar_height.unwrap_or(0),
                 };
-                return Ok(metadata);
+                Ok(metadata)
             }
-            Err(e) => return Err(e),
+            Err(e) => Err(e),
         }
     }
 
@@ -134,7 +128,7 @@ impl SourceImage {
         for (x, y, val) in img_resized.enumerate_pixels() {
             img[(y as usize, x as usize)] = val[0];
         }
-        return img;
+        img
     }
 }
 
@@ -153,8 +147,7 @@ pub fn reconstruct(args: &Cli) {
     );
     let tilt_angle = img1
         .tilt_angle
-        .map(|a1| img2.tilt_angle.map(|a2| a2 - a1))
-        .flatten();
+        .and_then(|a1| img2.tilt_angle.map(|a2| a2 - a1));
     if tilt_angle.is_some() {
         println!("Relative tilt angle is {}", tilt_angle.unwrap());
     }
@@ -173,9 +166,8 @@ pub fn reconstruct(args: &Cli) {
         keypoints1 = Fast::new(&img1_scaled);
         keypoints2 = Fast::new(&img2_scaled);
 
-        match start_time.elapsed() {
-            Ok(t) => println!("Extracted feature points in {:.3} seconds", t.as_secs_f32(),),
-            Err(_) => {}
+        if let Ok(t) = start_time.elapsed() {
+            println!("Extracted feature points in {:.3} seconds", t.as_secs_f32(),);
         }
         println!(
             "Image {} has {} feature points",
@@ -207,9 +199,8 @@ pub fn reconstruct(args: &Cli) {
         drop(keypoints2);
         drop(img1_scaled);
         drop(img2_scaled);
-        match start_time.elapsed() {
-            Ok(t) => println!("Matched keypoints in {:.3} seconds", t.as_secs_f32(),),
-            Err(_) => {}
+        if let Ok(t) = start_time.elapsed() {
+            println!("Matched keypoints in {:.3} seconds", t.as_secs_f32(),);
         }
         println!("Found {} matches", point_matches.len());
     }
@@ -217,7 +208,7 @@ pub fn reconstruct(args: &Cli) {
     let fm: FundamentalMatrix;
     {
         let start_time = SystemTime::now();
-        let point_matches = point_matches
+        let point_matches: Vec<((usize, usize), (usize, usize))> = point_matches
             .into_par_iter()
             .map(|(p1, p2)| {
                 (
@@ -242,9 +233,8 @@ pub fn reconstruct(args: &Cli) {
         };
         let f = FundamentalMatrix::new(projection_mode, &match_buckets, Some(&pb));
         pb.finish_and_clear();
-        match start_time.elapsed() {
-            Ok(t) => println!("Completed RANSAC fitting in {:.3} seconds", t.as_secs_f32(),),
-            Err(_) => {}
+        if let Ok(t) = start_time.elapsed() {
+            println!("Completed RANSAC fitting in {:.3} seconds", t.as_secs_f32(),);
         }
         match f {
             Ok(f) => fm = f,
@@ -271,8 +261,8 @@ pub fn reconstruct(args: &Cli) {
             crate::ProjectionMode::Perspective => crosscorrelation::ProjectionMode::Perspective,
         };
         let hardware_mode = match args.mode {
-            crate::HardwareMode::GPU => crosscorrelation::HardwareMode::GPU,
-            crate::HardwareMode::CPU => crosscorrelation::HardwareMode::CPU,
+            crate::HardwareMode::GPU => crosscorrelation::HardwareMode::Gpu,
+            crate::HardwareMode::CPU => crosscorrelation::HardwareMode::Cpu,
         };
 
         let mut total_percent_complete = 0.0;
@@ -310,12 +300,11 @@ pub fn reconstruct(args: &Cli) {
         }
         pb.finish_and_clear();
 
-        match start_time.elapsed() {
-            Ok(t) => println!(
+        if let Ok(t) = start_time.elapsed() {
+            println!(
                 "Completed surface generation in {:.3} seconds",
                 t.as_secs_f32()
-            ),
-            Err(_) => {}
+            );
         }
     }
 
@@ -330,12 +319,11 @@ pub fn reconstruct(args: &Cli) {
             triangulation::triangulate_affine(&point_correlations.correlated_points, out_scale);
         drop(point_correlations);
 
-        match start_time.elapsed() {
-            Ok(t) => println!(
+        if let Ok(t) = start_time.elapsed() {
+            println!(
                 "Completed point triangulation in {:.3} seconds",
                 t.as_secs_f32()
-            ),
-            Err(_) => {}
+            );
         }
     }
 
@@ -358,15 +346,13 @@ pub fn reconstruct(args: &Cli) {
             }
         }
 
-        match start_time.elapsed() {
-            Ok(t) => println!("Saved result in {:.3} seconds", t.as_secs_f32()),
-            Err(_) => {}
+        if let Ok(t) = start_time.elapsed() {
+            println!("Saved result in {:.3} seconds", t.as_secs_f32());
         }
     }
 
-    match start_time.elapsed() {
-        Ok(t) => println!("Completed reconstruction in {:.3} seconds", t.as_secs_f32(),),
-        Err(_) => {}
+    if let Ok(t) = start_time.elapsed() {
+        println!("Completed reconstruction in {:.3} seconds", t.as_secs_f32(),);
     }
 }
 
@@ -382,7 +368,7 @@ fn new_progress_bar(show_message: bool) -> ProgressBar {
         .with_key("percent_decimal", |s: &ProgressState, w: &mut dyn Write| {
             write!(w, "{:.2}", s.fraction() * 100.0).unwrap()
         });
-    return ProgressBar::new(10000).with_style(pb_style);
+    ProgressBar::new(10000).with_style(pb_style)
 }
 
 impl correlation::ProgressListener for ProgressBar {

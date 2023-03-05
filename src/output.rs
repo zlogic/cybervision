@@ -42,13 +42,13 @@ pub fn output<PL: ProgressListener>(
         InterpolationMode::None => triangulate_without_interpolation(&surface, &surface_points),
         InterpolationMode::Delaunay => vec![],
     };
-    let mut writer = if path.to_lowercase().ends_with(".obj") {
-        ObjWriter::new(surface, path)
+    let mut writer: Box<dyn MeshWriter> = if path.to_lowercase().ends_with(".obj") {
+        Box::new(ObjWriter::new(surface, path)?)
     } else if path.to_lowercase().ends_with(".ply") {
-        PlyWriter::new(surface, path)
+        Box::new(PlyWriter::new(surface, path)?)
     } else {
-        ImageWriter::new(surface, path)
-    }?;
+        Box::new(ImageWriter::new(surface, path)?)
+    };
 
     if interpolation == InterpolationMode::Delaunay {
         let triangulated_surface = triangulate_image(surface_points)?;
@@ -134,12 +134,9 @@ struct PlyWriter {
 }
 
 impl PlyWriter {
-    fn new(
-        surface: DMatrix<Option<f32>>,
-        path: &String,
-    ) -> Result<Box<dyn MeshWriter>, std::io::Error> {
+    fn new(surface: DMatrix<Option<f32>>, path: &String) -> Result<PlyWriter, std::io::Error> {
         let writer = BufWriter::new(File::create(path)?);
-        Ok(Box::new(PlyWriter { surface, writer }))
+        Ok(PlyWriter { surface, writer })
     }
 }
 
@@ -195,12 +192,9 @@ struct ObjWriter {
 }
 
 impl ObjWriter {
-    fn new(
-        surface: DMatrix<Option<f32>>,
-        path: &String,
-    ) -> Result<Box<dyn MeshWriter>, std::io::Error> {
+    fn new(surface: DMatrix<Option<f32>>, path: &String) -> Result<ObjWriter, std::io::Error> {
         let writer = BufWriter::new(File::create(path)?);
-        Ok(Box::new(ObjWriter { surface, writer }))
+        Ok(ObjWriter { surface, writer })
     }
 }
 
@@ -245,14 +239,11 @@ struct ImageWriter {
 }
 
 impl ImageWriter {
-    fn new(
-        surface: DMatrix<Option<f32>>,
-        path: &String,
-    ) -> Result<Box<dyn MeshWriter>, std::io::Error> {
-        Ok(Box::new(ImageWriter {
+    fn new(surface: DMatrix<Option<f32>>, path: &str) -> Result<ImageWriter, std::io::Error> {
+        Ok(ImageWriter {
             surface,
-            path: path.clone(),
-        }))
+            path: path.to_owned(),
+        })
     }
 }
 
@@ -295,7 +286,7 @@ impl MeshWriter for ImageWriter {
                 }
                 let depths = &depths;
                 let value: f32 = depths
-                    .into_iter()
+                    .iter()
                     .zip(lambda)
                     .map(|(depth, lambda)| depth * lambda)
                     .sum();
@@ -335,15 +326,14 @@ fn surface_points(surface: &DMatrix<Option<f32>>) -> Vec<Point2<f32>> {
     surface
         .column_iter()
         .enumerate()
-        .map(|(x, col)| {
+        .flat_map(|(x, col)| {
             let points: Vec<Point2<f32>> = col
                 .iter()
                 .enumerate()
                 .filter_map(|(y, v)| v.map(|_| Point2::new(x as f32, y as f32)))
                 .collect();
-            return points;
+            points
         })
-        .flatten()
         .collect()
 }
 
@@ -422,7 +412,7 @@ fn get_values_range(surface: &DMatrix<Option<f32>>) -> (f32, f32) {
             max = max.max(dist);
         }
     }
-    return (min, max);
+    (min, max)
 }
 
 #[inline]
@@ -489,12 +479,12 @@ fn map_depth(value: f32) -> Rgba<u8> {
         0x54,
     ];
 
-    return Rgba::from([
+    Rgba::from([
         map_color(&COLORMAP_R, value),
         map_color(&COLORMAP_G, value),
         map_color(&COLORMAP_B, value),
         u8::MAX,
-    ]);
+    ])
 }
 
 #[inline]
@@ -507,7 +497,7 @@ fn map_color(colormap: &[u8; 256], value: f32) -> u8 {
     let ratio = (value - step * box_index as f32) / step;
     let c1 = colormap[box_index] as f32;
     let c2 = colormap[box_index + 1] as f32;
-    return (c2 * ratio + c1 * (1.0 - ratio)).round() as u8;
+    (c2 * ratio + c1 * (1.0 - ratio)).round() as u8
 }
 
 #[derive(Debug)]
@@ -525,6 +515,6 @@ impl std::error::Error for OutputError {}
 
 impl fmt::Display for OutputError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return write!(f, "{}", self.msg);
+        write!(f, "{}", self.msg)
     }
 }

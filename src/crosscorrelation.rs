@@ -6,7 +6,7 @@ use std::{cell::RefCell, error, ops::Range, sync::atomic::AtomicUsize, sync::ato
 const SCALE_MIN_SIZE: usize = 64;
 const KERNEL_SIZE: usize = 5;
 const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
-const KERNEL_POINT_COUNT: usize = (KERNEL_WIDTH * KERNEL_WIDTH) as usize;
+const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
 
 const THRESHOLD_AFFINE: f32 = 0.6;
 const THRESHOLD_PERSPECTIVE: f32 = 0.6;
@@ -30,8 +30,8 @@ pub enum ProjectionMode {
 
 #[derive(Debug)]
 pub enum HardwareMode {
-    GPU,
-    CPU,
+    Gpu,
+    Cpu,
 }
 
 pub trait ProgressListener
@@ -84,7 +84,7 @@ impl PointCorrelations {
         let selected_hardware;
         let hw_mode;
         let gpu_context = match hardware_mode {
-            HardwareMode::GPU => {
+            HardwareMode::Gpu => {
                 match gpu::GpuContext::new(
                     (img1_dimensions.0 as usize, img1_dimensions.1 as usize),
                     (img2_dimensions.0 as usize, img2_dimensions.1 as usize),
@@ -93,32 +93,32 @@ impl PointCorrelations {
                     fundamental_matrix,
                 ) {
                     Ok(gpu_context) => {
-                        hw_mode = HardwareMode::GPU;
+                        hw_mode = HardwareMode::Gpu;
                         selected_hardware = format!("GPU {}", gpu_context.get_device_name());
                         Some(gpu_context)
                     }
                     Err(err) => {
-                        hw_mode = HardwareMode::CPU;
+                        hw_mode = HardwareMode::Cpu;
                         selected_hardware = format!("CPU fallback ({})", err);
                         None
                     }
                 }
             }
-            HardwareMode::CPU => {
-                hw_mode = HardwareMode::CPU;
-                selected_hardware = format!("CPU",);
+            HardwareMode::Cpu => {
+                hw_mode = HardwareMode::Cpu;
+                selected_hardware = "CPU".to_string();
                 None
             }
         };
 
         // Height specifies rows, width specifies columns.
         let correlated_points = match hw_mode {
-            HardwareMode::CPU => {
+            HardwareMode::Cpu => {
                 DMatrix::from_element(img1_dimensions.1 as usize, img1_dimensions.0 as usize, None)
             }
-            HardwareMode::GPU => DMatrix::from_element(0, 0, None),
+            HardwareMode::Gpu => DMatrix::from_element(0, 0, None),
         };
-        return PointCorrelations {
+        PointCorrelations {
             correlated_points,
             first_pass: true,
             min_stdev,
@@ -126,7 +126,7 @@ impl PointCorrelations {
             fundamental_matrix,
             gpu_context,
             selected_hardware,
-        };
+        }
     }
 
     pub fn get_selected_hardware(&self) -> &String {
@@ -161,8 +161,8 @@ impl PointCorrelations {
 
         let corelation_step = CorrelationStep {
             scale,
-            img1: img1,
-            img2: img2,
+            img1,
+            img2,
             img2_data,
         };
 
@@ -285,11 +285,11 @@ impl PointCorrelations {
                 corridor_offset: (0, 1),
             };
         }
-        return EpipolarLine {
+        EpipolarLine {
             coeff: (-f_p1[0] / f_p1[1], 1.0),
             add: (-scale as f64 * f_p1[2] / f_p1[1], 0.0),
             corridor_offset: (1, 0),
-        };
+        }
     }
 
     fn correlate_corridor_area(
@@ -335,7 +335,7 @@ impl PointCorrelations {
                     corr += delta1 * delta2;
                 }
             }
-            corr = corr / (p1_data.stdev * stdev2 * KERNEL_POINT_COUNT as f32);
+            corr /= p1_data.stdev * stdev2 * KERNEL_POINT_COUNT as f32;
 
             if corr >= self.correlation_threshold
                 && best_match.corr.map_or(true, |best_corr| corr > best_corr)
@@ -425,7 +425,7 @@ impl PointCorrelations {
         let corridor_end = corridor_center
             .saturating_add(corridor_length)
             .clamp(corridor_start, corridor_end);
-        return Some(corridor_start..corridor_end);
+        Some(corridor_start..corridor_end)
     }
 
     pub fn optimal_scale_steps(dimensions: (u32, u32)) -> usize {
@@ -435,7 +435,7 @@ impl PointCorrelations {
         while min_dimension / (1 << scale) > SCALE_MIN_SIZE {
             scale += 1;
         }
-        return scale - 1;
+        scale - 1
     }
 }
 
@@ -469,7 +469,7 @@ fn compute_image_point_data(img: &DMatrix<u8>) -> ImagePointData {
                 *stdev = p.stdev;
             }
         });
-    return data;
+    data
 }
 
 #[inline]
@@ -502,7 +502,7 @@ fn compute_compact_point_data(img: &DMatrix<u8>, row: usize, col: usize) -> Opti
     }
     result.stdev = (result.stdev / KERNEL_POINT_COUNT as f32).sqrt();
 
-    return Some(result);
+    Some(result)
 }
 
 mod gpu {
@@ -601,7 +601,7 @@ mod gpu {
                     &wgpu::DeviceDescriptor {
                         label: None,
                         features: wgpu::Features::empty(),
-                        limits: limits,
+                        limits,
                     },
                     None,
                 )
@@ -657,7 +657,7 @@ mod gpu {
         }
 
         pub fn get_device_name(&self) -> &String {
-            return &self.device_name;
+            &self.device_name
         }
 
         pub fn correlate_images<PL: super::ProgressListener>(
@@ -828,7 +828,7 @@ mod gpu {
                         self.fundamental_matrix[(row, col)] as f32;
                 }
             }
-            return f;
+            f
         }
 
         fn transfer_in_images(&self, img1: DMatrix<u8>, img2: DMatrix<u8>) {
@@ -1032,7 +1032,7 @@ mod gpu {
 
     impl fmt::Display for GpuError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            return write!(f, "{}", self.msg);
+            write!(f, "{}", self.msg)
         }
     }
 }

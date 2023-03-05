@@ -53,24 +53,21 @@ pub struct FundamentalMatrix {
 }
 
 impl FundamentalMatrix {
-    pub fn matches_to_buckets(
-        point_matches: &Vec<Match>,
-        dimensions: (u32, u32),
-    ) -> Vec<Vec<Match>> {
+    pub fn matches_to_buckets(point_matches: &[Match], dimensions: (u32, u32)) -> Vec<Vec<Match>> {
         let width = dimensions.0;
         let height = dimensions.1;
         let mut match_buckets: Vec<Vec<Match>> = Vec::new();
-        match_buckets.resize(MATCH_GRID_SIZE * MATCH_GRID_SIZE as usize, vec![]);
-        point_matches.into_iter().for_each(|(p1, p2)| {
+        match_buckets.resize(MATCH_GRID_SIZE * MATCH_GRID_SIZE, vec![]);
+        point_matches.iter().for_each(|(p1, p2)| {
             let x_i = (MATCH_GRID_SIZE * p1.0) / (width as usize);
             let y_i = (MATCH_GRID_SIZE * p1.1) / (height as usize);
             let pos = y_i * MATCH_GRID_SIZE + x_i;
             match_buckets[pos].push((*p1, *p2));
         });
-        return match_buckets
+        match_buckets
             .into_iter()
             .filter(|l| !l.is_empty())
-            .collect();
+            .collect()
     }
 
     pub fn new<PL: ProgressListener>(
@@ -119,7 +116,7 @@ impl FundamentalMatrix {
         match_buckets: &Vec<Vec<Match>>,
         progress_listener: Option<&PL>,
     ) -> Result<RansacIterationResult, RansacError> {
-        let matches_count: usize = match_buckets.into_iter().map(|b| b.len()).sum();
+        let matches_count: usize = match_buckets.iter().map(|b| b.len()).sum();
         if matches_count < RANSAC_D + self.ransac_n {
             return Err(RansacError::new("Not enough matches"));
         }
@@ -137,7 +134,7 @@ impl FundamentalMatrix {
                             / self.ransac_k as f32;
                         pl.report_status(value);
                     }
-                    self.ransac_iteration(&match_buckets)
+                    self.ransac_iteration(match_buckets)
                 })
                 .inspect(|m| {
                     if let Some(pl) = progress_listener {
@@ -155,10 +152,10 @@ impl FundamentalMatrix {
                 break;
             }
         }
-        return match best_result {
+        match best_result {
             Some(res) => Ok(res),
             None => Err(RansacError::new("No reliable matches found")),
-        };
+        }
     }
 
     fn ransac_iteration(&self, match_buckets: &Vec<Vec<Match>>) -> Option<RansacIterationResult> {
@@ -173,7 +170,7 @@ impl FundamentalMatrix {
             }
         }
 
-        let mut f = match self.projection {
+        let f = match self.projection {
             ProjectionMode::Affine => FundamentalMatrix::calculate_model_affine(&inliers)?,
             ProjectionMode::Perspective => {
                 FundamentalMatrix::calculate_model_perspective(&inliers)?
@@ -189,10 +186,10 @@ impl FundamentalMatrix {
             return None;
         }
         let all_inliers: (usize, f64) = match_buckets
-            .into_iter()
+            .iter()
             .map(|bucket| {
                 bucket
-                    .into_iter()
+                    .iter()
                     .filter_map(|m| self.fits_model(&f, m))
                     .fold((0, 0.0), |(count, error), match_error| {
                         (count + 1, error + match_error)
@@ -206,15 +203,15 @@ impl FundamentalMatrix {
 
         let matches_count = all_inliers.0;
         let inliers_error = all_inliers.1 / matches_count as f64;
-        return Some(RansacIterationResult {
+        Some(RansacIterationResult {
             f,
             matches_count,
             best_error: inliers_error,
-        });
+        })
     }
 
     #[inline]
-    fn calculate_model_affine(inliers: &Vec<Match>) -> Option<Matrix3<f64>> {
+    fn calculate_model_affine(inliers: &[Match]) -> Option<Matrix3<f64>> {
         let mut a = SMatrix::<f64, RANSAC_N_AFFINE, 4>::zeros();
         for i in 0..RANSAC_N_AFFINE {
             let inlier = &inliers[i];
@@ -231,7 +228,7 @@ impl FundamentalMatrix {
         let vtc = vt.row(vt.nrows() - 1);
         let e = vtc.dot(&mean);
         let f = Matrix3::new(0.0, 0.0, vtc[0], 0.0, 0.0, vtc[1], vtc[2], vtc[3], -e);
-        return Some(f);
+        Some(f)
     }
 
     #[inline]
@@ -269,7 +266,7 @@ impl FundamentalMatrix {
         let f = u * s * vt;
 
         // Scale back to image coordinates.
-        return Some(m2.tr_mul(&f) * m1);
+        Some(m2.tr_mul(&f) * m1)
     }
 
     #[inline]
@@ -342,7 +339,7 @@ impl FundamentalMatrix {
         if !err.is_finite() || err.abs() > self.ransac_t {
             return None;
         }
-        return Some(err);
+        Some(err)
     }
 }
 
@@ -353,8 +350,7 @@ impl Ord for RansacIterationResult {
             return mc_cmp;
         }
         // TODO: check if this is actually valid
-        return self
-            .best_error
+        self.best_error
             .partial_cmp(&other.best_error)
             .unwrap_or_else(|| {
                 // Errors should be minimized, so a normal value is preferred (should be greater)
@@ -364,9 +360,9 @@ impl Ord for RansacIterationResult {
                 } else if other.best_error.is_finite() {
                     return Ordering::Greater;
                 }
-                return Ordering::Equal;
+                Ordering::Equal
             })
-            .reverse();
+            .reverse()
     }
 }
 
@@ -399,6 +395,6 @@ impl std::error::Error for RansacError {}
 
 impl fmt::Display for RansacError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return write!(f, "{}", self.msg);
+        write!(f, "{}", self.msg)
     }
 }

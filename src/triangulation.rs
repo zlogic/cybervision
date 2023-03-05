@@ -4,7 +4,6 @@ use rayon::prelude::*;
 const HISTOGRAM_FILTER_BINS: usize = 100;
 const HISTOGRAM_FILTER_DISCARD_PERCENTILE: f32 = 0.025;
 const HISTOGRAM_FILTER_EPSILON: f32 = 0.001;
-const TRIANGULATION_MIN_SCALE: f64 = 0.001;
 
 pub struct Surface {
     pub points: DMatrix<Option<f32>>,
@@ -35,7 +34,7 @@ pub fn triangulate_affine(
             })
         });
     filter_histogram(&mut points);
-    return Surface { points };
+    Surface { points }
 }
 
 #[inline]
@@ -46,7 +45,7 @@ fn triangulate_point_affine(p1: (usize, usize), p2: Option<Match>) -> Option<f32
 fn filter_histogram(points: &mut DMatrix<Option<f32>>) {
     let (min, max) = points
         .iter()
-        .flat_map(|v| v)
+        .flatten()
         .fold((f32::MAX, f32::MIN), |acc, v| {
             (acc.0.min(*v), acc.1.max(*v))
         });
