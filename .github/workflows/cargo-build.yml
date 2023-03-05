@@ -2,7 +2,7 @@ name: Cargo build
 
 on:
   push:
-    branches: [ "master", "port-to-rust" ]
+    branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
 
