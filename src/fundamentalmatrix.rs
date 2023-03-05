@@ -14,7 +14,6 @@ const RANSAC_K_AFFINE: usize = 10_000_000;
 const RANSAC_K_PERSPECTIVE: usize = 10_000_000;
 const RANSAC_N_AFFINE: usize = 4;
 const RANSAC_N_PERSPECTIVE: usize = 8;
-const RANSAC_RANK_EPSILON: f64 = 0.0;
 const RANSAC_T_AFFINE: f64 = 0.1;
 const RANSAC_T_PERSPECTIVE: f64 = 0.5;
 const RANSAC_D: usize = 10;
@@ -248,13 +247,8 @@ impl FundamentalMatrix {
         let mean = a.row_mean();
         a.row_iter_mut().for_each(|mut r| r -= mean);
         let usv = a.svd(false, true);
-        let s = usv.singular_values;
         let vt = &usv.v_t?;
 
-        // Check if matrix rank is too low.
-        if s[s.len() - 1].abs() < RANSAC_RANK_EPSILON {
-            return None;
-        }
         let vtc = vt.row(vt.nrows() - 1);
         let e = vtc.dot(&mean);
         let f = Matrix3::new(0.0, 0.0, vtc[0], 0.0, 0.0, vtc[1], vtc[2], vtc[3], -e);
@@ -281,13 +275,8 @@ impl FundamentalMatrix {
             a[(i, 8)] = 1.0;
         }
         let usv = a.svd(false, true);
-        let s = usv.singular_values;
         let vt = &usv.v_t?;
 
-        // Check if matrix rank is too low.
-        if s[s.len() - 1].abs() < RANSAC_RANK_EPSILON {
-            return None;
-        }
         let vtc = vt.row(vt.nrows() - 1);
         let f = Matrix3::new(
             vtc[0], vtc[1], vtc[2], vtc[3], vtc[4], vtc[5], vtc[6], vtc[7], vtc[8],
