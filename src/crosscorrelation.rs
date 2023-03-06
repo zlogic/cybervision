@@ -742,7 +742,7 @@ mod gpu {
                 send_progress(progressbar_completed_percentage);
 
                 params.iteration_pass = 1;
-                for y in (0..y_limit + 1).step_by(batch_size as usize) {
+                for y in (0..=y_limit).step_by(batch_size as usize) {
                     params.corridor_start = y;
                     params.corridor_end = y + batch_size;
                     if params.corridor_end > y_limit {
@@ -833,20 +833,13 @@ mod gpu {
         }
 
         fn transfer_in_images(&self, img1: DMatrix<u8>, img2: DMatrix<u8>) {
-            let mut img_slice = Vec::with_capacity(img1.nrows() * img1.ncols());
+            let mut img_slice =
+                Vec::with_capacity(img1.nrows() * img1.ncols() + img2.nrows() * img2.ncols());
             for row in 0..img1.nrows() {
                 for col in 0..img1.ncols() {
                     img_slice.push(img1[(row, col)] as f32);
                 }
             }
-            self.queue.write_buffer(
-                &self.buffer_img,
-                0,
-                bytemuck::cast_slice(img_slice.as_slice()),
-            );
-            let img1_bytes =
-                (std::mem::size_of::<u32>() * img1.nrows() * img1.ncols()) as wgpu::BufferAddress;
-            let mut img_slice = Vec::with_capacity(img2.nrows() * img2.ncols());
             for row in 0..img2.nrows() {
                 for col in 0..img2.ncols() {
                     img_slice.push(img2[(row, col)] as f32);
@@ -854,7 +847,7 @@ mod gpu {
             }
             self.queue.write_buffer(
                 &self.buffer_img,
-                img1_bytes,
+                0,
                 bytemuck::cast_slice(img_slice.as_slice()),
             );
         }
