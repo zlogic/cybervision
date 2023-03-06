@@ -510,7 +510,7 @@ mod gpu {
     const MAX_BINDINGS: u32 = 5;
     const FUNDAMENTAL_MATRIX_PADDING: usize = 2;
 
-    use std::{borrow::Cow, error, fmt};
+    use std::{borrow::Cow, collections::HashMap, error, fmt};
 
     use bytemuck::{Pod, Zeroable};
     use nalgebra::{DMatrix, Matrix3};
@@ -561,6 +561,13 @@ mod gpu {
         buffer_internal: wgpu::Buffer,
         buffer_internal_int: wgpu::Buffer,
         buffer_out: wgpu::Buffer,
+
+        pipeline_configs: HashMap<String, ComputePipelineConfig>,
+    }
+
+    struct ComputePipelineConfig {
+        pipeline: wgpu::ComputePipeline,
+        bind_group: wgpu::BindGroup,
     }
 
     impl GpuContext {
@@ -652,6 +659,7 @@ mod gpu {
                 buffer_internal,
                 buffer_internal_int,
                 buffer_out,
+                pipeline_configs: HashMap::new(),
             };
             Ok(result)
         }
@@ -777,26 +785,23 @@ mod gpu {
         }
 
         fn run_shader(
-            &self,
+            &mut self,
             shape: (usize, usize),
             entry_point: &str,
             shader_params: ShaderParams,
         ) {
-            let pipeline = self
-                .device
-                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: None,
-                    layout: None,
-                    module: &self.shader_module,
-                    entry_point,
-                });
+            self.queue.write_buffer(
+                &self.buffer_params,
+                0,
+                bytemuck::cast_slice(&[shader_params]),
+            );
 
-            let bind_group_layout = pipeline.get_bind_group_layout(0);
-            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &bind_group_layout,
-                entries: self.create_bind_group_entries(entry_point).as_slice(),
-            });
+            if !self.pipeline_configs.contains_key(entry_point) {
+                let pipeline_config = self.create_pipeline_config(entry_point);
+                self.pipeline_configs
+                    .insert(entry_point.to_string(), pipeline_config);
+            }
+            let pipeline_config = self.pipeline_configs.get(entry_point).unwrap();
 
             let mut encoder = self
                 .device
@@ -805,18 +810,12 @@ mod gpu {
                 let workgroup_size = (shape.1 / 16 + 1, shape.0 / 16 + 1);
                 let mut cpass =
                     encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-                cpass.set_pipeline(&pipeline);
-                cpass.set_bind_group(0, &bind_group, &[]);
+                cpass.set_pipeline(&pipeline_config.pipeline);
+                cpass.set_bind_group(0, &pipeline_config.bind_group, &[]);
                 cpass.dispatch_workgroups(workgroup_size.0 as u32, workgroup_size.1 as u32, 1);
             }
 
-            self.queue.write_buffer(
-                &self.buffer_params,
-                0,
-                bytemuck::cast_slice(&[shader_params]),
-            );
             self.queue.submit(Some(encoder.finish()));
-
             self.device.poll(wgpu::Maintain::Wait);
         }
 
@@ -914,51 +913,92 @@ mod gpu {
             Ok(out_image)
         }
 
-        fn create_bind_group_entries(&self, entry_point: &str) -> Vec<wgpu::BindGroupEntry> {
-            match entry_point {
-                "init_out_data" => vec![
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.buffer_params.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: self.buffer_out.as_entire_binding(),
-                    },
-                ],
-                "prepare_initialdata_searchdata" => vec![
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.buffer_params.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: self.buffer_internal.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: self.buffer_internal_int.as_entire_binding(),
-                    },
-                ],
-                "prepare_searchdata" => vec![
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.buffer_params.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: self.buffer_internal.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: self.buffer_internal_int.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: self.buffer_out.as_entire_binding(),
-                    },
-                ],
-                "prepare_initialdata_correlation" => vec![
+        fn create_pipeline_config(&self, entry_point: &str) -> ComputePipelineConfig {
+            let bind_group_layout =
+                self.device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: None,
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::COMPUTE,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                    has_dynamic_offset: false,
+                                    min_binding_size: wgpu::BufferSize::new(
+                                        self.buffer_params.size(),
+                                    ),
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 1,
+                                visibility: wgpu::ShaderStages::COMPUTE,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                    has_dynamic_offset: false,
+                                    min_binding_size: wgpu::BufferSize::new(self.buffer_img.size()),
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 2,
+                                visibility: wgpu::ShaderStages::COMPUTE,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                    has_dynamic_offset: false,
+                                    min_binding_size: wgpu::BufferSize::new(
+                                        self.buffer_internal.size(),
+                                    ),
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 3,
+                                visibility: wgpu::ShaderStages::COMPUTE,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                    has_dynamic_offset: false,
+                                    min_binding_size: wgpu::BufferSize::new(
+                                        self.buffer_internal_int.size(),
+                                    ),
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 4,
+                                visibility: wgpu::ShaderStages::COMPUTE,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                    has_dynamic_offset: false,
+                                    min_binding_size: wgpu::BufferSize::new(self.buffer_out.size()),
+                                },
+                                count: None,
+                            },
+                        ],
+                    });
+
+            let pipeline_layout =
+                self.device
+                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: None,
+                        bind_group_layouts: &[&bind_group_layout],
+                        push_constant_ranges: &[],
+                    });
+
+            let pipeline = self
+                .device
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: None,
+                    layout: Some(&pipeline_layout),
+                    module: &self.shader_module,
+                    entry_point,
+                });
+
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &bind_group_layout,
+                entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
                         resource: self.buffer_params.as_entire_binding(),
@@ -971,20 +1011,6 @@ mod gpu {
                         binding: 2,
                         resource: self.buffer_internal.as_entire_binding(),
                     },
-                ],
-                "cross_correlate" => vec![
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.buffer_params.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: self.buffer_img.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: self.buffer_internal.as_entire_binding(),
-                    },
                     wgpu::BindGroupEntry {
                         binding: 3,
                         resource: self.buffer_internal_int.as_entire_binding(),
@@ -994,7 +1020,10 @@ mod gpu {
                         resource: self.buffer_out.as_entire_binding(),
                     },
                 ],
-                &_ => vec![],
+            });
+            ComputePipelineConfig {
+                pipeline,
+                bind_group,
             }
         }
     }
