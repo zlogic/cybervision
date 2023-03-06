@@ -20,7 +20,7 @@ struct Parameters
     min_range: f32,
 };
 
-@group(0) @binding(0) var<storage> parameters: Parameters;
+@group(0) @binding(0) var<uniform> parameters: Parameters;
 @group(0) @binding(1) var<storage> images: array<f32>;
 @group(0) @binding(2) var<storage, read_write> internals: array<f32>;
 @group(0) @binding(3) var<storage, read_write> internals_int: array<i32>;

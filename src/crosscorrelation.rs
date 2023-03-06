@@ -624,11 +624,13 @@ mod gpu {
 
             // Init buffers.
             let out_pixels = img1_pixels;
-            let buffer_params = init_buffer(
-                &device,
-                std::mem::size_of::<ShaderParams>().max(MIN_BUFFER_SIZE),
-                false,
-            );
+            let buffer_params = device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: std::mem::size_of::<ShaderParams>().max(MIN_BUFFER_SIZE)
+                    as wgpu::BufferAddress,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
             let buffer_img = init_buffer(
                 &device,
                 (img1_pixels + img2_pixels) * std::mem::size_of::<f32>(),
@@ -923,7 +925,7 @@ mod gpu {
                                 binding: 0,
                                 visibility: wgpu::ShaderStages::COMPUTE,
                                 ty: wgpu::BindingType::Buffer {
-                                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                    ty: wgpu::BufferBindingType::Uniform {},
                                     has_dynamic_offset: false,
                                     min_binding_size: wgpu::BufferSize::new(
                                         self.buffer_params.size(),
