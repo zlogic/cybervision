@@ -809,7 +809,7 @@ mod gpu {
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
             {
-                let workgroup_size = (shape.1 / 16 + 1, shape.0 / 16 + 1);
+                let workgroup_size = ((shape.1 + 15) / 16, ((shape.0 + 15) / 16));
                 let mut cpass =
                     encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
                 cpass.set_pipeline(&pipeline_config.pipeline);
