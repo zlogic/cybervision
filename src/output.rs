@@ -123,26 +123,42 @@ trait MeshWriter {
     ) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
-    fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
-        Ok(())
-    }
+    fn complete(&mut self) -> Result<(), Box<dyn error::Error>>;
 }
+
+const WRITE_BUFFER_SIZE: usize = 1024 * 1024;
 
 struct PlyWriter {
     surface: DMatrix<Option<f32>>,
     writer: BufWriter<File>,
+    buffer: Vec<u8>,
 }
 
 impl PlyWriter {
     fn new(surface: DMatrix<Option<f32>>, path: &String) -> Result<PlyWriter, std::io::Error> {
         let writer = BufWriter::new(File::create(path)?);
-        Ok(PlyWriter { surface, writer })
+        let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
+        Ok(PlyWriter {
+            surface,
+            writer,
+            buffer,
+        })
+    }
+    fn check_flush_buffer(&mut self) -> Result<(), std::io::Error> {
+        let buffer = &mut self.buffer;
+        let w = &mut self.writer;
+        if buffer.len() >= WRITE_BUFFER_SIZE {
+            w.write_all(buffer)?;
+            buffer.clear();
+        }
+        Ok(())
     }
 }
 
 impl MeshWriter for PlyWriter {
     fn output_header(&mut self, nvertices: usize, nfaces: usize) -> Result<(), std::io::Error> {
-        let w = self.writer.get_mut();
+        self.check_flush_buffer()?;
+        let w = &mut self.buffer;
         writeln!(w, "ply")?;
         writeln!(w, "format binary_big_endian 1.0")?;
         writeln!(w, "comment Cybervision 3D surface")?;
@@ -160,7 +176,8 @@ impl MeshWriter for PlyWriter {
             Some(depth) => Ok(depth),
             None => Err(OutputError::new("Point depth not found")),
         }?;
-        let w = self.writer.get_mut();
+        self.check_flush_buffer()?;
+        let w = &mut self.buffer;
         w.write_all(&x.to_be_bytes())?;
         w.write_all(&(self.surface.nrows() as f32 - y).to_be_bytes())?;
         w.write_all(&depth.to_be_bytes())?;
@@ -176,7 +193,8 @@ impl MeshWriter for PlyWriter {
         &mut self,
         indices: &[usize; 3],
     ) -> Result<(), Box<dyn error::Error>> {
-        let w = self.writer.get_mut();
+        self.check_flush_buffer()?;
+        let w = &mut self.buffer;
         const NUM_POINTS: [u8; 1] = 3u8.to_be_bytes();
         w.write_all(&NUM_POINTS)?;
         w.write_all(&(indices[2] as u32).to_be_bytes())?;
@@ -184,17 +202,40 @@ impl MeshWriter for PlyWriter {
         w.write_all(&(indices[0] as u32).to_be_bytes())?;
         Ok(())
     }
+
+    fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
+        let buffer = &mut self.buffer;
+        let w = &mut self.writer;
+        w.write_all(buffer)?;
+        buffer.clear();
+        Ok(())
+    }
 }
 
 struct ObjWriter {
     surface: DMatrix<Option<f32>>,
     writer: BufWriter<File>,
+    buffer: Vec<u8>,
 }
 
 impl ObjWriter {
     fn new(surface: DMatrix<Option<f32>>, path: &String) -> Result<ObjWriter, std::io::Error> {
         let writer = BufWriter::new(File::create(path)?);
-        Ok(ObjWriter { surface, writer })
+        let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
+        Ok(ObjWriter {
+            surface,
+            writer,
+            buffer,
+        })
+    }
+    fn check_flush_buffer(&mut self) -> Result<(), std::io::Error> {
+        let buffer = &mut self.buffer;
+        let w = &mut self.writer;
+        if buffer.len() >= WRITE_BUFFER_SIZE {
+            w.write_all(buffer)?;
+            buffer.clear();
+        }
+        Ok(())
     }
 }
 
@@ -205,7 +246,8 @@ impl MeshWriter for ObjWriter {
             None => Err(OutputError::new("Point depth not found")),
         };
         let depth = depth?;
-        let w = self.writer.get_mut();
+        self.check_flush_buffer()?;
+        let w = &mut self.buffer;
 
         writeln!(w, "v {} {} {}", x, self.surface.nrows() as f32 - y, depth)?;
         Ok(())
@@ -221,7 +263,8 @@ impl MeshWriter for ObjWriter {
         &mut self,
         indices: &[usize; 3],
     ) -> Result<(), Box<dyn error::Error>> {
-        let w = self.writer.get_mut();
+        self.check_flush_buffer()?;
+        let w = &mut self.buffer;
         writeln!(
             w,
             "f {} {} {}",
@@ -229,6 +272,14 @@ impl MeshWriter for ObjWriter {
             indices[1] + 1,
             indices[0] + 1
         )?;
+        Ok(())
+    }
+
+    fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
+        let buffer = &mut self.buffer;
+        let w = &mut self.writer;
+        w.write_all(buffer)?;
+        buffer.clear();
         Ok(())
     }
 }
