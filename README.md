@@ -44,10 +44,6 @@ cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay
 * If the filename ends with `.png`, this will save a PNG depth map file.
 * If the filename ends with `.jpg`, this will save a JPEG depth map file.
 
-⚠️ The optimal image size is 1024x1024 (or similar).
-Using larger images will result in increased processing times, increased memory usage, and run into GPU hardware limitations.
-Smaller images might not have enough details.
-
 ### GPU details
 
 Compiling a GPU-accelerated (Vulkan) version requires additional libraries and build tools.
@@ -59,6 +55,8 @@ Cybervision was tested to support CPU-only and GPU-accelerated processing on:
 * Windows 11, i7-11800H, Geforce RTX 3070 (mobile)
 * Fedora CoreOS 37, Celeron N3350 (digital signage appliance)
 * Oracle Linux 9, Ampere A1 (Oracle Cloud)
+
+Images up to 4032x3024 should work well, larger images might cause increased memory usage or cause GPU timeouts.
 
 To run Cybervision in Linux, you will need the Vulkan runtime library.
 It's called `libvulkan.so.1` and the package is typically called something like `vulkan`, `vulkan-loader`, `libvulkan` or `libvulkan1`.
