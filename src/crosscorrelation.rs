@@ -15,7 +15,7 @@ const MIN_STDEV_PERSPECTIVE: f32 = 1.0;
 const CORRIDOR_SIZE: usize = 20;
 // Decrease when using a low-powered GPU
 const CORRIDOR_SEGMENT_LENGTH: usize = 256;
-const SEARCH_AREA_SEGMENT_LENGTH: usize = 8;
+const SEARCH_AREA_SEGMENT_LENGTH: usize = 256;
 const NEIGHBOR_DISTANCE: usize = 10;
 const CORRIDOR_EXTEND_RANGE: f64 = 1.0;
 const CORRIDOR_MIN_RANGE: f64 = 2.5;
@@ -688,9 +688,6 @@ mod gpu {
             let max_height = img1.nrows().max(img2.nrows());
             let max_shape = (max_height, max_width);
             let img1_shape = img1.shape();
-            let max_length = self.out_shape.0.max(self.out_shape.1);
-            let corridor_length = max_length - (KERNEL_SIZE * 2);
-            let corridor_segments = corridor_length / CORRIDOR_SEGMENT_LENGTH + 1;
 
             let mut progressbar_completed_percentage = 0.02;
             let send_progress = |v| {
@@ -729,35 +726,37 @@ mod gpu {
                 progressbar_completed_percentage = 0.02;
                 send_progress(progressbar_completed_percentage);
 
-                let y_limit = (NEIGHBOR_DISTANCE as f32 / scale).ceil() as u32 * 2 + 1;
-                let batch_size = SEARCH_AREA_SEGMENT_LENGTH as u32;
+                let neighbor_width = (NEIGHBOR_DISTANCE as f32 / scale).ceil() as usize * 2 + 1;
+                let neighbor_pixels = neighbor_width * neighbor_width;
+                let neighbor_segments = neighbor_pixels / SEARCH_AREA_SEGMENT_LENGTH + 1;
+
                 params.iteration_pass = 0;
-                for y in (0..=y_limit).step_by(batch_size as usize) {
-                    params.corridor_start = y;
-                    params.corridor_end = y + batch_size;
-                    if params.corridor_end > y_limit {
-                        params.corridor_end = y_limit
+                for l in 0u32..neighbor_segments as u32 {
+                    params.corridor_start = l * SEARCH_AREA_SEGMENT_LENGTH as u32;
+                    params.corridor_end = (l + 1) * SEARCH_AREA_SEGMENT_LENGTH as u32;
+                    if params.corridor_end > neighbor_pixels as u32 {
+                        params.corridor_end = neighbor_pixels as u32;
                     }
                     self.run_shader(img1_shape, "prepare_searchdata", params);
 
-                    let percent_complete =
-                        progressbar_completed_percentage + 0.09 * (y as f32 / y_limit as f32);
+                    let percent_complete = progressbar_completed_percentage
+                        + 0.09 * (l as f32 / neighbor_segments as f32);
                     send_progress(percent_complete);
                 }
                 progressbar_completed_percentage = 0.11;
                 send_progress(progressbar_completed_percentage);
 
                 params.iteration_pass = 1;
-                for y in (0..=y_limit).step_by(batch_size as usize) {
-                    params.corridor_start = y;
-                    params.corridor_end = y + batch_size;
-                    if params.corridor_end > y_limit {
-                        params.corridor_end = y_limit
+                for l in 0u32..neighbor_segments as u32 {
+                    params.corridor_start = l * SEARCH_AREA_SEGMENT_LENGTH as u32;
+                    params.corridor_end = (l + 1) * SEARCH_AREA_SEGMENT_LENGTH as u32;
+                    if params.corridor_end > neighbor_pixels as u32 {
+                        params.corridor_end = neighbor_pixels as u32;
                     }
                     self.run_shader(img1_shape, "prepare_searchdata", params);
 
-                    let percent_complete =
-                        progressbar_completed_percentage + 0.09 * (y as f32 / y_limit as f32);
+                    let percent_complete = progressbar_completed_percentage
+                        + 0.09 * (l as f32 / neighbor_segments as f32);
                     send_progress(percent_complete);
                 }
 
@@ -768,6 +767,9 @@ mod gpu {
 
             self.run_shader(max_shape, "prepare_initialdata_correlation", params);
 
+            let max_length = self.out_shape.0.max(self.out_shape.1);
+            let corridor_length = max_length - (KERNEL_SIZE * 2);
+            let corridor_segments = corridor_length / CORRIDOR_SEGMENT_LENGTH + 1;
             for corridor_offset in -(CORRIDOR_SIZE as i32)..=CORRIDOR_SIZE as i32 {
                 for l in 0u32..corridor_segments as u32 {
                     params.corridor_offset = corridor_offset;

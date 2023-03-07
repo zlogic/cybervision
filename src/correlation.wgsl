@@ -150,6 +150,8 @@ fn calculate_epipolar_line(x1: u32, y1: u32, corridor_offset: i32, coeff: ptr<fu
 fn prepare_searchdata(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let x = global_id.x;
     let y = global_id.y;
+    let x_signed = i32(global_id.x);
+    let y_signed = i32(global_id.y);
 
     let img1_width = parameters.img1_width;
     let img1_height = parameters.img1_height;
@@ -166,20 +168,14 @@ fn prepare_searchdata(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let extend_range = parameters.extend_range;
     let min_range = parameters.min_range;
 
+    let out_neighbor_width = i32(ceil(f32(parameters.neighbor_distance)/scale))*2+1;
+
     var coeff: vec2<f32>;
     var add_const: vec2<f32>;
     var corridor_offset_vector: vec2<i32>;
-    calculate_epipolar_line(x, y, 0, &coeff, &add_const, &corridor_offset_vector);
-    let corridor_vertical = abs(coeff.y) > abs(coeff.x);
 
-    let x_min_signed = i32(floor(f32(i32(x)-neighbor_distance)/scale));
-    let x_max_signed = i32(ceil(f32(i32(x)+neighbor_distance)/scale));
-    let y_min_signed = i32(f32(i32(y)-neighbor_distance)/scale)+corridor_start;
-    let y_max_signed = i32(f32(i32(y)-neighbor_distance)/scale)+corridor_end;
-    let x_min = u32(clamp(x_min_signed, 0, i32(out_width)));
-    let x_max = u32(clamp(x_max_signed, 0, i32(out_width)));
-    let y_min = u32(clamp(y_min_signed, 0, i32(out_height)));
-    let y_max = u32(clamp(y_max_signed, 0, i32(out_height)));
+    var start_pos_x = i32(floor(f32(x_signed-neighbor_distance)/scale));
+    var start_pos_y = i32(floor(f32(y_signed-neighbor_distance)/scale));
 
     var data_int = internals_int[y*img1_width+x];
     var neighbor_count = data_int[2];
@@ -193,26 +189,34 @@ fn prepare_searchdata(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if !first_pass {
         mid_corridor /= f32(neighbor_count);
     }
-    for (var j=y_min;j<y_max;j++) {
-        for (var i=x_min;i<x_max;i++) {
-            let coord2 = vec2<f32>(result[j*out_width + i]) * scale;
-            if coord2.x<0.0 || coord2.y<0.0 {
-                continue;
-            }
 
-            var corridor_pos: f32;
-            if corridor_vertical {
-                corridor_pos = round((coord2.y-add_const.y)/coeff.y);
-            } else {
-                corridor_pos = round((coord2.x-add_const.x)/coeff.x);
-            }
-            if first_pass {
-                mid_corridor += corridor_pos;
-                neighbor_count++;
-            } else {
-                let delta = corridor_pos-mid_corridor;
-                range_stdev += delta*delta;
-            }
+    calculate_epipolar_line(x, y, 0, &coeff, &add_const, &corridor_offset_vector);
+    let corridor_vertical = abs(coeff.y) > abs(coeff.x);
+    for (var i: i32=corridor_start;i<corridor_end;i++) {
+        let x_out = start_pos_x + (i%out_neighbor_width);
+        let y_out = start_pos_y + (i/out_neighbor_width);
+
+        if x_out <=0 || y_out<=0 || x_out>=i32(out_width) || y_out>=i32(out_height) {
+            continue;
+        }
+
+        let coord2 = vec2<f32>(result[u32(y_out)*out_width + u32(x_out)]) * scale;
+        if coord2.x<0.0 || coord2.y<0.0 {
+            continue;
+        }
+
+        var corridor_pos: f32;
+        if corridor_vertical {
+            corridor_pos = round((coord2.y-add_const.y)/coeff.y);
+        } else {
+            corridor_pos = round((coord2.x-add_const.x)/coeff.x);
+        }
+        if first_pass {
+            mid_corridor += corridor_pos;
+            neighbor_count++;
+        } else {
+            let delta = corridor_pos-mid_corridor;
+            range_stdev += delta*delta;
         }
     }
 
@@ -259,7 +263,7 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let threshold = parameters.threshold;
     let min_stdev = parameters.min_stdev;
     let kernel_width = kernel_size*2u+1u;
-    let kernel_point_count = f32((2u*kernel_size+1u)*(2u*kernel_size+1u));
+    let kernel_point_count = f32(kernel_width*kernel_width);
 
     if x1 < kernel_size || x1 >= img1_width-kernel_size || y1 < kernel_size ||  y1 >= img1_height-kernel_size {
         return;
@@ -298,8 +302,7 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var add_const: vec2<f32>;
     var corridor_offset_vector: vec2<i32>;
     calculate_epipolar_line(x1, y1, corridor_offset, &coeff, &add_const, &corridor_offset_vector);
-    for (var corridor_pos: u32=corridor_start;corridor_pos<corridor_end;corridor_pos++)
-    {
+    for (var corridor_pos: u32=corridor_start;corridor_pos<corridor_end;corridor_pos++) {
         let x2_signed = i32(round(coeff.x*f32(corridor_pos)+add_const.x)) + corridor_offset_vector.x;
         let y2_signed = i32(round(coeff.y*f32(corridor_pos)+add_const.y)) + corridor_offset_vector.y;
         if x2_signed < 0 || y2_signed < 0 {
