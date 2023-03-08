@@ -635,21 +635,32 @@ mod gpu {
                 &device,
                 (img1_pixels + img2_pixels) * std::mem::size_of::<f32>(),
                 false,
+                true,
             );
             let buffer_internal_img1 = init_buffer(
                 &device,
                 (img1_pixels * 3) * std::mem::size_of::<f32>(),
                 true,
+                false,
             );
             let buffer_internal_img2 = init_buffer(
                 &device,
                 (img2_pixels * 2) * std::mem::size_of::<f32>(),
                 true,
+                false,
             );
-            let buffer_internal_int =
-                init_buffer(&device, img1_pixels * 3 * std::mem::size_of::<i32>(), true);
-            let buffer_out =
-                init_buffer(&device, out_pixels * 2 * std::mem::size_of::<i32>(), false);
+            let buffer_internal_int = init_buffer(
+                &device,
+                img1_pixels * 3 * std::mem::size_of::<i32>(),
+                true,
+                false,
+            );
+            let buffer_out = init_buffer(
+                &device,
+                out_pixels * 2 * std::mem::size_of::<i32>(),
+                false,
+                false,
+            );
 
             let result = GpuContext {
                 min_stdev,
@@ -1047,15 +1058,22 @@ mod gpu {
         }
     }
 
-    fn init_buffer(device: &wgpu::Device, size: usize, gpuonly: bool) -> wgpu::Buffer {
+    fn init_buffer(
+        device: &wgpu::Device,
+        size: usize,
+        gpuonly: bool,
+        readonly: bool,
+    ) -> wgpu::Buffer {
         let size = size as wgpu::BufferAddress;
 
-        let buffer_usage = if !gpuonly {
+        let buffer_usage = if gpuonly {
+            wgpu::BufferUsages::STORAGE
+        } else if readonly {
+            wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE
+        } else {
             wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::STORAGE
-        } else {
-            wgpu::BufferUsages::STORAGE
         };
         device.create_buffer(&wgpu::BufferDescriptor {
             label: None,

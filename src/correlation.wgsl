@@ -166,7 +166,6 @@ fn prepare_searchdata(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let out_neighbor_width = i32(ceil(f32(parameters.neighbor_distance)/scale))*2+1;
 
-
     var start_pos_x = i32(floor(f32(x_signed-neighbor_distance)/scale));
     var start_pos_y = i32(floor(f32(y_signed-neighbor_distance)/scale));
 
