@@ -125,24 +125,20 @@ fn prepare_initialdata_correlation(@builtin(global_invocation_id) global_id: vec
     }
 }
 
-fn calculate_epipolar_line(x1: u32, y1: u32, corridor_offset: i32, coeff: ptr<function,vec2<f32>>, add_const: ptr<function,vec2<f32>>, corridor_offset_vector: ptr<function,vec2<i32>>) {
+fn calculate_epipolar_line(x1: u32, y1: u32, coeff: ptr<function,vec2<f32>>, add_const: ptr<function,vec2<f32>>) {
     let scale = parameters.scale;
     let p1 = vec3(f32(x1)/scale, f32(y1)/scale, 1.0);
     let f_p1 = parameters.fundamental_matrix*p1;
     if abs(f_p1.x)>abs(f_p1.y) {
         (*coeff).x = f32(-f_p1.y/f_p1.x);
         (*add_const).x = f32(-scale*f_p1.z/f_p1.x);
-        (*corridor_offset_vector).x = corridor_offset;
         (*coeff).y = 1.0;
         (*add_const).y = 0.0;
-        (*corridor_offset_vector).y = 0;
     } else {
         (*coeff).x = 1.0;
         (*add_const).x = 0.0;
-        (*corridor_offset_vector).x = 0;
         (*coeff).y = f32(-f_p1.x/f_p1.y);
         (*add_const).y = f32(-scale*f_p1.z/f_p1.y);
-        (*corridor_offset_vector).y = corridor_offset;
     }
 }
 
@@ -170,9 +166,6 @@ fn prepare_searchdata(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let out_neighbor_width = i32(ceil(f32(parameters.neighbor_distance)/scale))*2+1;
 
-    var coeff: vec2<f32>;
-    var add_const: vec2<f32>;
-    var corridor_offset_vector: vec2<i32>;
 
     var start_pos_x = i32(floor(f32(x_signed-neighbor_distance)/scale));
     var start_pos_y = i32(floor(f32(y_signed-neighbor_distance)/scale));
@@ -190,7 +183,9 @@ fn prepare_searchdata(@builtin(global_invocation_id) global_id: vec3<u32>) {
         mid_corridor /= f32(neighbor_count);
     }
 
-    calculate_epipolar_line(x, y, 0, &coeff, &add_const, &corridor_offset_vector);
+    var coeff: vec2<f32>;
+    var add_const: vec2<f32>;
+    calculate_epipolar_line(x, y, &coeff, &add_const);
     let corridor_vertical = abs(coeff.y) > abs(coeff.x);
     for (var i: i32=corridor_start;i<corridor_end;i++) {
         let x_out = start_pos_x + (i%out_neighbor_width);
@@ -283,25 +278,36 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var best_corr = 0.0;
     var best_match = vec2<i32>(-1, -1);
 
-    var corridor_start = parameters.corridor_start;
-    var corridor_end = parameters.corridor_end;
-    if !first_iteration {
+    var corridor_start: u32;
+    var corridor_end: u32;
+    if first_iteration {
+        corridor_start = parameters.corridor_start + kernel_size;
+        corridor_end = parameters.corridor_end + kernel_size;
+    } else {
         let data_int = internals_int[img1_width*y1 + x1];
         let min_pos_signed = data_int[0];
         let max_pos_signed = data_int[1];
-        if !first_iteration && (min_pos_signed<0 || max_pos_signed<0) {
+        if min_pos_signed<0 || max_pos_signed<0 {
             return;
         }
         let min_pos = u32(min_pos_signed);
         let max_pos = u32(max_pos_signed);
-        corridor_start = clamp(corridor_start, min_pos, max_pos);
-        corridor_end = clamp(corridor_end, min_pos, max_pos);
+        corridor_start = clamp(min_pos+parameters.corridor_start, min_pos, max_pos);
+        corridor_end = clamp(min_pos+parameters.corridor_end, min_pos, max_pos);
+    }
+    if corridor_start == corridor_end {
+        return;
     }
 
     var coeff: vec2<f32>;
     var add_const: vec2<f32>;
+    calculate_epipolar_line(x1, y1, &coeff, &add_const);
     var corridor_offset_vector: vec2<i32>;
-    calculate_epipolar_line(x1, y1, corridor_offset, &coeff, &add_const, &corridor_offset_vector);
+    if abs(coeff.x) > abs(coeff.y) {
+        corridor_offset_vector = vec2(0, corridor_offset);
+    } else {
+        corridor_offset_vector = vec2(corridor_offset, 0);
+    }
     for (var corridor_pos: u32=corridor_start;corridor_pos<corridor_end;corridor_pos++) {
         let x2_signed = i32(round(coeff.x*f32(corridor_pos)+add_const.x)) + corridor_offset_vector.x;
         let y2_signed = i32(round(coeff.y*f32(corridor_pos)+add_const.y)) + corridor_offset_vector.y;
