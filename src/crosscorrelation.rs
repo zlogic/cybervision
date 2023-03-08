@@ -773,10 +773,11 @@ mod gpu {
             for corridor_offset in -(CORRIDOR_SIZE as i32)..=CORRIDOR_SIZE as i32 {
                 for l in 0u32..corridor_segments as u32 {
                     params.corridor_offset = corridor_offset;
-                    params.corridor_start = l * CORRIDOR_SEGMENT_LENGTH as u32;
-                    params.corridor_end = (l + 1) * CORRIDOR_SEGMENT_LENGTH as u32;
-                    if params.corridor_end > max_length as u32 {
-                        params.corridor_end = max_length as u32;
+                    params.corridor_start = KERNEL_SIZE as u32 + l * CORRIDOR_SEGMENT_LENGTH as u32;
+                    params.corridor_end =
+                        KERNEL_SIZE as u32 + (l + 1) * CORRIDOR_SEGMENT_LENGTH as u32;
+                    if params.corridor_end > (max_length - KERNEL_SIZE) as u32 {
+                        params.corridor_end = (max_length - KERNEL_SIZE) as u32;
                     }
                     self.run_shader(img1_shape, "cross_correlate", params);
 
