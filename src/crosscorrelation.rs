@@ -14,7 +14,7 @@ const MIN_STDEV_AFFINE: f32 = 1.0;
 const MIN_STDEV_PERSPECTIVE: f32 = 1.0;
 const CORRIDOR_SIZE: usize = 20;
 // Decrease when using a low-powered GPU
-const CORRIDOR_SEGMENT_LENGTH: usize = 1024;
+const CORRIDOR_SEGMENT_LENGTH: usize = 512;
 const SEARCH_AREA_SEGMENT_LENGTH: usize = 1024;
 const NEIGHBOR_DISTANCE: usize = 10;
 const CORRIDOR_EXTEND_RANGE: f64 = 1.0;
