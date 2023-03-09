@@ -358,23 +358,17 @@ impl PointCorrelations {
         corridor_end: usize,
     ) -> Option<Range<usize>> {
         let scale = correlation_step.scale;
-        let data = &self.correlated_points;
         thread_local! {static STDEV_RANGE: RefCell<Vec<f64>> = RefCell::new(Vec::new())};
         let mut mid_corridor = 0.0;
         let mut neighbor_count: usize = 0;
-        if row1 < NEIGHBOR_DISTANCE
-            || col1 < NEIGHBOR_DISTANCE
-            || row1 + NEIGHBOR_DISTANCE >= data.nrows()
-            || col1 + NEIGHBOR_DISTANCE >= data.ncols()
-        {
-            return None;
-        }
-        let row_min = ((row1 - NEIGHBOR_DISTANCE) as f32 / scale).floor() as usize;
+
+        let row_min = (row1.saturating_sub(NEIGHBOR_DISTANCE) as f32 / scale).floor() as usize;
         let row_max = ((row1 + NEIGHBOR_DISTANCE) as f32 / scale).ceil() as usize;
-        let col_min = ((col1 - NEIGHBOR_DISTANCE) as f32 / scale).floor() as usize;
+        let col_min = (col1.saturating_sub(NEIGHBOR_DISTANCE) as f32 / scale).floor() as usize;
         let col_max = ((col1 + NEIGHBOR_DISTANCE) as f32 / scale).ceil() as usize;
         let corridor_vertical = e_line.coeff.0.abs() > e_line.coeff.1.abs();
 
+        let data = &self.correlated_points;
         let row_min = row_min.clamp(0, data.nrows());
         let row_max = row_max.clamp(0, data.nrows());
         let col_min = col_min.clamp(0, data.ncols());
