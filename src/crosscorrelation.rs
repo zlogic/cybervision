@@ -17,7 +17,7 @@ const CORRIDOR_SIZE: usize = 20;
 const CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 512;
 const SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 1024;
 const CORRIDOR_SEGMENT_LENGTH_LOWPOWER: usize = 16;
-const SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER: usize = 64;
+const SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER: usize = 128;
 const NEIGHBOR_DISTANCE: usize = 10;
 const CORRIDOR_EXTEND_RANGE: f64 = 1.0;
 const CORRIDOR_MIN_RANGE: f64 = 2.5;
@@ -578,8 +578,6 @@ mod gpu {
 
             let img1_pixels = img1_dimensions.0 * img1_dimensions.1;
             let img2_pixels = img2_dimensions.0 * img2_dimensions.1;
-            let img1_in_pixels = img1_dimensions.0 * stride(img1_dimensions.1, 4);
-            let img2_in_pixels = img2_dimensions.0 * stride(img2_dimensions.1, 4);
 
             // Init adapter.
             let instance = wgpu::Instance::default();
@@ -642,7 +640,7 @@ mod gpu {
             let out_pixels = img1_pixels;
             let buffer_img = init_buffer(
                 &device,
-                (img1_in_pixels + img2_in_pixels) * std::mem::size_of::<u8>(),
+                (img1_pixels + img2_pixels) * std::mem::size_of::<f32>(),
                 false,
                 true,
             );
@@ -856,24 +854,16 @@ mod gpu {
         }
 
         fn transfer_in_images(&self, img1: DMatrix<u8>, img2: DMatrix<u8>) {
-            let img1_stride = stride(img1.ncols(), 4);
-            let img2_stride = stride(img2.ncols(), 4);
             let mut img_slice =
-                Vec::with_capacity(img1.nrows() * img1_stride + img2.nrows() * img2_stride);
+                Vec::with_capacity(img1.nrows() * img1.ncols() + img2.nrows() * img2.ncols());
             for row in 0..img1.nrows() {
                 for col in 0..img1.ncols() {
-                    img_slice.push(img1[(row, col)]);
-                }
-                for _ in img1.ncols()..img1_stride {
-                    img_slice.push(0u8);
+                    img_slice.push(img1[(row, col)] as f32);
                 }
             }
             for row in 0..img2.nrows() {
                 for col in 0..img2.ncols() {
-                    img_slice.push(img2[(row, col)]);
-                }
-                for _ in img2.ncols()..img2_stride {
-                    img_slice.push(0u8);
+                    img_slice.push(img2[(row, col)] as f32);
                 }
             }
             self.queue.write_buffer(
@@ -1080,10 +1070,6 @@ mod gpu {
             usage: buffer_usage,
             mapped_at_creation: false,
         })
-    }
-
-    fn stride(i: usize, align: usize) -> usize {
-        return ((i + align - 1) / align) * align;
     }
 
     #[derive(Debug)]

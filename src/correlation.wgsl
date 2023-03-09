@@ -21,7 +21,7 @@ struct Parameters
 };
 
 var<push_constant> parameters: Parameters;
-@group(0) @binding(0) var<storage> images: array<u32>;
+@group(0) @binding(0) var<storage> images: array<f32>;
 // For searchdata: contains [mean, stdev, _] for image1
 // For cross_correlate: contains [avg, stdev, corr] for image1
 @group(0) @binding(1) var<storage, read_write> internals_img1: array<vec3<f32>>;
@@ -65,16 +65,14 @@ fn prepare_initialdata_correlation(@builtin(global_invocation_id) global_id: vec
 
     let img1_width = parameters.img1_width;
     let img1_height = parameters.img1_height;
-    let img1_stride = ((img1_width+3u)/4u)*4u;
     let img2_width = parameters.img2_width;
     let img2_height = parameters.img2_height;
-    let img2_stride = ((img2_width+3u)/4u)*4u;
     let kernel_size = parameters.kernel_size;
     let kernel_width = kernel_size*2u+1u;
     let kernel_point_count = f32(kernel_width*kernel_width);
 
     let img1_offset = 0u;
-    let img2_offset = img1_stride/4u*img1_height;
+    let img2_offset = img1_width*img1_height;
 
     if x >= kernel_size && x < img1_width-kernel_size && y >= kernel_size && y < img1_height-kernel_size {
         var avg = 0.0;
@@ -82,8 +80,7 @@ fn prepare_initialdata_correlation(@builtin(global_invocation_id) global_id: vec
 
         for (var j=0u;j<kernel_width;j++) {
             for (var i=0u;i<kernel_width;i++) {
-                let img_pos = (y+j-kernel_size)*img1_stride+(x+i-kernel_size);
-                let value = unpack4x8unorm(images[img1_offset+img_pos/4u])[img_pos%4u] * 255.0;
+                let value = images[img1_offset + (y+j-kernel_size)*img1_width+(x+i-kernel_size)];
                 avg += value;
             }
         }
@@ -91,8 +88,7 @@ fn prepare_initialdata_correlation(@builtin(global_invocation_id) global_id: vec
 
         for (var j=0u;j<kernel_width;j++) {
             for (var i=0u;i<kernel_width;i++) {
-                let img_pos = img1_offset + (y+j-kernel_size)*img1_stride+(x+i-kernel_size);
-                let value = unpack4x8unorm(images[img1_offset+img_pos/4u])[img_pos%4u] * 255.0;
+                let value = images[img1_offset + (y+j-kernel_size)*img1_width+(x+i-kernel_size)];
                 let delta = value-avg;
                 stdev += delta*delta;
             }
@@ -109,8 +105,7 @@ fn prepare_initialdata_correlation(@builtin(global_invocation_id) global_id: vec
 
         for (var j=0u;j<kernel_width;j++) {
             for (var i=0u;i<kernel_width;i++) {
-                let img_pos = (y+j-kernel_size)*img2_stride+(x+i-kernel_size);
-                let value = unpack4x8unorm(images[img2_offset+img_pos/4u])[img_pos%4u] * 255.0;
+                let value = images[img2_offset + (y+j-kernel_size)*img2_width+(x+i-kernel_size)];
                 avg += value;
             }
         }
@@ -118,8 +113,7 @@ fn prepare_initialdata_correlation(@builtin(global_invocation_id) global_id: vec
 
         for (var j=0u;j<kernel_width;j++) {
             for (var i=0u;i<kernel_width;i++) {
-                let img_pos = (y+j-kernel_size)*img2_stride+(x+i-kernel_size);
-                let value = unpack4x8unorm(images[img2_offset+img_pos/4u])[img_pos%4u] * 255.0;
+                let value = images[img2_offset + (y+j-kernel_size)*img2_width+(x+i-kernel_size)];
                 let delta = value-avg;
                 stdev += delta*delta;
             }
@@ -252,10 +246,8 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let img1_width = parameters.img1_width;
     let img1_height = parameters.img1_height;
-    let img1_stride = ((img1_width+3u)/4u)*4u;
     let img2_width = parameters.img2_width;
     let img2_height = parameters.img2_height;
-    let img2_stride = ((img2_width+3u)/4u)*4u;
     let out_width = parameters.out_width;
     let out_height = parameters.out_height;
     let scale = parameters.scale;
@@ -272,7 +264,7 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
     let img1_offset = 0u;
-    let img2_offset = img1_stride/4u*img1_height;
+    let img2_offset = img1_width*img1_height;
 
     var data_img1 = internals_img1[img1_width*y1+x1];
     let avg1 = data_img1[0];
@@ -334,10 +326,8 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
         var corr = 0.0;
         for (var j=0u;j<kernel_width;j++) {
             for (var i=0u;i<kernel_width;i++) {
-                let img1_pos = (y1+j-kernel_size)*img1_stride+(x1+i-kernel_size);
-                let img2_pos = (y2+j-kernel_size)*img2_stride+(x2+i-kernel_size);
-                let delta1 =  unpack4x8unorm(images[img1_offset+img1_pos/4u])[img1_pos%4u] * 255.0 - avg1;
-                let delta2 =  unpack4x8unorm(images[img2_offset+img2_pos/4u])[img2_pos%4u] * 255.0 - avg2;
+                let delta1 = images[img1_offset + (y1+j-kernel_size)*img1_width+(x1+i-kernel_size)] - avg1;
+                let delta2 = images[img2_offset + (y2+j-kernel_size)*img2_width+(x2+i-kernel_size)] - avg2;
                 corr += delta1*delta2;
             }
         }
