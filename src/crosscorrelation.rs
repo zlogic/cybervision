@@ -14,8 +14,10 @@ const MIN_STDEV_AFFINE: f32 = 1.0;
 const MIN_STDEV_PERSPECTIVE: f32 = 1.0;
 const CORRIDOR_SIZE: usize = 20;
 // Decrease when using a low-powered GPU
-const CORRIDOR_SEGMENT_LENGTH: usize = 256;
-const SEARCH_AREA_SEGMENT_LENGTH: usize = 1024;
+const CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 512;
+const SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 1024;
+const CORRIDOR_SEGMENT_LENGTH_LOWPOWER: usize = 16;
+const SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER: usize = 128;
 const NEIGHBOR_DISTANCE: usize = 10;
 const CORRIDOR_EXTEND_RANGE: f64 = 1.0;
 const CORRIDOR_MIN_RANGE: f64 = 2.5;
@@ -31,6 +33,7 @@ pub enum ProjectionMode {
 #[derive(Debug)]
 pub enum HardwareMode {
     Gpu,
+    GpuLowPower,
     Cpu,
 }
 
@@ -82,41 +85,37 @@ impl PointCorrelations {
             ProjectionMode::Perspective => (MIN_STDEV_PERSPECTIVE, THRESHOLD_PERSPECTIVE),
         };
         let selected_hardware;
-        let hw_mode;
-        let gpu_context = match hardware_mode {
-            HardwareMode::Gpu => {
-                match gpu::GpuContext::new(
-                    (img1_dimensions.0 as usize, img1_dimensions.1 as usize),
-                    (img2_dimensions.0 as usize, img2_dimensions.1 as usize),
-                    min_stdev,
-                    correlation_threshold,
-                    fundamental_matrix,
-                ) {
-                    Ok(gpu_context) => {
-                        hw_mode = HardwareMode::Gpu;
-                        selected_hardware = format!("GPU {}", gpu_context.get_device_name());
-                        Some(gpu_context)
-                    }
-                    Err(err) => {
-                        hw_mode = HardwareMode::Cpu;
-                        selected_hardware = format!("CPU fallback ({})", err);
-                        None
-                    }
+        let gpu_context = if matches!(hardware_mode, HardwareMode::Gpu | HardwareMode::GpuLowPower)
+        {
+            let low_power = matches!(hardware_mode, HardwareMode::GpuLowPower);
+            match gpu::GpuContext::new(
+                (img1_dimensions.0 as usize, img1_dimensions.1 as usize),
+                (img2_dimensions.0 as usize, img2_dimensions.1 as usize),
+                min_stdev,
+                correlation_threshold,
+                fundamental_matrix,
+                low_power,
+            ) {
+                Ok(gpu_context) => {
+                    selected_hardware = format!("GPU {}", gpu_context.get_device_name());
+                    Some(gpu_context)
+                }
+                Err(err) => {
+                    selected_hardware = format!("CPU fallback ({})", err);
+                    None
                 }
             }
-            HardwareMode::Cpu => {
-                hw_mode = HardwareMode::Cpu;
-                selected_hardware = "CPU".to_string();
-                None
-            }
+        } else {
+            selected_hardware = "CPU".to_string();
+            None
         };
 
         // Height specifies rows, width specifies columns.
-        let correlated_points = match hw_mode {
-            HardwareMode::Cpu => {
+        let correlated_points = match gpu_context {
+            Some(_) => DMatrix::from_element(0, 0, None),
+            None => {
                 DMatrix::from_element(img1_dimensions.1 as usize, img1_dimensions.0 as usize, None)
             }
-            HardwareMode::Gpu => DMatrix::from_element(0, 0, None),
         };
         PointCorrelations {
             correlated_points,
@@ -516,8 +515,9 @@ mod gpu {
     use std::sync::mpsc;
 
     use super::{
-        CORRIDOR_EXTEND_RANGE, CORRIDOR_MIN_RANGE, CORRIDOR_SEGMENT_LENGTH, CORRIDOR_SIZE,
-        KERNEL_SIZE, NEIGHBOR_DISTANCE, SEARCH_AREA_SEGMENT_LENGTH,
+        CORRIDOR_EXTEND_RANGE, CORRIDOR_MIN_RANGE, CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE,
+        CORRIDOR_SEGMENT_LENGTH_LOWPOWER, CORRIDOR_SIZE, KERNEL_SIZE, NEIGHBOR_DISTANCE,
+        SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE, SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER,
     };
 
     #[repr(C)]
@@ -550,6 +550,9 @@ mod gpu {
         out_shape: (usize, usize),
         first_pass: bool,
 
+        corridor_segment_length: usize,
+        search_area_segment_length: usize,
+
         device_name: String,
         device: wgpu::Device,
         queue: wgpu::Queue,
@@ -575,6 +578,7 @@ mod gpu {
             min_stdev: f32,
             correlation_threshold: f32,
             fundamental_matrix: Matrix3<f64>,
+            low_power: bool,
         ) -> Result<GpuContext, Box<dyn error::Error>> {
             let out_shape = (img1_dimensions.1, img1_dimensions.0);
 
@@ -584,7 +588,11 @@ mod gpu {
             // Init adapter.
             let instance = wgpu::Instance::default();
             let adapter_options = wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
+                power_preference: if low_power {
+                    wgpu::PowerPreference::LowPower
+                } else {
+                    wgpu::PowerPreference::HighPerformance
+                },
                 force_fallback_adapter: false,
                 compatible_surface: None,
             };
@@ -594,6 +602,19 @@ mod gpu {
             } else {
                 return Err(GpuError::new("Adapter not found").into());
             };
+
+            let (search_area_segment_length, corridor_segment_length) = if low_power {
+                (
+                    SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER,
+                    CORRIDOR_SEGMENT_LENGTH_LOWPOWER,
+                )
+            } else {
+                (
+                    SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE,
+                    CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE,
+                )
+            };
+
             let mut limits = wgpu::Limits::downlevel_defaults();
             limits.max_bindings_per_bind_group = MAX_BINDINGS;
             limits.max_storage_buffers_per_shader_stage = MAX_BINDINGS;
@@ -660,6 +681,8 @@ mod gpu {
                 fundamental_matrix,
                 out_shape,
                 first_pass: true,
+                corridor_segment_length,
+                search_area_segment_length,
                 device_name,
                 device,
                 queue,
@@ -727,14 +750,15 @@ mod gpu {
                 progressbar_completed_percentage = 0.02;
                 send_progress(progressbar_completed_percentage);
 
+                let segment_length = self.search_area_segment_length;
                 let neighbor_width = (NEIGHBOR_DISTANCE as f32 / scale).ceil() as usize * 2 + 1;
                 let neighbor_pixels = neighbor_width * neighbor_width;
-                let neighbor_segments = neighbor_pixels / SEARCH_AREA_SEGMENT_LENGTH + 1;
+                let neighbor_segments = neighbor_pixels / segment_length + 1;
 
                 params.iteration_pass = 0;
                 for l in 0u32..neighbor_segments as u32 {
-                    params.corridor_start = l * SEARCH_AREA_SEGMENT_LENGTH as u32;
-                    params.corridor_end = (l + 1) * SEARCH_AREA_SEGMENT_LENGTH as u32;
+                    params.corridor_start = l * segment_length as u32;
+                    params.corridor_end = (l + 1) * segment_length as u32;
                     if params.corridor_end > neighbor_pixels as u32 {
                         params.corridor_end = neighbor_pixels as u32;
                     }
@@ -749,8 +773,8 @@ mod gpu {
 
                 params.iteration_pass = 1;
                 for l in 0u32..neighbor_segments as u32 {
-                    params.corridor_start = l * SEARCH_AREA_SEGMENT_LENGTH as u32;
-                    params.corridor_end = (l + 1) * SEARCH_AREA_SEGMENT_LENGTH as u32;
+                    params.corridor_start = l * segment_length as u32;
+                    params.corridor_end = (l + 1) * segment_length as u32;
                     if params.corridor_end > neighbor_pixels as u32 {
                         params.corridor_end = neighbor_pixels as u32;
                     }
@@ -771,21 +795,20 @@ mod gpu {
 
             let corridor_stripes = 2 * CORRIDOR_SIZE + 1;
             let max_length = self.out_shape.0.max(self.out_shape.1);
+            let segment_length = self.corridor_segment_length;
             let corridor_length = max_length - (KERNEL_SIZE * 2);
-            let corridor_segments = corridor_length / CORRIDOR_SEGMENT_LENGTH + 1;
+            let corridor_segments = corridor_length / segment_length + 1;
             for corridor_offset in -(CORRIDOR_SIZE as i32)..=CORRIDOR_SIZE as i32 {
                 for l in 0u32..corridor_segments as u32 {
                     params.corridor_offset = corridor_offset;
-                    params.corridor_start = KERNEL_SIZE as u32 + l * CORRIDOR_SEGMENT_LENGTH as u32;
-                    params.corridor_end =
-                        KERNEL_SIZE as u32 + (l + 1) * CORRIDOR_SEGMENT_LENGTH as u32;
-                    if params.corridor_end > (max_length - KERNEL_SIZE) as u32 {
-                        params.corridor_end = (max_length - KERNEL_SIZE) as u32;
+                    params.corridor_start = l * segment_length as u32;
+                    params.corridor_end = (l + 1) * segment_length as u32;
+                    if params.corridor_end > corridor_length as u32 {
+                        params.corridor_end = corridor_length as u32;
                     }
                     self.run_shader(img1_shape, "cross_correlate", params);
 
-                    let corridor_complete = (params.corridor_end as usize - KERNEL_SIZE) as f32
-                        / corridor_length as f32;
+                    let corridor_complete = params.corridor_end as f32 / corridor_length as f32;
                     let percent_complete = progressbar_completed_percentage
                         + (1.0 - progressbar_completed_percentage)
                             * (corridor_offset as f32 + CORRIDOR_SIZE as f32 + corridor_complete)

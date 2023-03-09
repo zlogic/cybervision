@@ -28,7 +28,9 @@ cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay
 
 `--scale=<scale>` is an optional argument to specify a depth scale, for example `--scale=-10.0`.
 
-`--mode=<cpu|gpu>` is an optional argument to specify a depth scale, for example `--mode=cpu` or `--mode=gpu`.Results might be slightly different between modes because the implementation is not completely identical.
+`--mode=<cpu|gpu|gpu-low-power>` is an optional argument to specify a depth scale, for example `--mode=cpu` or `--mode=gpu`
+ Results might be slightly different between modes because the implementation is not completely identical.
+ `gpu-low-power` will prefer a low-power GPU (like an integrated one) and will reduce the batch size to prevent errors (at the cost of reduced performance).
 
 `--interpolation=<none|delaunay>` is an optional argument to specify an interpolation mode, for example `--interpolation=none` or `--interpolation=delaunay`. 
 `none` means that interpolation is disabled, `delaunay` uses [Delaunay triangulation](https://en.wikipedia.org/wiki/Delaunay_triangulation).

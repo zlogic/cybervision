@@ -9,8 +9,9 @@ mod triangulation;
 
 #[derive(clap::ValueEnum, Clone)]
 pub enum HardwareMode {
-    GPU,
-    CPU,
+    Gpu,
+    GpuLowPower,
+    Cpu,
 }
 
 #[derive(clap::ValueEnum, Clone)]
@@ -33,7 +34,7 @@ pub struct Cli {
     scale: f32,
 
     /// Hardware mode
-    #[arg(long, value_enum, default_value_t = HardwareMode::GPU)]
+    #[arg(long, value_enum, default_value_t = HardwareMode::Gpu)]
     mode: HardwareMode,
 
     /// Interpolation mode

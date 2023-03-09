@@ -277,8 +277,8 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var best_corr = 0.0;
     var best_match = vec2<i32>(-1, -1);
 
-    var corridor_start = parameters.corridor_start;
-    var corridor_end = parameters.corridor_end;
+    var corridor_start = kernel_size + parameters.corridor_start;
+    var corridor_end = kernel_size + parameters.corridor_end;
     if !first_iteration {
         let data_int = internals_int[img1_width*y1 + x1];
         let min_pos_signed = data_int[0];
@@ -288,8 +288,8 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
         let min_pos = u32(min_pos_signed);
         let max_pos = u32(max_pos_signed);
-        corridor_start = clamp(min_pos+corridor_start, min_pos, max_pos);
-        corridor_end = clamp(min_pos+corridor_end, min_pos, max_pos);
+        corridor_start = clamp(min_pos+parameters.corridor_start, min_pos, max_pos);
+        corridor_end = clamp(min_pos+parameters.corridor_end, min_pos, max_pos);
         if corridor_start >= corridor_end {
             return;
         }

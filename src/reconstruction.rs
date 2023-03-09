@@ -261,8 +261,9 @@ pub fn reconstruct(args: &Cli) {
             crate::ProjectionMode::Perspective => crosscorrelation::ProjectionMode::Perspective,
         };
         let hardware_mode = match args.mode {
-            crate::HardwareMode::GPU => crosscorrelation::HardwareMode::Gpu,
-            crate::HardwareMode::CPU => crosscorrelation::HardwareMode::Cpu,
+            crate::HardwareMode::Gpu => crosscorrelation::HardwareMode::Gpu,
+            crate::HardwareMode::GpuLowPower => crosscorrelation::HardwareMode::GpuLowPower,
+            crate::HardwareMode::Cpu => crosscorrelation::HardwareMode::Cpu,
         };
 
         let mut total_percent_complete = 0.0;
