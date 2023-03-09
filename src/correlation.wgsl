@@ -288,8 +288,11 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
         let min_pos = u32(min_pos_signed);
         let max_pos = u32(max_pos_signed);
-        corridor_start = clamp(corridor_start, min_pos, max_pos);
-        corridor_end = clamp(corridor_end, min_pos, max_pos);
+        corridor_start = clamp(min_pos+corridor_start, min_pos, max_pos);
+        corridor_end = clamp(min_pos+corridor_end, min_pos, max_pos);
+        if corridor_start >= corridor_end {
+            return;
+        }
     }
 
     var coeff: vec2<f32>;
