@@ -506,8 +506,7 @@ fn compute_compact_point_data(img: &DMatrix<u8>, row: usize, col: usize) -> Opti
 }
 
 mod gpu {
-    const MIN_BUFFER_SIZE: usize = 128;
-    const MAX_BINDINGS: u32 = 6;
+    const MAX_BINDINGS: u32 = 5;
 
     use std::{borrow::Cow, collections::HashMap, error, fmt};
 
@@ -555,7 +554,6 @@ mod gpu {
         device: wgpu::Device,
         queue: wgpu::Queue,
         shader_module: wgpu::ShaderModule,
-        buffer_params: wgpu::Buffer,
         buffer_img: wgpu::Buffer,
         buffer_internal_img1: wgpu::Buffer,
         buffer_internal_img2: wgpu::Buffer,
@@ -603,11 +601,12 @@ mod gpu {
             let max_buffer_size = (img1_pixels * 3 + img2_pixels * 2) * std::mem::size_of::<f32>();
             limits.max_storage_buffer_binding_size = max_buffer_size as u32;
             limits.max_buffer_size = max_buffer_size as u64;
+            limits.max_push_constant_size = std::mem::size_of::<ShaderParams>() as u32;
             let (device, queue) = adapter
                 .request_device(
                     &wgpu::DeviceDescriptor {
                         label: None,
-                        features: wgpu::Features::empty(),
+                        features: wgpu::Features::PUSH_CONSTANTS,
                         limits,
                     },
                     None,
@@ -615,7 +614,7 @@ mod gpu {
                 .block_on()?;
 
             let info = adapter.get_info();
-            let device_name = format!("{} ({}: {})", info.name, info.driver, info.driver_info);
+            let device_name = format!("{:?} - {}", info.backend, info.name);
 
             let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
@@ -624,13 +623,6 @@ mod gpu {
 
             // Init buffers.
             let out_pixels = img1_pixels;
-            let buffer_params = device.create_buffer(&wgpu::BufferDescriptor {
-                label: None,
-                size: std::mem::size_of::<ShaderParams>().max(MIN_BUFFER_SIZE)
-                    as wgpu::BufferAddress,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
             let buffer_img = init_buffer(
                 &device,
                 (img1_pixels + img2_pixels) * std::mem::size_of::<f32>(),
@@ -672,7 +664,6 @@ mod gpu {
                 device,
                 queue,
                 shader_module,
-                buffer_params,
                 buffer_img,
                 buffer_internal_img1,
                 buffer_internal_img2,
@@ -694,7 +685,6 @@ mod gpu {
             scale: f32,
             progress_listener: Option<&PL>,
         ) {
-            let corridor_stripes = 2 * CORRIDOR_SIZE + 1;
             let max_width = img1.ncols().max(img2.ncols());
             let max_height = img1.nrows().max(img2.nrows());
             let max_shape = (max_height, max_width);
@@ -778,6 +768,7 @@ mod gpu {
 
             self.run_shader(max_shape, "prepare_initialdata_correlation", params);
 
+            let corridor_stripes = 2 * CORRIDOR_SIZE + 1;
             let max_length = self.out_shape.0.max(self.out_shape.1);
             let corridor_length = max_length - (KERNEL_SIZE * 2);
             let corridor_segments = corridor_length / CORRIDOR_SEGMENT_LENGTH + 1;
@@ -811,12 +802,6 @@ mod gpu {
             entry_point: &str,
             shader_params: ShaderParams,
         ) {
-            self.queue.write_buffer(
-                &self.buffer_params,
-                0,
-                bytemuck::cast_slice(&[shader_params]),
-            );
-
             if !self.pipeline_configs.contains_key(entry_point) {
                 let pipeline_config = self.create_pipeline_config(entry_point);
                 self.pipeline_configs
@@ -832,6 +817,7 @@ mod gpu {
                 let mut cpass =
                     encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
                 cpass.set_pipeline(&pipeline_config.pipeline);
+                cpass.set_push_constants(0, bytemuck::cast_slice(&[shader_params]));
                 cpass.set_bind_group(0, &pipeline_config.bind_group, &[]);
                 cpass.dispatch_workgroups(workgroup_size.0 as u32, workgroup_size.1 as u32, 1);
             }
@@ -873,7 +859,6 @@ mod gpu {
         pub fn complete_process(
             &mut self,
         ) -> Result<DMatrix<Option<super::Match>>, Box<dyn error::Error>> {
-            self.buffer_params.destroy();
             self.buffer_img.destroy();
             self.buffer_internal_img1.destroy();
             self.buffer_internal_img2.destroy();
@@ -937,18 +922,6 @@ mod gpu {
                                 binding: 0,
                                 visibility: wgpu::ShaderStages::COMPUTE,
                                 ty: wgpu::BindingType::Buffer {
-                                    ty: wgpu::BufferBindingType::Uniform {},
-                                    has_dynamic_offset: false,
-                                    min_binding_size: wgpu::BufferSize::new(
-                                        self.buffer_params.size(),
-                                    ),
-                                },
-                                count: None,
-                            },
-                            wgpu::BindGroupLayoutEntry {
-                                binding: 1,
-                                visibility: wgpu::ShaderStages::COMPUTE,
-                                ty: wgpu::BindingType::Buffer {
                                     ty: wgpu::BufferBindingType::Storage { read_only: true },
                                     has_dynamic_offset: false,
                                     min_binding_size: wgpu::BufferSize::new(self.buffer_img.size()),
@@ -956,7 +929,7 @@ mod gpu {
                                 count: None,
                             },
                             wgpu::BindGroupLayoutEntry {
-                                binding: 2,
+                                binding: 1,
                                 visibility: wgpu::ShaderStages::COMPUTE,
                                 ty: wgpu::BindingType::Buffer {
                                     ty: wgpu::BufferBindingType::Storage { read_only: false },
@@ -968,7 +941,7 @@ mod gpu {
                                 count: None,
                             },
                             wgpu::BindGroupLayoutEntry {
-                                binding: 3,
+                                binding: 2,
                                 visibility: wgpu::ShaderStages::COMPUTE,
                                 ty: wgpu::BindingType::Buffer {
                                     ty: wgpu::BufferBindingType::Storage { read_only: false },
@@ -980,7 +953,7 @@ mod gpu {
                                 count: None,
                             },
                             wgpu::BindGroupLayoutEntry {
-                                binding: 4,
+                                binding: 3,
                                 visibility: wgpu::ShaderStages::COMPUTE,
                                 ty: wgpu::BindingType::Buffer {
                                     ty: wgpu::BufferBindingType::Storage { read_only: false },
@@ -992,7 +965,7 @@ mod gpu {
                                 count: None,
                             },
                             wgpu::BindGroupLayoutEntry {
-                                binding: 5,
+                                binding: 4,
                                 visibility: wgpu::ShaderStages::COMPUTE,
                                 ty: wgpu::BindingType::Buffer {
                                     ty: wgpu::BufferBindingType::Storage { read_only: false },
@@ -1009,7 +982,10 @@ mod gpu {
                     .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                         label: None,
                         bind_group_layouts: &[&bind_group_layout],
-                        push_constant_ranges: &[],
+                        push_constant_ranges: &[wgpu::PushConstantRange {
+                            stages: wgpu::ShaderStages::COMPUTE,
+                            range: 0..std::mem::size_of::<ShaderParams>() as u32,
+                        }],
                     });
 
             let pipeline = self
@@ -1027,26 +1003,22 @@ mod gpu {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: self.buffer_params.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
                         resource: self.buffer_img.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
-                        binding: 2,
+                        binding: 1,
                         resource: self.buffer_internal_img1.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
-                        binding: 3,
+                        binding: 2,
                         resource: self.buffer_internal_img2.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
-                        binding: 4,
+                        binding: 3,
                         resource: self.buffer_internal_int.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
-                        binding: 5,
+                        binding: 4,
                         resource: self.buffer_out.as_entire_binding(),
                     },
                 ],
