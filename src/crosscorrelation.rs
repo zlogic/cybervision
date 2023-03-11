@@ -707,6 +707,7 @@ mod gpu {
             let max_shape = (max_height, max_width);
             let img1_shape = img1.shape();
 
+            let mut progressbar_completed_percentage = 0.02;
             let send_progress = |v| {
                 if let Some(pl) = progress_listener {
                     pl.report_status(v);
@@ -738,9 +739,10 @@ mod gpu {
 
             if self.first_pass {
                 self.run_shader(self.out_shape, "init_out_data", params);
-                send_progress(0.02);
             } else {
                 self.run_shader(max_shape, "prepare_initialdata_searchdata", params);
+                progressbar_completed_percentage = 0.02;
+                send_progress(progressbar_completed_percentage);
 
                 let segment_length = self.search_area_segment_length;
                 let neighbor_width = (NEIGHBOR_DISTANCE as f32 / scale).ceil() as usize * 2 + 1;
@@ -755,7 +757,13 @@ mod gpu {
                         params.corridor_end = neighbor_pixels as u32;
                     }
                     self.run_shader(img1_shape, "prepare_searchdata", params);
+
+                    let percent_complete = progressbar_completed_percentage
+                        + 0.09 * (l as f32 / neighbor_segments as f32);
+                    send_progress(percent_complete);
                 }
+                progressbar_completed_percentage = 0.11;
+                send_progress(progressbar_completed_percentage);
 
                 params.iteration_pass = 1;
                 for l in 0u32..neighbor_segments as u32 {
@@ -765,14 +773,20 @@ mod gpu {
                         params.corridor_end = neighbor_pixels as u32;
                     }
                     self.run_shader(img1_shape, "prepare_searchdata", params);
+
+                    let percent_complete = progressbar_completed_percentage
+                        + 0.09 * (l as f32 / neighbor_segments as f32);
+                    send_progress(percent_complete);
                 }
-                send_progress(0.10);
+
+                progressbar_completed_percentage = 0.20;
             }
-            self.device.poll(wgpu::Maintain::Wait);
+            send_progress(progressbar_completed_percentage);
             params.iteration_pass = if self.first_pass { 0 } else { 1 };
 
             self.run_shader(max_shape, "prepare_initialdata_correlation", params);
 
+            let corridor_stripes = 2 * CORRIDOR_SIZE + 1;
             let max_length = self.out_shape.0.max(self.out_shape.1);
             let segment_length = self.corridor_segment_length;
             let corridor_length = max_length - (KERNEL_SIZE * 2);
@@ -786,10 +800,15 @@ mod gpu {
                         params.corridor_end = corridor_length as u32;
                     }
                     self.run_shader(img1_shape, "cross_correlate", params);
+
+                    let corridor_complete = params.corridor_end as f32 / corridor_length as f32;
+                    let percent_complete = progressbar_completed_percentage
+                        + (1.0 - progressbar_completed_percentage)
+                            * (corridor_offset as f32 + CORRIDOR_SIZE as f32 + corridor_complete)
+                            / corridor_stripes as f32;
+                    send_progress(percent_complete);
                 }
             }
-            self.device.poll(wgpu::Maintain::Wait);
-            send_progress(1.00);
 
             self.first_pass = false;
         }
@@ -821,6 +840,7 @@ mod gpu {
             }
 
             self.queue.submit(Some(encoder.finish()));
+            self.device.poll(wgpu::Maintain::Wait);
         }
 
         fn convert_fundamental_matrix(&self) -> [f32; 3 * 4] {
