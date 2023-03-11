@@ -316,8 +316,29 @@ pub fn reconstruct(args: &Cli) {
     {
         let start_time = SystemTime::now();
 
-        surface =
-            triangulation::triangulate_affine(&point_correlations.correlated_points, out_scale);
+        surface = match args.projection {
+            crate::ProjectionMode::Parallel => {
+                triangulation::triangulate_affine(&point_correlations.correlated_points, out_scale)
+            }
+            crate::ProjectionMode::Perspective => {
+                let p2 = triangulation::find_projection_matrix(
+                    &fm.f,
+                    &point_correlations.correlated_points,
+                );
+                let p2 = match p2 {
+                    Some(p2) => p2,
+                    None => {
+                        eprintln!("Unable to find projection matrix");
+                        return;
+                    }
+                };
+                triangulation::triangulate_perspective(
+                    &point_correlations.correlated_points,
+                    &p2,
+                    out_scale,
+                )
+            }
+        };
         drop(point_correlations);
 
         if let Ok(t) = start_time.elapsed() {
