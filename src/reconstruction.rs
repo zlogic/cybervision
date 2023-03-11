@@ -213,12 +213,12 @@ pub fn reconstruct(args: &Cli) {
             .map(|(p1, p2)| {
                 (
                     (
-                        (p1.0 as f32 * keypoint_scale) as usize,
-                        (p1.1 as f32 * keypoint_scale) as usize,
+                        (p1.0 as f32 / keypoint_scale) as usize,
+                        (p1.1 as f32 / keypoint_scale) as usize,
                     ),
                     (
-                        (p2.0 as f32 * keypoint_scale) as usize,
-                        (p2.1 as f32 * keypoint_scale) as usize,
+                        (p2.0 as f32 / keypoint_scale) as usize,
+                        (p2.1 as f32 / keypoint_scale) as usize,
                     ),
                 )
             })

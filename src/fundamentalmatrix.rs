@@ -9,13 +9,13 @@ use std::{fmt, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrderi
 const MATCH_GRID_SIZE: usize = 8;
 const RANSAC_K_AFFINE: usize = 1_000_000;
 const RANSAC_K_PERSPECTIVE: usize = 1_000_000;
-const RANSAC_N_AFFINE: usize = 8;
-const RANSAC_N_PERSPECTIVE: usize = 16;
+const RANSAC_N_AFFINE: usize = 4;
+const RANSAC_N_PERSPECTIVE: usize = 8;
 const RANSAC_T_AFFINE: f64 = 0.1;
 const RANSAC_T_PERSPECTIVE: f64 = 1.0;
 const RANSAC_D: usize = 10;
 const RANSAC_D_EARLY_EXIT_AFFINE: usize = 1000;
-const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 20;
+const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 1000;
 const RANSAC_CHECK_INTERVAL: usize = 50_000;
 
 type Point = (usize, usize);
@@ -116,6 +116,9 @@ impl FundamentalMatrix {
         match_buckets: &Vec<Vec<Match>>,
         progress_listener: Option<&PL>,
     ) -> Result<RansacIterationResult, RansacError> {
+        if match_buckets.len() < self.ransac_n {
+            return Err(RansacError::new("Not enough match buckets"));
+        }
         let matches_count: usize = match_buckets.iter().map(|b| b.len()).sum();
         if matches_count < RANSAC_D + self.ransac_n {
             return Err(RansacError::new("Not enough matches"));
@@ -160,14 +163,13 @@ impl FundamentalMatrix {
 
     fn ransac_iteration(&self, match_buckets: &Vec<Vec<Match>>) -> Option<RansacIterationResult> {
         let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
-        // It's possible to select multiple points from the same bucket.
-        let mut inliers = Vec::<Match>::with_capacity(self.ransac_n);
-        while inliers.len() < self.ransac_n {
-            let bucket = match_buckets.choose(rng)?;
-            let inlier = bucket.choose(rng)?;
-            if !inliers.contains(inlier) {
-                inliers.push(*inlier);
-            }
+        let inliers: Vec<Match> = match_buckets
+            .choose_multiple(rng, self.ransac_n)
+            .into_iter()
+            .filter_map(|bucket| bucket.choose(rng).map(|m| m.to_owned()))
+            .collect();
+        if inliers.len() < self.ransac_n {
+            return None;
         }
 
         let f = match self.projection {
