@@ -16,10 +16,8 @@ const CORRIDOR_SIZE: usize = 20;
 // Decrease when using a low-powered GPU
 const CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 512;
 const SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 1024;
-const INFLIGHT_QUEUE_LIMIT_HIGHPERFORMANCE: usize = 128;
 const CORRIDOR_SEGMENT_LENGTH_LOWPOWER: usize = 8;
 const SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER: usize = 128;
-const INFLIGHT_QUEUE_LIMIT_LOWPOWER: usize = 1;
 const NEIGHBOR_DISTANCE: usize = 10;
 const CORRIDOR_EXTEND_RANGE: f64 = 1.0;
 const CORRIDOR_MIN_RANGE: f64 = 2.5;
@@ -512,8 +510,7 @@ mod gpu {
 
     use super::{
         CORRIDOR_EXTEND_RANGE, CORRIDOR_MIN_RANGE, CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE,
-        CORRIDOR_SEGMENT_LENGTH_LOWPOWER, CORRIDOR_SIZE, INFLIGHT_QUEUE_LIMIT_HIGHPERFORMANCE,
-        INFLIGHT_QUEUE_LIMIT_LOWPOWER, KERNEL_SIZE, NEIGHBOR_DISTANCE,
+        CORRIDOR_SEGMENT_LENGTH_LOWPOWER, CORRIDOR_SIZE, KERNEL_SIZE, NEIGHBOR_DISTANCE,
         SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE, SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER,
     };
 
@@ -549,12 +546,10 @@ mod gpu {
 
         corridor_segment_length: usize,
         search_area_segment_length: usize,
-        inflight_queue_limit: Option<usize>,
 
         device_name: String,
         device: wgpu::Device,
         queue: wgpu::Queue,
-        inflight_queues: usize,
         shader_module: wgpu::ShaderModule,
         buffer_img: wgpu::Buffer,
         buffer_internal_img1: wgpu::Buffer,
@@ -602,20 +597,17 @@ mod gpu {
                 return Err(GpuError::new("Adapter not found").into());
             };
 
-            let (search_area_segment_length, corridor_segment_length, inflight_queue_limit) =
-                if low_power {
-                    (
-                        SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER,
-                        CORRIDOR_SEGMENT_LENGTH_LOWPOWER,
-                        INFLIGHT_QUEUE_LIMIT_LOWPOWER,
-                    )
-                } else {
-                    (
-                        SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE,
-                        CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE,
-                        INFLIGHT_QUEUE_LIMIT_HIGHPERFORMANCE,
-                    )
-                };
+            let (search_area_segment_length, corridor_segment_length) = if low_power {
+                (
+                    SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER,
+                    CORRIDOR_SEGMENT_LENGTH_LOWPOWER,
+                )
+            } else {
+                (
+                    SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE,
+                    CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE,
+                )
+            };
 
             let mut limits = wgpu::Limits::downlevel_defaults();
             limits.max_bindings_per_bind_group = MAX_BINDINGS;
@@ -638,13 +630,6 @@ mod gpu {
 
             let info = adapter.get_info();
             let device_name = format!("{:?} - {}", info.backend, info.name);
-            // Vulkan can lose devices if to much items are submitted into the queue.
-            // Metal can accept as many submissions as possible, and this maximizes performance.
-            let inflight_queue_limit = if info.backend != wgpu::Backend::Metal {
-                Some(inflight_queue_limit)
-            } else {
-                None
-            };
 
             let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
@@ -692,11 +677,9 @@ mod gpu {
                 first_pass: true,
                 corridor_segment_length,
                 search_area_segment_length,
-                inflight_queue_limit,
                 device_name,
                 device,
                 queue,
-                inflight_queues: 0,
                 shader_module,
                 buffer_img,
                 buffer_internal_img1,
@@ -826,8 +809,6 @@ mod gpu {
                     send_progress(percent_complete);
                 }
             }
-            self.device.poll(wgpu::Maintain::Wait);
-            self.inflight_queues = 0;
 
             self.first_pass = false;
         }
@@ -859,13 +840,7 @@ mod gpu {
             }
 
             self.queue.submit(Some(encoder.finish()));
-            if let Some(queue_limit) = self.inflight_queue_limit {
-                self.inflight_queues += 1;
-                if self.inflight_queues >= queue_limit {
-                    self.device.poll(wgpu::Maintain::Wait);
-                    self.inflight_queues = 0;
-                }
-            }
+            self.device.poll(wgpu::Maintain::Wait);
         }
 
         fn convert_fundamental_matrix(&self) -> [f32; 3 * 4] {
