@@ -11,6 +11,7 @@ use crate::Cli;
 use image::imageops::FilterType;
 use image::GenericImageView;
 use image::GrayImage;
+use image::RgbImage;
 use indicatif::ProgressState;
 use indicatif::{ProgressBar, ProgressStyle};
 use nalgebra::DMatrix;
@@ -48,6 +49,14 @@ impl SourceImage {
             scale: metadata.scale,
             tilt_angle: metadata.tilt_angle,
         })
+    }
+
+    fn load_rgb(path: &String) -> Result<RgbImage, image::ImageError> {
+        let metadata = SourceImage::get_metadata(path);
+        let img = image::open(path)?.into_rgb8();
+        Ok(img
+            .view(0, 0, img.width(), img.height() - metadata.databar_height)
+            .to_image())
     }
 
     fn get_metadata(path: &String) -> ImageMeta {
@@ -336,8 +345,21 @@ pub fn reconstruct(args: &Cli) {
             crate::InterpolationMode::Delaunay => output::InterpolationMode::Delaunay,
             crate::InterpolationMode::None => output::InterpolationMode::None,
         };
+        let vertex_mode = match args.mesh {
+            crate::Mesh::Plain => output::VertexMode::Plain,
+            crate::Mesh::VertexColors => output::VertexMode::Color,
+            crate::Mesh::TextureCoordinates => output::VertexMode::Texture,
+        };
 
-        let result = output::output(surface.points, &args.img_out, interpolation_mode, Some(&pb));
+        let img1 = SourceImage::load_rgb(&args.img1).unwrap();
+        let result = output::output(
+            surface.points,
+            img1,
+            &args.img_out,
+            interpolation_mode,
+            vertex_mode,
+            Some(&pb),
+        );
         pb.finish_and_clear();
         match result {
             Ok(_) => {}

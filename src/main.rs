@@ -26,8 +26,16 @@ pub enum ProjectionMode {
     Perspective,
 }
 
+#[derive(clap::ValueEnum, Clone)]
+pub enum Mesh {
+    Plain,
+    VertexColors,
+    TextureCoordinates,
+}
+
 /// Cybervision commandline arguments
 #[derive(Parser)]
+#[command(author, version, about, long_about = None)]
 pub struct Cli {
     /// Depth scale
     #[arg(long, default_value_t = -1.0)]
@@ -44,6 +52,9 @@ pub struct Cli {
     /// Hardware mode
     #[arg(long, value_enum, default_value_t = ProjectionMode::Parallel)]
     projection: ProjectionMode,
+
+    #[arg(long, value_enum, default_value_t = Mesh::Plain)]
+    mesh: Mesh,
 
     /// Image 1
     img1: String,

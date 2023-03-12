@@ -4,9 +4,10 @@ use std::{
     fmt,
     fs::File,
     io::{BufWriter, Write},
+    path::Path,
 };
 
-use image::{Rgba, RgbaImage};
+use image::{RgbImage, Rgba, RgbaImage};
 use nalgebra::DMatrix;
 use rayon::prelude::*;
 use spade::{
@@ -18,6 +19,13 @@ use spade::{
 pub enum InterpolationMode {
     Delaunay,
     None,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum VertexMode {
+    Plain,
+    Color,
+    Texture,
 }
 
 pub trait ProgressListener
@@ -33,8 +41,10 @@ type TriangulatedSurfaceFace<'a> = FaceHandle<'a, InnerTag, Point2<f32>, (), (),
 
 pub fn output<PL: ProgressListener>(
     surface: DMatrix<Option<f32>>,
-    path: &String,
+    img1: RgbImage,
+    path: &str,
     interpolation: InterpolationMode,
+    vertex_mode: VertexMode,
     progress_listener: Option<&PL>,
 ) -> Result<(), Box<dyn error::Error>> {
     let surface_points = surface_points(&surface);
@@ -43,9 +53,9 @@ pub fn output<PL: ProgressListener>(
         InterpolationMode::Delaunay => vec![],
     };
     let mut writer: Box<dyn MeshWriter> = if path.to_lowercase().ends_with(".obj") {
-        Box::new(ObjWriter::new(surface, path)?)
+        Box::new(ObjWriter::new(surface, path, img1, vertex_mode)?)
     } else if path.to_lowercase().ends_with(".ply") {
-        Box::new(PlyWriter::new(surface, path)?)
+        Box::new(PlyWriter::new(surface, path, img1, vertex_mode)?)
     } else {
         Box::new(ImageWriter::new(surface, path)?)
     };
@@ -68,9 +78,19 @@ pub fn output<PL: ProgressListener>(
             .enumerate()
             .try_for_each(|(i, v)| {
                 if let Some(pl) = progress_listener {
-                    pl.report_status(0.2 + 0.4 * (i as f32 / nvertices));
+                    pl.report_status(0.2 + 0.2 * (i as f32 / nvertices));
                 }
                 writer.output_vertex(v.position().x, v.position().y)
+            })?;
+        triangulated_surface
+            .vertices()
+            .into_iter()
+            .enumerate()
+            .try_for_each(|(i, v)| {
+                if let Some(pl) = progress_listener {
+                    pl.report_status(0.4 + 0.2 * (i as f32 / nvertices));
+                }
+                writer.output_vertex_uv(v.position().x, v.position().y)
             })?;
         let nfaces = triangulated_surface.num_inner_faces() as f32;
         triangulated_surface
@@ -79,7 +99,7 @@ pub fn output<PL: ProgressListener>(
             .enumerate()
             .try_for_each(|(i, f)| {
                 if let Some(pl) = progress_listener {
-                    pl.report_status(0.6 + 0.4 * (i as f32 / nfaces));
+                    pl.report_status(0.6 + 0.3 * (i as f32 / nfaces));
                 }
                 writer.output_face(f)
             })?;
@@ -90,9 +110,15 @@ pub fn output<PL: ProgressListener>(
     writer.output_header(surface_points.len(), surface_vertices_uninterpolated.len())?;
     surface_points.iter().enumerate().try_for_each(|(i, p)| {
         if let Some(pl) = progress_listener {
-            pl.report_status(0.2 + 0.4 * (i as f32 / npoints));
+            pl.report_status(0.2 + 0.2 * (i as f32 / npoints));
         }
         writer.output_vertex(p.x, p.y)
+    })?;
+    surface_points.iter().enumerate().try_for_each(|(i, p)| {
+        if let Some(pl) = progress_listener {
+            pl.report_status(0.4 + 0.2 * (i as f32 / npoints));
+        }
+        writer.output_vertex_uv(p.x, p.y)
     })?;
     drop(surface_points);
     surface_vertices_uninterpolated
@@ -100,7 +126,7 @@ pub fn output<PL: ProgressListener>(
         .enumerate()
         .try_for_each(|(i, p)| {
             if let Some(pl) = progress_listener {
-                pl.report_status(0.6 + 0.4 * (i as f32 / npoints));
+                pl.report_status(0.6 + 0.3 * (i as f32 / npoints));
             }
             writer.output_face_uninterpolated(p)
         })?;
@@ -112,6 +138,9 @@ trait MeshWriter {
         Ok(())
     }
     fn output_vertex(&mut self, _x: f32, _y: f32) -> Result<(), Box<dyn error::Error>> {
+        Ok(())
+    }
+    fn output_vertex_uv(&mut self, _x: f32, _y: f32) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
     fn output_face(&mut self, _f: TriangulatedSurfaceFace) -> Result<(), Box<dyn error::Error>> {
@@ -132,16 +161,26 @@ struct PlyWriter {
     surface: DMatrix<Option<f32>>,
     writer: BufWriter<File>,
     buffer: Vec<u8>,
+    vertex_mode: VertexMode,
+    img1: RgbImage,
 }
 
 impl PlyWriter {
-    fn new(surface: DMatrix<Option<f32>>, path: &String) -> Result<PlyWriter, std::io::Error> {
+    fn new(
+        surface: DMatrix<Option<f32>>,
+        path: &str,
+        img1: RgbImage,
+        vertex_mode: VertexMode,
+    ) -> Result<PlyWriter, Box<dyn error::Error>> {
         let writer = BufWriter::new(File::create(path)?);
         let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
+
         Ok(PlyWriter {
             surface,
             writer,
             buffer,
+            vertex_mode,
+            img1,
         })
     }
     fn check_flush_buffer(&mut self) -> Result<(), std::io::Error> {
@@ -166,6 +205,16 @@ impl MeshWriter for PlyWriter {
         writeln!(w, "property float x")?;
         writeln!(w, "property float y")?;
         writeln!(w, "property float z")?;
+
+        match self.vertex_mode {
+            VertexMode::Plain => {}
+            VertexMode::Texture => {}
+            VertexMode::Color => {
+                writeln!(w, "property uchar red")?;
+                writeln!(w, "property uchar green")?;
+                writeln!(w, "property uchar blue")?;
+            }
+        }
         writeln!(w, "element face {}", nfaces)?;
         writeln!(w, "property list uchar int vertex_indices")?;
         writeln!(w, "end_header")
@@ -176,11 +225,22 @@ impl MeshWriter for PlyWriter {
             Some(depth) => Ok(depth),
             None => Err(OutputError::new("Point depth not found")),
         }?;
+        let color = match self.vertex_mode {
+            VertexMode::Plain | VertexMode::Texture => None,
+            VertexMode::Color => self
+                .img1
+                .get_pixel_checked(x.round() as u32, y.round() as u32)
+                .map(|pixel| pixel.0),
+        };
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
+
         w.write_all(&x.to_be_bytes())?;
         w.write_all(&(self.surface.nrows() as f32 - y).to_be_bytes())?;
         w.write_all(&depth.to_be_bytes())?;
+        if let Some(color) = color {
+            w.write_all(&color)?;
+        }
         Ok(())
     }
 
@@ -216,16 +276,27 @@ struct ObjWriter {
     surface: DMatrix<Option<f32>>,
     writer: BufWriter<File>,
     buffer: Vec<u8>,
+    vertex_mode: VertexMode,
+    img1: RgbImage,
+    path: String,
 }
 
 impl ObjWriter {
-    fn new(surface: DMatrix<Option<f32>>, path: &String) -> Result<ObjWriter, std::io::Error> {
+    fn new(
+        surface: DMatrix<Option<f32>>,
+        path: &str,
+        img1: RgbImage,
+        vertex_mode: VertexMode,
+    ) -> Result<ObjWriter, Box<dyn error::Error>> {
         let writer = BufWriter::new(File::create(path)?);
         let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
         Ok(ObjWriter {
             surface,
             writer,
             buffer,
+            vertex_mode,
+            img1,
+            path: path.to_string(),
         })
     }
     fn check_flush_buffer(&mut self) -> Result<(), std::io::Error> {
@@ -237,9 +308,51 @@ impl ObjWriter {
         }
         Ok(())
     }
+    fn get_output_filename(&self) -> Option<String> {
+        Path::new(&self.path)
+            .file_name()
+            .and_then(|n| n.to_str().map(|n| n.to_string()))
+    }
+    fn write_material(&mut self) -> Result<(), Box<dyn error::Error>> {
+        let texture_filename = match self.vertex_mode {
+            VertexMode::Plain | VertexMode::Color => return Ok(()),
+            VertexMode::Texture => self.get_output_filename().unwrap(),
+        };
+
+        let mut w = BufWriter::new(File::create(self.path.to_string() + ".mtl")?);
+
+        let image_filename = texture_filename + ".png";
+        writeln!(w, "newmtl Textured")?;
+        writeln!(w, "Ka 1.0 1.0 1.0")?;
+        writeln!(w, "Kd 1.0 1.0 1.0")?;
+        writeln!(w, "Ks 0.0 0.0 0.0")?;
+        writeln!(w, "illum 1")?;
+        writeln!(w, "Ns 0.000000")?;
+        writeln!(w, "map_Ka {}", image_filename)?;
+        writeln!(w, "map_Kd {}", image_filename)?;
+
+        self.img1.save(self.path.to_string() + ".png")?;
+
+        Ok(())
+    }
 }
 
 impl MeshWriter for ObjWriter {
+    fn output_header(&mut self, _nvertices: usize, _nfaces: usize) -> Result<(), std::io::Error> {
+        self.check_flush_buffer()?;
+        let material_filename = self.get_output_filename().unwrap();
+        let w = &mut self.buffer;
+
+        match self.vertex_mode {
+            VertexMode::Plain | VertexMode::Color => {}
+            VertexMode::Texture => {
+                writeln!(w, "mtllib {}", material_filename + ".mtl")?;
+                writeln!(w, "usemtl Textured")?;
+            }
+        }
+        Ok(())
+    }
+
     fn output_vertex(&mut self, x: f32, y: f32) -> Result<(), Box<dyn error::Error>> {
         let depth = match self.surface[(y.round() as usize, x.round() as usize)] {
             Some(depth) => Ok(depth),
@@ -249,7 +362,46 @@ impl MeshWriter for ObjWriter {
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
 
-        writeln!(w, "v {} {} {}", x, self.surface.nrows() as f32 - y, depth)?;
+        let color = match self.vertex_mode {
+            VertexMode::Plain | VertexMode::Texture => None,
+            VertexMode::Color => self
+                .img1
+                .get_pixel_checked(x.round() as u32, y.round() as u32)
+                .map(|pixel| pixel.0),
+        };
+
+        if let Some(color) = color {
+            writeln!(
+                w,
+                "v {} {} {} {} {} {}",
+                x,
+                self.surface.nrows() as f32 - y,
+                depth,
+                color[0] as f32 / 255.0,
+                color[1] as f32 / 255.0,
+                color[2] as f32 / 255.0,
+            )?
+        } else {
+            writeln!(w, "v {} {} {}", x, self.surface.nrows() as f32 - y, depth)?
+        }
+
+        Ok(())
+    }
+
+    fn output_vertex_uv(&mut self, x: f32, y: f32) -> Result<(), Box<dyn error::Error>> {
+        self.check_flush_buffer()?;
+        match self.vertex_mode {
+            VertexMode::Plain | VertexMode::Color => {}
+            VertexMode::Texture => {
+                let w = &mut self.buffer;
+                writeln!(
+                    w,
+                    "vt {} {}",
+                    x / self.surface.ncols() as f32,
+                    1.0f32 - y / self.surface.nrows() as f32,
+                )?;
+            }
+        }
         Ok(())
     }
 
@@ -265,13 +417,31 @@ impl MeshWriter for ObjWriter {
     ) -> Result<(), Box<dyn error::Error>> {
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
-        writeln!(
-            w,
-            "f {} {} {}",
-            indices[2] + 1,
-            indices[1] + 1,
-            indices[0] + 1
-        )?;
+        match self.vertex_mode {
+            VertexMode::Plain | VertexMode::Color => {
+                writeln!(
+                    w,
+                    "f {} {} {}",
+                    indices[2] + 1,
+                    indices[1] + 1,
+                    indices[0] + 1
+                )?;
+            }
+            VertexMode::Texture => {
+                let w = &mut self.buffer;
+
+                writeln!(
+                    w,
+                    "f {}/{} {}/{} {}/{}",
+                    indices[2] + 1,
+                    indices[2] + 1,
+                    indices[1] + 1,
+                    indices[1] + 1,
+                    indices[0] + 1,
+                    indices[0] + 1,
+                )?;
+            }
+        }
         Ok(())
     }
 
@@ -280,6 +450,7 @@ impl MeshWriter for ObjWriter {
         let w = &mut self.writer;
         w.write_all(buffer)?;
         buffer.clear();
+        self.write_material()?;
         Ok(())
     }
 }
