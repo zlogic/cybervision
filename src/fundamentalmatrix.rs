@@ -17,6 +17,7 @@ const RANSAC_D: usize = 10;
 const RANSAC_D_EARLY_EXIT_AFFINE: usize = 1000;
 const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 1000;
 const RANSAC_CHECK_INTERVAL: usize = 50_000;
+const RANSAC_RANK_EPSILON_PERSPECTIVE: f64 = 0.001;
 
 type Point = (usize, usize);
 type Match = (Point, Point);
@@ -255,6 +256,11 @@ impl FundamentalMatrix {
         let usv = a.svd(false, true);
         let vt = &usv.v_t?;
 
+        let s = usv.singular_values;
+        if s[s.len() - 1].abs() < RANSAC_RANK_EPSILON_PERSPECTIVE {
+            return None;
+        }
+
         let vtc = vt.row(vt.nrows() - 1);
         let f = Matrix3::new(
             vtc[0], vtc[1], vtc[2], vtc[3], vtc[4], vtc[5], vtc[6], vtc[7], vtc[8],
@@ -268,7 +274,9 @@ impl FundamentalMatrix {
         let f = u * s * vt;
 
         // Scale back to image coordinates.
-        Some(m2.tr_mul(&f) * m1)
+        let f = m2.tr_mul(&f) * m1;
+        // Normalize by last element of F.
+        Some(f / f[(2, 2)])
     }
 
     #[inline]
