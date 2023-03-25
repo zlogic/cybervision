@@ -1,4 +1,5 @@
 use nalgebra::{DMatrix, Matrix3, Matrix3x4, Vector3};
+use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 use rayon::prelude::*;
 
 use crate::fundamentalmatrix::FundamentalMatrix;
@@ -79,41 +80,27 @@ pub fn triangulate_perspective(
 
     // TODO: customize this
     // TODO: show progress
-    let points3d: Vec<Vector3<f32>> = point_matches
-        .chunks(100)
+    let points3d: Vec<Vector3<f64>> = point_matches
+        .chunks(25)
         .par_bridge()
         .flat_map(|chunk| {
-            let problem = ReprojectionErrorMinimization::new(p2.clone(), chunk, true).unwrap();
-            let (result, report) = LevenbergMarquardt::new().minimize(problem);
-            if !report.termination.was_successful() {
-                panic!("LM failed")
+            let chunk: Vec<((usize, usize), (usize, usize))> = chunk
+                .iter()
+                .map(|m| {
+                    (
+                        (m.0 .0 as usize, m.0 .1 as usize),
+                        (m.1 .0 as usize, m.1 .1 as usize),
+                    )
+                })
+                .collect();
+            if let Ok(res) = FundamentalMatrix::optimize_triangulate_points(p2, &chunk) {
+                res
+            } else {
+                Vec::new()
             }
-            result.extract_points3d()
         })
         .collect();
     */
-
-    /*
-    points
-        .column_iter_mut()
-        .enumerate()
-        .par_bridge()
-        .for_each(|(col, mut out_col)| {
-            out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                let x1 = 2.0 * row as f64 / correlated_points.nrows() as f64 - 1.0;
-                let y1 = 2.0 * col as f64 / correlated_points.ncols() as f64 - 1.0;
-                let point2 = correlated_points[(row, col)];
-                if let Some(point2) = correlated_points[(row, col)] {
-                    let x2 = 2.0 * point2.0 as f64 / correlated_points.nrows() as f64 - 1.0;
-                    let y2 = 2.0 * point2.1 as f64 / correlated_points.ncols() as f64 - 1.0;
-                    *out_point = triangulate_point_perspective(p2, (x1, y1), (x2, y2))
-                        .map(|depth| depth * depth_scale);
-                } else {
-                    *out_point = None
-                };
-            })
-        });
-        */
 
     let points3d: Vec<Vector3<f64>> = points
         .column_iter()

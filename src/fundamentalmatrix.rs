@@ -22,7 +22,6 @@ const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 100;
 const RANSAC_CHECK_INTERVAL: usize = 50_000;
 const RANSAC_RANK_EPSILON_PERSPECTIVE: f64 = 0.001;
 const PERSPECTIVE_OPTIMIZE_F: bool = true;
-const PERSPECTIVE_OPTIMIZE_POINTS: bool = false;
 
 type Point = (usize, usize);
 type Match = (Point, Point);
@@ -391,7 +390,7 @@ impl FundamentalMatrix {
         let e2 = u.row(2);
         let e2_skewsymmetric =
             Matrix3::new(0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0);
-        let e2s_f = -e2_skewsymmetric * f;
+        let e2s_f = e2_skewsymmetric * f;
 
         let mut p2 = Matrix3x4::zeros();
         for row in 0..3 {
@@ -416,8 +415,7 @@ impl FundamentalMatrix {
         p2: &Matrix3x4<f64>,
         inliers: &Vec<Match>,
     ) -> Result<Matrix3x4<f64>, LMError> {
-        let problem =
-            ReprojectionErrorMinimization::new(p2.clone(), inliers, PERSPECTIVE_OPTIMIZE_POINTS);
+        let problem = ReprojectionErrorMinimization::new(p2.clone(), inliers, false);
         let (result, report) = LevenbergMarquardt::new().minimize(problem);
         if !report.termination.was_successful() {
             return Err(LMError::new(report.termination));
@@ -471,6 +469,18 @@ impl FundamentalMatrix {
         let vt = usv.v_t.unwrap();
         let point4d = vt.row(vt.nrows() - 1).transpose();
         point4d
+    }
+
+    pub fn optimize_triangulate_points(
+        p2: &Matrix3x4<f64>,
+        points: &[Match],
+    ) -> Result<Vec<Vector3<f64>>, LMError> {
+        let problem = ReprojectionErrorMinimization::new(p2.clone(), points, true);
+        let (result, report) = LevenbergMarquardt::new().minimize(problem);
+        if !report.termination.was_successful() {
+            return Err(LMError::new(report.termination));
+        }
+        Ok(result.extract_points3d())
     }
 }
 
@@ -547,7 +557,7 @@ impl ReprojectionErrorMinimization<'_> {
     }
 
     #[inline]
-    fn extract_points3d(&self) -> Vec<Vector3<f32>> {
+    fn extract_points3d(&self) -> Vec<Vector3<f64>> {
         let p2 = self.extract_p2();
         (0..self.point_matches.len())
             .into_iter()
@@ -564,12 +574,9 @@ impl ReprojectionErrorMinimization<'_> {
                         .map(|e| e * e)
                         .sum::<f64>()
                         .sqrt();
+                // TODO: extract this into a constant
                 if projection_error < 25.0 {
-                    Some(Vector3::new(
-                        point3d.x as f32,
-                        point3d.y as f32,
-                        point3d.z as f32,
-                    ))
+                    Some(Vector3::new(point3d.x, point3d.y, point3d.z))
                 } else {
                     None
                 }
