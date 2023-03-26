@@ -302,6 +302,7 @@ pub fn reconstruct(args: &Cli) {
             point_correlations.correlate_images(img1, img2, scale, Some(&pb));
             total_percent_complete += scale * scale / total_percent;
         }
+        point_correlations.apply_peak_filter();
         match point_correlations.complete() {
             Ok(_) => {}
             Err(err) => {

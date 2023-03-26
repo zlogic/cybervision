@@ -15,13 +15,15 @@ const RANSAC_K_PERSPECTIVE: usize = 1_000_000;
 const RANSAC_N_AFFINE: usize = 4;
 const RANSAC_N_PERSPECTIVE: usize = 8;
 const RANSAC_T_AFFINE: f64 = 0.1;
-const RANSAC_T_PERSPECTIVE: f64 = 1.0;
+const RANSAC_T_PERSPECTIVE: f64 = 5.0;
 const RANSAC_D: usize = 10;
 const RANSAC_D_EARLY_EXIT_AFFINE: usize = 1000;
 const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 100;
 const RANSAC_CHECK_INTERVAL: usize = 50_000;
 const RANSAC_RANK_EPSILON_PERSPECTIVE: f64 = 0.001;
 const PERSPECTIVE_OPTIMIZE_F: bool = true;
+// TODO: this should be relative to the image size
+const TRIANGULATION_REPROJECTION_THRESHOLD: f64 = 25.0;
 
 type Point = (usize, usize);
 type Match = (Point, Point);
@@ -415,7 +417,7 @@ impl FundamentalMatrix {
         p2: &Matrix3x4<f64>,
         inliers: &Vec<Match>,
     ) -> Result<Matrix3x4<f64>, LMError> {
-        let problem = ReprojectionErrorMinimization::new(p2.clone(), inliers, false);
+        let problem = ReprojectionErrorMinimization::new(p2.clone(), inliers, true, false);
         let (result, report) = LevenbergMarquardt::new().minimize(problem);
         if !report.termination.was_successful() {
             return Err(LMError::new(report.termination));
@@ -471,16 +473,23 @@ impl FundamentalMatrix {
         point4d
     }
 
-    pub fn optimize_triangulate_points(
+    pub fn optimize_triangulate_point(
         p2: &Matrix3x4<f64>,
-        points: &[Match],
-    ) -> Result<Vec<Vector3<f64>>, LMError> {
-        let problem = ReprojectionErrorMinimization::new(p2.clone(), points, true);
+        point: &Match,
+    ) -> Result<Vector3<f64>, LMError> {
+        let matches = [*point];
+        let problem = ReprojectionErrorMinimization::new(p2.clone(), &matches, false, true);
         let (result, report) = LevenbergMarquardt::new().minimize(problem);
         if !report.termination.was_successful() {
             return Err(LMError::new(report.termination));
         }
-        Ok(result.extract_points3d())
+        if let Some(point3d) = result.extract_point3d() {
+            Ok(point3d)
+        } else {
+            Err(LMError::new(levenberg_marquardt::TerminationReason::User(
+                "reprojection error",
+            )))
+        }
     }
 }
 
@@ -488,25 +497,32 @@ struct ReprojectionErrorMinimization<'a> {
     /// Optimization parameters vector.
     /// First 12 items are columns of P2; followed by 3D coordinates of triangulated points.
     params: OVector<f64, Dyn>,
+    p2: Matrix3x4<f64>,
     point_matches: &'a [Match],
+    points_offset: usize,
     optimize_points: bool,
+    optimize_p2: bool,
 }
 
 impl ReprojectionErrorMinimization<'_> {
     pub fn new<'a>(
         p2: Matrix3x4<f64>,
         point_matches: &[Match],
+        optimize_p2: bool,
         optimize_points: bool,
     ) -> ReprojectionErrorMinimization {
+        let points_offset = if optimize_p2 { 12 } else { 0 };
         let parameters_len = if optimize_points {
-            12 + point_matches.len() * 3
+            points_offset + point_matches.len() * 3
         } else {
-            12
+            points_offset
         };
         let mut params = OVector::<f64, Dyn>::zeros(parameters_len);
-        for col in 0..4 {
-            for row in 0..3 {
-                params[col * 3 + row] = p2[(row, col)];
+        if optimize_p2 {
+            for col in 0..4 {
+                for row in 0..3 {
+                    params[col * 3 + row] = p2[(row, col)];
+                }
             }
         }
         if optimize_points {
@@ -514,14 +530,17 @@ impl ReprojectionErrorMinimization<'_> {
                 let m = &point_matches[m_i];
                 let m = FundamentalMatrix::triangulate_match(&p2, m);
                 for m_c in 0..3 {
-                    params[12 + m_i * 3 + m_c] = m[m_c];
+                    params[points_offset + m_i * 3 + m_c] = m[m_c];
                 }
             }
         }
         ReprojectionErrorMinimization {
-            point_matches,
             params,
+            p2,
+            point_matches,
+            points_offset,
             optimize_points,
+            optimize_p2,
         }
     }
 
@@ -547,41 +566,34 @@ impl ReprojectionErrorMinimization<'_> {
 
     #[inline]
     fn extract_p2(&self) -> Matrix3x4<f64> {
-        let mut p2 = Matrix3x4::zeros();
-        for col in 0..4 {
-            for row in 0..3 {
-                p2[(row, col)] = self.params[col * 3 + row];
+        if self.optimize_p2 {
+            let mut p2 = Matrix3x4::zeros();
+            for col in 0..4 {
+                for row in 0..3 {
+                    p2[(row, col)] = self.params[col * 3 + row];
+                }
             }
+            p2
+        } else {
+            self.p2
         }
-        p2
     }
 
     #[inline]
-    fn extract_points3d(&self) -> Vec<Vector3<f64>> {
-        let p2 = self.extract_p2();
-        (0..self.point_matches.len())
-            .into_iter()
-            .flat_map(|m_i| {
-                let m = &self.point_matches[m_i];
-                let mut point3d = Vector4::zeros();
-                for m_c in 0..3 {
-                    point3d[m_c] = self.params[12 + m_i * 3 + m_c];
-                }
-                point3d[3] = 1.0;
-                let projection_error =
-                    ReprojectionErrorMinimization::projection_error(p2, point3d, m.0, m.1)
-                        .iter()
-                        .map(|e| e * e)
-                        .sum::<f64>()
-                        .sqrt();
-                // TODO: extract this into a constant
-                if projection_error < 25.0 {
-                    Some(Vector3::new(point3d.x, point3d.y, point3d.z))
-                } else {
-                    None
-                }
-            })
-            .collect()
+    fn extract_point3d(&self) -> Option<Vector3<f64>> {
+        let points_offset = self.points_offset;
+        let mut point3d = Vector3::zeros();
+        // This only works when triangulating exactly one point!
+        for m_c in 0..3 {
+            point3d[m_c] = self.params[points_offset + m_c];
+        }
+
+        let projection_error = self.residuals()?.iter().map(|e| e * e).sum::<f64>().sqrt();
+        if projection_error < TRIANGULATION_REPROJECTION_THRESHOLD {
+            Some(point3d)
+        } else {
+            None
+        }
     }
 }
 
@@ -599,6 +611,7 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for ReprojectionErrorMinimization<'_> {
     }
 
     fn residuals(&self) -> Option<OVector<f64, Dyn>> {
+        let points_offset = self.points_offset;
         let p2 = self.extract_p2();
         // Residuals contain point reprojection errors.
         let mut residuals = OVector::<f64, Dyn>::zeros(self.point_matches.len() * 4);
@@ -607,7 +620,7 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for ReprojectionErrorMinimization<'_> {
             let point3d = if self.optimize_points {
                 let mut point3d = Vector4::zeros();
                 for m_c in 0..3 {
-                    point3d[m_c] = self.params[12 + m_i * 3 + m_c];
+                    point3d[m_c] = self.params[points_offset + m_i * 3 + m_c];
                 }
                 point3d[3] = 1.0;
                 point3d
@@ -624,10 +637,11 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for ReprojectionErrorMinimization<'_> {
     }
 
     fn jacobian(&self) -> Option<OMatrix<f64, Dyn, Dyn>> {
+        let points_offset = self.points_offset;
         let parameters_len = if self.optimize_points {
-            12 + self.point_matches.len() * 3
+            points_offset + self.point_matches.len() * 3
         } else {
-            12
+            points_offset
         };
         // TODO: use sparse matrix?
         let mut jac = OMatrix::<f64, Dyn, Dyn>::zeros(self.point_matches.len() * 4, parameters_len);
@@ -638,9 +652,9 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for ReprojectionErrorMinimization<'_> {
             // Read data from parameters
             let p3d = if self.optimize_points {
                 Vector4::new(
-                    self.params[12 + m_i * 3 + 0],
-                    self.params[12 + m_i * 3 + 1],
-                    self.params[12 + m_i * 3 + 2],
+                    self.params[points_offset + m_i * 3 + 0],
+                    self.params[points_offset + m_i * 3 + 1],
+                    self.params[points_offset + m_i * 3 + 2],
                     1.0,
                 )
             } else {
@@ -655,6 +669,9 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for ReprojectionErrorMinimization<'_> {
             // Prc is the r-th row, c-th column of P
             // X is a 3D coordinate (4-component vector [x y z 1])
 
+            // Image 1 contains r1 and r2 (residuals for x1 and y1)
+            // r1 = -(P11*x+P12*y+P13*z+P14)/(P31*x+P32*y+P33*z+P34) = -(x/z)
+            // r2 = -(P21*x+P22*y+P23*z+P24)/(P31*x+P32*y+P33*z+P34) = -(y/z)
             // Image 2 contains r3 and r4 (residuals for x2 and y2), affected by p2 and the point coordinates.
             // r3 = -(P11*x+P12*y+P13*z+P14)/(P31*x+P32*y+P33*z+P34)
             // r4 = -(P21*x+P22*y+P23*z+P24)/(P31*x+P32*y+P33*z+P34)
@@ -664,53 +681,50 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for ReprojectionErrorMinimization<'_> {
             // Pr2 = P21*x+P22*y+P23*z+P24
             // Pr3 = P31*x+P32*y+P33*z+P34
             let p_r = p2 * &p3d;
-            // dr3/dP1i = -Poi/(P31*x+P32*y+P33*z+P34) = -Poi/Pr3
-            for p_col in 0..4 {
-                jac[(r3, p_col * 3 + 0)] = -p3d[p_col] / p_r[2];
+            if self.optimize_p2 {
+                // dr3/dP1i = -Poi/(P31*x+P32*y+P33*z+P34) = -Poi/Pr3
+                for p_col in 0..4 {
+                    jac[(r3, p_col * 3 + 0)] = -p3d[p_col] / p_r[2];
+                }
+                // dr4/dP2i = -Poi/(P31*x+P32*y+P33*z+P34) = -Poi/Pr3
+                for p_col in 0..4 {
+                    jac[(r4, p_col * 3 + 1)] = -p3d[p_col] / p_r[2];
+                }
+                // dr3/dP3i = Poi*(P11*x+P12*y+P13*z+P14)/((P31*x+P32*y+P33*z+P34)^2) = Poi*Pr1/(Pr3^2)
+                for p_col in 0..4 {
+                    jac[(r3, p_col * 3 + 2)] = p3d[p_col] * p_r[0] / (p_r[2] * p_r[2]);
+                }
+                // dr4/dP3i = Poi*(P21*x+P22*y+P23*z+P24)/((P31*x+P32*y+P33*z+P34)^2) = Poi*Pr2/(Pr3^2)
+                for p_col in 0..4 {
+                    jac[(r4, p_col * 3 + 2)] = p3d[p_col] * p_r[1] / (p_r[2] * p_r[2]);
+                }
             }
-            // dr4/dP2i = -Poi/(P31*x+P32*y+P33*z+P34) = -Poi/Pr3
-            for p_col in 0..4 {
-                jac[(r4, p_col * 3 + 1)] = -p3d[p_col] / p_r[2];
-            }
-            // dr3/dP3i = Poi*(P11*x+P12*y+P13*z+P14)/((P31*x+P32*y+P33*z+P34)^2) = Poi*Pr1/(Pr3^2)
-            for p_col in 0..4 {
-                jac[(r3, p_col * 3 + 2)] = p3d[p_col] * p_r[0] / (p_r[2] * p_r[2]);
-            }
-            // dr4/dP3i = Poi*(P21*x+P22*y+P23*z+P24)/((P31*x+P32*y+P33*z+P34)^2) = Poi*Pr2/(Pr3^2)
-            for p_col in 0..4 {
-                jac[(r4, p_col * 3 + 2)] = p3d[p_col] * p_r[1] / (p_r[2] * p_r[2]);
-            }
-            // Skip 3D point coordinate optimization if not required.
-            if !self.optimize_points {
-                continue;
-            }
-            // dr3/dx = -(P11*(P32*y+P33*z+P34)-P31*(P12*y+P13*z+P14))/(Pr3^2) = -(P11*Pr3[x=0]-P31*Pr1[x=0])/(Pr3^2)
-            // dr3/di = -(P1i*Pr3[i=0]-P3i*Pr1[i=0])/(Pr3^2)
-            // dr4/dx = -(P21*(P32*y+P33*z+P34)-P31*(P22*y+P23*z+P24))/(Pr3^2) = -(P21*Pr3[x=0]-P31*Pr2[x=0])/(Pr3^2)
-            // dr3/di = -(P2i*Pr3[i=0]-P3i*Pr2[i=0])/(Pr3^2)
-            for coord in 0..3 {
-                // Create a vector where coord = 0
-                let mut vec_diff = p3d;
-                vec_diff[coord] = 0.0;
-                // Create projection where coord = 0
-                let p_r_diff = p2 * vec_diff;
-                jac[(r3, 12 + m_i * 3 + coord)] = -(p2[(0, coord)] * p_r_diff[2]
-                    - p2[(2, coord)] * p_r_diff[0])
-                    / (p_r[2] * p_r[2]);
-                jac[(r4, 12 + m_i * 3 + coord)] = -(p2[(1, coord)] * p_r_diff[2]
-                    - p2[(2, coord)] * p_r_diff[1])
-                    / (p_r[2] * p_r[2]);
-            }
+            if self.optimize_points {
+                // dr3/dx = -(P11*(P32*y+P33*z+P34)-P31*(P12*y+P13*z+P14))/(Pr3^2) = -(P11*Pr3[x=0]-P31*Pr1[x=0])/(Pr3^2)
+                // dr3/di = -(P1i*Pr3[i=0]-P3i*Pr1[i=0])/(Pr3^2)
+                // dr4/dx = -(P21*(P32*y+P33*z+P34)-P31*(P22*y+P23*z+P24))/(Pr3^2) = -(P21*Pr3[x=0]-P31*Pr2[x=0])/(Pr3^2)
+                // dr3/di = -(P2i*Pr3[i=0]-P3i*Pr2[i=0])/(Pr3^2)
+                for coord in 0..3 {
+                    // Create a vector where coord = 0
+                    let mut vec_diff = p3d;
+                    vec_diff[coord] = 0.0;
+                    // Create projection where coord = 0
+                    let p_r_diff = p2 * vec_diff;
+                    jac[(r3, points_offset + m_i * 3 + coord)] = -(p2[(0, coord)] * p_r_diff[2]
+                        - p2[(2, coord)] * p_r_diff[0])
+                        / (p_r[2] * p_r[2]);
+                    jac[(r4, points_offset + m_i * 3 + coord)] = -(p2[(1, coord)] * p_r_diff[2]
+                        - p2[(2, coord)] * p_r_diff[1])
+                        / (p_r[2] * p_r[2]);
+                }
 
-            // Image 1 contains r1 and r2 (residuals for x1 and y1)
-            // r1 = -(P11*x+P12*y+P13*z+P14)/(P31*x+P32*y+P33*z+P34) = -(x/z)
-            // r2 = -(P21*x+P22*y+P23*z+P24)/(P31*x+P32*y+P33*z+P34) = -(y/z)
-            // dr1/dx = -1/z; dr1/dz = x/(z^2)
-            jac[(r1, 12 + m_i * 3 + 0)] = -1.0 / p3d.z;
-            jac[(r1, 12 + m_i * 3 + 2)] = p3d.x / (p3d.z * p3d.z);
-            // dr2/dy = -1/z; dr2/dz = y/(z^2)
-            jac[(r2, 12 + m_i * 3 + 1)] = -1.0 / p3d.z;
-            jac[(r2, 12 + m_i * 3 + 2)] = p3d.y / (p3d.z * p3d.z);
+                // dr1/dx = -1/z; dr1/dz = x/(z^2)
+                jac[(r1, points_offset + m_i * 3 + 0)] = -1.0 / p3d.z;
+                jac[(r1, points_offset + m_i * 3 + 2)] = p3d.x / (p3d.z * p3d.z);
+                // dr2/dy = -1/z; dr2/dz = y/(z^2)
+                jac[(r2, points_offset + m_i * 3 + 1)] = -1.0 / p3d.z;
+                jac[(r2, points_offset + m_i * 3 + 2)] = p3d.y / (p3d.z * p3d.z);
+            }
         }
 
         Some(jac)

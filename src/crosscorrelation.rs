@@ -11,16 +11,19 @@ const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
 const THRESHOLD_AFFINE: f32 = 0.6;
 const THRESHOLD_PERSPECTIVE: f32 = 0.6;
 const MIN_STDEV_AFFINE: f32 = 1.0;
-const MIN_STDEV_PERSPECTIVE: f32 = 1.0;
-const CORRIDOR_SIZE: usize = 20;
+const MIN_STDEV_PERSPECTIVE: f32 = 5.0;
+const CORRIDOR_SIZE: usize = 2;
 // Decrease when using a low-powered GPU
 const CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 512;
 const SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 1024;
 const CORRIDOR_SEGMENT_LENGTH_LOWPOWER: usize = 8;
 const SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER: usize = 128;
 const NEIGHBOR_DISTANCE: usize = 10;
-const CORRIDOR_EXTEND_RANGE: f64 = 1.0;
+const CORRIDOR_EXTEND_RANGE: f64 = 0.25;
 const CORRIDOR_MIN_RANGE: f64 = 2.5;
+
+const PEAK_FILTER_STDEV_THRESHOLD: f32 = 1.5;
+const PEAK_FILTER_SEARCH_AREA: usize = 6;
 
 type Match = (u32, u32);
 
@@ -430,6 +433,24 @@ impl PointCorrelations {
         }
         scale - 1
     }
+
+    pub fn apply_peak_filter(&mut self) {
+        let (nrows, ncols) = self.correlated_points.shape();
+        let mut filtered_points = DMatrix::from_element(nrows, ncols, None);
+
+        filtered_points
+            .column_iter_mut()
+            .enumerate()
+            .par_bridge()
+            .for_each(|(col, mut out_col)| {
+                out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
+                    if point_not_peak(&self.correlated_points, row, col) {
+                        *out_point = self.correlated_points[(row, col)];
+                    }
+                })
+            });
+        self.correlated_points = filtered_points;
+    }
 }
 
 struct PointData {
@@ -496,6 +517,69 @@ fn compute_compact_point_data(img: &DMatrix<u8>, row: usize, col: usize) -> Opti
     result.stdev = (result.stdev / KERNEL_POINT_COUNT as f32).sqrt();
 
     Some(result)
+}
+
+#[inline]
+fn point_not_peak(img: &DMatrix<Option<Match>>, row: usize, col: usize) -> bool {
+    const SEARCH_RADIUS: usize = PEAK_FILTER_SEARCH_AREA;
+    const SEARCH_WIDTH: usize = PEAK_FILTER_SEARCH_AREA * 2 + 1;
+    if !correlation::point_inside_bounds::<SEARCH_RADIUS>(img.shape(), row, col) {
+        return false;
+    };
+    let point_distance = if let Some(value) = img[(row, col)] {
+        let dist = (row as f32 - value.0 as f32, col as f32 - value.1 as f32);
+        (dist.0 * dist.0 + dist.1 * dist.1).sqrt()
+    } else {
+        return false;
+    };
+    let mut avg = 0.0;
+    let mut stdev = 0.0;
+    let mut count = 0;
+    for r in 0..SEARCH_WIDTH {
+        let srow = (row + r).saturating_sub(SEARCH_RADIUS);
+        for c in 0..SEARCH_WIDTH {
+            let scol = (col + c).saturating_sub(SEARCH_RADIUS);
+            if srow == row && scol == col {
+                continue;
+            }
+            let value = img[(srow, scol)];
+            let distance = if let Some(value) = value {
+                let dist = (srow as f32 - value.0 as f32, scol as f32 - value.1 as f32);
+                (dist.0 * dist.0 + dist.1 * dist.1).sqrt()
+            } else {
+                continue;
+            };
+            avg += distance as f32;
+            count += 1;
+        }
+    }
+    if count == 0 {
+        return false;
+    }
+
+    avg /= count as f32;
+
+    for r in 0..SEARCH_WIDTH {
+        let srow = (row + r).saturating_sub(SEARCH_RADIUS);
+        for c in 0..SEARCH_WIDTH {
+            let scol = (col + c).saturating_sub(SEARCH_RADIUS);
+            if srow == row && scol == col {
+                continue;
+            }
+            let value = img[(srow, scol)];
+            let distance = if let Some(value) = value {
+                let dist = (srow as f32 - value.0 as f32, scol as f32 - value.1 as f32);
+                (dist.0 * dist.0 + dist.1 * dist.1).sqrt()
+            } else {
+                continue;
+            };
+            let delta = distance - avg;
+            stdev += delta * delta;
+        }
+    }
+    stdev = (stdev / count as f32).sqrt();
+
+    (point_distance - avg).abs() < stdev * PEAK_FILTER_STDEV_THRESHOLD
 }
 
 mod gpu {
