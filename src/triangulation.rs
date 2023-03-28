@@ -5,14 +5,29 @@ use rayon::prelude::*;
 use crate::fundamentalmatrix::FundamentalMatrix;
 
 const HISTOGRAM_FILTER_BINS: usize = 100;
-const HISTOGRAM_FILTER_DISCARD_PERCENTILE: f32 = 0.025;
-const HISTOGRAM_FILTER_EPSILON: f32 = 0.001;
-const PERSPECTIVE_PROJECTION_OPTIMIZATION_MAX_POINTS: usize = 100000;
-const TRIANGULATION_MIN_SCALE: f64 = 0.0001;
+const HISTOGRAM_FILTER_DISCARD_PERCENTILE: f64 = 0.025;
+const HISTOGRAM_FILTER_EPSILON: f64 = 0.001;
+const PERSPECTIVE_PROJECTION_OPTIMIZATION_MAX_POINTS: usize = 1000000;
+const OPTIMIZE_PROJECTION_MATRIX: bool = true;
+// TODO: this should be relative to the image size
+const OPTIMIZATION_REPROJECTION_THRESHOLD: f64 = 1.0;
+const TRIANGULATION_REPROJECTION_THRESHOLD: f64 = 5.0;
 
-pub struct Surface {
-    pub points: DMatrix<Option<f32>>,
+pub struct Point {
+    pub original: (usize, usize),
+    pub reconstructed: Vector3<f64>,
 }
+
+impl Point {
+    fn new(original: (usize, usize), reconstructed: Vector3<f64>) -> Point {
+        Point {
+            original,
+            reconstructed,
+        }
+    }
+}
+
+pub type Surface = Vec<Point>;
 
 type Match = (u32, u32);
 
@@ -20,26 +35,28 @@ pub fn triangulate_affine(
     correlated_points: &DMatrix<Option<Match>>,
     scale: (f32, f32, f32),
 ) -> Surface {
-    let mut points = DMatrix::<Option<f32>>::from_element(
-        correlated_points.nrows(),
-        correlated_points.ncols(),
-        None,
-    );
-
-    let depth_scale = scale.2 * ((scale.0 + scale.1) / 2.0);
-
-    points
-        .column_iter_mut()
+    let mut points = correlated_points
+        .column_iter()
         .enumerate()
         .par_bridge()
-        .for_each(|(col, mut out_col)| {
-            out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                *out_point = triangulate_point_affine((row, col), correlated_points[(row, col)])
-                    .map(|depth| depth * depth_scale);
-            })
-        });
+        .flat_map(|(col, out_col)| {
+            let triangulated_points: Vec<Point> = out_col
+                .iter()
+                .enumerate()
+                .filter_map(|(row, matched_point)| {
+                    triangulate_point_affine((row, col), matched_point)
+                })
+                .collect();
+            triangulated_points
+        })
+        .collect();
     filter_histogram(&mut points);
-    Surface { points }
+
+    let depth_scale = (scale.2 * ((scale.0 + scale.1) / 2.0)) as f64;
+    points
+        .iter_mut()
+        .for_each(|p| p.reconstructed.z *= depth_scale);
+    points
 }
 
 pub fn triangulate_perspective(
@@ -47,21 +64,13 @@ pub fn triangulate_perspective(
     p2: &Matrix3x4<f64>,
     scale: (f32, f32, f32),
 ) -> Surface {
-    let mut points = DMatrix::<Option<f32>>::from_element(
-        correlated_points.nrows(),
-        correlated_points.ncols(),
-        None,
-    );
-    let depth_scale = scale.2;
-
-    /*
     // TODO: show progress
-    let points3d: Vec<Vector3<f64>> = correlated_points
+    let mut points: Vec<Point> = correlated_points
         .column_iter()
         .enumerate()
         .par_bridge()
         .flat_map(|(col, out_col)| {
-            let col_points: Vec<Vector3<f64>> = out_col
+            let col_points: Vec<Point> = out_col
                 .iter()
                 .enumerate()
                 .filter_map(|(row, _)| {
@@ -69,9 +78,14 @@ pub fn triangulate_perspective(
                     let point2 = correlated_points[(row, col)]?;
                     let point2 = (point2.1 as usize, point2.0 as usize);
                     let m = (point1, point2);
-                    if let Ok(res) = FundamentalMatrix::optimize_triangulate_point(p2, &m) {
-                        Some(Vector3::new(point1.0 as f64, point1.1 as f64, res.z))
-                        //Some(res)
+                    let (point3d, err) =
+                        FundamentalMatrix::optimize_triangulate_point(&p2, &m).ok()?;
+                    if err < TRIANGULATION_REPROJECTION_THRESHOLD {
+                        Some(Point::new(
+                            (col, row),
+                            //Vector3::new(col as f64, row as f64, point3d.z),
+                            point3d,
+                        ))
                     } else {
                         None
                     }
@@ -80,14 +94,14 @@ pub fn triangulate_perspective(
             col_points
         })
         .collect();
-    */
 
-    let points3d: Vec<Vector3<f64>> = points
+    /*
+    let mut points: Vec<Point> = correlated_points
         .column_iter()
         .enumerate()
         .par_bridge()
         .flat_map(|(col, out_col)| {
-            let col_points: Vec<Vector3<f64>> = out_col
+            let col_points: Vec<Point> = out_col
                 .iter()
                 .enumerate()
                 .flat_map(|(row, _)| {
@@ -96,9 +110,8 @@ pub fn triangulate_perspective(
                     if let Some(point2) = correlated_points[(row, col)] {
                         let x2 = point2.1 as f64;
                         let y2 = point2.0 as f64;
-                        let z2 = triangulate_point_perspective(&p2, (x1, y1), (x2, y2))?;
-                        Some(Vector3::new(x1, y1, z2.z))
-                        //Some(z2)
+                        let point3d = triangulate_point_perspective(&p2, (x1, y1), (x2, y2))?;
+                        Some(Point::new((col, row), point3d))
                     } else {
                         None
                     }
@@ -107,73 +120,26 @@ pub fn triangulate_perspective(
             col_points
         })
         .collect();
-
-    // TODO: refactor this
-    let x_min = points3d
-        .iter()
-        .map(|point| point.x)
-        .min_by(|p1, p2| p1.partial_cmp(&p2).unwrap())
-        .unwrap();
-    let x_max = points3d
-        .iter()
-        .map(|point| point.x)
-        .max_by(|p1, p2| p1.partial_cmp(&p2).unwrap())
-        .unwrap();
-    let y_min = points3d
-        .iter()
-        .map(|point| point.y)
-        .min_by(|p1, p2| p1.partial_cmp(&p2).unwrap())
-        .unwrap();
-    let y_max = points3d
-        .iter()
-        .map(|point| point.y)
-        .max_by(|p1, p2| p1.partial_cmp(&p2).unwrap())
-        .unwrap();
-
-    let z_min = points3d
-        .iter()
-        .map(|point| point.z)
-        .min_by(|p1, p2| p1.partial_cmp(&p2).unwrap())
-        .unwrap();
-    let z_max = points3d
-        .iter()
-        .map(|point| point.z)
-        .max_by(|p1, p2| p1.partial_cmp(&p2).unwrap())
-        .unwrap();
-
-    println!(
-        "x = {} {} y= {} {} z={} {}",
-        x_max, x_min, y_max, y_min, z_max, z_min
-    );
-
-    let max_scale = (x_max - x_min).max(y_max - y_min);
-    println!("scale={}", max_scale);
-
-    points3d.into_iter().for_each(|point| {
-        let coord_x = correlated_points.ncols() as f64 * (point.x - x_min) / (x_max - x_min);
-        let coord_y = correlated_points.nrows() as f64 * (point.y - y_min) / (y_max - y_min);
-        let coord_x_signed = coord_x.round() as i32;
-        let coord_y_signed = coord_y.round() as i32;
-        if coord_x_signed >= points.ncols() as i32 || coord_y_signed >= points.nrows() as i32 {
-            return;
-        }
-        let row = coord_y_signed.clamp(0, points.nrows() as i32 - 1) as usize;
-        let col = coord_x_signed.clamp(0, points.ncols() as i32 - 1) as usize;
-        let depth = (point.z - z_min) * correlated_points.nrows() as f64 * depth_scale as f64
-            / (z_max - z_min);
-        points[(row, col)] = Some(depth as f32);
-    });
+     */
 
     filter_histogram(&mut points);
-    Surface { points }
+
+    let depth_scale = scale.2 as f64;
+    points
+        .iter_mut()
+        .for_each(|p| p.reconstructed.z *= depth_scale);
+    points
 }
 
 #[inline]
-fn triangulate_point_affine(p1: (usize, usize), p2: Option<Match>) -> Option<f32> {
+fn triangulate_point_affine(p1: (usize, usize), p2: &Option<Match>) -> Option<Point> {
     if let Some(p2) = p2 {
-        let dx = p1.1 as f32 - p2.1 as f32;
-        let dy = p1.0 as f32 - p2.0 as f32;
-        return Some((dx * dx + dy * dy).sqrt());
+        let dx = p1.1 as f64 - p2.1 as f64;
+        let dy = p1.0 as f64 - p2.0 as f64;
+        let distance = (dx * dx + dy * dy).sqrt();
+        let point3d = Vector3::new(p1.1 as f64, p1.0 as f64, distance);
+
+        return Some(Point::new((p1.1, p1.0), point3d));
     }
     None
 }
@@ -203,8 +169,7 @@ fn triangulate_point_perspective(
         + projection2.y * projection2.y)
         .sqrt();
 
-    // TODO: extract this into a constant
-    if projection_error > 25.0 {
+    if projection_error > TRIANGULATION_REPROJECTION_THRESHOLD {
         return None;
     }
 
@@ -267,9 +232,9 @@ pub fn find_projection_matrix(
                 .iter()
                 .enumerate()
                 .flat_map(|(row, _)| {
-                    let point1 = (row as usize, col as usize);
+                    let point1 = (col as usize, row as usize);
                     if let Some(point2) = correlated_points[(row, col)] {
-                        let point2 = (point2.0 as usize, point2.1 as usize);
+                        let point2 = (point2.1 as usize, point2.0 as usize);
                         Some((point1, point2))
                     } else {
                         None
@@ -314,22 +279,17 @@ fn validate_projection_matrix(
         .sum()
 }
 
-fn filter_histogram(points: &mut DMatrix<Option<f32>>) {
-    let (min, max) = points
-        .iter()
-        .flatten()
-        .fold((f32::MAX, f32::MIN), |acc, v| {
-            (acc.0.min(*v), acc.1.max(*v))
-        });
+fn filter_histogram(points: &mut Surface) {
+    let (min, max) = points.iter().fold((f64::MAX, f64::MIN), |acc, p| {
+        let depth = p.reconstructed.z;
+        (acc.0.min(depth), acc.1.max(depth))
+    });
 
     let mut histogram_sum = 0usize;
     let mut histogram = [0usize; HISTOGRAM_FILTER_BINS];
     points.iter().for_each(|p| {
-        let p = match p {
-            Some(p) => p,
-            None => return,
-        };
-        let pos = ((p - min) * HISTOGRAM_FILTER_BINS as f32 / (max - min)).round();
+        let depth = p.reconstructed.z;
+        let pos = ((depth - min) * HISTOGRAM_FILTER_BINS as f64 / (max - min)).round();
         let pos = (pos as usize).clamp(0, HISTOGRAM_FILTER_BINS - 1);
         histogram[pos] += 1;
         histogram_sum += 1;
@@ -339,35 +299,30 @@ fn filter_histogram(points: &mut DMatrix<Option<f32>>) {
     let mut min_depth = min;
     for (i, bin) in histogram.iter().enumerate() {
         current_histogram_sum += bin;
-        if (current_histogram_sum as f32 / histogram_sum as f32)
+        if (current_histogram_sum as f64 / histogram_sum as f64)
             > HISTOGRAM_FILTER_DISCARD_PERCENTILE
         {
             break;
         }
         min_depth = min
-            + (i as f32 / HISTOGRAM_FILTER_BINS as f32 - HISTOGRAM_FILTER_EPSILON) * (max - min);
+            + (i as f64 / HISTOGRAM_FILTER_BINS as f64 - HISTOGRAM_FILTER_EPSILON) * (max - min);
     }
     let mut current_histogram_sum = 0;
     let mut max_depth = max;
     for (i, bin) in histogram.iter().enumerate().rev() {
         current_histogram_sum += bin;
-        if (current_histogram_sum as f32 / histogram_sum as f32)
+        if (current_histogram_sum as f64 / histogram_sum as f64)
             > HISTOGRAM_FILTER_DISCARD_PERCENTILE
         {
             break;
         }
         max_depth = min
-            + (i as f32 / HISTOGRAM_FILTER_BINS as f32 + HISTOGRAM_FILTER_EPSILON) * (max - min);
+            + (i as f64 / HISTOGRAM_FILTER_BINS as f64 + HISTOGRAM_FILTER_EPSILON) * (max - min);
     }
 
-    points.iter_mut().for_each(|p| {
-        let p_value = match p {
-            Some(p) => p,
-            None => return,
-        };
-        if *p_value < min_depth || *p_value > max_depth {
-            *p = None;
-        }
+    points.retain(|point| {
+        let depth = point.reconstructed.z;
+        depth >= min_depth && depth <= max_depth
     })
 }
 
@@ -375,10 +330,12 @@ pub fn f_to_projection_matrix(
     f: &Matrix3<f64>,
     correlated_points: &DMatrix<Option<Match>>,
 ) -> Option<Matrix3x4<f64>> {
-    //FundamentalMatrix::f_to_projection_matrix(f)
+    let p2 = FundamentalMatrix::f_to_projection_matrix(f)?;
+    if !OPTIMIZE_PROJECTION_MATRIX {
+        return Some(p2);
+    }
 
-    const SELECT_RANDOM_MATCHES: usize = PERSPECTIVE_PROJECTION_OPTIMIZATION_MAX_POINTS;
-
+    // Select points with a low reprojection error.
     let point_matches: Vec<((usize, usize), (usize, usize))> = correlated_points
         .column_iter()
         .enumerate()
@@ -389,8 +346,12 @@ pub fn f_to_projection_matrix(
                 .enumerate()
                 .flat_map(|(row, _)| {
                     let point1 = (col, row);
-                    if let Some(point2) = correlated_points[(row, col)] {
-                        let point2 = (point2.1 as usize, point2.0 as usize);
+                    let point2 = correlated_points[(row, col)]?;
+                    let point2 = (point2.1 as usize, point2.0 as usize);
+                    let m = (point1, point2);
+                    let (point3d, err) =
+                        FundamentalMatrix::optimize_triangulate_point(&p2, &m).ok()?;
+                    if err < OPTIMIZATION_REPROJECTION_THRESHOLD {
                         Some((point1, point2))
                     } else {
                         None
@@ -402,6 +363,7 @@ pub fn f_to_projection_matrix(
         .collect();
 
     let mut rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
+    const SELECT_RANDOM_MATCHES: usize = PERSPECTIVE_PROJECTION_OPTIMIZATION_MAX_POINTS;
     let point_matches = if point_matches.len() > SELECT_RANDOM_MATCHES {
         point_matches
             .choose_multiple(&mut rng, SELECT_RANDOM_MATCHES)

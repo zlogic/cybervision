@@ -375,7 +375,7 @@ pub fn reconstruct(args: &Cli) {
 
         let img1 = SourceImage::load_rgb(&args.img1).unwrap();
         let result = output::output(
-            surface.points,
+            surface,
             img1,
             &args.img_out,
             interpolation_mode,

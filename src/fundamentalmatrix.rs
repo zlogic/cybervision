@@ -22,8 +22,6 @@ const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 100;
 const RANSAC_CHECK_INTERVAL: usize = 50_000;
 const RANSAC_RANK_EPSILON_PERSPECTIVE: f64 = 0.001;
 const PERSPECTIVE_OPTIMIZE_F: bool = true;
-// TODO: this should be relative to the image size
-const TRIANGULATION_REPROJECTION_THRESHOLD: f64 = 25.0;
 
 type Point = (usize, usize);
 type Match = (Point, Point);
@@ -387,9 +385,12 @@ impl FundamentalMatrix {
 
     #[inline]
     pub fn f_to_projection_matrix(f: &Matrix3<f64>) -> Option<Matrix3x4<f64>> {
-        let usv = f.svd(true, true);
+        let usv = f.svd(true, false);
         let u = usv.u?;
-        let e2 = u.row(2);
+        // TODO: clean this up
+        //let vt = usv.v_t?;
+        let e2 = u.column(2);
+        //let e2 = vt.row(2);
         let e2_skewsymmetric =
             Matrix3::new(0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0);
         let e2s_f = e2_skewsymmetric * f;
@@ -476,20 +477,14 @@ impl FundamentalMatrix {
     pub fn optimize_triangulate_point(
         p2: &Matrix3x4<f64>,
         point: &Match,
-    ) -> Result<Vector3<f64>, LMError> {
+    ) -> Result<(Vector3<f64>, f64), LMError> {
         let matches = [*point];
         let problem = ReprojectionErrorMinimization::new(p2.clone(), &matches, false, true);
         let (result, report) = LevenbergMarquardt::new().minimize(problem);
         if !report.termination.was_successful() {
             return Err(LMError::new(report.termination));
         }
-        if let Some(point3d) = result.extract_point3d() {
-            Ok(point3d)
-        } else {
-            Err(LMError::new(levenberg_marquardt::TerminationReason::User(
-                "reprojection error",
-            )))
-        }
+        Ok(result.extract_point3d())
     }
 }
 
@@ -580,7 +575,7 @@ impl ReprojectionErrorMinimization<'_> {
     }
 
     #[inline]
-    fn extract_point3d(&self) -> Option<Vector3<f64>> {
+    fn extract_point3d(&self) -> (Vector3<f64>, f64) {
         let points_offset = self.points_offset;
         let mut point3d = Vector3::zeros();
         // This only works when triangulating exactly one point!
@@ -588,12 +583,14 @@ impl ReprojectionErrorMinimization<'_> {
             point3d[m_c] = self.params[points_offset + m_c];
         }
 
-        let projection_error = self.residuals()?.iter().map(|e| e * e).sum::<f64>().sqrt();
-        if projection_error < TRIANGULATION_REPROJECTION_THRESHOLD {
-            Some(point3d)
-        } else {
-            None
-        }
+        let projection_error = self
+            .residuals()
+            .unwrap()
+            .iter()
+            .map(|e| e * e)
+            .sum::<f64>()
+            .sqrt();
+        (point3d, projection_error)
     }
 }
 
@@ -680,7 +677,7 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for ReprojectionErrorMinimization<'_> {
             // Pr1 = P11*x+P12*y+P13*z+P14
             // Pr2 = P21*x+P22*y+P23*z+P24
             // Pr3 = P31*x+P32*y+P33*z+P34
-            let p_r = p2 * &p3d;
+            let p_r = p2 * p3d;
             if self.optimize_p2 {
                 // dr3/dP1i = -Poi/(P31*x+P32*y+P33*z+P34) = -Poi/Pr3
                 for p_col in 0..4 {

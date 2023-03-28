@@ -1,19 +1,19 @@
 use std::{
     error,
-    f32::EPSILON,
-    fmt,
     fs::File,
     io::{BufWriter, Write},
     path::Path,
 };
 
 use image::{RgbImage, Rgba, RgbaImage};
-use nalgebra::DMatrix;
+use nalgebra::{DMatrix, Vector3};
 use rayon::prelude::*;
 use spade::{
     handles::{FaceHandle, InnerTag},
-    DelaunayTriangulation, InsertionError, Point2, Triangulation,
+    DelaunayTriangulation, HasPosition, Point2, Triangulation,
 };
+
+use crate::triangulation;
 
 #[derive(Debug, PartialEq)]
 pub enum InterpolationMode {
@@ -35,33 +35,29 @@ where
     fn report_status(&self, pos: f32);
 }
 
-type TriangulatedSurface = DelaunayTriangulation<Point2<f32>>;
-
-type TriangulatedSurfaceFace<'a> = FaceHandle<'a, InnerTag, Point2<f32>, (), (), ()>;
+type TriangulatedSurfaceFace<'a> = FaceHandle<'a, InnerTag, triangulation::Point, (), (), ()>;
 
 pub fn output<PL: ProgressListener>(
-    surface: DMatrix<Option<f32>>,
+    points: triangulation::Surface,
     img1: RgbImage,
     path: &str,
     interpolation: InterpolationMode,
     vertex_mode: VertexMode,
     progress_listener: Option<&PL>,
 ) -> Result<(), Box<dyn error::Error>> {
-    let surface_points = surface_points(&surface);
-    let surface_vertices_uninterpolated = match interpolation {
-        InterpolationMode::None => triangulate_without_interpolation(&surface, &surface_points),
-        InterpolationMode::Delaunay => vec![],
-    };
+    let range = CoordsRange::new(&points);
+    let img1_shape = (img1.height() as usize, img1.width() as usize);
     let mut writer: Box<dyn MeshWriter> = if path.to_lowercase().ends_with(".obj") {
-        Box::new(ObjWriter::new(surface, path, img1, vertex_mode)?)
+        Box::new(ObjWriter::new(range, path, img1, vertex_mode)?)
     } else if path.to_lowercase().ends_with(".ply") {
-        Box::new(PlyWriter::new(surface, path, img1, vertex_mode)?)
+        Box::new(PlyWriter::new(range, path, img1, vertex_mode)?)
     } else {
-        Box::new(ImageWriter::new(surface, path)?)
+        Box::new(ImageWriter::new(range, path, img1)?)
     };
 
     if interpolation == InterpolationMode::Delaunay {
-        let triangulated_surface = triangulate_image(surface_points)?;
+        let triangulated_surface: DelaunayTriangulation<triangulation::Point> =
+            Triangulation::bulk_load(points)?;
 
         if let Some(pl) = progress_listener {
             pl.report_status(0.2);
@@ -80,7 +76,7 @@ pub fn output<PL: ProgressListener>(
                 if let Some(pl) = progress_listener {
                     pl.report_status(0.2 + 0.2 * (i as f32 / nvertices));
                 }
-                writer.output_vertex(v.position().x, v.position().y)
+                writer.output_vertex(v.data())
             })?;
         triangulated_surface
             .vertices()
@@ -90,7 +86,7 @@ pub fn output<PL: ProgressListener>(
                 if let Some(pl) = progress_listener {
                     pl.report_status(0.4 + 0.2 * (i as f32 / nvertices));
                 }
-                writer.output_vertex_uv(v.position().x, v.position().y)
+                writer.output_vertex_uv(v.data().original)
             })?;
         let nfaces = triangulated_surface.num_inner_faces() as f32;
         triangulated_surface
@@ -106,21 +102,21 @@ pub fn output<PL: ProgressListener>(
         return writer.complete();
     }
 
-    let npoints = surface_points.len() as f32;
-    writer.output_header(surface_points.len(), surface_vertices_uninterpolated.len())?;
-    surface_points.iter().enumerate().try_for_each(|(i, p)| {
+    let surface_vertices_uninterpolated = triangulate_without_interpolation(img1_shape, &points);
+    let npoints = points.len() as f32;
+    writer.output_header(points.len(), surface_vertices_uninterpolated.len())?;
+    points.iter().enumerate().try_for_each(|(i, p)| {
         if let Some(pl) = progress_listener {
             pl.report_status(0.2 + 0.2 * (i as f32 / npoints));
         }
-        writer.output_vertex(p.x, p.y)
+        writer.output_vertex(p)
     })?;
-    surface_points.iter().enumerate().try_for_each(|(i, p)| {
+    points.iter().enumerate().try_for_each(|(i, p)| {
         if let Some(pl) = progress_listener {
             pl.report_status(0.4 + 0.2 * (i as f32 / npoints));
         }
-        writer.output_vertex_uv(p.x, p.y)
+        writer.output_vertex_uv(p.original)
     })?;
-    drop(surface_points);
     surface_vertices_uninterpolated
         .iter()
         .enumerate()
@@ -133,14 +129,73 @@ pub fn output<PL: ProgressListener>(
     return writer.complete();
 }
 
+struct CoordsRange {
+    min_x: f64,
+    max_x: f64,
+    min_y: f64,
+    max_y: f64,
+    min_z: f64,
+    max_z: f64,
+}
+
+impl CoordsRange {
+    fn new(points: &triangulation::Surface) -> CoordsRange {
+        let (min_x, max_x, min_y, max_y, min_z, max_z) = points.iter().fold(
+            (f64::MAX, f64::MIN, f64::MAX, f64::MIN, f64::MAX, f64::MIN),
+            |acc, p| {
+                let x = p.reconstructed.x;
+                let y = p.reconstructed.y;
+                let z = p.reconstructed.z;
+                (
+                    acc.0.min(x),
+                    acc.1.max(x),
+                    acc.2.min(y),
+                    acc.3.max(y),
+                    acc.4.min(z),
+                    acc.5.max(z),
+                )
+            },
+        );
+        CoordsRange {
+            min_x,
+            max_x,
+            min_y,
+            max_y,
+            min_z,
+            max_z,
+        }
+    }
+
+    #[inline]
+    fn normalize(&self, p: &triangulation::Point) -> Vector3<f64> {
+        // TODO: use a better normalization approach
+        // TODO: Do not renormalize parallel projection
+        let x = (p.reconstructed.x - self.min_x) * 100.0 / (self.max_x - self.min_x);
+        let y = (self.max_y - p.reconstructed.y) * 100.0 / (self.max_y - self.min_y);
+        let z = (p.reconstructed.z - self.min_z) * 100.0 / (self.max_z - self.min_z);
+        /*
+        let (x, y, z) = (
+            p.original.0 as f32,
+            self.img1.height() as f32 - p.original.1 as f32,
+            ((p.reconstructed.z - self.range.min_z) * self.img1.width() as f64
+                / (self.range.max_z - self.range.min_z)) as f32,
+        );
+        */
+        Vector3::new(x, y, z)
+    }
+}
+
 trait MeshWriter {
     fn output_header(&mut self, _nvertices: usize, _nfaces: usize) -> Result<(), std::io::Error> {
         Ok(())
     }
-    fn output_vertex(&mut self, _x: f32, _y: f32) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex(
+        &mut self,
+        _point: &triangulation::Point,
+    ) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
-    fn output_vertex_uv(&mut self, _x: f32, _y: f32) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex_uv(&mut self, _point: (usize, usize)) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
     fn output_face(&mut self, _f: TriangulatedSurfaceFace) -> Result<(), Box<dyn error::Error>> {
@@ -158,7 +213,7 @@ trait MeshWriter {
 const WRITE_BUFFER_SIZE: usize = 1024 * 1024;
 
 struct PlyWriter {
-    surface: DMatrix<Option<f32>>,
+    range: CoordsRange,
     writer: BufWriter<File>,
     buffer: Vec<u8>,
     vertex_mode: VertexMode,
@@ -167,7 +222,7 @@ struct PlyWriter {
 
 impl PlyWriter {
     fn new(
-        surface: DMatrix<Option<f32>>,
+        range: CoordsRange,
         path: &str,
         img1: RgbImage,
         vertex_mode: VertexMode,
@@ -176,7 +231,7 @@ impl PlyWriter {
         let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
 
         Ok(PlyWriter {
-            surface,
+            range,
             writer,
             buffer,
             vertex_mode,
@@ -220,24 +275,22 @@ impl MeshWriter for PlyWriter {
         writeln!(w, "end_header")
     }
 
-    fn output_vertex(&mut self, x: f32, y: f32) -> Result<(), Box<dyn error::Error>> {
-        let depth = match self.surface[(y.round() as usize, x.round() as usize)] {
-            Some(depth) => Ok(depth),
-            None => Err(OutputError::new("Point depth not found")),
-        }?;
+    fn output_vertex(&mut self, p: &triangulation::Point) -> Result<(), Box<dyn error::Error>> {
         let color = match self.vertex_mode {
             VertexMode::Plain | VertexMode::Texture => None,
             VertexMode::Color => self
                 .img1
-                .get_pixel_checked(x.round() as u32, y.round() as u32)
+                .get_pixel_checked(p.original.0 as u32, p.original.1 as u32)
                 .map(|pixel| pixel.0),
         };
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
 
+        let p = self.range.normalize(p);
+        let (x, y, z) = (p.x as f32, p.y as f32, p.z as f32);
         w.write_all(&x.to_be_bytes())?;
-        w.write_all(&(self.surface.nrows() as f32 - y).to_be_bytes())?;
-        w.write_all(&depth.to_be_bytes())?;
+        w.write_all(&y.to_be_bytes())?;
+        w.write_all(&z.to_be_bytes())?;
         if let Some(color) = color {
             w.write_all(&color)?;
         }
@@ -273,7 +326,7 @@ impl MeshWriter for PlyWriter {
 }
 
 struct ObjWriter {
-    surface: DMatrix<Option<f32>>,
+    range: CoordsRange,
     writer: BufWriter<File>,
     buffer: Vec<u8>,
     vertex_mode: VertexMode,
@@ -283,7 +336,7 @@ struct ObjWriter {
 
 impl ObjWriter {
     fn new(
-        surface: DMatrix<Option<f32>>,
+        range: CoordsRange,
         path: &str,
         img1: RgbImage,
         vertex_mode: VertexMode,
@@ -291,7 +344,7 @@ impl ObjWriter {
         let writer = BufWriter::new(File::create(path)?);
         let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
         Ok(ObjWriter {
-            surface,
+            range,
             writer,
             buffer,
             vertex_mode,
@@ -353,12 +406,7 @@ impl MeshWriter for ObjWriter {
         Ok(())
     }
 
-    fn output_vertex(&mut self, x: f32, y: f32) -> Result<(), Box<dyn error::Error>> {
-        let depth = match self.surface[(y.round() as usize, x.round() as usize)] {
-            Some(depth) => Ok(depth),
-            None => Err(OutputError::new("Point depth not found")),
-        };
-        let depth = depth?;
+    fn output_vertex(&mut self, p: &triangulation::Point) -> Result<(), Box<dyn error::Error>> {
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
 
@@ -366,29 +414,30 @@ impl MeshWriter for ObjWriter {
             VertexMode::Plain | VertexMode::Texture => None,
             VertexMode::Color => self
                 .img1
-                .get_pixel_checked(x.round() as u32, y.round() as u32)
+                .get_pixel_checked(p.original.0 as u32, p.original.1 as u32)
                 .map(|pixel| pixel.0),
         };
 
+        let p = self.range.normalize(p);
         if let Some(color) = color {
             writeln!(
                 w,
                 "v {} {} {} {} {} {}",
-                x,
-                self.surface.nrows() as f32 - y,
-                depth,
+                p.x,
+                p.y,
+                p.z,
                 color[0] as f32 / 255.0,
                 color[1] as f32 / 255.0,
                 color[2] as f32 / 255.0,
             )?
         } else {
-            writeln!(w, "v {} {} {}", x, self.surface.nrows() as f32 - y, depth)?
+            writeln!(w, "v {} {} {}", p.x, p.y, p.z)?
         }
 
         Ok(())
     }
 
-    fn output_vertex_uv(&mut self, x: f32, y: f32) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex_uv(&mut self, p: (usize, usize)) -> Result<(), Box<dyn error::Error>> {
         self.check_flush_buffer()?;
         match self.vertex_mode {
             VertexMode::Plain | VertexMode::Color => {}
@@ -397,8 +446,8 @@ impl MeshWriter for ObjWriter {
                 writeln!(
                     w,
                     "vt {} {}",
-                    x / self.surface.ncols() as f32,
-                    1.0f32 - y / self.surface.nrows() as f32,
+                    p.0 as f32 / self.img1.width() as f32,
+                    1.0f32 - p.1 as f32 / self.img1.height() as f32,
                 )?;
             }
         }
@@ -456,135 +505,96 @@ impl MeshWriter for ObjWriter {
 }
 
 struct ImageWriter {
-    surface: DMatrix<Option<f32>>,
+    output_image: RgbaImage,
+    range: CoordsRange,
     path: String,
 }
 
 impl ImageWriter {
-    fn new(surface: DMatrix<Option<f32>>, path: &str) -> Result<ImageWriter, std::io::Error> {
+    fn new(range: CoordsRange, path: &str, img1: RgbImage) -> Result<ImageWriter, std::io::Error> {
         Ok(ImageWriter {
-            surface,
+            output_image: RgbaImage::from_pixel(
+                img1.width(),
+                img1.height(),
+                Rgba::from([0, 0, 0, 0]),
+            ),
+            range,
             path: path.to_owned(),
         })
     }
 }
 
 impl MeshWriter for ImageWriter {
+    fn output_vertex(&mut self, p: &triangulation::Point) -> Result<(), Box<dyn error::Error>> {
+        let (x, y) = (p.original.0 as u32, p.original.1 as u32);
+        let value = (p.reconstructed.z - self.range.min_z) / (self.range.max_z - self.range.min_z);
+        self.output_image.put_pixel(x, y, map_depth(value));
+        Ok(())
+    }
+
     fn output_face(&mut self, f: TriangulatedSurfaceFace) -> Result<(), Box<dyn error::Error>> {
-        let frows = self.surface.nrows() as f32;
-        let fcols = self.surface.ncols() as f32;
-        let vertices = f.positions();
-        let depths: Vec<f32> = vertices
-            .iter()
-            .filter_map(|v| self.surface[(v.y as usize, v.x as usize)])
-            .collect();
-        if depths.len() < 3 {
-            return Err(OutputError::new("Point depth not found").into());
-        };
+        let vertices = f.vertices();
         let (min_x, max_x) = vertices
             .iter()
-            .fold((fcols, 0.0f32), |acc, f| (acc.0.min(f.x), acc.1.max(f.x)));
+            .fold((self.output_image.width(), 0), |acc, f| {
+                let point = f.data().original;
+                (acc.0.min(point.0 as u32), acc.1.max(point.0 as u32))
+            });
         let (min_y, max_y) = vertices
             .iter()
-            .fold((frows, 0.0f32), |acc, f| (acc.0.min(f.y), acc.1.max(f.y)));
-        let min_x = min_x.ceil() as usize;
-        let max_x = max_x.floor() as usize;
-        let min_y = min_y.ceil() as usize;
-        let max_y = max_y.floor() as usize;
+            .fold((self.output_image.height(), 0), |acc, f| {
+                let point = f.data().original;
+                (acc.0.min(point.1 as u32), acc.1.max(point.1 as u32))
+            });
+
         for x in min_x..=max_x {
             for y in min_y..=max_y {
-                if self.surface[(y, x)].is_some() {
+                if self.output_image.get_pixel(x, y).0[3] != 0 {
                     continue;
                 }
+                // TODO: use barycentric interpolation of original coordinates, not reconstructed
                 let lambda = f.barycentric_interpolation(Point2 {
-                    x: x as f32,
-                    y: y as f32,
+                    x: x as f64,
+                    y: y as f64,
                 });
                 if lambda
                     .iter()
-                    .any(|lambda| *lambda > 1.0 + EPSILON || *lambda < 0.0 - EPSILON)
+                    .any(|lambda| *lambda > 1.0 + f64::EPSILON || *lambda < 0.0 - f64::EPSILON)
                 {
                     continue;
                 }
-                let depths = &depths;
-                let value: f32 = depths
+                let value: f64 = vertices
                     .iter()
                     .zip(lambda)
-                    .map(|(depth, lambda)| depth * lambda)
+                    .map(|(vertex, lambda)| vertex.data().reconstructed.z * lambda)
                     .sum();
-                self.surface[(y, x)] = Some(value);
+
+                let value = (value - self.range.min_z) / (self.range.max_z - self.range.min_z);
+                self.output_image.put_pixel(x, y, map_depth(value));
             }
         }
         Ok(())
     }
 
     fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
-        let mut img = RgbaImage::from_pixel(
-            self.surface.ncols() as u32,
-            self.surface.nrows() as u32,
-            Rgba::from([0, 0, 0, 0]),
-        );
-
-        let (min, max) = get_values_range(&self.surface);
-
-        img.enumerate_pixels_mut().for_each(|(col, row, pixel)| {
-            let row = row as usize;
-            let col = col as usize;
-            let value = self.surface[(row, col)];
-            let mut value = match value {
-                Some(v) => v,
-                None => return,
-            };
-            value = (value - min) / (max - min);
-            *pixel = map_depth(value);
-        });
-
-        img.save(&self.path)?;
+        self.output_image.save(&self.path)?;
         Ok(())
     }
 }
 
-fn surface_points(surface: &DMatrix<Option<f32>>) -> Vec<Point2<f32>> {
-    surface
-        .column_iter()
-        .enumerate()
-        .flat_map(|(x, col)| {
-            let points: Vec<Point2<f32>> = col
-                .iter()
-                .enumerate()
-                .filter_map(|(y, v)| v.map(|_| Point2::new(x as f32, y as f32)))
-                .collect();
-            points
-        })
-        .collect()
-}
-
-fn triangulate_image(
-    surface_points: Vec<Point2<f32>>,
-) -> Result<TriangulatedSurface, InsertionError> {
-    Triangulation::bulk_load(surface_points)
-}
-
 fn triangulate_without_interpolation(
-    surface: &DMatrix<Option<f32>>,
-    points: &Vec<Point2<f32>>,
+    shape: (usize, usize),
+    surface: &triangulation::Surface,
 ) -> Vec<[usize; 3]> {
-    let mut indices: DMatrix<Option<usize>> =
-        DMatrix::from_element(surface.nrows(), surface.ncols(), None);
-    let mut index = 0usize;
-    for col in 0..indices.ncols() {
-        for row in 0..indices.nrows() {
-            if surface[(row, col)].is_some() {
-                indices[(row, col)] = Some(index);
-                index += 1;
-            }
-        }
-    }
-    points
+    let mut indices: DMatrix<Option<usize>> = DMatrix::from_element(shape.0, shape.1, None);
+    surface.iter().enumerate().for_each(|(i, point)| {
+        indices[(point.original.1, point.original.0)] = Some(i);
+    });
+    surface
         .par_iter()
         .flat_map(|p| {
-            let row = p.y as usize;
-            let col = p.x as usize;
+            let row = p.original.1;
+            let col = p.original.0;
             let forward_neighbor = [(row, col), (row, col + 1), (row + 1, col)];
             let back_neighbor = [(row, col), (row, col - 1), (row - 1, col)];
 
@@ -620,25 +630,8 @@ fn triangulate_without_interpolation(
         .collect()
 }
 
-fn get_values_range(surface: &DMatrix<Option<f32>>) -> (f32, f32) {
-    let mut min = f32::MAX;
-    let mut max = f32::MIN;
-
-    for row in 0..surface.nrows() {
-        for col in 0..surface.ncols() {
-            let dist = match surface[(row, col)] {
-                Some(d) => d,
-                None => continue,
-            };
-            min = min.min(dist);
-            max = max.max(dist);
-        }
-    }
-    (min, max)
-}
-
 #[inline]
-fn map_depth(value: f32) -> Rgba<u8> {
+fn map_depth(value: f64) -> Rgba<u8> {
     // viridis from https://bids.github.io/colormap/
     const COLORMAP_R: [u8; 256] = [
         0xfd, 0xfb, 0xf8, 0xf6, 0xf4, 0xf1, 0xef, 0xec, 0xea, 0xe7, 0xe5, 0xe2, 0xdf, 0xdd, 0xda,
@@ -710,33 +703,22 @@ fn map_depth(value: f32) -> Rgba<u8> {
 }
 
 #[inline]
-fn map_color(colormap: &[u8; 256], value: f32) -> u8 {
+fn map_color(colormap: &[u8; 256], value: f64) -> u8 {
     if value >= 1.0 {
         return colormap[colormap.len() - 1];
     }
-    let step = 1.0 / (colormap.len() - 1) as f32;
+    let step = 1.0 / (colormap.len() - 1) as f64;
     let box_index = ((value / step).floor() as usize).clamp(0, colormap.len() - 2);
-    let ratio = (value - step * box_index as f32) / step;
-    let c1 = colormap[box_index] as f32;
-    let c2 = colormap[box_index + 1] as f32;
+    let ratio = (value - step * box_index as f64) / step;
+    let c1 = colormap[box_index] as f64;
+    let c2 = colormap[box_index + 1] as f64;
     (c2 * ratio + c1 * (1.0 - ratio)).round() as u8
 }
 
-#[derive(Debug)]
-pub struct OutputError {
-    msg: &'static str,
-}
-
-impl OutputError {
-    fn new(msg: &'static str) -> OutputError {
-        OutputError { msg }
+impl HasPosition for triangulation::Point {
+    fn position(&self) -> Point2<f64> {
+        Point2::new(self.reconstructed.x, self.reconstructed.y)
     }
-}
 
-impl std::error::Error for OutputError {}
-
-impl fmt::Display for OutputError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.msg)
-    }
+    type Scalar = f64;
 }
