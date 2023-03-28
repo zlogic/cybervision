@@ -11,7 +11,7 @@ const PERSPECTIVE_PROJECTION_OPTIMIZATION_MAX_POINTS: usize = 1000000;
 const OPTIMIZE_PROJECTION_MATRIX: bool = true;
 // TODO: this should be relative to the image size
 const OPTIMIZATION_REPROJECTION_THRESHOLD: f64 = 1.0;
-const TRIANGULATION_REPROJECTION_THRESHOLD: f64 = 5.0;
+const TRIANGULATION_REPROJECTION_THRESHOLD: f64 = 10.0;
 
 pub struct Point {
     pub original: (usize, usize),
@@ -64,34 +64,54 @@ pub fn triangulate_perspective(
     p2: &Matrix3x4<f64>,
     scale: (f32, f32, f32),
 ) -> Surface {
-    // TODO: show progress
-    let mut points: Vec<Point> = correlated_points
+    let mut point_matches: Vec<((usize, usize), (usize, usize))> = correlated_points
         .column_iter()
         .enumerate()
         .par_bridge()
         .flat_map(|(col, out_col)| {
-            let col_points: Vec<Point> = out_col
+            let col_points: Vec<((usize, usize), (usize, usize))> = out_col
                 .iter()
                 .enumerate()
-                .filter_map(|(row, _)| {
-                    let point1 = (col as usize, row as usize);
+                .flat_map(|(row, _)| {
+                    let point1 = (col, row);
                     let point2 = correlated_points[(row, col)]?;
-                    let point2 = (point2.1 as usize, point2.0 as usize);
-                    let m = (point1, point2);
-                    let (point3d, err) =
-                        FundamentalMatrix::optimize_triangulate_point(&p2, &m).ok()?;
-                    if err < TRIANGULATION_REPROJECTION_THRESHOLD {
+                    let point2 = (point1.1 as usize, point2.0 as usize);
+                    Some((point1, point2))
+                })
+                .collect();
+            col_points
+        })
+        .collect();
+    let mut rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
+    point_matches.shuffle(&mut rng);
+
+    // TODO: show progress
+    let mut points = point_matches
+        .chunks(100)
+        .par_bridge()
+        .flat_map(|chunk| {
+            let points3d = if let Ok(points3d) =
+                FundamentalMatrix::optimize_triangulate_points(&p2, chunk, false)
+            {
+                points3d
+            } else {
+                vec![]
+            };
+            points3d
+                .iter()
+                .enumerate()
+                .filter_map(|(i, (point3d, err))| {
+                    if *err < TRIANGULATION_REPROJECTION_THRESHOLD {
                         Some(Point::new(
-                            (col, row),
-                            //Vector3::new(col as f64, row as f64, point3d.z),
-                            point3d,
+                            chunk[i].0,
+                            Vector3::new(chunk[i].0 .0 as f64, chunk[i].0 .1 as f64, point3d.z),
+                            //*point3d,
                         ))
                     } else {
                         None
                     }
                 })
-                .collect();
-            col_points
+                .collect::<Vec<Point>>()
         })
         .collect();
 
@@ -187,7 +207,9 @@ pub fn f_to_projection_matrix(
                     let point2 = correlated_points[(row, col)]?;
                     let point2 = (point2.1 as usize, point2.0 as usize);
                     let m = (point1, point2);
-                    let (_, err) = FundamentalMatrix::optimize_triangulate_point(&p2, &m).ok()?;
+                    let res =
+                        FundamentalMatrix::optimize_triangulate_points(&p2, &[m], false).ok()?;
+                    let err = res[0].1;
                     if err < OPTIMIZATION_REPROJECTION_THRESHOLD {
                         Some((point1, point2))
                     } else {
