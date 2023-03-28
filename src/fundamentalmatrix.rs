@@ -292,7 +292,9 @@ impl FundamentalMatrix {
         f.unscale_mut(f[(2, 2)]);
 
         if PERSPECTIVE_OPTIMIZE_F {
-            return FundamentalMatrix::optimize_f_with_projection(&f, &inliers);
+            let mut p2 = FundamentalMatrix::f_to_projection_matrix(&f);
+            p2 = FundamentalMatrix::optimize_projection_matrix(&p2?, &inliers).ok();
+            return p2.map(|p2| FundamentalMatrix::projection_matrix_to_f(&p2));
         }
         Some(f)
     }
@@ -368,18 +370,17 @@ impl FundamentalMatrix {
                 inliers
             })
             .collect();
-        FundamentalMatrix::optimize_f_with_projection(f, &inliers)
+
+        let p2 = FundamentalMatrix::optimize_f_to_projection(f, &inliers);
+        p2.map(|p2| FundamentalMatrix::projection_matrix_to_f(&p2))
     }
 
-    fn optimize_f_with_projection(f: &Matrix3<f64>, inliers: &Vec<Match>) -> Option<Matrix3<f64>> {
-        let inliers: Vec<ReprojectionMatch> = inliers
-            .iter()
-            .map(|(p1, p2)| ((p1.0 as f64, p1.1 as f64), (p2.0 as f64, p2.1 as f64)))
-            .collect();
-        let p1 = Matrix3x4::identity();
+    pub fn optimize_f_to_projection(
+        f: &Matrix3<f64>,
+        inliers: &Vec<Match>,
+    ) -> Option<Matrix3x4<f64>> {
         let p2 = FundamentalMatrix::f_to_projection_matrix(f);
-        let p2 = FundamentalMatrix::optimize_projection_matrix(&p1, &p2?, &inliers).ok();
-        p2.map(|p2| FundamentalMatrix::projection_matrix_to_f(&p2))
+        FundamentalMatrix::optimize_projection_matrix(&p2?, &inliers).ok()
     }
 
     #[inline]
@@ -410,12 +411,11 @@ impl FundamentalMatrix {
         t_skewsymmetric * p2.fixed_view(0, 0)
     }
 
-    pub fn optimize_projection_matrix(
-        p1: &Matrix3x4<f64>,
+    fn optimize_projection_matrix(
         p2: &Matrix3x4<f64>,
-        inliers: &Vec<ReprojectionMatch>,
+        inliers: &Vec<Match>,
     ) -> Result<Matrix3x4<f64>, LMError> {
-        let problem = ReprojectionErrorMinimization::new(p1, p2, &inliers, true, false);
+        let problem = ReprojectionErrorMinimization::new(p2, inliers, true, false);
         let (result, report) = LevenbergMarquardt::new().minimize(problem);
         if !report.termination.was_successful() {
             return Err(LMError::new(report.termination));
@@ -441,20 +441,19 @@ impl FundamentalMatrix {
     }
 
     #[inline]
-    fn triangulate_match(
-        p1: &Matrix3x4<f64>,
-        p2: &Matrix3x4<f64>,
-        m: ReprojectionMatch,
-    ) -> Vector4<f64> {
-        FundamentalMatrix::triangulate_point(p1, p2, m.0, m.1)
+    fn triangulate_match(p2: &Matrix3x4<f64>, m: &Match) -> Vector4<f64> {
+        let point1 = (m.0 .0 as f64, m.0 .1 as f64);
+        let point2 = (m.1 .0 as f64, m.1 .1 as f64);
+        FundamentalMatrix::triangulate_point(p2, point1, point2)
     }
 
     pub fn triangulate_point(
-        p1: &Matrix3x4<f64>,
         p2: &Matrix3x4<f64>,
-        point1: ReprojectionPoint,
-        point2: ReprojectionPoint,
+        point1: (f64, f64),
+        point2: (f64, f64),
     ) -> Vector4<f64> {
+        let p1: Matrix3x4<f64> = Matrix3x4::identity();
+
         let mut a = Matrix4::<f64>::zeros();
 
         a.row_mut(0)
@@ -473,12 +472,11 @@ impl FundamentalMatrix {
     }
 
     pub fn optimize_triangulate_point(
-        p1: &Matrix3x4<f64>,
         p2: &Matrix3x4<f64>,
-        point: ReprojectionMatch,
+        point: &Match,
     ) -> Result<(Vector3<f64>, f64), LMError> {
-        let matches = [point];
-        let problem = ReprojectionErrorMinimization::new(p1, p2, &matches, false, true);
+        let matches = [*point];
+        let problem = ReprojectionErrorMinimization::new(p2, &matches, false, true);
         let (result, report) = LevenbergMarquardt::new().minimize(problem);
         if !report.termination.was_successful() {
             return Err(LMError::new(report.termination));
@@ -487,16 +485,12 @@ impl FundamentalMatrix {
     }
 }
 
-type ReprojectionPoint = (f64, f64);
-type ReprojectionMatch = (ReprojectionPoint, ReprojectionPoint);
-
 struct ReprojectionErrorMinimization<'a> {
     /// Optimization parameters vector.
     /// First 12 items are columns of P2; followed by 3D coordinates of triangulated points.
     params: OVector<f64, Dyn>,
-    p1: &'a Matrix3x4<f64>,
     p2: &'a Matrix3x4<f64>,
-    point_matches: &'a [ReprojectionMatch],
+    point_matches: &'a [Match],
     points_offset: usize,
     optimize_points: bool,
     optimize_p2: bool,
@@ -504,9 +498,8 @@ struct ReprojectionErrorMinimization<'a> {
 
 impl ReprojectionErrorMinimization<'_> {
     pub fn new<'a>(
-        p1: &'a Matrix3x4<f64>,
         p2: &'a Matrix3x4<f64>,
-        point_matches: &'a [ReprojectionMatch],
+        point_matches: &'a [Match],
         optimize_p2: bool,
         optimize_points: bool,
     ) -> ReprojectionErrorMinimization<'a> {
@@ -526,8 +519,8 @@ impl ReprojectionErrorMinimization<'_> {
         }
         if optimize_points {
             for m_i in 0..point_matches.len() {
-                let m = point_matches[m_i];
-                let m = FundamentalMatrix::triangulate_match(&p1, &p2, m);
+                let m = &point_matches[m_i];
+                let m = FundamentalMatrix::triangulate_match(p2, m);
                 for m_c in 0..3 {
                     params[points_offset + m_i * 3 + m_c] = m[m_c];
                 }
@@ -535,7 +528,6 @@ impl ReprojectionErrorMinimization<'_> {
         }
         ReprojectionErrorMinimization {
             params,
-            p1,
             p2,
             point_matches,
             points_offset,
@@ -546,12 +538,12 @@ impl ReprojectionErrorMinimization<'_> {
 
     #[inline]
     fn projection_error(
-        p1: &Matrix3x4<f64>,
         p2: &Matrix3x4<f64>,
         point3d: Vector4<f64>,
-        point1: ReprojectionPoint,
-        point2: ReprojectionPoint,
+        point1: Point,
+        point2: Point,
     ) -> [f64; 4] {
+        let p1 = Matrix3x4::<f64>::identity();
         let mut projection1 = p1 * point3d;
         let mut projection2 = p2 * point3d;
         projection1.unscale_mut(projection1[2]);
@@ -582,7 +574,6 @@ impl ReprojectionErrorMinimization<'_> {
     #[inline]
     fn extract_point3d(&self) -> (Vector3<f64>, f64) {
         let points_offset = self.points_offset;
-        let p1 = &self.p1;
         let p2 = self.extract_p2();
         // This only works when triangulating exactly one point!
         let m_i = 0;
@@ -593,7 +584,7 @@ impl ReprojectionErrorMinimization<'_> {
         }
         point3d[3] = 1.0;
         let projection_error =
-            ReprojectionErrorMinimization::projection_error(p1, &p2, point3d, m.0, m.1);
+            ReprojectionErrorMinimization::projection_error(&p2, point3d, m.0, m.1);
 
         let projection_error = projection_error.iter().map(|e| e * e).sum::<f64>().sqrt();
         let point3d = Vector3::new(point3d.x, point3d.y, point3d.z);
@@ -616,12 +607,11 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for ReprojectionErrorMinimization<'_> {
 
     fn residuals(&self) -> Option<OVector<f64, Dyn>> {
         let points_offset = self.points_offset;
-        let p1 = &self.p1;
         let p2 = self.extract_p2();
         // Residuals contain point reprojection errors.
         let mut residuals = OVector::<f64, Dyn>::zeros(self.point_matches.len() * 4);
         for m_i in 0..self.point_matches.len() {
-            let m = self.point_matches[m_i];
+            let m = &self.point_matches[m_i];
             let point3d = if self.optimize_points {
                 let mut point3d = Vector4::zeros();
                 for m_c in 0..3 {
@@ -630,10 +620,10 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for ReprojectionErrorMinimization<'_> {
                 point3d[3] = 1.0;
                 point3d
             } else {
-                FundamentalMatrix::triangulate_match(&p1, &p2, m)
+                FundamentalMatrix::triangulate_match(&p2, m)
             };
             let projection_error =
-                ReprojectionErrorMinimization::projection_error(p1, &p2, point3d, m.0, m.1);
+                ReprojectionErrorMinimization::projection_error(&p2, point3d, m.0, m.1);
             for r_c in 0..4 {
                 residuals[m_i * 4 + r_c] = projection_error[r_c];
             }
@@ -650,7 +640,6 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for ReprojectionErrorMinimization<'_> {
         };
         // TODO: use sparse matrix?
         let mut jac = OMatrix::<f64, Dyn, Dyn>::zeros(self.point_matches.len() * 4, parameters_len);
-        let p1 = &self.p1;
         let p2 = self.extract_p2();
         // Write a row for each residual (reprojection error).
         // Using a symbolic formula (not finite differences/central difference), check the Rust LM library for more info.
@@ -664,8 +653,8 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for ReprojectionErrorMinimization<'_> {
                     1.0,
                 )
             } else {
-                let m = self.point_matches[m_i];
-                FundamentalMatrix::triangulate_match(&p1, &p2, m)
+                let m = &self.point_matches[m_i];
+                FundamentalMatrix::triangulate_match(&p2, m)
             };
             let r1 = m_i * 4 + 0;
             let r2 = m_i * 4 + 1;
