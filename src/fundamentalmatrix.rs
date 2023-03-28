@@ -387,10 +387,7 @@ impl FundamentalMatrix {
     pub fn f_to_projection_matrix(f: &Matrix3<f64>) -> Option<Matrix3x4<f64>> {
         let usv = f.svd(true, false);
         let u = usv.u?;
-        // TODO: clean this up
-        //let vt = usv.v_t?;
         let e2 = u.column(2);
-        //let e2 = vt.row(2);
         let e2_skewsymmetric =
             Matrix3::new(0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0);
         let e2s_f = e2_skewsymmetric * f;

@@ -95,33 +95,6 @@ pub fn triangulate_perspective(
         })
         .collect();
 
-    /*
-    let mut points: Vec<Point> = correlated_points
-        .column_iter()
-        .enumerate()
-        .par_bridge()
-        .flat_map(|(col, out_col)| {
-            let col_points: Vec<Point> = out_col
-                .iter()
-                .enumerate()
-                .flat_map(|(row, _)| {
-                    let x1 = col as f64;
-                    let y1 = row as f64;
-                    if let Some(point2) = correlated_points[(row, col)] {
-                        let x2 = point2.1 as f64;
-                        let y2 = point2.0 as f64;
-                        let point3d = triangulate_point_perspective(&p2, (x1, y1), (x2, y2))?;
-                        Some(Point::new((col, row), point3d))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            col_points
-        })
-        .collect();
-     */
-
     filter_histogram(&mut points);
 
     let depth_scale = scale.2 as f64;
@@ -142,141 +115,6 @@ fn triangulate_point_affine(p1: (usize, usize), p2: &Option<Match>) -> Option<Po
         return Some(Point::new((p1.1, p1.0), point3d));
     }
     None
-}
-
-#[inline]
-fn triangulate_point_perspective(
-    p2: &Matrix3x4<f64>,
-    point1: (f64, f64),
-    point2: (f64, f64),
-) -> Option<Vector3<f64>> {
-    let p1 = Matrix3x4::identity();
-    let mut point3d = FundamentalMatrix::triangulate_point(p2, point1, point2);
-    point3d.unscale_mut(point3d.w);
-
-    let mut projection1 = p1 * point3d;
-    let mut projection2 = p2 * point3d;
-    projection1.unscale_mut(projection1[2]);
-    projection2.unscale_mut(projection2[2]);
-    projection1.x -= point1.0 as f64;
-    projection1.y -= point1.1 as f64;
-    projection2.x -= point2.0 as f64;
-    projection2.y -= point2.1 as f64;
-
-    let projection_error = (projection1.x * projection1.x
-        + projection1.y * projection1.y
-        + projection2.x * projection2.x
-        + projection2.y * projection2.y)
-        .sqrt();
-
-    if projection_error > TRIANGULATION_REPROJECTION_THRESHOLD {
-        return None;
-    }
-
-    /*
-    if point3d.w.abs() < TRIANGULATION_MIN_SCALE {
-        return None;
-    }
-    */
-
-    /*
-    if point3d.z > 0.0 {
-        Some(Vector3::new(point3d.x, point3d.y, point3d.z))
-    } else {
-        None
-    }
-    */
-    Some(Vector3::new(point3d.x, point3d.y, point3d.z))
-}
-
-pub fn find_projection_matrix(
-    fundamental_matrix: &Matrix3<f64>,
-    correlated_points: &DMatrix<Option<Match>>,
-) -> Option<Matrix3x4<f64>> {
-    // Create essential matrix and camera matrices.
-    let k = Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
-    let essential_matrix = k.tr_mul(fundamental_matrix) * k;
-
-    // Create camera matrices and find one where
-    let svd = essential_matrix.svd(true, true);
-    let u = svd.u?;
-    let vt = svd.v_t?;
-    let u3 = u.column(2);
-    const W: Matrix3<f64> = Matrix3::new(0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
-
-    let mut p2_1 = (u * (W) * vt).insert_column(3, 0.0);
-    let mut p2_2 = (u * (W) * vt).insert_column(3, 0.0);
-    let mut p2_3 = (u * (W.transpose()) * vt).insert_column(3, 0.0);
-    let mut p2_4 = (u * (W.transpose()) * vt).insert_column(3, 0.0);
-
-    // Solve chirality and find the matrix that the most points in front of the image.
-    p2_1.column_mut(3).copy_from(&u3);
-    p2_2.column_mut(3).copy_from(&-u3);
-    p2_3.column_mut(3).copy_from(&u3);
-    p2_4.column_mut(3).copy_from(&-u3);
-    let p2 = [p2_1, p2_2, p2_3, p2_4]
-        .into_iter()
-        .map(|p2| {
-            let points_count = validate_projection_matrix(p2, correlated_points);
-            (p2, points_count)
-        })
-        .max_by(|r1, r2| r1.1.cmp(&r2.1))
-        .map(|(p2, _)| p2)?;
-
-    let point_matches: Vec<((usize, usize), (usize, usize))> = correlated_points
-        .column_iter()
-        .enumerate()
-        .par_bridge()
-        .flat_map(|(col, out_col)| {
-            let col_points: Vec<((usize, usize), (usize, usize))> = out_col
-                .iter()
-                .enumerate()
-                .flat_map(|(row, _)| {
-                    let point1 = (col as usize, row as usize);
-                    if let Some(point2) = correlated_points[(row, col)] {
-                        let point2 = (point2.1 as usize, point2.0 as usize);
-                        Some((point1, point2))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            col_points
-        })
-        .collect();
-
-    let f = FundamentalMatrix::projection_matrix_to_f(&p2);
-
-    FundamentalMatrix::optimize_f_to_projection(&f, &point_matches)
-}
-
-fn validate_projection_matrix(
-    p2: Matrix3x4<f64>,
-    correlated_points: &DMatrix<Option<Match>>,
-) -> usize {
-    correlated_points
-        .column_iter()
-        .enumerate()
-        .par_bridge()
-        .map(move |(col, out_col)| {
-            out_col
-                .iter()
-                .enumerate()
-                .filter(|(row, _)| {
-                    let point1 = ((*row as f64), col as f64);
-                    let point2 = correlated_points[(*row, col)];
-                    let point2 = if let Some(point2) = point2 {
-                        (point2.0 as f64, point2.1 as f64)
-                    } else {
-                        return false;
-                    };
-                    let mut point4d = FundamentalMatrix::triangulate_point(&p2, point1, point2);
-                    point4d.unscale_mut(point4d.w);
-                    point4d.z > 0.0 && (p2 * point4d).z > 0.0
-                })
-                .count()
-        })
-        .sum()
 }
 
 fn filter_histogram(points: &mut Surface) {
@@ -349,8 +187,7 @@ pub fn f_to_projection_matrix(
                     let point2 = correlated_points[(row, col)]?;
                     let point2 = (point2.1 as usize, point2.0 as usize);
                     let m = (point1, point2);
-                    let (point3d, err) =
-                        FundamentalMatrix::optimize_triangulate_point(&p2, &m).ok()?;
+                    let (_, err) = FundamentalMatrix::optimize_triangulate_point(&p2, &m).ok()?;
                     if err < OPTIMIZATION_REPROJECTION_THRESHOLD {
                         Some((point1, point2))
                     } else {
