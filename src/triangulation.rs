@@ -10,8 +10,8 @@ const HISTOGRAM_FILTER_EPSILON: f64 = 0.001;
 const PERSPECTIVE_PROJECTION_OPTIMIZATION_MAX_POINTS: usize = 1000000;
 const OPTIMIZE_PROJECTION_MATRIX: bool = true;
 // TODO: this should be relative to the image size
-const OPTIMIZATION_REPROJECTION_THRESHOLD: f64 = 1.0;
-const TRIANGULATION_REPROJECTION_THRESHOLD: f64 = 5.0;
+const OPTIMIZATION_REPROJECTION_THRESHOLD: f64 = 0.001;
+const TRIANGULATION_REPROJECTION_THRESHOLD: f64 = 0.005;
 
 pub struct Point {
     pub original: (usize, usize),
@@ -64,6 +64,13 @@ pub fn triangulate_perspective(
     p2: &Matrix3x4<f64>,
     scale: (f32, f32, f32),
 ) -> Surface {
+    let cpm = condition_points_matrix(correlated_points);
+    let (t_x, t_y) = (
+        2.0 / correlated_points.ncols() as f64,
+        2.0 / correlated_points.nrows() as f64,
+    );
+
+    let p1 = cpm * Matrix3x4::identity();
     // TODO: show progress
     let mut points: Vec<Point> = correlated_points
         .column_iter()
@@ -74,12 +81,12 @@ pub fn triangulate_perspective(
                 .iter()
                 .enumerate()
                 .filter_map(|(row, _)| {
-                    let point1 = (col as usize, row as usize);
+                    let point1 = (col as f64 * t_x - 1.0, row as f64 * t_y - 1.0);
                     let point2 = correlated_points[(row, col)]?;
-                    let point2 = (point2.1 as usize, point2.0 as usize);
+                    let point2 = (point2.1 as f64 * t_x - 1.0, point2.0 as f64 * t_y - 1.0);
                     let m = (point1, point2);
                     let (point3d, err) =
-                        FundamentalMatrix::optimize_triangulate_point(&p2, &m).ok()?;
+                        FundamentalMatrix::optimize_triangulate_point(&p1, &p2, m).ok()?;
                     if err < TRIANGULATION_REPROJECTION_THRESHOLD {
                         Some(Point::new(
                             (col, row),
@@ -164,6 +171,20 @@ fn filter_histogram(points: &mut Surface) {
     })
 }
 
+fn condition_points_matrix(correlated_points: &DMatrix<Option<Match>>) -> Matrix3<f64> {
+    Matrix3::new(
+        2.0 / correlated_points.ncols() as f64,
+        0.0,
+        -1.0,
+        0.0,
+        2.0 / correlated_points.nrows() as f64,
+        -1.0,
+        0.0,
+        0.0,
+        1.0,
+    )
+}
+
 pub fn f_to_projection_matrix(
     f: &Matrix3<f64>,
     correlated_points: &DMatrix<Option<Match>>,
@@ -173,21 +194,31 @@ pub fn f_to_projection_matrix(
         return Some(p2);
     }
 
+    let cpm = condition_points_matrix(correlated_points);
+    let (t_x, t_y) = (
+        2.0 / correlated_points.ncols() as f64,
+        2.0 / correlated_points.nrows() as f64,
+    );
+
+    let p1 = cpm * Matrix3x4::identity();
+    let p2 = cpm * p2;
+
     // Select points with a low reprojection error.
-    let point_matches: Vec<((usize, usize), (usize, usize))> = correlated_points
+    let point_matches: Vec<((f64, f64), (f64, f64))> = correlated_points
         .column_iter()
         .enumerate()
         .par_bridge()
         .flat_map(|(col, out_col)| {
-            let col_points: Vec<((usize, usize), (usize, usize))> = out_col
+            let col_points: Vec<((f64, f64), (f64, f64))> = out_col
                 .iter()
                 .enumerate()
                 .flat_map(|(row, _)| {
-                    let point1 = (col, row);
+                    let point1 = (col as f64 * t_x - 1.0, row as f64 * t_y - 1.0);
                     let point2 = correlated_points[(row, col)]?;
-                    let point2 = (point2.1 as usize, point2.0 as usize);
+                    let point2 = (point2.1 as f64 * t_x - 1.0, point2.0 as f64 * t_y - 1.0);
                     let m = (point1, point2);
-                    let (_, err) = FundamentalMatrix::optimize_triangulate_point(&p2, &m).ok()?;
+                    let (_, err) =
+                        FundamentalMatrix::optimize_triangulate_point(&p1, &p2, m).ok()?;
                     if err < OPTIMIZATION_REPROJECTION_THRESHOLD {
                         Some((point1, point2))
                     } else {
@@ -210,5 +241,5 @@ pub fn f_to_projection_matrix(
         point_matches
     };
 
-    FundamentalMatrix::optimize_f_to_projection(f, &point_matches)
+    FundamentalMatrix::optimize_projection_matrix(&p1, &p2, &point_matches).ok()
 }
