@@ -471,17 +471,17 @@ impl FundamentalMatrix {
         point4d
     }
 
-    pub fn optimize_triangulate_points(
+    pub fn optimize_triangulate_point(
         p2: &Matrix3x4<f64>,
-        matches: &[Match],
-        optimize_p2: bool,
-    ) -> Result<Vec<(Vector3<f64>, f64)>, LMError> {
-        let problem = ReprojectionErrorMinimization::new(p2, matches, optimize_p2, true);
+        point: &Match,
+    ) -> Result<(Vector3<f64>, f64), LMError> {
+        let matches = [*point];
+        let problem = ReprojectionErrorMinimization::new(p2, &matches, false, true);
         let (result, report) = LevenbergMarquardt::new().minimize(problem);
         if !report.termination.was_successful() {
             return Err(LMError::new(report.termination));
         }
-        Ok(result.extract_points3d())
+        Ok(result.extract_point3d())
     }
 }
 
@@ -572,27 +572,23 @@ impl ReprojectionErrorMinimization<'_> {
     }
 
     #[inline]
-    fn extract_points3d(&self) -> Vec<(Vector3<f64>, f64)> {
+    fn extract_point3d(&self) -> (Vector3<f64>, f64) {
         let points_offset = self.points_offset;
         let p2 = self.extract_p2();
+        // This only works when triangulating exactly one point!
+        let m_i = 0;
+        let m = self.point_matches[m_i];
+        let mut point3d = Vector4::zeros();
+        for m_c in 0..3 {
+            point3d[m_c] = self.params[points_offset + 3 * m_i + m_c];
+        }
+        point3d[3] = 1.0;
+        let projection_error =
+            ReprojectionErrorMinimization::projection_error(&p2, point3d, m.0, m.1);
 
-        self.point_matches
-            .iter()
-            .enumerate()
-            .map(|(m_i, m)| {
-                let mut point3d = Vector4::zeros();
-                for m_c in 0..3 {
-                    point3d[m_c] = self.params[points_offset + 3 * m_i + m_c];
-                }
-                point3d[3] = 1.0;
-                let projection_error =
-                    ReprojectionErrorMinimization::projection_error(&p2, point3d, m.0, m.1);
-
-                let projection_error = projection_error.iter().map(|e| e * e).sum::<f64>().sqrt();
-                let point3d = Vector3::new(point3d.x, point3d.y, point3d.z);
-                (point3d, projection_error)
-            })
-            .collect()
+        let projection_error = projection_error.iter().map(|e| e * e).sum::<f64>().sqrt();
+        let point3d = Vector3::new(point3d.x, point3d.y, point3d.z);
+        (point3d, projection_error)
     }
 }
 
