@@ -15,13 +15,13 @@ const RANSAC_K_PERSPECTIVE: usize = 1_000_000;
 const RANSAC_N_AFFINE: usize = 4;
 const RANSAC_N_PERSPECTIVE: usize = 8;
 const RANSAC_T_AFFINE: f64 = 0.1;
-const RANSAC_T_PERSPECTIVE: f64 = 5.0;
+const RANSAC_T_PERSPECTIVE: f64 = 50.0;
 const RANSAC_D: usize = 10;
 const RANSAC_D_EARLY_EXIT_AFFINE: usize = 1000;
-const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 100;
+const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 1000;
 const RANSAC_CHECK_INTERVAL: usize = 50_000;
 const RANSAC_RANK_EPSILON_PERSPECTIVE: f64 = 0.001;
-const PERSPECTIVE_OPTIMIZE_F: bool = true;
+const PERSPECTIVE_OPTIMIZE_F: bool = false;
 
 type Point = (usize, usize);
 type Match = (Point, Point);
@@ -160,7 +160,7 @@ impl FundamentalMatrix {
                 break;
             }
         }
-        if self.projection == ProjectionMode::Perspective {
+        if self.projection == ProjectionMode::Perspective && PERSPECTIVE_OPTIMIZE_F {
             best_result = best_result.map(|mut result| {
                 let f = self.optimize_ransac_fundamental_matrix(match_buckets, &result.f);
                 if let Some(f) = f {
@@ -282,6 +282,9 @@ impl FundamentalMatrix {
         let u = usv.u?;
         let s = usv.singular_values;
         let vt = &usv.v_t?;
+        // TODO: remove this?
+        // Warning: this is effectively an essential matrix.
+        //let s = Vector3::new(1.0, 1.0, 0.0);
         let s = Vector3::new(s[0], s[1], 0.0);
         let s = Matrix3::from_diagonal(&s);
         let f = u * s * vt;
@@ -586,7 +589,14 @@ impl ReprojectionErrorMinimization<'_> {
         let projection_error =
             ReprojectionErrorMinimization::projection_error(&p2, point3d, m.0, m.1);
 
-        let projection_error = projection_error.iter().map(|e| e * e).sum::<f64>().sqrt();
+        let projection_error = (projection_error[0] * projection_error[0]
+            + projection_error[1] * projection_error[1])
+            .sqrt()
+            .max(
+                (projection_error[2] * projection_error[2]
+                    + projection_error[3] * projection_error[3])
+                    .sqrt(),
+            );
         let point3d = Vector3::new(point3d.x, point3d.y, point3d.z);
         (point3d, projection_error)
     }

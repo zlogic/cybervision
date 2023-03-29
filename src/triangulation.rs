@@ -8,10 +8,10 @@ const HISTOGRAM_FILTER_BINS: usize = 100;
 const HISTOGRAM_FILTER_DISCARD_PERCENTILE: f64 = 0.025;
 const HISTOGRAM_FILTER_EPSILON: f64 = 0.001;
 const PERSPECTIVE_PROJECTION_OPTIMIZATION_MAX_POINTS: usize = 1000000;
-const OPTIMIZE_PROJECTION_MATRIX: bool = true;
+const OPTIMIZE_PROJECTION_MATRIX: bool = false;
 // TODO: this should be relative to the image size
 const OPTIMIZATION_REPROJECTION_THRESHOLD: f64 = 1.0;
-const TRIANGULATION_REPROJECTION_THRESHOLD: f64 = 5.0;
+const TRIANGULATION_REPROJECTION_THRESHOLD: f64 = 50.0;
 
 pub struct Point {
     pub original: (usize, usize),
@@ -64,6 +64,7 @@ pub fn triangulate_perspective(
     p2: &Matrix3x4<f64>,
     scale: (f32, f32, f32),
 ) -> Surface {
+    /*
     // TODO: show progress
     let mut points: Vec<Point> = correlated_points
         .column_iter()
@@ -83,8 +84,38 @@ pub fn triangulate_perspective(
                     if err < TRIANGULATION_REPROJECTION_THRESHOLD {
                         Some(Point::new(
                             (col, row),
-                            //Vector3::new(col as f64, row as f64, point3d.z),
-                            point3d,
+                            Vector3::new(col as f64, row as f64, point3d.z),
+                            //point3d,
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            col_points
+        })
+        .collect();
+     */
+
+    let mut points: Vec<Point> = correlated_points
+        .column_iter()
+        .enumerate()
+        .par_bridge()
+        .flat_map(|(col, out_col)| {
+            let col_points: Vec<Point> = out_col
+                .iter()
+                .enumerate()
+                .flat_map(|(row, _)| {
+                    let x1 = col as f64;
+                    let y1 = row as f64;
+                    if let Some(point2) = correlated_points[(row, col)] {
+                        let x2 = point2.1 as f64;
+                        let y2 = point2.0 as f64;
+                        let point3d = triangulate_point_perspective(&p2, (x1, y1), (x2, y2))?;
+                        Some(Point::new(
+                            (col, row),
+                            Vector3::new(col as f64, row as f64, point3d.z),
+                            //point3d,
                         ))
                     } else {
                         None
@@ -115,6 +146,51 @@ fn triangulate_point_affine(p1: (usize, usize), p2: &Option<Match>) -> Option<Po
         return Some(Point::new((p1.1, p1.0), point3d));
     }
     None
+}
+
+#[inline]
+fn triangulate_point_perspective(
+    p2: &Matrix3x4<f64>,
+    point1: (f64, f64),
+    point2: (f64, f64),
+) -> Option<Vector3<f64>> {
+    let p1 = Matrix3x4::identity();
+    let mut point3d = FundamentalMatrix::triangulate_point(p2, point1, point2);
+    point3d.unscale_mut(point3d.w);
+
+    let mut projection1 = p1 * point3d;
+    let mut projection2 = p2 * point3d;
+    projection1.unscale_mut(projection1[2]);
+    projection2.unscale_mut(projection2[2]);
+    projection1.x -= point1.0 as f64;
+    projection1.y -= point1.1 as f64;
+    projection2.x -= point2.0 as f64;
+    projection2.y -= point2.1 as f64;
+
+    let projection_error = (projection1.x * projection1.x
+        + projection1.y * projection1.y
+        + projection2.x * projection2.x
+        + projection2.y * projection2.y)
+        .sqrt();
+
+    if projection_error > TRIANGULATION_REPROJECTION_THRESHOLD {
+        return None;
+    }
+
+    /*
+    if point3d.w.abs() < TRIANGULATION_MIN_SCALE {
+        return None;
+    }
+    */
+
+    /*
+    if point3d.z > 0.0 {
+        Some(Vector3::new(point3d.x, point3d.y, point3d.z))
+    } else {
+        None
+    }
+    */
+    Some(Vector3::new(point3d.x, point3d.y, point3d.z))
 }
 
 fn filter_histogram(points: &mut Surface) {
@@ -198,6 +274,8 @@ pub fn f_to_projection_matrix(
             col_points
         })
         .collect();
+
+    println!("kept {} matches", point_matches.len());
 
     let mut rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
     const SELECT_RANDOM_MATCHES: usize = PERSPECTIVE_PROJECTION_OPTIMIZATION_MAX_POINTS;

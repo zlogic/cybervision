@@ -9,7 +9,8 @@ const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
 const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
 
 const THRESHOLD_AFFINE: f32 = 0.6;
-const THRESHOLD_PERSPECTIVE: f32 = 0.6;
+// TODO: apply a better filter to lower this threshold
+const THRESHOLD_PERSPECTIVE: f32 = 0.9;
 const MIN_STDEV_AFFINE: f32 = 1.0;
 const MIN_STDEV_PERSPECTIVE: f32 = 5.0;
 const CORRIDOR_SIZE: usize = 2;
