@@ -262,7 +262,8 @@ pub fn reconstruct(args: &Cli) {
         let scale_steps = PointCorrelations::optimal_scale_steps(img1.img.dimensions());
         let total_percent: f32 = (0..=scale_steps)
             .map(|step| 1.0 / ((1 << (scale_steps - step)) as f32).powi(2))
-            .sum();
+            .sum::<f32>()
+            * 2.0;
 
         let pb = new_progress_bar(false);
         let projection_mode = match args.projection {
@@ -280,8 +281,15 @@ pub fn reconstruct(args: &Cli) {
             img1.img.dimensions(),
             img2.img.dimensions(),
             fm.f,
-            projection_mode,
-            hardware_mode,
+            &projection_mode,
+            &hardware_mode,
+        );
+        let mut reverse_point_correlations = PointCorrelations::new(
+            img2.img.dimensions(),
+            img1.img.dimensions(),
+            fm.f.transpose(),
+            &projection_mode,
+            &hardware_mode,
         );
         println!(
             "Selected hardware: {}",
@@ -292,17 +300,37 @@ pub fn reconstruct(args: &Cli) {
             let img1 = img1.resize(scale);
             let img2 = img2.resize(scale);
 
-            let pb = CrossCorrelationProgressBar {
-                total_percent_complete,
-                total_percent,
-                pb: &pb,
-                scale,
-            };
+            {
+                let pb = CrossCorrelationProgressBar {
+                    total_percent_complete,
+                    total_percent,
+                    pb: &pb,
+                    scale,
+                };
 
-            point_correlations.correlate_images(img1, img2, scale, Some(&pb));
-            total_percent_complete += scale * scale / total_percent;
+                // Correlate in both directions.
+                point_correlations.correlate_images(img1.clone(), img2.clone(), scale, Some(&pb));
+                total_percent_complete += scale * scale / total_percent;
+            }
+            {
+                let pb = CrossCorrelationProgressBar {
+                    total_percent_complete,
+                    total_percent,
+                    pb: &pb,
+                    scale,
+                };
+                reverse_point_correlations.correlate_images(img2, img1, scale, Some(&pb));
+                total_percent_complete += scale * scale / total_percent;
+            }
+            point_correlations.cross_check_filter(&reverse_point_correlations, scale);
+            reverse_point_correlations.cross_check_filter(&point_correlations, scale);
         }
-        point_correlations.apply_peak_filter();
+        match reverse_point_correlations.complete() {
+            Ok(_) => {}
+            Err(err) => {
+                eprintln!("Failed to complete points correlation: {}", err)
+            }
+        }
         match point_correlations.complete() {
             Ok(_) => {}
             Err(err) => {
@@ -331,11 +359,7 @@ pub fn reconstruct(args: &Cli) {
                 triangulation::triangulate_affine(&point_correlations.correlated_points, out_scale)
             }
             crate::ProjectionMode::Perspective => {
-                let p2 = triangulation::f_to_projection_matrix(
-                    &fm.f,
-                    &point_correlations.correlated_points,
-                );
-                let p2 = match p2 {
+                let p2 = match FundamentalMatrix::f_to_projection_matrix(&fm.f) {
                     Some(p2) => p2,
                     None => {
                         eprintln!("Unable to find projection matrix");

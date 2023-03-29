@@ -9,8 +9,7 @@ const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
 const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
 
 const THRESHOLD_AFFINE: f32 = 0.6;
-// TODO: apply a better filter to lower this threshold
-const THRESHOLD_PERSPECTIVE: f32 = 0.9;
+const THRESHOLD_PERSPECTIVE: f32 = 0.8;
 const MIN_STDEV_AFFINE: f32 = 1.0;
 const MIN_STDEV_PERSPECTIVE: f32 = 5.0;
 const CORRIDOR_SIZE: usize = 2;
@@ -22,9 +21,7 @@ const SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER: usize = 128;
 const NEIGHBOR_DISTANCE: usize = 10;
 const CORRIDOR_EXTEND_RANGE: f64 = 0.25;
 const CORRIDOR_MIN_RANGE: f64 = 2.5;
-
-const PEAK_FILTER_STDEV_THRESHOLD: f32 = 1.5;
-const PEAK_FILTER_SEARCH_AREA: usize = 6;
+const CROSS_CHECK_SEARCH_AREA: usize = 2;
 
 type Match = (u32, u32);
 
@@ -81,8 +78,8 @@ impl PointCorrelations {
         img1_dimensions: (u32, u32),
         img2_dimensions: (u32, u32),
         fundamental_matrix: Matrix3<f64>,
-        projection_mode: ProjectionMode,
-        hardware_mode: HardwareMode,
+        projection_mode: &ProjectionMode,
+        hardware_mode: &HardwareMode,
     ) -> PointCorrelations {
         let (min_stdev, correlation_threshold) = match projection_mode {
             ProjectionMode::Affine => (MIN_STDEV_AFFINE, THRESHOLD_AFFINE),
@@ -435,22 +432,65 @@ impl PointCorrelations {
         scale - 1
     }
 
-    pub fn apply_peak_filter(&mut self) {
-        let (nrows, ncols) = self.correlated_points.shape();
-        let mut filtered_points = DMatrix::from_element(nrows, ncols, None);
-
-        filtered_points
+    pub fn cross_check_filter(&mut self, reverse: &PointCorrelations, scale: f32) {
+        let search_area = CROSS_CHECK_SEARCH_AREA * (1.0 / scale).round() as usize;
+        self.correlated_points
             .column_iter_mut()
             .enumerate()
             .par_bridge()
             .for_each(|(col, mut out_col)| {
                 out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                    if point_not_peak(&self.correlated_points, row, col) {
-                        *out_point = self.correlated_points[(row, col)];
+                    if let Some(m) = out_point {
+                        if !PointCorrelations::cross_check_point(reverse, search_area, row, col, *m)
+                        {
+                            *out_point = None;
+                        }
                     }
                 })
             });
-        self.correlated_points = filtered_points;
+    }
+
+    #[inline]
+    fn cross_check_point(
+        reverse: &PointCorrelations,
+        search_area: usize,
+        row: usize,
+        col: usize,
+        m: (u32, u32),
+    ) -> bool {
+        let min_row = (m.0 as usize)
+            .saturating_sub(search_area)
+            .clamp(0, reverse.correlated_points.nrows());
+        let max_row = (m.0 as usize)
+            .saturating_add(search_area + 1)
+            .clamp(0, reverse.correlated_points.nrows());
+        let min_col = (m.1 as usize)
+            .saturating_sub(search_area + 1)
+            .clamp(0, reverse.correlated_points.ncols());
+        let max_col = (m.1 as usize)
+            .saturating_add(search_area)
+            .clamp(0, reverse.correlated_points.ncols());
+
+        let r_min_row = row.saturating_sub(search_area);
+        let r_max_row = row.saturating_add(search_area + 1);
+        let r_min_col = col.saturating_sub(search_area);
+        let r_max_col = col.saturating_add(search_area + 1);
+
+        for srow in min_row..max_row {
+            for scol in min_col..max_col {
+                if let Some(rm) = reverse.correlated_points[(srow, scol)] {
+                    let (rrow, rcol) = (rm.0 as usize, rm.1 as usize);
+                    if rrow >= r_min_row
+                        && rrow < r_max_row
+                        && rcol >= r_min_col
+                        && rcol < r_max_col
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 }
 
@@ -518,69 +558,6 @@ fn compute_compact_point_data(img: &DMatrix<u8>, row: usize, col: usize) -> Opti
     result.stdev = (result.stdev / KERNEL_POINT_COUNT as f32).sqrt();
 
     Some(result)
-}
-
-#[inline]
-fn point_not_peak(img: &DMatrix<Option<Match>>, row: usize, col: usize) -> bool {
-    const SEARCH_RADIUS: usize = PEAK_FILTER_SEARCH_AREA;
-    const SEARCH_WIDTH: usize = PEAK_FILTER_SEARCH_AREA * 2 + 1;
-    if !correlation::point_inside_bounds::<SEARCH_RADIUS>(img.shape(), row, col) {
-        return false;
-    };
-    let point_distance = if let Some(value) = img[(row, col)] {
-        let dist = (row as f32 - value.0 as f32, col as f32 - value.1 as f32);
-        (dist.0 * dist.0 + dist.1 * dist.1).sqrt()
-    } else {
-        return false;
-    };
-    let mut avg = 0.0;
-    let mut stdev = 0.0;
-    let mut count = 0;
-    for r in 0..SEARCH_WIDTH {
-        let srow = (row + r).saturating_sub(SEARCH_RADIUS);
-        for c in 0..SEARCH_WIDTH {
-            let scol = (col + c).saturating_sub(SEARCH_RADIUS);
-            if srow == row && scol == col {
-                continue;
-            }
-            let value = img[(srow, scol)];
-            let distance = if let Some(value) = value {
-                let dist = (srow as f32 - value.0 as f32, scol as f32 - value.1 as f32);
-                (dist.0 * dist.0 + dist.1 * dist.1).sqrt()
-            } else {
-                continue;
-            };
-            avg += distance as f32;
-            count += 1;
-        }
-    }
-    if count == 0 {
-        return false;
-    }
-
-    avg /= count as f32;
-
-    for r in 0..SEARCH_WIDTH {
-        let srow = (row + r).saturating_sub(SEARCH_RADIUS);
-        for c in 0..SEARCH_WIDTH {
-            let scol = (col + c).saturating_sub(SEARCH_RADIUS);
-            if srow == row && scol == col {
-                continue;
-            }
-            let value = img[(srow, scol)];
-            let distance = if let Some(value) = value {
-                let dist = (srow as f32 - value.0 as f32, scol as f32 - value.1 as f32);
-                (dist.0 * dist.0 + dist.1 * dist.1).sqrt()
-            } else {
-                continue;
-            };
-            let delta = distance - avg;
-            stdev += delta * delta;
-        }
-    }
-    stdev = (stdev / count as f32).sqrt();
-
-    (point_distance - avg).abs() < stdev * PEAK_FILTER_STDEV_THRESHOLD
 }
 
 mod gpu {
