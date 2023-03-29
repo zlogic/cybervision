@@ -4,10 +4,6 @@ use rayon::prelude::*;
 
 use crate::fundamentalmatrix::FundamentalMatrix;
 
-const HISTOGRAM_FILTER_BINS: usize = 100;
-const HISTOGRAM_FILTER_DISCARD_PERCENTILE: f64 = 0.025;
-const HISTOGRAM_FILTER_EPSILON: f64 = 0.001;
-
 pub struct Point {
     pub original: (usize, usize),
     pub reconstructed: Vector3<f64>,
@@ -30,7 +26,7 @@ pub fn triangulate_affine(
     correlated_points: &DMatrix<Option<Match>>,
     scale: (f32, f32, f32),
 ) -> Surface {
-    let mut points = correlated_points
+    let mut points: Vec<Point> = correlated_points
         .column_iter()
         .enumerate()
         .par_bridge()
@@ -45,7 +41,6 @@ pub fn triangulate_affine(
             triangulated_points
         })
         .collect();
-    filter_histogram(&mut points);
 
     let depth_scale = (scale.2 * ((scale.0 + scale.1) / 2.0)) as f64;
     points
@@ -88,8 +83,6 @@ pub fn triangulate_perspective(
         })
         .collect();
 
-    filter_histogram(&mut points);
-
     let depth_scale = scale.2 as f64;
     points
         .iter_mut()
@@ -120,51 +113,4 @@ fn triangulate_point_perspective(
     point3d.unscale_mut(point3d.w);
 
     Some(Vector3::new(point3d.x, point3d.y, point3d.z))
-}
-
-fn filter_histogram(points: &mut Surface) {
-    let (min, max) = points.iter().fold((f64::MAX, f64::MIN), |acc, p| {
-        let depth = p.reconstructed.z;
-        (acc.0.min(depth), acc.1.max(depth))
-    });
-
-    let mut histogram_sum = 0usize;
-    let mut histogram = [0usize; HISTOGRAM_FILTER_BINS];
-    points.iter().for_each(|p| {
-        let depth = p.reconstructed.z;
-        let pos = ((depth - min) * HISTOGRAM_FILTER_BINS as f64 / (max - min)).round();
-        let pos = (pos as usize).clamp(0, HISTOGRAM_FILTER_BINS - 1);
-        histogram[pos] += 1;
-        histogram_sum += 1;
-    });
-
-    let mut current_histogram_sum = 0;
-    let mut min_depth = min;
-    for (i, bin) in histogram.iter().enumerate() {
-        current_histogram_sum += bin;
-        if (current_histogram_sum as f64 / histogram_sum as f64)
-            > HISTOGRAM_FILTER_DISCARD_PERCENTILE
-        {
-            break;
-        }
-        min_depth = min
-            + (i as f64 / HISTOGRAM_FILTER_BINS as f64 - HISTOGRAM_FILTER_EPSILON) * (max - min);
-    }
-    let mut current_histogram_sum = 0;
-    let mut max_depth = max;
-    for (i, bin) in histogram.iter().enumerate().rev() {
-        current_histogram_sum += bin;
-        if (current_histogram_sum as f64 / histogram_sum as f64)
-            > HISTOGRAM_FILTER_DISCARD_PERCENTILE
-        {
-            break;
-        }
-        max_depth = min
-            + (i as f64 / HISTOGRAM_FILTER_BINS as f64 + HISTOGRAM_FILTER_EPSILON) * (max - min);
-    }
-
-    points.retain(|point| {
-        let depth = point.reconstructed.z;
-        depth >= min_depth && depth <= max_depth
-    })
 }
