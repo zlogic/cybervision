@@ -499,7 +499,6 @@ impl MeshWriter for ImageWriter {
                 if self.output_image.get_pixel(x, y).0[3] != 0 {
                     continue;
                 }
-                // TODO: use barycentric interpolation of original coordinates, not reconstructed
                 let lambda = f.barycentric_interpolation(Point2 {
                     x: x as f64,
                     y: y as f64,
@@ -664,7 +663,7 @@ fn map_color(colormap: &[u8; 256], value: f64) -> u8 {
 
 impl HasPosition for triangulation::Point {
     fn position(&self) -> Point2<f64> {
-        Point2::new(self.reconstructed.x, self.reconstructed.y)
+        Point2::new(self.original.0 as f64, self.original.1 as f64)
     }
 
     type Scalar = f64;
