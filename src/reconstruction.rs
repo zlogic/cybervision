@@ -243,7 +243,7 @@ pub fn reconstruct(args: &Cli) {
         let f = FundamentalMatrix::new(projection_mode, &match_buckets, Some(&pb));
         pb.finish_and_clear();
         if let Ok(t) = start_time.elapsed() {
-            println!("Completed RANSAC fitting in {:.3} seconds", t.as_secs_f32(),);
+            println!("Completed RANSAC fitting in {:.3} seconds", t.as_secs_f32());
         }
         match f {
             Ok(f) => fm = f,

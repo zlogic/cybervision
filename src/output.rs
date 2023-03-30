@@ -6,7 +6,7 @@ use std::{
 };
 
 use image::{RgbImage, Rgba, RgbaImage};
-use nalgebra::{DMatrix, Vector3};
+use nalgebra::DMatrix;
 use rayon::prelude::*;
 use spade::{
     handles::{FaceHandle, InnerTag},
@@ -45,14 +45,13 @@ pub fn output<PL: ProgressListener>(
     vertex_mode: VertexMode,
     progress_listener: Option<&PL>,
 ) -> Result<(), Box<dyn error::Error>> {
-    let range = CoordsRange::new(&points);
     let img1_shape = (img1.height() as usize, img1.width() as usize);
     let mut writer: Box<dyn MeshWriter> = if path.to_lowercase().ends_with(".obj") {
-        Box::new(ObjWriter::new(range, path, img1, vertex_mode)?)
+        Box::new(ObjWriter::new(path, img1, vertex_mode)?)
     } else if path.to_lowercase().ends_with(".ply") {
-        Box::new(PlyWriter::new(range, path, img1, vertex_mode)?)
+        Box::new(PlyWriter::new(path, img1, vertex_mode)?)
     } else {
-        Box::new(ImageWriter::new(range, path, img1)?)
+        Box::new(ImageWriter::new(path, img1, &points)?)
     };
 
     if interpolation == InterpolationMode::Delaunay {
@@ -129,62 +128,6 @@ pub fn output<PL: ProgressListener>(
     return writer.complete();
 }
 
-struct CoordsRange {
-    min_x: f64,
-    max_x: f64,
-    min_y: f64,
-    max_y: f64,
-    min_z: f64,
-    max_z: f64,
-}
-
-impl CoordsRange {
-    fn new(points: &triangulation::Surface) -> CoordsRange {
-        let (min_x, max_x, min_y, max_y, min_z, max_z) = points.iter().fold(
-            (f64::MAX, f64::MIN, f64::MAX, f64::MIN, f64::MAX, f64::MIN),
-            |acc, p| {
-                let x = p.reconstructed.x;
-                let y = p.reconstructed.y;
-                let z = p.reconstructed.z;
-                (
-                    acc.0.min(x),
-                    acc.1.max(x),
-                    acc.2.min(y),
-                    acc.3.max(y),
-                    acc.4.min(z),
-                    acc.5.max(z),
-                )
-            },
-        );
-        CoordsRange {
-            min_x,
-            max_x,
-            min_y,
-            max_y,
-            min_z,
-            max_z,
-        }
-    }
-
-    #[inline]
-    fn normalize(&self, p: &triangulation::Point) -> Vector3<f64> {
-        // TODO: use a better normalization approach
-        // TODO: Do not renormalize parallel projection
-        let x = (p.reconstructed.x - self.min_x) * 100.0 / (self.max_x - self.min_x);
-        let y = (self.max_y - p.reconstructed.y) * 100.0 / (self.max_y - self.min_y);
-        let z = (p.reconstructed.z - self.min_z) * 100.0 / (self.max_z - self.min_z);
-        /*
-        let (x, y, z) = (
-            p.original.0 as f32,
-            self.img1.height() as f32 - p.original.1 as f32,
-            ((p.reconstructed.z - self.range.min_z) * self.img1.width() as f64
-                / (self.range.max_z - self.range.min_z)) as f32,
-        );
-        */
-        Vector3::new(x, y, z)
-    }
-}
-
 trait MeshWriter {
     fn output_header(&mut self, _nvertices: usize, _nfaces: usize) -> Result<(), std::io::Error> {
         Ok(())
@@ -213,7 +156,6 @@ trait MeshWriter {
 const WRITE_BUFFER_SIZE: usize = 1024 * 1024;
 
 struct PlyWriter {
-    range: CoordsRange,
     writer: BufWriter<File>,
     buffer: Vec<u8>,
     vertex_mode: VertexMode,
@@ -222,7 +164,6 @@ struct PlyWriter {
 
 impl PlyWriter {
     fn new(
-        range: CoordsRange,
         path: &str,
         img1: RgbImage,
         vertex_mode: VertexMode,
@@ -231,7 +172,6 @@ impl PlyWriter {
         let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
 
         Ok(PlyWriter {
-            range,
             writer,
             buffer,
             vertex_mode,
@@ -286,8 +226,8 @@ impl MeshWriter for PlyWriter {
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
 
-        let p = self.range.normalize(p);
-        let (x, y, z) = (p.x as f32, p.y as f32, p.z as f32);
+        let p = p.reconstructed;
+        let (x, y, z) = (p.x as f32, -p.y as f32, p.z as f32);
         w.write_all(&x.to_be_bytes())?;
         w.write_all(&y.to_be_bytes())?;
         w.write_all(&z.to_be_bytes())?;
@@ -326,7 +266,6 @@ impl MeshWriter for PlyWriter {
 }
 
 struct ObjWriter {
-    range: CoordsRange,
     writer: BufWriter<File>,
     buffer: Vec<u8>,
     vertex_mode: VertexMode,
@@ -336,7 +275,6 @@ struct ObjWriter {
 
 impl ObjWriter {
     fn new(
-        range: CoordsRange,
         path: &str,
         img1: RgbImage,
         vertex_mode: VertexMode,
@@ -344,7 +282,6 @@ impl ObjWriter {
         let writer = BufWriter::new(File::create(path)?);
         let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
         Ok(ObjWriter {
-            range,
             writer,
             buffer,
             vertex_mode,
@@ -418,20 +355,20 @@ impl MeshWriter for ObjWriter {
                 .map(|pixel| pixel.0),
         };
 
-        let p = self.range.normalize(p);
+        let p = p.reconstructed;
         if let Some(color) = color {
             writeln!(
                 w,
                 "v {} {} {} {} {} {}",
                 p.x,
-                p.y,
+                -p.y,
                 p.z,
                 color[0] as f32 / 255.0,
                 color[1] as f32 / 255.0,
                 color[2] as f32 / 255.0,
             )?
         } else {
-            writeln!(w, "v {} {} {}", p.x, p.y, p.z)?
+            writeln!(w, "v {} {} {}", p.x, -p.y, p.z)?
         }
 
         Ok(())
@@ -506,20 +443,30 @@ impl MeshWriter for ObjWriter {
 
 struct ImageWriter {
     output_image: RgbaImage,
-    range: CoordsRange,
     path: String,
+    min_depth: f64,
+    max_depth: f64,
 }
 
 impl ImageWriter {
-    fn new(range: CoordsRange, path: &str, img1: RgbImage) -> Result<ImageWriter, std::io::Error> {
+    fn new(
+        path: &str,
+        img1: RgbImage,
+        points: &triangulation::Surface,
+    ) -> Result<ImageWriter, std::io::Error> {
+        let (min_depth, max_depth) = points.iter().fold((f64::MAX, f64::MIN), |acc, p| {
+            let z = p.reconstructed.z;
+            (acc.0.min(z), acc.1.max(z))
+        });
         Ok(ImageWriter {
             output_image: RgbaImage::from_pixel(
                 img1.width(),
                 img1.height(),
                 Rgba::from([0, 0, 0, 0]),
             ),
-            range,
             path: path.to_owned(),
+            min_depth,
+            max_depth,
         })
     }
 }
@@ -527,7 +474,7 @@ impl ImageWriter {
 impl MeshWriter for ImageWriter {
     fn output_vertex(&mut self, p: &triangulation::Point) -> Result<(), Box<dyn error::Error>> {
         let (x, y) = (p.original.0 as u32, p.original.1 as u32);
-        let value = (p.reconstructed.z - self.range.min_z) / (self.range.max_z - self.range.min_z);
+        let value = (p.reconstructed.z - self.min_depth) / (self.max_depth - self.min_depth);
         self.output_image.put_pixel(x, y, map_depth(value));
         Ok(())
     }
@@ -569,7 +516,7 @@ impl MeshWriter for ImageWriter {
                     .map(|(vertex, lambda)| vertex.data().reconstructed.z * lambda)
                     .sum();
 
-                let value = (value - self.range.min_z) / (self.range.max_z - self.range.min_z);
+                let value = (value - self.min_depth) / (self.max_depth - self.min_depth);
                 self.output_image.put_pixel(x, y, map_depth(value));
             }
         }

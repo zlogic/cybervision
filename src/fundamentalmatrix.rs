@@ -268,6 +268,9 @@ impl FundamentalMatrix {
         let usv = f.svd(true, true);
         let u = usv.u?;
         let s = usv.singular_values;
+        if s[1] < RANSAC_RANK_EPSILON_PERSPECTIVE {
+            return None;
+        }
         let vt = &usv.v_t?;
         let s = Vector3::new(s[0], s[1], 0.0);
         let s = Matrix3::from_diagonal(&s);

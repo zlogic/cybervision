@@ -4,6 +4,8 @@ use rayon::prelude::*;
 
 use crate::fundamentalmatrix::FundamentalMatrix;
 
+const PERSPECTIVE_VALUE_RANGE: f64 = 100.0;
+
 pub struct Point {
     pub original: (usize, usize),
     pub reconstructed: Vector3<f64>,
@@ -69,11 +71,7 @@ pub fn triangulate_perspective(
                         let x2 = point2.1 as f64;
                         let y2 = point2.0 as f64;
                         let point3d = triangulate_point_perspective(&p2, (x1, y1), (x2, y2))?;
-                        Some(Point::new(
-                            (col, row),
-                            Vector3::new(col as f64, row as f64, point3d.z),
-                            //point3d,
-                        ))
+                        Some(Point::new((col, row), point3d))
                     } else {
                         None
                     }
@@ -82,11 +80,10 @@ pub fn triangulate_perspective(
             col_points
         })
         .collect();
-
-    let depth_scale = scale.2 as f64;
-    points
-        .iter_mut()
-        .for_each(|p| p.reconstructed.z *= depth_scale);
+    scale_points(
+        &mut points,
+        (scale.0 as f64, scale.1 as f64, scale.2 as f64),
+    );
     points
 }
 
@@ -112,5 +109,34 @@ fn triangulate_point_perspective(
     let mut point3d = FundamentalMatrix::triangulate_point(p2, point1, point2);
     point3d.unscale_mut(point3d.w);
 
+    if point3d.z < 0.0 {
+        point3d.unscale_mut(-1.0);
+    }
+
     Some(Vector3::new(point3d.x, point3d.y, point3d.z))
+}
+
+fn scale_points(points: &mut Surface, scale: (f64, f64, f64)) {
+    let (min_x, max_x, min_y, max_y, min_z, max_z) = points.iter().fold(
+        (f64::MAX, f64::MIN, f64::MAX, f64::MIN, f64::MAX, f64::MIN),
+        |acc, p| {
+            let x = p.reconstructed.x;
+            let y = p.reconstructed.y;
+            let z = p.reconstructed.z;
+            (
+                acc.0.min(x),
+                acc.1.max(x),
+                acc.2.min(y),
+                acc.3.max(y),
+                acc.4.min(z),
+                acc.5.max(z),
+            )
+        },
+    );
+    points.iter_mut().for_each(|point| {
+        let point = &mut (*point).reconstructed;
+        point.x = scale.0 * (point.x - min_x) * PERSPECTIVE_VALUE_RANGE / (max_x - min_x);
+        point.y = scale.1 * (point.y - min_y) * PERSPECTIVE_VALUE_RANGE / (max_y - min_y);
+        point.z = scale.2 * (point.z - min_z) * PERSPECTIVE_VALUE_RANGE / (max_z - min_z);
+    })
 }
