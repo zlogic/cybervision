@@ -656,7 +656,7 @@ fn compute_compact_point_data(img: &DMatrix<u8>, row: usize, col: usize) -> Opti
 }
 
 mod gpu {
-    const MAX_BINDINGS: u32 = 5;
+    const MAX_BINDINGS: u32 = 4;
 
     use std::{borrow::Cow, collections::HashMap, error, fmt};
 
@@ -710,8 +710,7 @@ mod gpu {
         queue: wgpu::Queue,
         shader_module: wgpu::ShaderModule,
         buffer_img: wgpu::Buffer,
-        buffer_internal_img1: wgpu::Buffer,
-        buffer_internal_img2: wgpu::Buffer,
+        buffer_internal: wgpu::Buffer,
         buffer_internal_int: wgpu::Buffer,
         buffer_out: wgpu::Buffer,
         buffer_out_reverse: wgpu::Buffer,
@@ -815,21 +814,15 @@ mod gpu {
                 false,
                 true,
             );
-            let buffer_internal_img1 = init_buffer(
+            let buffer_internal = init_buffer(
                 &device,
-                (img1_pixels * 4) * std::mem::size_of::<f32>(),
-                true,
-                false,
-            );
-            let buffer_internal_img2 = init_buffer(
-                &device,
-                (img2_pixels * 2) * std::mem::size_of::<f32>(),
+                (img1_pixels * 3 + img2_pixels * 2) * std::mem::size_of::<f32>(),
                 true,
                 false,
             );
             let buffer_internal_int = init_buffer(
                 &device,
-                img1_pixels * 4 * std::mem::size_of::<i32>(),
+                img1_pixels * 3 * std::mem::size_of::<i32>(),
                 true,
                 false,
             );
@@ -859,8 +852,7 @@ mod gpu {
                 queue,
                 shader_module,
                 buffer_img,
-                buffer_internal_img1,
-                buffer_internal_img2,
+                buffer_internal,
                 buffer_internal_int,
                 buffer_out,
                 buffer_out_reverse,
@@ -1106,8 +1098,7 @@ mod gpu {
             &mut self,
         ) -> Result<DMatrix<Option<super::Match>>, Box<dyn error::Error>> {
             self.buffer_img.destroy();
-            self.buffer_internal_img1.destroy();
-            self.buffer_internal_img2.destroy();
+            self.buffer_internal.destroy();
             self.buffer_internal_int.destroy();
             self.buffer_out_reverse.destroy();
 
@@ -1191,7 +1182,7 @@ mod gpu {
                                     ty: wgpu::BufferBindingType::Storage { read_only: false },
                                     has_dynamic_offset: false,
                                     min_binding_size: wgpu::BufferSize::new(
-                                        self.buffer_internal_img1.size(),
+                                        self.buffer_internal.size(),
                                     ),
                                 },
                                 count: None,
@@ -1203,25 +1194,13 @@ mod gpu {
                                     ty: wgpu::BufferBindingType::Storage { read_only: false },
                                     has_dynamic_offset: false,
                                     min_binding_size: wgpu::BufferSize::new(
-                                        self.buffer_internal_img2.size(),
-                                    ),
-                                },
-                                count: None,
-                            },
-                            wgpu::BindGroupLayoutEntry {
-                                binding: 3,
-                                visibility: wgpu::ShaderStages::COMPUTE,
-                                ty: wgpu::BindingType::Buffer {
-                                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                                    has_dynamic_offset: false,
-                                    min_binding_size: wgpu::BufferSize::new(
                                         self.buffer_internal_int.size(),
                                     ),
                                 },
                                 count: None,
                             },
                             wgpu::BindGroupLayoutEntry {
-                                binding: 4,
+                                binding: 3,
                                 visibility: wgpu::ShaderStages::COMPUTE,
                                 ty: wgpu::BindingType::Buffer {
                                     ty: wgpu::BufferBindingType::Storage { read_only: false },
@@ -1293,18 +1272,14 @@ mod gpu {
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
-                            resource: self.buffer_internal_img1.as_entire_binding(),
+                            resource: self.buffer_internal.as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
                             binding: 2,
-                            resource: self.buffer_internal_img2.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
                             resource: self.buffer_internal_int.as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
-                            binding: 4,
+                            binding: 3,
                             resource: buffer_out.as_entire_binding(),
                         },
                     ],
