@@ -33,14 +33,13 @@ pub fn triangulate_affine(
         .enumerate()
         .par_bridge()
         .flat_map(|(col, out_col)| {
-            let triangulated_points: Vec<Point> = out_col
+            out_col
                 .iter()
                 .enumerate()
                 .filter_map(|(row, matched_point)| {
                     triangulate_point_affine((row, col), matched_point)
                 })
-                .collect();
-            triangulated_points
+                .collect::<Vec<_>>()
         })
         .collect();
 
@@ -61,7 +60,7 @@ pub fn triangulate_perspective(
         .enumerate()
         .par_bridge()
         .flat_map(|(col, out_col)| {
-            let col_points: Vec<Point> = out_col
+            out_col
                 .iter()
                 .enumerate()
                 .flat_map(|(row, _)| {
@@ -70,14 +69,13 @@ pub fn triangulate_perspective(
                     if let Some(point2) = correlated_points[(row, col)] {
                         let x2 = point2.1 as f64;
                         let y2 = point2.0 as f64;
-                        let point3d = triangulate_point_perspective(&p2, (x1, y1), (x2, y2))?;
+                        let point3d = triangulate_point_perspective(p2, (x1, y1), (x2, y2))?;
                         Some(Point::new((col, row), point3d))
                     } else {
                         None
                     }
                 })
-                .collect();
-            col_points
+                .collect::<Vec<_>>()
         })
         .collect();
     scale_points(
@@ -134,7 +132,7 @@ fn scale_points(points: &mut Surface, scale: (f64, f64, f64)) {
         },
     );
     points.iter_mut().for_each(|point| {
-        let point = &mut (*point).reconstructed;
+        let point = &mut point.reconstructed;
         point.x = scale.0 * (point.x - min_x) * PERSPECTIVE_VALUE_RANGE / (max_x - min_x);
         point.y = scale.1 * (point.y - min_y) * PERSPECTIVE_VALUE_RANGE / (max_y - min_y);
         point.z = scale.2 * (point.z - min_z) * PERSPECTIVE_VALUE_RANGE / (max_z - min_z);

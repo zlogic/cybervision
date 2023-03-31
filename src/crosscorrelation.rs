@@ -209,7 +209,7 @@ impl PointCorrelations {
             );
             return;
         };
-        let img2_data = compute_image_point_data(&img2);
+        let img2_data = compute_image_point_data(img2);
         let mut out_data: DMatrix<Option<Match>> =
             DMatrix::from_element(img1.shape().0, img1.shape().1, None);
 
@@ -585,7 +585,7 @@ impl PointCorrelations {
                 }
             }
         }
-        return false;
+        false
     }
 }
 

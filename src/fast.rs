@@ -44,7 +44,6 @@ impl Fast {
             .into_par_iter()
             .map(|row| {
                 let kp: Vec<(usize, usize)> = (KERNEL_SIZE..(img.ncols() - KERNEL_SIZE))
-                    .into_iter()
                     .filter_map(
                         |col| match is_keypoint(&img, FAST_THRESHOLD.into(), row, col) {
                             true => Some((row, col)),

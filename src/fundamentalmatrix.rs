@@ -166,7 +166,6 @@ impl FundamentalMatrix {
         let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
         let inliers: Vec<Match> = match_buckets
             .choose_multiple(rng, self.ransac_n)
-            .into_iter()
             .filter_map(|bucket| bucket.choose(rng).map(|m| m.to_owned()))
             .collect();
         if inliers.len() < self.ransac_n {
@@ -387,13 +386,13 @@ impl FundamentalMatrix {
         let mut a = Matrix4::<f64>::zeros();
 
         a.row_mut(0)
-            .copy_from(&(p1.row(2) * point1.0 as f64 - p1.row(0)));
+            .copy_from(&(p1.row(2) * point1.0 - p1.row(0)));
         a.row_mut(1)
-            .copy_from(&(p1.row(2) * point1.1 as f64 - p1.row(1)));
+            .copy_from(&(p1.row(2) * point1.1 - p1.row(1)));
         a.row_mut(2)
-            .copy_from(&(p2.row(2) * point2.0 as f64 - p2.row(0)));
+            .copy_from(&(p2.row(2) * point2.0 - p2.row(0)));
         a.row_mut(3)
-            .copy_from(&(p2.row(2) * point2.1 as f64 - p2.row(1)));
+            .copy_from(&(p2.row(2) * point2.1 - p2.row(1)));
 
         let usv = a.svd(false, true);
         let vt = usv.v_t.unwrap();

@@ -69,7 +69,6 @@ pub fn output<PL: ProgressListener>(
         let nvertices = triangulated_surface.num_vertices() as f32;
         triangulated_surface
             .vertices()
-            .into_iter()
             .enumerate()
             .try_for_each(|(i, v)| {
                 if let Some(pl) = progress_listener {
@@ -79,7 +78,6 @@ pub fn output<PL: ProgressListener>(
             })?;
         triangulated_surface
             .vertices()
-            .into_iter()
             .enumerate()
             .try_for_each(|(i, v)| {
                 if let Some(pl) = progress_listener {
@@ -90,7 +88,6 @@ pub fn output<PL: ProgressListener>(
         let nfaces = triangulated_surface.num_inner_faces() as f32;
         triangulated_surface
             .inner_faces()
-            .into_iter()
             .enumerate()
             .try_for_each(|(i, f)| {
                 if let Some(pl) = progress_listener {

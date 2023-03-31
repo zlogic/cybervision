@@ -65,7 +65,7 @@ impl KeypointMatching {
                     None => return vec![],
                 };
                 let points2 = &points2;
-                let matches: Vec<(Point, Point)> = points2
+                points2
                     .iter()
                     .enumerate()
                     .filter_map(|(i2, p2)| {
@@ -77,8 +77,7 @@ impl KeypointMatching {
                             .filter(|corr| *corr > THRESHOLD)
                             .map(|_| (*p1, *p2))
                     })
-                    .collect();
-                matches
+                    .collect::<Vec<_>>()
             })
             .collect()
     }
