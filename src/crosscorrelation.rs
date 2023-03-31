@@ -47,12 +47,18 @@ where
 
 pub struct PointCorrelations {
     pub correlated_points: DMatrix<Option<Match>>,
+    correlated_points_reverse: DMatrix<Option<Match>>,
     first_pass: bool,
     min_stdev: f32,
     correlation_threshold: f32,
     fundamental_matrix: Matrix3<f64>,
     gpu_context: Option<gpu::GpuContext>,
     selected_hardware: String,
+}
+
+enum CorrelationDirection {
+    Forward,
+    Reverse,
 }
 
 struct EpipolarLine {
@@ -66,10 +72,12 @@ struct BestMatch {
     corr: Option<f32>,
 }
 
-struct CorrelationStep {
+struct CorrelationStep<'a> {
     scale: f32,
-    img1: DMatrix<u8>,
-    img2: DMatrix<u8>,
+    fundamental_matrix: Matrix3<f64>,
+    correlated_points: &'a DMatrix<Option<Match>>,
+    img1: &'a DMatrix<u8>,
+    img2: &'a DMatrix<u8>,
     img2_data: ImagePointData,
 }
 
@@ -112,14 +120,19 @@ impl PointCorrelations {
         };
 
         // Height specifies rows, width specifies columns.
-        let correlated_points = match gpu_context {
-            Some(_) => DMatrix::from_element(0, 0, None),
-            None => {
-                DMatrix::from_element(img1_dimensions.1 as usize, img1_dimensions.0 as usize, None)
-            }
+        let (correlated_points, correlated_points_reverse) = match gpu_context {
+            Some(_) => (
+                DMatrix::from_element(0, 0, None),
+                DMatrix::from_element(0, 0, None),
+            ),
+            None => (
+                DMatrix::from_element(img1_dimensions.1 as usize, img1_dimensions.0 as usize, None),
+                DMatrix::from_element(img2_dimensions.1 as usize, img2_dimensions.0 as usize, None),
+            ),
         };
         PointCorrelations {
             correlated_points,
+            correlated_points_reverse,
             first_pass: true,
             min_stdev,
             correlation_threshold,
@@ -134,6 +147,7 @@ impl PointCorrelations {
     }
 
     pub fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
+        self.correlated_points_reverse = DMatrix::from_element(0, 0, None);
         if let Some(gpu_context) = &mut self.gpu_context {
             match gpu_context.complete_process() {
                 Ok(correlated_points) => self.correlated_points = correlated_points,
@@ -151,6 +165,35 @@ impl PointCorrelations {
         scale: f32,
         progress_listener: Option<&PL>,
     ) {
+        self.correlate_images_step(
+            &img1,
+            &img2,
+            scale,
+            progress_listener,
+            CorrelationDirection::Forward,
+        );
+        self.correlate_images_step(
+            &img2,
+            &img1,
+            scale,
+            progress_listener,
+            CorrelationDirection::Reverse,
+        );
+
+        self.cross_check_filter(scale, CorrelationDirection::Forward);
+        self.cross_check_filter(scale, CorrelationDirection::Reverse);
+
+        self.first_pass = false;
+    }
+
+    fn correlate_images_step<PL: ProgressListener>(
+        &mut self,
+        img1: &DMatrix<u8>,
+        img2: &DMatrix<u8>,
+        scale: f32,
+        progress_listener: Option<&PL>,
+        dir: CorrelationDirection,
+    ) {
         if let Some(gpu_context) = &mut self.gpu_context {
             gpu_context.correlate_images(img1, img2, scale, progress_listener);
             return;
@@ -159,8 +202,20 @@ impl PointCorrelations {
         let mut out_data: DMatrix<Option<Match>> =
             DMatrix::from_element(img1.shape().0, img1.shape().1, None);
 
+        let correlated_points = match dir {
+            CorrelationDirection::Forward => &self.correlated_points,
+            CorrelationDirection::Reverse => &self.correlated_points_reverse,
+        };
+
+        let fundamental_matrix = match dir {
+            CorrelationDirection::Forward => self.fundamental_matrix,
+            CorrelationDirection::Reverse => self.fundamental_matrix.transpose(),
+        };
+
         let corelation_step = CorrelationStep {
             scale,
+            fundamental_matrix,
+            correlated_points,
             img1,
             img2,
             img2_data,
@@ -179,6 +234,10 @@ impl PointCorrelations {
                 }
                 if let Some(pl) = progress_listener {
                     let value = counter.fetch_add(1, Ordering::Relaxed) as f32 / out_data_cols;
+                    let value = match dir {
+                        CorrelationDirection::Forward => value / 2.0,
+                        CorrelationDirection::Reverse => 0.5 + value / 2.0,
+                    };
                     pl.report_status(value);
                 }
                 out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
@@ -189,6 +248,11 @@ impl PointCorrelations {
                 })
             });
 
+        let correlated_points = match dir {
+            CorrelationDirection::Forward => &mut self.correlated_points,
+            CorrelationDirection::Reverse => &mut self.correlated_points_reverse,
+        };
+
         for row in 0..nrows {
             for col in 0..ncols {
                 let point = out_data[(row, col)];
@@ -197,10 +261,9 @@ impl PointCorrelations {
                 }
                 let out_row = (row as f32 / scale) as usize;
                 let out_col = (col as f32 / scale) as usize;
-                self.correlated_points[(out_row, out_col)] = point;
+                correlated_points[(out_row, out_col)] = point;
             }
         }
-        self.first_pass = false;
     }
 
     fn correlate_point(
@@ -222,7 +285,7 @@ impl PointCorrelations {
             return;
         }
 
-        let e_line = self.get_epipolar_line(correlation_step, row, col);
+        let e_line = PointCorrelations::get_epipolar_line(correlation_step, row, col);
         if !e_line.coeff.0.is_finite()
             || !e_line.coeff.1.is_finite()
             || !e_line.add.0.is_finite()
@@ -270,14 +333,13 @@ impl PointCorrelations {
     }
 
     fn get_epipolar_line(
-        &self,
         correlation_step: &CorrelationStep,
         row: usize,
         col: usize,
     ) -> EpipolarLine {
         let scale = correlation_step.scale;
         let p1 = Vector3::new(col as f64 / scale as f64, row as f64 / scale as f64, 1.0);
-        let f_p1 = self.fundamental_matrix * p1;
+        let f_p1 = correlation_step.fundamental_matrix * p1;
         if f_p1[0].abs() > f_p1[1].abs() {
             return EpipolarLine {
                 coeff: (1.0, -f_p1[1] / f_p1[0]),
@@ -369,7 +431,7 @@ impl PointCorrelations {
         let col_max = ((col1 + NEIGHBOR_DISTANCE) as f32 / scale).ceil() as usize;
         let corridor_vertical = e_line.coeff.0.abs() > e_line.coeff.1.abs();
 
-        let data = &self.correlated_points;
+        let data = correlation_step.correlated_points;
         let row_min = row_min.clamp(0, data.nrows());
         let row_max = row_max.clamp(0, data.nrows());
         let col_min = col_min.clamp(0, data.ncols());
@@ -432,17 +494,30 @@ impl PointCorrelations {
         scale - 1
     }
 
-    pub fn cross_check_filter(&mut self, reverse: &PointCorrelations, scale: f32) {
+    fn cross_check_filter(&mut self, scale: f32, dir: CorrelationDirection) {
+        let (correlated_points, correlated_points_reverse) = match dir {
+            CorrelationDirection::Forward => {
+                (&mut self.correlated_points, &self.correlated_points_reverse)
+            }
+            CorrelationDirection::Reverse => {
+                (&mut self.correlated_points_reverse, &self.correlated_points)
+            }
+        };
         let search_area = CROSS_CHECK_SEARCH_AREA * (1.0 / scale).round() as usize;
-        self.correlated_points
+        correlated_points
             .column_iter_mut()
             .enumerate()
             .par_bridge()
             .for_each(|(col, mut out_col)| {
                 out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
                     if let Some(m) = out_point {
-                        if !PointCorrelations::cross_check_point(reverse, search_area, row, col, *m)
-                        {
+                        if !PointCorrelations::cross_check_point(
+                            correlated_points_reverse,
+                            search_area,
+                            row,
+                            col,
+                            *m,
+                        ) {
                             *out_point = None;
                         }
                     }
@@ -452,7 +527,7 @@ impl PointCorrelations {
 
     #[inline]
     fn cross_check_point(
-        reverse: &PointCorrelations,
+        reverse: &DMatrix<Option<Match>>,
         search_area: usize,
         row: usize,
         col: usize,
@@ -460,16 +535,16 @@ impl PointCorrelations {
     ) -> bool {
         let min_row = (m.0 as usize)
             .saturating_sub(search_area)
-            .clamp(0, reverse.correlated_points.nrows());
+            .clamp(0, reverse.nrows());
         let max_row = (m.0 as usize)
             .saturating_add(search_area + 1)
-            .clamp(0, reverse.correlated_points.nrows());
+            .clamp(0, reverse.nrows());
         let min_col = (m.1 as usize)
             .saturating_sub(search_area + 1)
-            .clamp(0, reverse.correlated_points.ncols());
+            .clamp(0, reverse.ncols());
         let max_col = (m.1 as usize)
             .saturating_add(search_area)
-            .clamp(0, reverse.correlated_points.ncols());
+            .clamp(0, reverse.ncols());
 
         let r_min_row = row.saturating_sub(search_area);
         let r_max_row = row.saturating_add(search_area + 1);
@@ -478,7 +553,7 @@ impl PointCorrelations {
 
         for srow in min_row..max_row {
             for scol in min_col..max_col {
-                if let Some(rm) = reverse.correlated_points[(srow, scol)] {
+                if let Some(rm) = reverse[(srow, scol)] {
                     let (rrow, rcol) = (rm.0 as usize, rm.1 as usize);
                     if rrow >= r_min_row
                         && rrow < r_max_row
@@ -765,8 +840,8 @@ mod gpu {
 
         pub fn correlate_images<PL: super::ProgressListener>(
             &mut self,
-            img1: DMatrix<u8>,
-            img2: DMatrix<u8>,
+            img1: &DMatrix<u8>,
+            img2: &DMatrix<u8>,
             scale: f32,
             progress_listener: Option<&PL>,
         ) {
@@ -921,7 +996,7 @@ mod gpu {
             f
         }
 
-        fn transfer_in_images(&self, img1: DMatrix<u8>, img2: DMatrix<u8>) {
+        fn transfer_in_images(&self, img1: &DMatrix<u8>, img2: &DMatrix<u8>) {
             let mut img_slice =
                 Vec::with_capacity(img1.nrows() * img1.ncols() + img2.nrows() * img2.ncols());
             for row in 0..img1.nrows() {
