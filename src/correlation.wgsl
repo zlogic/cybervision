@@ -348,3 +348,51 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
         result[out_pos] = best_match;
     }
 }
+
+@group(1) @binding(0) var<storage, read_write> img1: array<vec2<i32>>;
+@group(1) @binding(1) var<storage> img2: array<vec2<i32>>;
+
+@compute @workgroup_size(16, 16, 1)
+fn cross_check_filter(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let x1 = global_id.x;
+    let y1 = global_id.y;
+
+    let img1_width = parameters.img1_width;
+    let img1_height = parameters.img1_height;
+    let img2_width = parameters.img2_width;
+    let img2_height = parameters.img2_height;
+    let search_area = i32(parameters.neighbor_distance);
+
+    if x1 >= img1_width || y1 >= img1_height {
+        return;
+    }
+
+    let point = img1[img1_width*y1+x1];
+    if point.x < 0 || point.y < 0 || u32(point.x) >= img2_width || u32(point.y) >= img2_height {
+        return;
+    }
+
+    let min_x = u32(clamp(point.x-search_area, 0, i32(img2_width)));
+    let max_x = u32(clamp(point.x+search_area+1, 0, i32(img2_width)));
+    let min_y = u32(clamp(point.y-search_area, 0, i32(img2_height)));
+    let max_y = u32(clamp(point.y+search_area+1, 0, i32(img2_height)));
+
+    let r_min_x = clamp(i32(x1)-search_area, 0, i32(img1_width));
+    let r_max_x = clamp(i32(x1)+search_area+1, 0, i32(img1_width));
+    let r_min_y = clamp(i32(y1)-search_area, 0, i32(img1_height));
+    let r_max_y = clamp(i32(y1)+search_area+1, 0, i32(img1_height));
+
+    for (var y2 = min_y;y2<max_y;y2++) {
+        for (var x2 = min_x;x2<max_x;x2++) {
+            let rpoint = img2[img2_width*y2+x2];
+            if rpoint.x < 0 || rpoint.y < 0 {
+                continue;
+            }
+            if rpoint.x >= r_min_x && rpoint.x < r_max_x && rpoint.y >= r_min_y && rpoint.y < r_max_y {
+                return;
+            }
+        }
+    }
+
+    img1[img1_width*y1+x1] = vec2(-1, -1);
+}

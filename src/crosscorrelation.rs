@@ -195,7 +195,18 @@ impl PointCorrelations {
         dir: CorrelationDirection,
     ) {
         if let Some(gpu_context) = &mut self.gpu_context {
-            gpu_context.correlate_images(img1, img2, scale, progress_listener);
+            let dir = match dir {
+                CorrelationDirection::Forward => gpu::CorrelationDirection::Forward,
+                CorrelationDirection::Reverse => gpu::CorrelationDirection::Reverse,
+            };
+            gpu_context.correlate_images(
+                img1,
+                img2,
+                scale,
+                self.first_pass,
+                progress_listener,
+                dir,
+            );
             return;
         };
         let img2_data = compute_image_point_data(&img2);
@@ -495,6 +506,15 @@ impl PointCorrelations {
     }
 
     fn cross_check_filter(&mut self, scale: f32, dir: CorrelationDirection) {
+        if let Some(gpu_context) = &mut self.gpu_context {
+            let dir = match dir {
+                CorrelationDirection::Forward => gpu::CorrelationDirection::Forward,
+                CorrelationDirection::Reverse => gpu::CorrelationDirection::Reverse,
+            };
+            gpu_context.cross_check_filter(scale, dir);
+            return;
+        };
+
         let (correlated_points, correlated_points_reverse) = match dir {
             CorrelationDirection::Forward => {
                 (&mut self.correlated_points, &self.correlated_points_reverse)
@@ -647,8 +667,9 @@ mod gpu {
 
     use super::{
         CORRIDOR_EXTEND_RANGE, CORRIDOR_MIN_RANGE, CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE,
-        CORRIDOR_SEGMENT_LENGTH_LOWPOWER, CORRIDOR_SIZE, KERNEL_SIZE, NEIGHBOR_DISTANCE,
-        SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE, SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER,
+        CORRIDOR_SEGMENT_LENGTH_LOWPOWER, CORRIDOR_SIZE, CROSS_CHECK_SEARCH_AREA, KERNEL_SIZE,
+        NEIGHBOR_DISTANCE, SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE,
+        SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER,
     };
 
     #[repr(C)]
@@ -678,8 +699,8 @@ mod gpu {
         min_stdev: f32,
         correlation_threshold: f32,
         fundamental_matrix: Matrix3<f64>,
-        out_shape: (usize, usize),
-        first_pass: bool,
+        img1_shape: (usize, usize),
+        img2_shape: (usize, usize),
 
         corridor_segment_length: usize,
         search_area_segment_length: usize,
@@ -693,13 +714,20 @@ mod gpu {
         buffer_internal_img2: wgpu::Buffer,
         buffer_internal_int: wgpu::Buffer,
         buffer_out: wgpu::Buffer,
+        buffer_out_reverse: wgpu::Buffer,
 
         pipeline_configs: HashMap<String, ComputePipelineConfig>,
     }
 
+    pub enum CorrelationDirection {
+        Forward,
+        Reverse,
+    }
+
     struct ComputePipelineConfig {
         pipeline: wgpu::ComputePipeline,
-        bind_group: wgpu::BindGroup,
+        cross_correlation_bind_group: wgpu::BindGroup,
+        cross_check_bind_group: wgpu::BindGroup,
     }
 
     impl GpuContext {
@@ -711,7 +739,8 @@ mod gpu {
             fundamental_matrix: Matrix3<f64>,
             low_power: bool,
         ) -> Result<GpuContext, Box<dyn error::Error>> {
-            let out_shape = (img1_dimensions.1, img1_dimensions.0);
+            let img1_shape = (img1_dimensions.1, img1_dimensions.0);
+            let img2_shape = (img2_dimensions.1, img2_dimensions.0);
 
             let img1_pixels = img1_dimensions.0 * img1_dimensions.1;
             let img2_pixels = img2_dimensions.0 * img2_dimensions.1;
@@ -780,7 +809,6 @@ mod gpu {
             };
 
             // Init buffers.
-            let out_pixels = img1_pixels;
             let buffer_img = init_buffer(
                 &device,
                 (img1_pixels + img2_pixels) * std::mem::size_of::<f32>(),
@@ -807,8 +835,14 @@ mod gpu {
             );
             let buffer_out = init_buffer(
                 &device,
-                out_pixels * 2 * std::mem::size_of::<i32>(),
+                img1_pixels * 2 * std::mem::size_of::<i32>(),
                 false,
+                false,
+            );
+            let buffer_out_reverse = init_buffer(
+                &device,
+                img2_pixels * 2 * std::mem::size_of::<i32>(),
+                true,
                 false,
             );
 
@@ -816,8 +850,8 @@ mod gpu {
                 min_stdev,
                 correlation_threshold,
                 fundamental_matrix,
-                out_shape,
-                first_pass: true,
+                img1_shape,
+                img2_shape,
                 corridor_segment_length,
                 search_area_segment_length,
                 device_name,
@@ -829,6 +863,7 @@ mod gpu {
                 buffer_internal_img2,
                 buffer_internal_int,
                 buffer_out,
+                buffer_out_reverse,
                 pipeline_configs: HashMap::new(),
             };
             Ok(result)
@@ -843,17 +878,27 @@ mod gpu {
             img1: &DMatrix<u8>,
             img2: &DMatrix<u8>,
             scale: f32,
+            first_pass: bool,
             progress_listener: Option<&PL>,
+            dir: CorrelationDirection,
         ) {
             let max_width = img1.ncols().max(img2.ncols());
             let max_height = img1.nrows().max(img2.nrows());
             let max_shape = (max_height, max_width);
             let img1_shape = img1.shape();
+            let out_shape = match dir {
+                CorrelationDirection::Forward => self.img1_shape,
+                CorrelationDirection::Reverse => self.img2_shape,
+            };
 
             let mut progressbar_completed_percentage = 0.02;
-            let send_progress = |v| {
+            let send_progress = |value| {
+                let value = match dir {
+                    CorrelationDirection::Forward => value / 2.0,
+                    CorrelationDirection::Reverse => 0.5 + value / 2.0,
+                };
                 if let Some(pl) = progress_listener {
-                    pl.report_status(v);
+                    pl.report_status(value);
                 }
             };
 
@@ -862,9 +907,9 @@ mod gpu {
                 img1_height: img1.nrows() as u32,
                 img2_width: img2.ncols() as u32,
                 img2_height: img2.nrows() as u32,
-                out_width: self.out_shape.1 as u32,
-                out_height: self.out_shape.0 as u32,
-                fundamental_matrix: self.convert_fundamental_matrix(),
+                out_width: out_shape.1 as u32,
+                out_height: out_shape.0 as u32,
+                fundamental_matrix: self.convert_fundamental_matrix(&dir),
                 scale,
                 iteration_pass: 0,
                 corridor_offset: 0,
@@ -880,10 +925,10 @@ mod gpu {
 
             self.transfer_in_images(img1, img2);
 
-            if self.first_pass {
-                self.run_shader(self.out_shape, "init_out_data", params);
+            if first_pass {
+                self.run_shader(out_shape, &dir, "init_out_data", params);
             } else {
-                self.run_shader(max_shape, "prepare_initialdata_searchdata", params);
+                self.run_shader(max_shape, &dir, "prepare_initialdata_searchdata", params);
                 progressbar_completed_percentage = 0.02;
                 send_progress(progressbar_completed_percentage);
 
@@ -899,7 +944,7 @@ mod gpu {
                     if params.corridor_end > neighbor_pixels as u32 {
                         params.corridor_end = neighbor_pixels as u32;
                     }
-                    self.run_shader(img1_shape, "prepare_searchdata", params);
+                    self.run_shader(img1_shape, &dir, "prepare_searchdata", params);
 
                     let percent_complete = progressbar_completed_percentage
                         + 0.09 * (l as f32 / neighbor_segments as f32);
@@ -915,7 +960,7 @@ mod gpu {
                     if params.corridor_end > neighbor_pixels as u32 {
                         params.corridor_end = neighbor_pixels as u32;
                     }
-                    self.run_shader(img1_shape, "prepare_searchdata", params);
+                    self.run_shader(img1_shape, &dir, "prepare_searchdata", params);
 
                     let percent_complete = progressbar_completed_percentage
                         + 0.09 * (l as f32 / neighbor_segments as f32);
@@ -925,12 +970,12 @@ mod gpu {
                 progressbar_completed_percentage = 0.20;
             }
             send_progress(progressbar_completed_percentage);
-            params.iteration_pass = if self.first_pass { 0 } else { 1 };
+            params.iteration_pass = if first_pass { 0 } else { 1 };
 
-            self.run_shader(max_shape, "prepare_initialdata_correlation", params);
+            self.run_shader(max_shape, &dir, "prepare_initialdata_correlation", params);
 
             let corridor_stripes = 2 * CORRIDOR_SIZE + 1;
-            let max_length = self.out_shape.0.max(self.out_shape.1);
+            let max_length = out_shape.0.max(out_shape.1);
             let segment_length = self.corridor_segment_length;
             let corridor_length = max_length - (KERNEL_SIZE * 2);
             let corridor_segments = corridor_length / segment_length + 1;
@@ -942,7 +987,7 @@ mod gpu {
                     if params.corridor_end > corridor_length as u32 {
                         params.corridor_end = corridor_length as u32;
                     }
-                    self.run_shader(img1_shape, "cross_correlate", params);
+                    self.run_shader(img1_shape, &dir, "cross_correlate", params);
 
                     let corridor_complete = params.corridor_end as f32 / corridor_length as f32;
                     let percent_complete = progressbar_completed_percentage
@@ -952,22 +997,58 @@ mod gpu {
                     send_progress(percent_complete);
                 }
             }
+        }
 
-            self.first_pass = false;
+        pub fn cross_check_filter(&mut self, scale: f32, dir: CorrelationDirection) {
+            let (out_shape, out_shape_reverse) = match dir {
+                CorrelationDirection::Forward => (self.img1_shape, self.img2_shape),
+                CorrelationDirection::Reverse => (self.img2_shape, self.img1_shape),
+            };
+
+            let search_area = CROSS_CHECK_SEARCH_AREA * (1.0 / scale).round() as usize;
+
+            // Reuse/repurpose ShaderParams.
+            let params = ShaderParams {
+                img1_width: out_shape.1 as u32,
+                img1_height: out_shape.0 as u32,
+                img2_width: out_shape_reverse.1 as u32,
+                img2_height: out_shape_reverse.0 as u32,
+                out_width: 0,
+                out_height: 0,
+                fundamental_matrix: [0.0; 3 * 4],
+                scale: 0.0,
+                iteration_pass: 0,
+                corridor_offset: 0,
+                corridor_start: 0,
+                corridor_end: 0,
+                kernel_size: 0,
+                threshold: 0.0,
+                min_stdev: 0.0,
+                neighbor_distance: search_area as u32,
+                extend_range: 0.0,
+                min_range: 0.0,
+            };
+            self.run_shader(out_shape, &dir, "cross_check_filter", params);
         }
 
         fn run_shader(
             &mut self,
             shape: (usize, usize),
+            dir: &CorrelationDirection,
             entry_point: &str,
             shader_params: ShaderParams,
         ) {
-            if !self.pipeline_configs.contains_key(entry_point) {
-                let pipeline_config = self.create_pipeline_config(entry_point);
+            let dir_name = match dir {
+                CorrelationDirection::Forward => "forward",
+                CorrelationDirection::Reverse => "reverse",
+            };
+            let config_key = format!("{}-{}", entry_point, dir_name);
+            if !self.pipeline_configs.contains_key(&config_key) {
+                let pipeline_config = self.create_pipeline_config(entry_point, dir);
                 self.pipeline_configs
-                    .insert(entry_point.to_string(), pipeline_config);
+                    .insert(config_key.to_string(), pipeline_config);
             }
-            let pipeline_config = self.pipeline_configs.get(entry_point).unwrap();
+            let pipeline_config = self.pipeline_configs.get(&config_key).unwrap();
 
             let mut encoder = self
                 .device
@@ -978,7 +1059,8 @@ mod gpu {
                     encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
                 cpass.set_pipeline(&pipeline_config.pipeline);
                 cpass.set_push_constants(0, bytemuck::cast_slice(&[shader_params]));
-                cpass.set_bind_group(0, &pipeline_config.bind_group, &[]);
+                cpass.set_bind_group(0, &pipeline_config.cross_correlation_bind_group, &[]);
+                cpass.set_bind_group(1, &pipeline_config.cross_check_bind_group, &[]);
                 cpass.dispatch_workgroups(workgroup_size.0 as u32, workgroup_size.1 as u32, 1);
             }
 
@@ -986,11 +1068,15 @@ mod gpu {
             self.device.poll(wgpu::Maintain::Wait);
         }
 
-        fn convert_fundamental_matrix(&self) -> [f32; 3 * 4] {
+        fn convert_fundamental_matrix(&self, dir: &CorrelationDirection) -> [f32; 3 * 4] {
+            let fundamental_matrix = match dir {
+                CorrelationDirection::Forward => self.fundamental_matrix,
+                CorrelationDirection::Reverse => self.fundamental_matrix.transpose(),
+            };
             let mut f = [0f32; 3 * 4];
             for row in 0..3 {
                 for col in 0..3 {
-                    f[col * 4 + row] = self.fundamental_matrix[(row, col)] as f32;
+                    f[col * 4 + row] = fundamental_matrix[(row, col)] as f32;
                 }
             }
             f
@@ -1024,7 +1110,7 @@ mod gpu {
             self.buffer_internal_img2.destroy();
             self.buffer_internal_int.destroy();
 
-            let mut out_image = DMatrix::from_element(self.out_shape.0, self.out_shape.1, None);
+            let mut out_image = DMatrix::from_element(self.img1_shape.0, self.img1_shape.1, None);
 
             let out_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: None,
@@ -1072,8 +1158,17 @@ mod gpu {
             Ok(out_image)
         }
 
-        fn create_pipeline_config(&self, entry_point: &str) -> ComputePipelineConfig {
-            let bind_group_layout =
+        fn create_pipeline_config(
+            &self,
+            entry_point: &str,
+            dir: &CorrelationDirection,
+        ) -> ComputePipelineConfig {
+            let (buffer_out, buffer_out_reverse) = match dir {
+                CorrelationDirection::Forward => (&self.buffer_out, &self.buffer_out_reverse),
+                CorrelationDirection::Reverse => (&self.buffer_out_reverse, &self.buffer_out),
+            };
+
+            let correlation_layout =
                 self.device
                     .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                         label: None,
@@ -1130,18 +1225,47 @@ mod gpu {
                                 ty: wgpu::BindingType::Buffer {
                                     ty: wgpu::BufferBindingType::Storage { read_only: false },
                                     has_dynamic_offset: false,
-                                    min_binding_size: wgpu::BufferSize::new(self.buffer_out.size()),
+                                    min_binding_size: wgpu::BufferSize::new(buffer_out.size()),
                                 },
                                 count: None,
                             },
                         ],
                     });
 
+            let cross_check_layout =
+                self.device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: None,
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::COMPUTE,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                    has_dynamic_offset: false,
+                                    min_binding_size: wgpu::BufferSize::new(buffer_out.size()),
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 1,
+                                visibility: wgpu::ShaderStages::COMPUTE,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                    has_dynamic_offset: false,
+                                    min_binding_size: wgpu::BufferSize::new(
+                                        buffer_out_reverse.size(),
+                                    ),
+                                },
+                                count: None,
+                            },
+                        ],
+                    });
             let pipeline_layout =
                 self.device
                     .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                         label: None,
-                        bind_group_layouts: &[&bind_group_layout],
+                        bind_group_layouts: &[&correlation_layout, &cross_check_layout],
                         push_constant_ranges: &[wgpu::PushConstantRange {
                             stages: wgpu::ShaderStages::COMPUTE,
                             range: 0..std::mem::size_of::<ShaderParams>() as u32,
@@ -1157,35 +1281,54 @@ mod gpu {
                     entry_point,
                 });
 
-            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.buffer_img.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: self.buffer_internal_img1.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: self.buffer_internal_img2.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: self.buffer_internal_int.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: self.buffer_out.as_entire_binding(),
-                    },
-                ],
-            });
+            let cross_correlation_bind_group =
+                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: None,
+                    layout: &correlation_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: self.buffer_img.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: self.buffer_internal_img1.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: self.buffer_internal_img2.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: self.buffer_internal_int.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: buffer_out.as_entire_binding(),
+                        },
+                    ],
+                });
+
+            let cross_check_bind_group =
+                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: None,
+                    layout: &cross_check_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: buffer_out.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: buffer_out_reverse.as_entire_binding(),
+                        },
+                    ],
+                });
+
             ComputePipelineConfig {
                 pipeline,
-                bind_group,
+                cross_correlation_bind_group,
+                cross_check_bind_group,
             }
         }
     }
