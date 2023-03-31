@@ -22,7 +22,7 @@ struct Parameters
 
 var<push_constant> parameters: Parameters;
 @group(0) @binding(0) var<storage> images: array<f32>;
-// For searchdata: contains [mean, stdev, _] for image1
+// For searchdata: contains [min_corridor, stdev, _] for image1
 // For cross_correlate: contains [avg, stdev, corr] for image1
 @group(0) @binding(1) var<storage, read_write> internals_img1: array<vec3<f32>>;
 // Contains [avg, stdev] for image 2
@@ -344,7 +344,7 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
     {
         let out_pos = out_width*u32((f32(y1)/scale)) + u32(f32(x1)/scale);
         data_img1[2] = best_corr;
-        internals_img1[img1_width*y1 + x1] = data_img1;
+        internals_img1[img1_width*y1+x1] = data_img1;
         result[out_pos] = best_match;
     }
 }

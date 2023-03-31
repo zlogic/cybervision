@@ -817,7 +817,7 @@ mod gpu {
             );
             let buffer_internal_img1 = init_buffer(
                 &device,
-                (img1_pixels * 3) * std::mem::size_of::<f32>(),
+                (img1_pixels * 4) * std::mem::size_of::<f32>(),
                 true,
                 false,
             );
@@ -829,7 +829,7 @@ mod gpu {
             );
             let buffer_internal_int = init_buffer(
                 &device,
-                img1_pixels * 3 * std::mem::size_of::<i32>(),
+                img1_pixels * 4 * std::mem::size_of::<i32>(),
                 true,
                 false,
             );
@@ -975,7 +975,7 @@ mod gpu {
             self.run_shader(max_shape, &dir, "prepare_initialdata_correlation", params);
 
             let corridor_stripes = 2 * CORRIDOR_SIZE + 1;
-            let max_length = out_shape.0.max(out_shape.1);
+            let max_length = img2.nrows().max(img2.ncols());
             let segment_length = self.corridor_segment_length;
             let corridor_length = max_length - (KERNEL_SIZE * 2);
             let corridor_segments = corridor_length / segment_length + 1;
@@ -1109,6 +1109,7 @@ mod gpu {
             self.buffer_internal_img1.destroy();
             self.buffer_internal_img2.destroy();
             self.buffer_internal_int.destroy();
+            self.buffer_out_reverse.destroy();
 
             let mut out_image = DMatrix::from_element(self.img1_shape.0, self.img1_shape.1, None);
 
