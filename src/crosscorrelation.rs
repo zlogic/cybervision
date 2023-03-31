@@ -796,16 +796,10 @@ mod gpu {
             let info = adapter.get_info();
             let device_name = format!("{:?} - {}", info.backend, info.name);
 
-            let shader_module = unsafe {
-                // The shader already contains bound checks.
-                // Disabling these checks significantly improves performance when running on Metal.
-                device.create_shader_module_unchecked(wgpu::ShaderModuleDescriptor {
-                    label: None,
-                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
-                        "correlation.wgsl"
-                    ))),
-                })
-            };
+            let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("correlation.wgsl"))),
+            });
 
             // Init buffers.
             let buffer_img = init_buffer(
