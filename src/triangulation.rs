@@ -2,10 +2,14 @@ use nalgebra::{DMatrix, Matrix3x4, Vector3};
 
 use rayon::prelude::*;
 
-use crate::fundamentalmatrix::FundamentalMatrix;
+use crate::{correlation, fundamentalmatrix::FundamentalMatrix};
 
 const PERSPECTIVE_VALUE_RANGE: f64 = 100.0;
+const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 1.0;
+const OUTLIER_FILTER_SEARCH_AREA: usize = 5;
+const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 10;
 
+#[derive(Clone, Copy)]
 pub struct Point {
     pub original: (usize, usize),
     pub reconstructed: Vector3<f64>,
@@ -55,7 +59,7 @@ pub fn triangulate_perspective(
     p2: &Matrix3x4<f64>,
     scale: (f32, f32, f32),
 ) -> Surface {
-    let mut points: Vec<Point> = correlated_points
+    let points: Vec<Point> = correlated_points
         .column_iter()
         .enumerate()
         .par_bridge()
@@ -78,6 +82,9 @@ pub fn triangulate_perspective(
                 .collect::<Vec<_>>()
         })
         .collect();
+
+    let mut points = filter_outliers(correlated_points.shape(), &points);
+
     scale_points(
         &mut points,
         (scale.0 as f64, scale.1 as f64, scale.2 as f64),
@@ -114,6 +121,26 @@ fn triangulate_point_perspective(
     Some(Vector3::new(point3d.x, point3d.y, point3d.z))
 }
 
+fn filter_outliers(shape: (usize, usize), points: &Vec<Point>) -> Vec<Point> {
+    // TODO: replace this with something better?
+    let mut point_depths: DMatrix<Option<f64>> = DMatrix::from_element(shape.0, shape.1, None);
+
+    points
+        .iter()
+        .for_each(|p| point_depths[(p.original.1, p.original.0)] = Some(p.reconstructed.z));
+
+    points
+        .par_iter()
+        .filter_map(|p| {
+            if point_not_outlier(&point_depths, p.original.1, p.original.0) {
+                Some(*p)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 fn scale_points(points: &mut Surface, scale: (f64, f64, f64)) {
     let (min_x, max_x, min_y, max_y, min_z, max_z) = points.iter().fold(
         (f64::MAX, f64::MIN, f64::MAX, f64::MIN, f64::MAX, f64::MIN),
@@ -131,10 +158,69 @@ fn scale_points(points: &mut Surface, scale: (f64, f64, f64)) {
             )
         },
     );
+    let optimal_scale = 1.0 / (max_x - min_x).min(max_y - min_y);
     points.iter_mut().for_each(|point| {
         let point = &mut point.reconstructed;
-        point.x = scale.0 * (point.x - min_x) * PERSPECTIVE_VALUE_RANGE / (max_x - min_x);
-        point.y = scale.1 * (point.y - min_y) * PERSPECTIVE_VALUE_RANGE / (max_y - min_y);
+        point.x = scale.0 * (point.x - min_x) * PERSPECTIVE_VALUE_RANGE * optimal_scale;
+        point.y = scale.1 * (point.y - min_y) * PERSPECTIVE_VALUE_RANGE * optimal_scale;
         point.z = scale.2 * (point.z - min_z) * PERSPECTIVE_VALUE_RANGE / (max_z - min_z);
     })
+}
+
+#[inline]
+fn point_not_outlier(img: &DMatrix<Option<f64>>, row: usize, col: usize) -> bool {
+    const SEARCH_RADIUS: usize = OUTLIER_FILTER_SEARCH_AREA;
+    const SEARCH_WIDTH: usize = SEARCH_RADIUS * 2 + 1;
+    if !correlation::point_inside_bounds::<SEARCH_RADIUS>(img.shape(), row, col) {
+        return false;
+    };
+    let point_distance = if let Some(v) = img[(row, col)] {
+        v
+    } else {
+        return false;
+    };
+    let mut avg = 0.0;
+    let mut stdev = 0.0;
+    let mut count = 0;
+    for r in 0..SEARCH_WIDTH {
+        let srow = (row + r).saturating_sub(SEARCH_RADIUS);
+        for c in 0..SEARCH_WIDTH {
+            let scol = (col + c).saturating_sub(SEARCH_RADIUS);
+            if srow == row && scol == col {
+                continue;
+            }
+            let value = if let Some(v) = img[(srow, scol)] {
+                v
+            } else {
+                continue;
+            };
+            avg += value;
+            count += 1;
+        }
+    }
+    if count < OUTLIER_FILTER_MIN_NEIGHBORS {
+        return false;
+    }
+
+    avg /= count as f64;
+
+    for r in 0..SEARCH_WIDTH {
+        let srow = (row + r).saturating_sub(SEARCH_RADIUS);
+        for c in 0..SEARCH_WIDTH {
+            let scol = (col + c).saturating_sub(SEARCH_RADIUS);
+            if srow == row && scol == col {
+                continue;
+            }
+            let value = if let Some(v) = img[(srow, scol)] {
+                v
+            } else {
+                continue;
+            };
+            let delta = value - avg;
+            stdev += delta * delta;
+        }
+    }
+    stdev = (stdev / count as f64).sqrt();
+
+    (point_distance - avg).abs() < stdev * OUTLIER_FILTER_STDEV_THRESHOLD
 }
