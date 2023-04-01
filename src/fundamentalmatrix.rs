@@ -225,12 +225,16 @@ impl FundamentalMatrix {
         let mean = a.row_mean();
         a.row_iter_mut().for_each(|mut r| r -= mean);
         let usv = a.svd(false, true);
+        let s = usv.singular_values;
+        if s[1] < RANSAC_RANK_EPSILON_PERSPECTIVE {
+            return None;
+        }
         let vt = &usv.v_t?;
 
         let vtc = vt.row(vt.nrows() - 1);
         let e = vtc.dot(&mean);
         let f = Matrix3::new(0.0, 0.0, vtc[0], 0.0, 0.0, vtc[1], vtc[2], vtc[3], -e);
-        Some(f)
+        Some(f / f[(2, 2)])
     }
 
     #[inline]
@@ -385,14 +389,10 @@ impl FundamentalMatrix {
 
         let mut a = Matrix4::<f64>::zeros();
 
-        a.row_mut(0)
-            .copy_from(&(p1.row(2) * point1.0 - p1.row(0)));
-        a.row_mut(1)
-            .copy_from(&(p1.row(2) * point1.1 - p1.row(1)));
-        a.row_mut(2)
-            .copy_from(&(p2.row(2) * point2.0 - p2.row(0)));
-        a.row_mut(3)
-            .copy_from(&(p2.row(2) * point2.1 - p2.row(1)));
+        a.row_mut(0).copy_from(&(p1.row(2) * point1.0 - p1.row(0)));
+        a.row_mut(1).copy_from(&(p1.row(2) * point1.1 - p1.row(1)));
+        a.row_mut(2).copy_from(&(p2.row(2) * point2.0 - p2.row(0)));
+        a.row_mut(3).copy_from(&(p2.row(2) * point2.1 - p2.row(1)));
 
         let usv = a.svd(false, true);
         let vt = usv.v_t.unwrap();
