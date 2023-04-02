@@ -16,6 +16,8 @@ More information is available in the [Wiki](https://github.com/zlogic/cybervisio
 
 <img src="https://raw.githubusercontent.com/wiki/zlogic/cybervision/Explanation/03_mesh_small.png"/>
 
+<img src="https://raw.githubusercontent.com/wiki/zlogic/cybervision/Examples/Photos/photo4-small.jpg"/>
+
 ## How to use it
 
 Download a release distribution from [releases](/zlogic/cybervision/releases).
