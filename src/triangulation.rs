@@ -160,9 +160,9 @@ fn scale_points(points: &mut Surface, scale: (f64, f64, f64)) {
     );
     points.iter_mut().for_each(|point| {
         let point = &mut point.reconstructed;
-        point.x = scale.0 * (point.x - min_x) * PERSPECTIVE_VALUE_RANGE / (max_x - min_x);
-        point.y = scale.1 * (point.y - min_y) * PERSPECTIVE_VALUE_RANGE / (max_y - min_y);
-        point.z = scale.2 * (point.z - min_z) * PERSPECTIVE_VALUE_RANGE / (max_z - min_z);
+        point.x = scale.0 * PERSPECTIVE_VALUE_RANGE * (point.x - min_x) / (max_x - min_x);
+        point.y = scale.1 * PERSPECTIVE_VALUE_RANGE * (point.y - min_y) / (max_y - min_y);
+        point.z = scale.2 * PERSPECTIVE_VALUE_RANGE * (point.z - min_z) / (max_z - min_z);
     })
 }
 

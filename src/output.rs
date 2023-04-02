@@ -194,9 +194,9 @@ impl MeshWriter for PlyWriter {
         writeln!(w, "format binary_big_endian 1.0")?;
         writeln!(w, "comment Cybervision 3D surface")?;
         writeln!(w, "element vertex {}", nvertices)?;
-        writeln!(w, "property float x")?;
-        writeln!(w, "property float y")?;
-        writeln!(w, "property float z")?;
+        writeln!(w, "property double x")?;
+        writeln!(w, "property double y")?;
+        writeln!(w, "property double z")?;
 
         match self.vertex_mode {
             VertexMode::Plain => {}
@@ -224,7 +224,7 @@ impl MeshWriter for PlyWriter {
         let w = &mut self.buffer;
 
         let p = p.reconstructed;
-        let (x, y, z) = (p.x as f32, -p.y as f32, p.z as f32);
+        let (x, y, z) = (p.x as f64, -p.y as f64, p.z as f64);
         w.write_all(&x.to_be_bytes())?;
         w.write_all(&y.to_be_bytes())?;
         w.write_all(&z.to_be_bytes())?;
@@ -360,9 +360,9 @@ impl MeshWriter for ObjWriter {
                 p.x,
                 -p.y,
                 p.z,
-                color[0] as f32 / 255.0,
-                color[1] as f32 / 255.0,
-                color[2] as f32 / 255.0,
+                color[0] as f64 / 255.0,
+                color[1] as f64 / 255.0,
+                color[2] as f64 / 255.0,
             )?
         } else {
             writeln!(w, "v {} {} {}", p.x, -p.y, p.z)?
@@ -380,8 +380,8 @@ impl MeshWriter for ObjWriter {
                 writeln!(
                     w,
                     "vt {} {}",
-                    p.0 as f32 / self.img1.width() as f32,
-                    1.0f32 - p.1 as f32 / self.img1.height() as f32,
+                    p.0 as f64 / self.img1.width() as f64,
+                    1.0f64 - p.1 as f64 / self.img1.height() as f64,
                 )?;
             }
         }
