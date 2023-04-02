@@ -224,7 +224,7 @@ impl MeshWriter for PlyWriter {
         let w = &mut self.buffer;
 
         let p = p.reconstructed;
-        let (x, y, z) = (p.x as f64, -p.y as f64, p.z as f64);
+        let (x, y, z) = (p.x, -p.y, p.z);
         w.write_all(&x.to_be_bytes())?;
         w.write_all(&y.to_be_bytes())?;
         w.write_all(&z.to_be_bytes())?;
