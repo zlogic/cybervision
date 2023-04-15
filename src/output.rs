@@ -15,13 +15,13 @@ use spade::{
 
 use crate::triangulation;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum InterpolationMode {
     Delaunay,
     None,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum VertexMode {
     Plain,
     Color,

@@ -1,3 +1,5 @@
+use std::process::exit;
+
 use clap::Parser;
 mod correlation;
 mod crosscorrelation;
@@ -56,11 +58,8 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = Mesh::Plain)]
     mesh: Mesh,
 
-    /// Image 1
-    img1: String,
-
-    /// Image 2
-    img2: String,
+    /// Source images
+    img_src: Vec<String>,
 
     /// Output image
     img_out: String,
@@ -69,5 +68,8 @@ pub struct Cli {
 fn main() {
     let args = Cli::parse();
 
-    reconstruction::reconstruct(&args);
+    if let Err(err) = reconstruction::reconstruct(&args) {
+        println!("Reconstruction failed, root cause is {}", err);
+        exit(-1);
+    };
 }

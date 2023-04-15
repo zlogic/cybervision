@@ -25,13 +25,13 @@ const CROSS_CHECK_SEARCH_AREA: usize = 2;
 
 type Match = (u32, u32);
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum ProjectionMode {
     Affine,
     Perspective,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum HardwareMode {
     Gpu,
     GpuLowPower,
@@ -86,8 +86,8 @@ impl PointCorrelations {
         img1_dimensions: (u32, u32),
         img2_dimensions: (u32, u32),
         fundamental_matrix: Matrix3<f64>,
-        projection_mode: &ProjectionMode,
-        hardware_mode: &HardwareMode,
+        projection_mode: ProjectionMode,
+        hardware_mode: HardwareMode,
     ) -> PointCorrelations {
         let (min_stdev, correlation_threshold) = match projection_mode {
             ProjectionMode::Affine => (MIN_STDEV_AFFINE, THRESHOLD_AFFINE),

@@ -22,7 +22,7 @@ const RANSAC_RANK_EPSILON_PERSPECTIVE: f64 = 0.001;
 type Point = (usize, usize);
 type Match = (Point, Point);
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum ProjectionMode {
     Affine,
     Perspective,

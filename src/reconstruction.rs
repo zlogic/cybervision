@@ -15,7 +15,10 @@ use image::RgbImage;
 use indicatif::ProgressState;
 use indicatif::{ProgressBar, ProgressStyle};
 use nalgebra::DMatrix;
+use nalgebra::Matrix3;
 use rayon::prelude::*;
+use std::error;
+use std::fmt;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::BufReader;
@@ -29,6 +32,7 @@ struct SourceImage {
     img: GrayImage,
     scale: (f32, f32),
     tilt_angle: Option<f32>,
+    filename: String,
 }
 
 #[derive(Debug)]
@@ -39,7 +43,7 @@ struct ImageMeta {
 }
 
 impl SourceImage {
-    fn load(path: &String) -> Result<SourceImage, image::ImageError> {
+    fn load(path: &str) -> Result<SourceImage, image::ImageError> {
         let metadata = SourceImage::get_metadata(path);
         let img = image::open(path)?.into_luma8();
         let img = img.view(0, 0, img.width(), img.height() - metadata.databar_height);
@@ -48,10 +52,11 @@ impl SourceImage {
             img: img.to_image(),
             scale: metadata.scale,
             tilt_angle: metadata.tilt_angle,
+            filename: path.to_string(),
         })
     }
 
-    fn load_rgb(path: &String) -> Result<RgbImage, image::ImageError> {
+    fn load_rgb(path: &str) -> Result<RgbImage, image::ImageError> {
         let metadata = SourceImage::get_metadata(path);
         let img = image::open(path)?.into_rgb8();
         Ok(img
@@ -59,7 +64,7 @@ impl SourceImage {
             .to_image())
     }
 
-    fn get_metadata(path: &String) -> ImageMeta {
+    fn get_metadata(path: &str) -> ImageMeta {
         let default_metadata = ImageMeta {
             scale: (1.0, 1.0),
             tilt_angle: None,
@@ -78,7 +83,7 @@ impl SourceImage {
             .and_then(|(_, value)| value.parse::<F>().ok())
     }
 
-    fn get_metadata_tiff(path: &String) -> Result<ImageMeta, tiff::TiffError> {
+    fn get_metadata_tiff(path: &str) -> Result<ImageMeta, tiff::TiffError> {
         let reader = BufReader::new(File::open(path)?);
         let mut decoder = tiff::decoder::Decoder::new(reader)?;
         let metadata = decoder
@@ -141,57 +146,138 @@ impl SourceImage {
     }
 }
 
-type Point = (usize, usize);
+struct ImageReconstruction {
+    scale: f32,
+    hardware_mode: crosscorrelation::HardwareMode,
+    interpolation_mode: output::InterpolationMode,
+    projection_mode: fundamentalmatrix::ProjectionMode,
+    vertex_mode: output::VertexMode,
+}
 
-pub fn reconstruct(args: &Cli) {
-    let img1 = SourceImage::load(&args.img1).unwrap();
-    let img2 = SourceImage::load(&args.img2).unwrap();
-    println!(
-        "Image {} has scale width {:?}, height {:?}",
-        args.img1, img1.scale.0, img1.scale.1
-    );
-    println!(
-        "Image {} has scale width {:?}, height {:?}",
-        args.img2, img2.scale.0, img1.scale.1
-    );
-    let tilt_angle = img1
-        .tilt_angle
-        .and_then(|a1| img2.tilt_angle.map(|a2| a2 - a1));
-    if tilt_angle.is_some() {
-        println!("Relative tilt angle is {}", tilt_angle.unwrap());
-    }
+pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
     let start_time = SystemTime::now();
-    let keypoint_scale: f32;
-    let img1_scaled: DMatrix<u8>;
-    let img2_scaled: DMatrix<u8>;
-    let keypoints1: Fast;
-    let keypoints2: Fast;
-    {
-        let start_time = SystemTime::now();
-        keypoint_scale = Fast::optimal_keypoint_scale(img1.img.dimensions());
-        img1_scaled = img1.resize(keypoint_scale);
-        img2_scaled = img2.resize(keypoint_scale);
 
-        keypoints1 = Fast::new(&img1_scaled);
-        keypoints2 = Fast::new(&img2_scaled);
+    let img1_filename = &args.img_src[0];
+    let img2_filename = &args.img_src[1];
+    let projection_mode = match args.projection {
+        crate::ProjectionMode::Parallel => fundamentalmatrix::ProjectionMode::Affine,
+        crate::ProjectionMode::Perspective => fundamentalmatrix::ProjectionMode::Perspective,
+    };
+
+    let hardware_mode = match args.mode {
+        crate::HardwareMode::Gpu => crosscorrelation::HardwareMode::Gpu,
+        crate::HardwareMode::GpuLowPower => crosscorrelation::HardwareMode::GpuLowPower,
+        crate::HardwareMode::Cpu => crosscorrelation::HardwareMode::Cpu,
+    };
+
+    let interpolation_mode = match args.interpolation {
+        crate::InterpolationMode::Delaunay => output::InterpolationMode::Delaunay,
+        crate::InterpolationMode::None => output::InterpolationMode::None,
+    };
+
+    let vertex_mode = match args.mesh {
+        crate::Mesh::Plain => output::VertexMode::Plain,
+        crate::Mesh::VertexColors => output::VertexMode::Color,
+        crate::Mesh::TextureCoordinates => output::VertexMode::Texture,
+    };
+
+    let reconstruction_task = ImageReconstruction {
+        scale: args.scale,
+        hardware_mode,
+        interpolation_mode,
+        projection_mode,
+        vertex_mode,
+    };
+
+    let surface = reconstruction_task.reconstruct(img1_filename, img2_filename)?;
+
+    reconstruction_task.output_surface(surface, &img1_filename, &args.img_out)?;
+
+    if let Ok(t) = start_time.elapsed() {
+        println!("Completed reconstruction in {:.3} seconds", t.as_secs_f32());
+    }
+
+    Ok(())
+}
+
+impl ImageReconstruction {
+    fn reconstruct(
+        &self,
+        img1_filename: &str,
+        img2_filename: &str,
+    ) -> Result<triangulation::Surface, Box<dyn error::Error>> {
+        println!("Processing images {} and {}", img1_filename, img2_filename);
+        let img1 = SourceImage::load(img1_filename)?;
+        let img2 = SourceImage::load(img2_filename)?;
+        println!(
+            "Image {} has scale width {:?}, height {:?}",
+            img1_filename, img1.scale.0, img1.scale.1
+        );
+        println!(
+            "Image {} has scale width {:?}, height {:?}",
+            img2_filename, img2.scale.0, img1.scale.1
+        );
+        let tilt_angle = img1
+            .tilt_angle
+            .and_then(|a1| img2.tilt_angle.map(|a2| a2 - a1));
+        if let Some(tilt_angle) = tilt_angle {
+            println!("Relative tilt angle is {}", tilt_angle);
+        }
+
+        let point_matches = self.match_keypoints(&img1, &img2);
+
+        let fm = match self.find_fundamental_matrix(point_matches, img1.img.dimensions()) {
+            Ok(f) => f,
+            Err(err) => {
+                eprintln!("Failed to complete RANSAC task: {}", err);
+                return Err(err.into());
+            }
+        };
+        println!("Kept {} matches", fm.matches_count);
+
+        let correlated_points = match self.correlate_points(&img1, &img2, fm.f) {
+            Ok(correlated_points) => correlated_points,
+            Err(err) => {
+                eprintln!("Failed to complete points correlation: {}", err);
+                return Err(err);
+            }
+        };
+
+        // Most 3D viewers don't display coordinates below 0, reset to default 1.0 - instead of image metadata
+        //let out_scale = img1.scale;
+        let out_scale = (1.0, 1.0, self.scale);
+
+        self.triangulate_surface(out_scale, fm.f, correlated_points)
+    }
+
+    fn match_keypoints(
+        &self,
+        img1: &SourceImage,
+        img2: &SourceImage,
+    ) -> Vec<((usize, usize), (usize, usize))> {
+        let start_time = SystemTime::now();
+
+        let keypoint_scale = Fast::optimal_keypoint_scale(img1.img.dimensions());
+        let img1_scaled = img1.resize(keypoint_scale);
+        let img2_scaled = img2.resize(keypoint_scale);
+
+        let keypoints1 = Fast::new(&img1_scaled);
+        let keypoints2 = Fast::new(&img2_scaled);
 
         if let Ok(t) = start_time.elapsed() {
             println!("Extracted feature points in {:.3} seconds", t.as_secs_f32(),);
         }
         println!(
             "Image {} has {} feature points",
-            args.img1,
+            img1.filename,
             keypoints1.keypoints().len()
         );
         println!(
             "Image {} has {} feature points",
-            args.img2,
+            img2.filename,
             keypoints2.keypoints().len()
         );
-    }
 
-    let point_matches: Vec<(Point, Point)>;
-    {
         let start_time = SystemTime::now();
 
         let pb = new_progress_bar(false);
@@ -203,7 +289,7 @@ pub fn reconstruct(args: &Cli) {
             Some(&pb),
         );
         pb.finish_and_clear();
-        point_matches = matcher.matches;
+        let point_matches = matcher.matches;
         drop(keypoints1);
         drop(keypoints2);
         drop(img1_scaled);
@@ -212,12 +298,8 @@ pub fn reconstruct(args: &Cli) {
             println!("Matched keypoints in {:.3} seconds", t.as_secs_f32(),);
         }
         println!("Found {} matches", point_matches.len());
-    }
 
-    let fm: FundamentalMatrix;
-    {
-        let start_time = SystemTime::now();
-        let point_matches: Vec<((usize, usize), (usize, usize))> = point_matches
+        point_matches
             .into_par_iter()
             .map(|(p1, p2)| {
                 (
@@ -231,33 +313,37 @@ pub fn reconstruct(args: &Cli) {
                     ),
                 )
             })
-            .collect();
-        let match_buckets =
-            FundamentalMatrix::matches_to_buckets(&point_matches, img1.img.dimensions());
+            .collect()
+    }
+
+    fn find_fundamental_matrix(
+        &self,
+        point_matches: Vec<((usize, usize), (usize, usize))>,
+        img1_dimensions: (u32, u32),
+    ) -> Result<FundamentalMatrix, fundamentalmatrix::RansacError> {
+        let start_time = SystemTime::now();
+        let match_buckets = FundamentalMatrix::matches_to_buckets(&point_matches, img1_dimensions);
         drop(point_matches);
         let pb = new_progress_bar(true);
-        let projection_mode = match args.projection {
-            crate::ProjectionMode::Parallel => fundamentalmatrix::ProjectionMode::Affine,
-            crate::ProjectionMode::Perspective => fundamentalmatrix::ProjectionMode::Perspective,
-        };
-        let f = FundamentalMatrix::new(projection_mode, &match_buckets, Some(&pb));
+
+        let result = FundamentalMatrix::new(self.projection_mode, &match_buckets, Some(&pb));
         pb.finish_and_clear();
+
         if let Ok(t) = start_time.elapsed() {
             println!("Completed RANSAC fitting in {:.3} seconds", t.as_secs_f32());
         }
-        match f {
-            Ok(f) => fm = f,
-            Err(e) => {
-                eprintln!("Failed to complete RANSAC task: {}", e);
-                return;
-            }
-        }
 
-        println!("Kept {} matches", fm.matches_count);
+        result
     }
 
-    let mut point_correlations: PointCorrelations;
-    {
+    fn correlate_points(
+        &self,
+        img1: &SourceImage,
+        img2: &SourceImage,
+        f: Matrix3<f64>,
+    ) -> Result<DMatrix<Option<(u32, u32)>>, Box<dyn error::Error>> {
+        let mut point_correlations;
+
         let start_time = SystemTime::now();
         let scale_steps = PointCorrelations::optimal_scale_steps(img1.img.dimensions());
         let total_percent: f32 = (0..=scale_steps)
@@ -265,30 +351,27 @@ pub fn reconstruct(args: &Cli) {
             .sum::<f32>();
 
         let pb = new_progress_bar(false);
-        let projection_mode = match args.projection {
-            crate::ProjectionMode::Parallel => crosscorrelation::ProjectionMode::Affine,
-            crate::ProjectionMode::Perspective => crosscorrelation::ProjectionMode::Perspective,
-        };
-        let hardware_mode = match args.mode {
-            crate::HardwareMode::Gpu => crosscorrelation::HardwareMode::Gpu,
-            crate::HardwareMode::GpuLowPower => crosscorrelation::HardwareMode::GpuLowPower,
-            crate::HardwareMode::Cpu => crosscorrelation::HardwareMode::Cpu,
+        let projection_mode = match self.projection_mode {
+            fundamentalmatrix::ProjectionMode::Affine => crosscorrelation::ProjectionMode::Affine,
+            fundamentalmatrix::ProjectionMode::Perspective => {
+                crosscorrelation::ProjectionMode::Perspective
+            }
         };
 
         let mut total_percent_complete = 0.0;
         point_correlations = PointCorrelations::new(
             img1.img.dimensions(),
             img2.img.dimensions(),
-            fm.f,
-            &projection_mode,
-            &hardware_mode,
+            f,
+            projection_mode,
+            self.hardware_mode,
         );
         let mut reverse_point_correlations = PointCorrelations::new(
             img2.img.dimensions(),
             img1.img.dimensions(),
-            fm.f.transpose(),
-            &projection_mode,
-            &hardware_mode,
+            f.transpose(),
+            projection_mode,
+            self.hardware_mode,
         );
         println!(
             "Selected hardware: {}",
@@ -309,55 +392,44 @@ pub fn reconstruct(args: &Cli) {
             point_correlations.correlate_images(img1, img2, scale, Some(&pb));
             total_percent_complete += scale * scale / total_percent;
         }
-        match reverse_point_correlations.complete() {
-            Ok(_) => {}
-            Err(err) => {
-                eprintln!("Failed to complete points correlation: {}", err)
-            }
-        }
-        match point_correlations.complete() {
-            Ok(_) => {}
-            Err(err) => {
-                eprintln!("Failed to complete points correlation: {}", err)
-            }
-        }
         pb.finish_and_clear();
-
         if let Ok(t) = start_time.elapsed() {
             println!(
                 "Completed surface generation in {:.3} seconds",
                 t.as_secs_f32()
             );
         }
+
+        reverse_point_correlations.complete()?;
+        point_correlations.complete()?;
+        Ok(point_correlations.correlated_points)
     }
 
-    // Most 3D viewers don't display coordinates below 0, reset to default 1.0 - instead of image metadata
-    //let out_scale = img1.scale;
-    let out_scale = (1.0, 1.0, args.scale);
-    let surface: triangulation::Surface;
-    {
+    fn triangulate_surface(
+        &self,
+        out_scale: (f32, f32, f32),
+        f: Matrix3<f64>,
+        correlated_points: DMatrix<Option<(u32, u32)>>,
+    ) -> Result<triangulation::Surface, Box<dyn error::Error>> {
         let start_time = SystemTime::now();
 
-        surface = match args.projection {
-            crate::ProjectionMode::Parallel => {
-                triangulation::triangulate_affine(&point_correlations.correlated_points, out_scale)
+        let surface = match self.projection_mode {
+            fundamentalmatrix::ProjectionMode::Affine => {
+                triangulation::triangulate_affine(&correlated_points, out_scale)
             }
-            crate::ProjectionMode::Perspective => {
-                let p2 = match FundamentalMatrix::f_to_projection_matrix(&fm.f) {
+            fundamentalmatrix::ProjectionMode::Perspective => {
+                let p2 = match FundamentalMatrix::f_to_projection_matrix(&f) {
                     Some(p2) => p2,
                     None => {
                         eprintln!("Unable to find projection matrix");
-                        return;
+                        return Err(
+                            ReconstructionError::new("Unable to find projection matrix").into()
+                        );
                     }
                 };
-                triangulation::triangulate_perspective(
-                    &point_correlations.correlated_points,
-                    &p2,
-                    out_scale,
-                )
+                triangulation::triangulate_perspective(&correlated_points, &p2, out_scale)
             }
         };
-        drop(point_correlations);
 
         if let Ok(t) = start_time.elapsed() {
             println!(
@@ -365,47 +437,43 @@ pub fn reconstruct(args: &Cli) {
                 t.as_secs_f32()
             );
         }
+
+        Ok(surface)
     }
 
-    {
+    fn output_surface(
+        &self,
+        surface: triangulation::Surface,
+        texture_filename: &str,
+        output_filename: &str,
+    ) -> Result<(), Box<dyn error::Error>> {
         let start_time = SystemTime::now();
 
         let pb = new_progress_bar(false);
-        let interpolation_mode = match args.interpolation {
-            crate::InterpolationMode::Delaunay => output::InterpolationMode::Delaunay,
-            crate::InterpolationMode::None => output::InterpolationMode::None,
-        };
-        let vertex_mode = match args.mesh {
-            crate::Mesh::Plain => output::VertexMode::Plain,
-            crate::Mesh::VertexColors => output::VertexMode::Color,
-            crate::Mesh::TextureCoordinates => output::VertexMode::Texture,
-        };
 
-        let img1 = SourceImage::load_rgb(&args.img1).unwrap();
+        let img1 = SourceImage::load_rgb(texture_filename).unwrap();
         let result = output::output(
             surface,
             img1,
-            &args.img_out,
-            interpolation_mode,
-            vertex_mode,
+            output_filename,
+            self.interpolation_mode,
+            self.vertex_mode,
             Some(&pb),
         );
         pb.finish_and_clear();
         match result {
             Ok(_) => {}
-            Err(e) => {
-                eprintln!("Failed to save image: {}", e);
-                return;
+            Err(err) => {
+                eprintln!("Failed to save image: {}", err);
+                return Err(err);
             }
         }
 
         if let Ok(t) = start_time.elapsed() {
             println!("Saved result in {:.3} seconds", t.as_secs_f32());
         }
-    }
 
-    if let Ok(t) = start_time.elapsed() {
-        println!("Completed reconstruction in {:.3} seconds", t.as_secs_f32(),);
+        Ok(())
     }
 }
 
@@ -459,5 +527,24 @@ impl crosscorrelation::ProgressListener for CrossCorrelationProgressBar<'_> {
 impl output::ProgressListener for ProgressBar {
     fn report_status(&self, pos: f32) {
         self.set_position((pos * 10000.0) as u64);
+    }
+}
+
+#[derive(Debug)]
+pub struct ReconstructionError {
+    msg: &'static str,
+}
+
+impl ReconstructionError {
+    fn new(msg: &'static str) -> ReconstructionError {
+        ReconstructionError { msg }
+    }
+}
+
+impl std::error::Error for ReconstructionError {}
+
+impl fmt::Display for ReconstructionError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.msg)
     }
 }
