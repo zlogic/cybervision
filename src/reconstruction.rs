@@ -191,7 +191,7 @@ pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
 
     let surface = reconstruction_task.reconstruct(img1_filename, img2_filename)?;
 
-    reconstruction_task.output_surface(surface, &img1_filename, &args.img_out)?;
+    reconstruction_task.output_surface(surface, img1_filename, &args.img_out)?;
 
     if let Ok(t) = start_time.elapsed() {
         println!("Completed reconstruction in {:.3} seconds", t.as_secs_f32());
@@ -199,6 +199,8 @@ pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
 
     Ok(())
 }
+
+type CorrelatedPoints = DMatrix<Option<(u32, u32)>>;
 
 impl ImageReconstruction {
     fn reconstruct(
@@ -341,7 +343,7 @@ impl ImageReconstruction {
         img1: &SourceImage,
         img2: &SourceImage,
         f: Matrix3<f64>,
-    ) -> Result<DMatrix<Option<(u32, u32)>>, Box<dyn error::Error>> {
+    ) -> Result<CorrelatedPoints, Box<dyn error::Error>> {
         let mut point_correlations;
 
         let start_time = SystemTime::now();
