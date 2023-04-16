@@ -420,7 +420,7 @@ impl ImageReconstruction {
                 triangulation::triangulate_affine(&correlated_points, out_scale)
             }
             fundamentalmatrix::ProjectionMode::Perspective => {
-                let p2 = match FundamentalMatrix::f_to_projection_matrix(&f) {
+                let p2 = match triangulation::find_projection_matrix(&f, &correlated_points) {
                     Some(p2) => p2,
                     None => {
                         eprintln!("Unable to find projection matrix");

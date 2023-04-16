@@ -1,8 +1,8 @@
-use nalgebra::{DMatrix, Matrix3x4, Vector3};
+use nalgebra::{DMatrix, Matrix3, Matrix3x4, Matrix4, Vector3, Vector4};
 
 use rayon::prelude::*;
 
-use crate::{correlation, fundamentalmatrix::FundamentalMatrix};
+use crate::correlation;
 
 const PERSPECTIVE_VALUE_RANGE: f64 = 100.0;
 const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 1.0;
@@ -73,7 +73,7 @@ pub fn triangulate_perspective(
                     if let Some(point2) = correlated_points[(row, col)] {
                         let x2 = point2.1 as f64;
                         let y2 = point2.0 as f64;
-                        let point3d = triangulate_point_perspective(p2, (x1, y1), (x2, y2))?;
+                        let point3d = triangulate_point_perspective(p2, (x1, y1), (x2, y2));
                         Some(Point::new((col, row), point3d))
                     } else {
                         None
@@ -110,15 +110,122 @@ fn triangulate_point_perspective(
     p2: &Matrix3x4<f64>,
     point1: (f64, f64),
     point2: (f64, f64),
-) -> Option<Vector3<f64>> {
-    let mut point3d = FundamentalMatrix::triangulate_point(p2, point1, point2);
+) -> Vector3<f64> {
+    let mut point3d = triangulate_point_perspective_unnormalized(p2, point1, point2);
     point3d.unscale_mut(point3d.w);
 
     if point3d.z < 0.0 {
         point3d.unscale_mut(-1.0);
     }
 
-    Some(Vector3::new(point3d.x, point3d.y, point3d.z))
+    Vector3::new(point3d.x, point3d.y, point3d.z)
+}
+
+#[inline]
+fn triangulate_point_perspective_unnormalized(
+    p2: &Matrix3x4<f64>,
+    point1: (f64, f64),
+    point2: (f64, f64),
+) -> Vector4<f64> {
+    let p1: Matrix3x4<f64> = Matrix3x4::identity();
+
+    let mut a = Matrix4::<f64>::zeros();
+
+    a.row_mut(0).copy_from(&(p1.row(2) * point1.0 - p1.row(0)));
+    a.row_mut(1).copy_from(&(p1.row(2) * point1.1 - p1.row(1)));
+    a.row_mut(2).copy_from(&(p2.row(2) * point2.0 - p2.row(0)));
+    a.row_mut(3).copy_from(&(p2.row(2) * point2.1 - p2.row(1)));
+
+    let usv = a.svd(false, true);
+    let vt = usv.v_t.unwrap();
+    let point4d = vt.row(vt.nrows() - 1).transpose();
+    point4d
+}
+
+pub fn find_projection_matrix(
+    fundamental_matrix: &Matrix3<f64>,
+    correlated_points: &DMatrix<Option<Match>>,
+) -> Option<Matrix3x4<f64>> {
+    // Create essential matrix and camera matrices.
+    let k = Matrix3::new(
+        1.0,
+        0.0,
+        correlated_points.ncols() as f64 / 2.0,
+        0.0,
+        1.0,
+        correlated_points.nrows() as f64 / 2.0,
+        0.0,
+        0.0,
+        1.0,
+    );
+    let essential_matrix = k.tr_mul(fundamental_matrix) * k;
+
+    // Create camera matrices and find one where
+    let svd = essential_matrix.svd(true, true);
+    let u = svd.u?;
+    let vt = svd.v_t?;
+    let u3 = u.column(2);
+    const W: Matrix3<f64> = Matrix3::new(0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+
+    let mut p2_1 = (u * (W) * vt).insert_column(3, 0.0);
+    let mut p2_2 = (u * (W) * vt).insert_column(3, 0.0);
+    let mut p2_3 = (u * (W.transpose()) * vt).insert_column(3, 0.0);
+    let mut p2_4 = (u * (W.transpose()) * vt).insert_column(3, 0.0);
+
+    // Solve chirality and find the matrix that the most points in front of the image.
+    p2_1.column_mut(3).copy_from(&u3);
+    p2_2.column_mut(3).copy_from(&-u3);
+    p2_3.column_mut(3).copy_from(&u3);
+    p2_4.column_mut(3).copy_from(&-u3);
+    [p2_1, p2_2, p2_3, p2_4]
+        .into_iter()
+        .map(|p2| {
+            let points_count: usize = correlated_points
+                .column_iter()
+                .enumerate()
+                .par_bridge()
+                .map(move |(col, out_col)| {
+                    out_col
+                        .iter()
+                        .enumerate()
+                        .filter(|(row, _)| {
+                            let point1 = (col as f64, *row as f64);
+                            let point2 = correlated_points[(*row, col)];
+                            let point2 = if let Some(point2) = point2 {
+                                (point2.1 as f64, point2.0 as f64)
+                            } else {
+                                return false;
+                            };
+                            let mut point4d =
+                                triangulate_point_perspective_unnormalized(&p2, point1, point2);
+                            point4d.unscale_mut(point4d.w);
+                            point4d.z > 0.0 && (p2 * point4d).z > 0.0
+                        })
+                        .count()
+                })
+                .sum();
+            (p2, points_count)
+        })
+        .max_by(|r1, r2| r1.1.cmp(&r2.1))
+        .map(|(p2, _)| p2)
+}
+
+pub fn f_to_projection_matrix(f: &Matrix3<f64>) -> Option<Matrix3x4<f64>> {
+    let usv = f.svd(true, false);
+    let u = usv.u?;
+    let e2 = u.column(2);
+    let e2_skewsymmetric = Matrix3::new(0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0);
+    let e2s_f = e2_skewsymmetric * f;
+
+    let mut p2 = Matrix3x4::zeros();
+    for row in 0..3 {
+        for col in 0..3 {
+            p2[(row, col)] = e2s_f[(row, col)];
+        }
+        p2[(row, 3)] = e2[row];
+    }
+
+    Some(p2)
 }
 
 fn filter_outliers(shape: (usize, usize), points: &Vec<Point>) -> Vec<Point> {
@@ -158,10 +265,11 @@ fn scale_points(points: &mut Surface, scale: (f64, f64, f64)) {
             )
         },
     );
+    let range_xy = (max_x - min_x).min(max_y - min_y);
     points.iter_mut().for_each(|point| {
         let point = &mut point.reconstructed;
-        point.x = scale.0 * PERSPECTIVE_VALUE_RANGE * (point.x - min_x) / (max_x - min_x);
-        point.y = scale.1 * PERSPECTIVE_VALUE_RANGE * (point.y - min_y) / (max_y - min_y);
+        point.x = scale.0 * PERSPECTIVE_VALUE_RANGE * (point.x - min_x) / range_xy;
+        point.y = scale.1 * PERSPECTIVE_VALUE_RANGE * (point.y - min_y) / range_xy;
         point.z = scale.2 * PERSPECTIVE_VALUE_RANGE * (point.z - min_z) / (max_z - min_z);
     })
 }

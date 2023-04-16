@@ -1,4 +1,4 @@
-use nalgebra::{Matrix3, Matrix3x4, Matrix4, SMatrix, Vector3, Vector4};
+use nalgebra::{Matrix3, SMatrix, Vector3};
 use rand::rngs::SmallRng;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
@@ -344,26 +344,6 @@ impl FundamentalMatrix {
     }
 
     #[inline]
-    pub fn f_to_projection_matrix(f: &Matrix3<f64>) -> Option<Matrix3x4<f64>> {
-        let usv = f.svd(true, false);
-        let u = usv.u?;
-        let e2 = u.column(2);
-        let e2_skewsymmetric =
-            Matrix3::new(0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0);
-        let e2s_f = e2_skewsymmetric * f;
-
-        let mut p2 = Matrix3x4::zeros();
-        for row in 0..3 {
-            for col in 0..3 {
-                p2[(row, col)] = e2s_f[(row, col)];
-            }
-            p2[(row, 3)] = e2[row];
-        }
-
-        Some(p2)
-    }
-
-    #[inline]
     fn fits_model(&self, f: &Matrix3<f64>, m: &Match) -> Option<f64> {
         let p1 = Vector3::new(m.0 .0 as f64, m.0 .1 as f64, 1.0);
         let p2 = Vector3::new(m.1 .0 as f64, m.1 .1 as f64, 1.0);
@@ -378,26 +358,6 @@ impl FundamentalMatrix {
             return None;
         }
         Some(err)
-    }
-
-    pub fn triangulate_point(
-        p2: &Matrix3x4<f64>,
-        point1: (f64, f64),
-        point2: (f64, f64),
-    ) -> Vector4<f64> {
-        let p1: Matrix3x4<f64> = Matrix3x4::identity();
-
-        let mut a = Matrix4::<f64>::zeros();
-
-        a.row_mut(0).copy_from(&(p1.row(2) * point1.0 - p1.row(0)));
-        a.row_mut(1).copy_from(&(p1.row(2) * point1.1 - p1.row(1)));
-        a.row_mut(2).copy_from(&(p2.row(2) * point2.0 - p2.row(0)));
-        a.row_mut(3).copy_from(&(p2.row(2) * point2.1 - p2.row(1)));
-
-        let usv = a.svd(false, true);
-        let vt = usv.v_t.unwrap();
-        let point4d = vt.row(vt.nrows() - 1).transpose();
-        point4d
     }
 }
 
