@@ -221,7 +221,7 @@ pub fn recover_relative_pose(
     // Gaku Nakano, "A Simple Direct Solution to the Perspective-Three-Point Problem," BMVC2019
     const RANSAC_N: usize = 3;
     const RANSAC_K: usize = 10000;
-    const RANSAC_T: f64 = 1.0;
+    const RANSAC_T: f64 = 2.5;
     // TODO: add ransac_d
     // TODO: add progressbar
     let result = (0..RANSAC_K)
@@ -277,7 +277,7 @@ pub fn recover_relative_pose(
                 .collect()
         })
         .reduce(|(pose1, count1, error1), (pose2, count2, error2)| {
-            if count1 > count2 || (count1 == count1 && error1 < error2) {
+            if count1 > count2 || (count1 == count2 && error1 < error2) {
                 (pose1, count1, error1)
             } else {
                 (pose2, count2, error2)
