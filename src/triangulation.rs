@@ -221,7 +221,7 @@ pub fn recover_relative_pose(
     // Gaku Nakano, "A Simple Direct Solution to the Perspective-Three-Point Problem," BMVC2019
     const RANSAC_N: usize = 3;
     const RANSAC_K: usize = 10000;
-    const RANSAC_T: f64 = 2.5;
+    const RANSAC_T: f64 = 5.0;
     // TODO: add ransac_d
     // TODO: add progressbar
     let result = (0..RANSAC_K)
@@ -250,8 +250,8 @@ pub fn recover_relative_pose(
                 .into_iter()
                 .map(|(r, t)| {
                     let mut p2 = Matrix3x4::zeros();
-                    p2.fixed_view_mut::<3, 3>(0, 0).copy_from(&r.transpose());
-                    p2.column_mut(3).copy_from(&-t);
+                    p2.fixed_view_mut::<3, 3>(0, 0).copy_from(&r);
+                    p2.column_mut(3).copy_from(&t);
 
                     let (count, error) = points
                         .iter()
@@ -345,7 +345,7 @@ fn recover_pose_from_points(
         -2.0 * f[4] * f[4] * f[5] + g[5] * f[4] * f[4] - f[5] * f[5],
     ];
 
-    let xy = solve_quartic(h)
+    let mut xy = solve_quartic(h)
         .into_iter()
         .filter_map(|x| {
             if !x.is_finite() {
@@ -356,7 +356,7 @@ fn recover_pose_from_points(
         })
         .collect::<Vec<_>>();
 
-    //polish_roots(f, g, &mut xy);
+    polish_roots(f, g, &mut xy);
 
     let a_vector = Matrix3::new(
         -inliers[0].0.x,
@@ -448,7 +448,7 @@ fn solve_quartic(factors: [f64; 5]) -> [f64; 4] {
 }
 
 fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut Vec<(f64, f64)>) {
-    const MAX_ITER: usize = 5;
+    const MAX_ITER: usize = 50;
     for _ in 0..MAX_ITER {
         for (x_target, y_target) in xy.iter_mut() {
             let x = *x_target;
@@ -460,7 +460,7 @@ fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut Vec<(f64, f64)>) {
             let fv = f[0] * x2 + f[1] * x_y + f[3] * x + f[4] * y + f[5];
             let gv = g[0] * x2 - y2 + g[3] * x + g[4] * y + g[5];
 
-            if fv.abs() < f64::EPSILON || gv.abs() < f64::EPSILON {
+            if fv.abs() < f64::EPSILON && gv.abs() < f64::EPSILON {
                 continue;
             }
 
