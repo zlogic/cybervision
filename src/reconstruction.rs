@@ -16,6 +16,7 @@ use indicatif::ProgressState;
 use indicatif::{ProgressBar, ProgressStyle};
 use nalgebra::DMatrix;
 use nalgebra::Matrix3;
+use nalgebra::Vector3;
 use rayon::prelude::*;
 use std::error;
 use std::fmt;
@@ -147,18 +148,17 @@ impl SourceImage {
 }
 
 struct ImageReconstruction {
-    scale: f32,
+    out_scale: (f64, f64, f64),
     hardware_mode: crosscorrelation::HardwareMode,
     interpolation_mode: output::InterpolationMode,
     projection_mode: fundamentalmatrix::ProjectionMode,
     vertex_mode: output::VertexMode,
+    last_pose: (Matrix3<f64>, Vector3<f64>),
 }
 
 pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
     let start_time = SystemTime::now();
 
-    let img1_filename = &args.img_src[0];
-    let img2_filename = &args.img_src[1];
     let projection_mode = match args.projection {
         crate::ProjectionMode::Parallel => fundamentalmatrix::ProjectionMode::Affine,
         crate::ProjectionMode::Perspective => fundamentalmatrix::ProjectionMode::Perspective,
@@ -181,16 +181,39 @@ pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
         crate::Mesh::TextureCoordinates => output::VertexMode::Texture,
     };
 
-    let reconstruction_task = ImageReconstruction {
-        scale: args.scale,
+    // Most 3D viewers don't display coordinates below 0, reset to default 1.0 - instead of image metadata
+    //let out_scale = img1.scale;
+    let out_scale = (1.0, 1.0, args.scale as f64);
+
+    let last_pose = (Matrix3::identity(), Vector3::zeros());
+
+    let mut reconstruction_task = ImageReconstruction {
+        out_scale,
         hardware_mode,
         interpolation_mode,
         projection_mode,
         vertex_mode,
+        last_pose,
     };
 
-    let surface = reconstruction_task.reconstruct(img1_filename, img2_filename)?;
+    let mut surface: triangulation::Surface = Vec::new();
+    for i in 0..args.img_src.len() - 1 {
+        let img1_filename = &args.img_src[i];
+        let img2_filename = &args.img_src[i + 1];
+        let last_pose = reconstruction_task.last_pose;
+        let mut current_surface = reconstruction_task.reconstruct(img1_filename, img2_filename)?;
 
+        let r = last_pose.0;
+        let t = last_pose.1;
+        current_surface.iter_mut().for_each(|mut point| {
+            let new_point = r.tr_mul(&(point.reconstructed - t));
+            point.reconstructed = new_point;
+        });
+
+        surface.append(&mut current_surface);
+    }
+
+    let img1_filename = &args.img_src[0];
     reconstruction_task.output_surface(surface, img1_filename, &args.img_out)?;
 
     if let Ok(t) = start_time.elapsed() {
@@ -204,7 +227,7 @@ type CorrelatedPoints = DMatrix<Option<(u32, u32)>>;
 
 impl ImageReconstruction {
     fn reconstruct(
-        &self,
+        &mut self,
         img1_filename: &str,
         img2_filename: &str,
     ) -> Result<triangulation::Surface, Box<dyn error::Error>> {
@@ -245,11 +268,7 @@ impl ImageReconstruction {
             }
         };
 
-        // Most 3D viewers don't display coordinates below 0, reset to default 1.0 - instead of image metadata
-        //let out_scale = img1.scale;
-        let out_scale = (1.0, 1.0, self.scale);
-
-        self.triangulate_surface(out_scale, fm.f, correlated_points)
+        self.triangulate_surface(fm.f, correlated_points)
     }
 
     fn match_keypoints(
@@ -408,8 +427,7 @@ impl ImageReconstruction {
     }
 
     fn triangulate_surface(
-        &self,
-        out_scale: (f32, f32, f32),
+        &mut self,
         f: Matrix3<f64>,
         correlated_points: DMatrix<Option<(u32, u32)>>,
     ) -> Result<triangulation::Surface, Box<dyn error::Error>> {
@@ -417,10 +435,10 @@ impl ImageReconstruction {
 
         let surface = match self.projection_mode {
             fundamentalmatrix::ProjectionMode::Affine => {
-                triangulation::triangulate_affine(&correlated_points, out_scale)
+                triangulation::triangulate_affine(&correlated_points)
             }
             fundamentalmatrix::ProjectionMode::Perspective => {
-                let p2 = match triangulation::find_projection_matrix(&f, &correlated_points) {
+                let p2 = match triangulation::f_to_projection_matrix(&f) {
                     Some(p2) => p2,
                     None => {
                         eprintln!("Unable to find projection matrix");
@@ -429,9 +447,12 @@ impl ImageReconstruction {
                         );
                     }
                 };
-                triangulation::triangulate_perspective(&correlated_points, &p2, out_scale)
+                triangulation::triangulate_perspective(&correlated_points, &p2)
             }
         };
+        let relative_pose = triangulation::recover_relative_pose(&correlated_points, &surface);
+        self.last_pose.0 = self.last_pose.0 * relative_pose.0;
+        self.last_pose.1 = self.last_pose.1 + relative_pose.1;
 
         if let Ok(t) = start_time.elapsed() {
             println!(
@@ -453,9 +474,20 @@ impl ImageReconstruction {
 
         let pb = new_progress_bar(false);
 
+        let mut surface = surface;
+        match self.projection_mode {
+            fundamentalmatrix::ProjectionMode::Affine => {
+                triangulation::scale_points_affine(&mut surface, self.out_scale)
+            }
+            fundamentalmatrix::ProjectionMode::Perspective => {
+                triangulation::scale_points_perspective(&mut surface, self.out_scale)
+            }
+        };
+        let surface: triangulation::Surface = surface;
+
         let img1 = SourceImage::load_rgb(texture_filename).unwrap();
         let result = output::output(
-            surface,
+            surface.to_owned(),
             img1,
             output_filename,
             self.interpolation_mode,
