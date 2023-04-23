@@ -1,6 +1,6 @@
 [package]
 name = "cybervision"
-version = "0.15.0"
+version = "0.15.1"
 edition = "2021"
 authors = ["Dmitry Zolotukhin <zlogic@gmail.com>"]
 repository = "https://github.com/zlogic/cybervision"
@@ -9,15 +9,15 @@ license = "Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.2.1", default_features = false, features = ["std", "derive", "help", "usage", "suggestions"] }
+clap = { version = "4.2.4", default_features = false, features = ["std", "derive", "help", "usage", "suggestions"] }
 image = { version = "0.24.6", default_features = false, features = ["png", "jpeg", "tiff", "jpeg_rayon"] }
 indicatif = { version = "0.17.3", default_features = false }
 tiff = "*"
 rayon = "*"
 rand = { version = "0.8.5", default_features = false, features = ["std", "std_rng", "small_rng"] }
 nalgebra = { version = "0.32.2", features = ["rayon"] }
-spade = { version = "2.1.0", default_features = false }
-wgpu = { version = "0.15.1", default-features = false, features = ["wgsl"] }
+spade = { version = "2.2.0", default_features = false }
+wgpu = { version = "0.16.0", default-features = false, features = ["wgsl"] }
 pollster = { version = "0.3.0", default-features = false }
 bytemuck = { version = "*", features = ["derive"] }
 
