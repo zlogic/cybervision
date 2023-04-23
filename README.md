@@ -1,5 +1,13 @@
 # Cybervision
 
+# Experimental multi view branch
+
+**⚠️ Warning** This `multi-view-reconstruction` is an experimental branch, attempting to reconstruct 3D images from a set of photos.
+Unfortunately, it requires either camera calibration, or using [advanced math for self-calibration](https://www.researchgate.net/publication/3659897_The_modulus_constraint_A_new_constraint_self-calibration) - solving a quartic equation system with up to 64 roots.
+It's a bit too much and out of my scope of expertise.
+Without calibration, each pair of images uses its own coordinate system and it's impossible to align images in a single 3D model.
+It also doesn't help that sometimes noise or incorrectly detected features cause images to be incorrectly reconstructed, and adding that data to a combined mesh ruins the end result.
+
 ![Build status](https://github.com/zlogic/cybervision/actions/workflows/cargo-build.yml/badge.svg)
 
 <img src="https://raw.githubusercontent.com/wiki/zlogic/cybervision/Cybervision.svg" width="100"/>
