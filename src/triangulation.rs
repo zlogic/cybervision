@@ -1,3 +1,5 @@
+use std::fmt;
+
 use nalgebra::{DMatrix, Matrix3, Matrix3x4, Matrix4, Vector3, Vector4};
 
 use rand::seq::SliceRandom;
@@ -30,102 +32,245 @@ pub type Surface = Vec<Point>;
 
 type Match = (u32, u32);
 
-pub fn triangulate_affine(correlated_points: &DMatrix<Option<Match>>) -> Surface {
-    correlated_points
-        .column_iter()
-        .enumerate()
-        .par_bridge()
-        .flat_map(|(col, out_col)| {
-            out_col
-                .iter()
-                .enumerate()
-                .filter_map(|(row, matched_point)| {
-                    triangulate_point_affine((row, col), matched_point)
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect()
+pub trait Triangulation {
+    fn triangulate(
+        &mut self,
+        correlated_points: &DMatrix<Option<Match>>,
+        fundamental_matrix: &Matrix3<f64>,
+    ) -> Result<(), TriangulationError>;
+    fn get_surface(&self) -> Surface;
 }
 
-pub fn triangulate_perspective(
-    correlated_points: &DMatrix<Option<Match>>,
-    p2: &Matrix3x4<f64>,
-) -> Surface {
-    let points: Vec<Point> = correlated_points
-        .column_iter()
-        .enumerate()
-        .par_bridge()
-        .flat_map(|(col, out_col)| {
-            out_col
-                .iter()
-                .enumerate()
-                .flat_map(|(row, _)| {
-                    let x1 = col as f64;
-                    let y1 = row as f64;
-                    if let Some(point2) = correlated_points[(row, col)] {
-                        let x2 = point2.1 as f64;
-                        let y2 = point2.0 as f64;
-                        let point3d = triangulate_point_perspective(p2, (x1, y1), (x2, y2));
-                        Some(Point::new((col, row), point3d))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect();
-
-    filter_outliers(correlated_points.shape(), &points)
+pub struct AffineTriangulation {
+    surface: Surface,
+    scale: (f64, f64, f64),
 }
 
-#[inline]
-fn triangulate_point_affine(p1: (usize, usize), p2: &Option<Match>) -> Option<Point> {
-    if let Some(p2) = p2 {
-        let dx = p1.1 as f64 - p2.1 as f64;
-        let dy = p1.0 as f64 - p2.0 as f64;
-        let distance = (dx * dx + dy * dy).sqrt();
-        let point3d = Vector3::new(p1.1 as f64, p1.0 as f64, distance);
-
-        return Some(Point::new((p1.1, p1.0), point3d));
-    }
-    None
-}
-
-#[inline]
-fn triangulate_point_perspective(
-    p2: &Matrix3x4<f64>,
-    point1: (f64, f64),
-    point2: (f64, f64),
-) -> Vector3<f64> {
-    let mut point3d = triangulate_point_perspective_unnormalized(p2, point1, point2);
-    point3d.unscale_mut(point3d.w);
-
-    if point3d.z < 0.0 {
-        point3d.unscale_mut(-1.0);
+impl AffineTriangulation {
+    pub fn new(scale: (f64, f64, f64)) -> AffineTriangulation {
+        AffineTriangulation {
+            surface: vec![],
+            scale,
+        }
     }
 
-    Vector3::new(point3d.x, point3d.y, point3d.z)
+    #[inline]
+    fn triangulate_point(p1: (usize, usize), p2: &Option<Match>) -> Option<Point> {
+        if let Some(p2) = p2 {
+            let dx = p1.1 as f64 - p2.1 as f64;
+            let dy = p1.0 as f64 - p2.0 as f64;
+            let distance = (dx * dx + dy * dy).sqrt();
+            let point3d = Vector3::new(p1.1 as f64, p1.0 as f64, distance);
+
+            return Some(Point::new((p1.1, p1.0), point3d));
+        }
+        None
+    }
+
+    fn scale_points(&self) -> Surface {
+        let scale = &self.scale;
+
+        let depth_scale = (scale.2 * ((scale.0 + scale.1) / 2.0)) as f64;
+        self.surface
+            .iter()
+            .map(|point| {
+                let mut point = *point;
+                point.reconstructed.z *= depth_scale;
+                point
+            })
+            .collect()
+    }
 }
 
-#[inline]
-fn triangulate_point_perspective_unnormalized(
-    p2: &Matrix3x4<f64>,
-    point1: (f64, f64),
-    point2: (f64, f64),
-) -> Vector4<f64> {
-    let p1: Matrix3x4<f64> = Matrix3x4::identity();
+impl Triangulation for AffineTriangulation {
+    fn triangulate(
+        &mut self,
+        correlated_points: &DMatrix<Option<Match>>,
+        _: &Matrix3<f64>,
+    ) -> Result<(), TriangulationError> {
+        let points3d = correlated_points
+            .column_iter()
+            .enumerate()
+            .par_bridge()
+            .flat_map(|(col, out_col)| {
+                out_col
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(row, matched_point)| {
+                        AffineTriangulation::triangulate_point((row, col), matched_point)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
 
-    let mut a = Matrix4::<f64>::zeros();
+        self.surface = points3d;
 
-    a.row_mut(0).copy_from(&(p1.row(2) * point1.0 - p1.row(0)));
-    a.row_mut(1).copy_from(&(p1.row(2) * point1.1 - p1.row(1)));
-    a.row_mut(2).copy_from(&(p2.row(2) * point2.0 - p2.row(0)));
-    a.row_mut(3).copy_from(&(p2.row(2) * point2.1 - p2.row(1)));
+        Ok(())
+    }
 
-    let usv = a.svd(false, true);
-    let vt = usv.v_t.unwrap();
-    let point4d = vt.row(vt.nrows() - 1).transpose();
-    point4d
+    fn get_surface(&self) -> Surface {
+        // TODO: drop unused items?
+        self.scale_points()
+    }
+}
+
+pub struct PerspectiveTriangulation {
+    surface: Surface,
+    scale: (f64, f64, f64),
+}
+
+impl Triangulation for PerspectiveTriangulation {
+    fn triangulate(
+        &mut self,
+        correlated_points: &DMatrix<Option<Match>>,
+        fundamental_matrix: &Matrix3<f64>,
+    ) -> Result<(), TriangulationError> {
+        let p2 = match PerspectiveTriangulation::f_to_projection_matrix(&fundamental_matrix) {
+            Some(p2) => p2,
+            None => return Err(TriangulationError::new("Unable to find projection matrix")),
+        };
+
+        let points: Vec<Point> = correlated_points
+            .column_iter()
+            .enumerate()
+            .par_bridge()
+            .flat_map(|(col, out_col)| {
+                out_col
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(row, _)| {
+                        let x1 = col as f64;
+                        let y1 = row as f64;
+                        if let Some(point2) = correlated_points[(row, col)] {
+                            let x2 = point2.1 as f64;
+                            let y2 = point2.0 as f64;
+                            let point3d = PerspectiveTriangulation::triangulate_point(
+                                &p2,
+                                (x1, y1),
+                                (x2, y2),
+                            );
+                            Some(Point::new((col, row), point3d))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        let mut points = filter_outliers(correlated_points.shape(), &points);
+        self.surface.append(&mut points);
+        self.previous_matches = correlated_points.to_owned();
+
+        Ok(())
+    }
+
+    fn get_surface(&self) -> Surface {
+        // TODO: drop unused items?
+        self.scale_points()
+    }
+}
+
+impl PerspectiveTriangulation {
+    pub fn new(scale: (f64, f64, f64)) -> PerspectiveTriangulation {
+        PerspectiveTriangulation {
+            surface: vec![],
+            scale,
+        }
+    }
+
+    #[inline]
+    fn triangulate_point(
+        p2: &Matrix3x4<f64>,
+        point1: (f64, f64),
+        point2: (f64, f64),
+    ) -> Vector3<f64> {
+        let mut point3d =
+            PerspectiveTriangulation::triangulate_point_unnormalized(p2, point1, point2);
+        point3d.unscale_mut(point3d.w);
+
+        if point3d.z < 0.0 {
+            point3d.unscale_mut(-1.0);
+        }
+
+        Vector3::new(point3d.x, point3d.y, point3d.z)
+    }
+
+    #[inline]
+    fn triangulate_point_unnormalized(
+        p2: &Matrix3x4<f64>,
+        point1: (f64, f64),
+        point2: (f64, f64),
+    ) -> Vector4<f64> {
+        let p1: Matrix3x4<f64> = Matrix3x4::identity();
+
+        let mut a = Matrix4::<f64>::zeros();
+
+        a.row_mut(0).copy_from(&(p1.row(2) * point1.0 - p1.row(0)));
+        a.row_mut(1).copy_from(&(p1.row(2) * point1.1 - p1.row(1)));
+        a.row_mut(2).copy_from(&(p2.row(2) * point2.0 - p2.row(0)));
+        a.row_mut(3).copy_from(&(p2.row(2) * point2.1 - p2.row(1)));
+
+        let usv = a.svd(false, true);
+        let vt = usv.v_t.unwrap();
+        let point4d = vt.row(vt.nrows() - 1).transpose();
+        point4d
+    }
+
+    fn f_to_projection_matrix(f: &Matrix3<f64>) -> Option<Matrix3x4<f64>> {
+        let usv = f.svd(true, false);
+        let u = usv.u?;
+        let e2 = u.column(2);
+        let e2_skewsymmetric =
+            Matrix3::new(0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0);
+        let e2s_f = e2_skewsymmetric * f;
+
+        let mut p2 = Matrix3x4::zeros();
+        for row in 0..3 {
+            for col in 0..3 {
+                p2[(row, col)] = e2s_f[(row, col)];
+            }
+            p2[(row, 3)] = e2[row];
+        }
+
+        Some(p2)
+    }
+
+    fn scale_points(&self) -> Surface {
+        let scale = &self.scale;
+        let points = &self.surface;
+
+        let (min_x, max_x, min_y, max_y, min_z, max_z) = points.iter().fold(
+            (f64::MAX, f64::MIN, f64::MAX, f64::MIN, f64::MAX, f64::MIN),
+            |acc, p| {
+                let x = p.reconstructed.x;
+                let y = p.reconstructed.y;
+                let z = p.reconstructed.z;
+                (
+                    acc.0.min(x),
+                    acc.1.max(x),
+                    acc.2.min(y),
+                    acc.3.max(y),
+                    acc.4.min(z),
+                    acc.5.max(z),
+                )
+            },
+        );
+        let range_xy = (max_x - min_x).min(max_y - min_y);
+        points
+            .iter()
+            .map(|point| {
+                let mut point = *point;
+                let point3d = &mut point.reconstructed;
+                point3d.x = scale.0 * PERSPECTIVE_VALUE_RANGE * (point3d.x - min_x) / range_xy;
+                point3d.y = scale.1 * PERSPECTIVE_VALUE_RANGE * (point3d.y - min_y) / range_xy;
+                point3d.z =
+                    scale.2 * PERSPECTIVE_VALUE_RANGE * (point3d.z - min_z) / (max_z - min_z);
+
+                point
+            })
+            .collect()
+    }
 }
 
 pub fn find_projection_matrix(
@@ -183,7 +328,9 @@ pub fn find_projection_matrix(
                                 return false;
                             };
                             let mut point4d =
-                                triangulate_point_perspective_unnormalized(&p2, point1, point2);
+                                PerspectiveTriangulation::triangulate_point_unnormalized(
+                                    &p2, point1, point2,
+                                );
                             point4d.unscale_mut(point4d.w);
                             point4d.z > 0.0 && (p2 * point4d).z > 0.0
                         })
@@ -194,24 +341,6 @@ pub fn find_projection_matrix(
         })
         .max_by(|r1, r2| r1.1.cmp(&r2.1))
         .map(|(p2, _)| p2)
-}
-
-pub fn f_to_projection_matrix(f: &Matrix3<f64>) -> Option<Matrix3x4<f64>> {
-    let usv = f.svd(true, false);
-    let u = usv.u?;
-    let e2 = u.column(2);
-    let e2_skewsymmetric = Matrix3::new(0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0);
-    let e2s_f = e2_skewsymmetric * f;
-
-    let mut p2 = Matrix3x4::zeros();
-    for row in 0..3 {
-        for col in 0..3 {
-            p2[(row, col)] = e2s_f[(row, col)];
-        }
-        p2[(row, 3)] = e2[row];
-    }
-
-    Some(p2)
 }
 
 pub fn recover_relative_pose(
@@ -500,39 +629,6 @@ fn filter_outliers(shape: (usize, usize), points: &Vec<Point>) -> Vec<Point> {
         .collect()
 }
 
-pub fn scale_points_affine(points: &mut Surface, scale: (f64, f64, f64)) {
-    let depth_scale = (scale.2 * ((scale.0 + scale.1) / 2.0)) as f64;
-    points
-        .iter_mut()
-        .for_each(|p| p.reconstructed.z *= depth_scale);
-}
-
-pub fn scale_points_perspective(points: &mut Surface, scale: (f64, f64, f64)) {
-    let (min_x, max_x, min_y, max_y, min_z, max_z) = points.iter().fold(
-        (f64::MAX, f64::MIN, f64::MAX, f64::MIN, f64::MAX, f64::MIN),
-        |acc, p| {
-            let x = p.reconstructed.x;
-            let y = p.reconstructed.y;
-            let z = p.reconstructed.z;
-            (
-                acc.0.min(x),
-                acc.1.max(x),
-                acc.2.min(y),
-                acc.3.max(y),
-                acc.4.min(z),
-                acc.5.max(z),
-            )
-        },
-    );
-    let range_xy = (max_x - min_x).min(max_y - min_y);
-    points.iter_mut().for_each(|point| {
-        let point = &mut point.reconstructed;
-        point.x = scale.0 * PERSPECTIVE_VALUE_RANGE * (point.x - min_x) / range_xy;
-        point.y = scale.1 * PERSPECTIVE_VALUE_RANGE * (point.y - min_y) / range_xy;
-        point.z = scale.2 * PERSPECTIVE_VALUE_RANGE * (point.z - min_z) / (max_z - min_z);
-    })
-}
-
 #[inline]
 fn point_not_outlier(img: &DMatrix<Option<f64>>, row: usize, col: usize) -> bool {
     const SEARCH_RADIUS: usize = OUTLIER_FILTER_SEARCH_AREA;
@@ -589,4 +685,23 @@ fn point_not_outlier(img: &DMatrix<Option<f64>>, row: usize, col: usize) -> bool
     stdev = (stdev / count as f64).sqrt();
 
     (point_distance - avg).abs() < stdev * OUTLIER_FILTER_STDEV_THRESHOLD
+}
+
+#[derive(Debug)]
+pub struct TriangulationError {
+    msg: &'static str,
+}
+
+impl TriangulationError {
+    fn new(msg: &'static str) -> TriangulationError {
+        TriangulationError { msg }
+    }
+}
+
+impl std::error::Error for TriangulationError {}
+
+impl fmt::Display for TriangulationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.msg)
+    }
 }
