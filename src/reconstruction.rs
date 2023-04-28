@@ -150,7 +150,7 @@ struct ImageReconstruction {
     interpolation_mode: output::InterpolationMode,
     projection_mode: fundamentalmatrix::ProjectionMode,
     vertex_mode: output::VertexMode,
-    triangulation: Box<dyn triangulation::Triangulation>,
+    triangulation: triangulation::Triangulation,
 }
 
 pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
@@ -182,14 +182,11 @@ pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
     //let out_scale = img1.scale;
     let out_scale = (1.0, 1.0, args.scale as f64);
 
-    let triangulation: Box<dyn triangulation::Triangulation> = match args.projection {
-        crate::ProjectionMode::Parallel => {
-            Box::new(triangulation::AffineTriangulation::new(out_scale))
-        }
-        crate::ProjectionMode::Perspective => {
-            Box::new(triangulation::PerspectiveTriangulation::new(out_scale))
-        }
+    let triangulation_projection = match args.projection {
+        crate::ProjectionMode::Parallel => triangulation::ProjectionMode::Affine,
+        crate::ProjectionMode::Perspective => triangulation::ProjectionMode::Perspective,
     };
+    let triangulation = triangulation::Triangulation::new(triangulation_projection, out_scale);
 
     let mut reconstruction_task = ImageReconstruction {
         hardware_mode,
@@ -205,8 +202,8 @@ pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
         reconstruction_task.reconstruct(img1_filename, img2_filename)?;
     }
 
-    let img1_filename = &args.img_src[0];
-    reconstruction_task.output_surface(img1_filename, &args.img_out)?;
+    let img_filenames = &args.img_src[0..args.img_src.len() - 1];
+    reconstruction_task.output_surface(img_filenames, &args.img_out)?;
 
     if let Ok(t) = start_time.elapsed() {
         println!("Completed reconstruction in {:.3} seconds", t.as_secs_f32());
@@ -431,7 +428,11 @@ impl ImageReconstruction {
     ) -> Result<(), triangulation::TriangulationError> {
         let start_time = SystemTime::now();
 
-        let result = self.triangulation.triangulate(&correlated_points, &f);
+        let pb = new_progress_bar(true);
+        let result = self
+            .triangulation
+            .triangulate(&correlated_points, &f, Some(&pb));
+        pb.finish();
 
         if let Ok(t) = start_time.elapsed() {
             println!(
@@ -444,8 +445,8 @@ impl ImageReconstruction {
     }
 
     fn output_surface(
-        &self,
-        texture_filename: &str,
+        &mut self,
+        texture_filenames: &[String],
         output_filename: &str,
     ) -> Result<(), Box<dyn error::Error>> {
         let start_time = SystemTime::now();
@@ -453,11 +454,16 @@ impl ImageReconstruction {
         let pb = new_progress_bar(false);
 
         let surface: triangulation::Surface = self.triangulation.get_surface();
+        self.triangulation.complete();
 
-        let img1 = SourceImage::load_rgb(texture_filename).unwrap();
+        let images = texture_filenames
+            .iter()
+            .map(|img_filename| SourceImage::load_rgb(img_filename).unwrap())
+            .collect();
+
         let result = output::output(
             surface.to_owned(),
-            img1,
+            images,
             output_filename,
             self.interpolation_mode,
             self.vertex_mode,
@@ -524,6 +530,12 @@ impl crosscorrelation::ProgressListener for CrossCorrelationProgressBar<'_> {
         let percent_complete =
             self.total_percent_complete + pos * self.scale * self.scale / self.total_percent;
         self.pb.set_position((percent_complete * 10000.0) as u64);
+    }
+}
+
+impl triangulation::ProgressListener for ProgressBar {
+    fn report_status(&self, pos: f32) {
+        self.set_position((pos * 10000.0) as u64);
     }
 }
 

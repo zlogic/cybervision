@@ -39,19 +39,20 @@ type TriangulatedSurfaceFace<'a> = FaceHandle<'a, InnerTag, triangulation::Point
 
 pub fn output<PL: ProgressListener>(
     points: triangulation::Surface,
-    img1: RgbImage,
+    images: Vec<RgbImage>,
     path: &str,
     interpolation: InterpolationMode,
     vertex_mode: VertexMode,
     progress_listener: Option<&PL>,
 ) -> Result<(), Box<dyn error::Error>> {
+    let img1 = &images[0];
     let img1_shape = (img1.height() as usize, img1.width() as usize);
     let mut writer: Box<dyn MeshWriter> = if path.to_lowercase().ends_with(".obj") {
-        Box::new(ObjWriter::new(path, img1, vertex_mode)?)
+        Box::new(ObjWriter::new(path, images, vertex_mode)?)
     } else if path.to_lowercase().ends_with(".ply") {
-        Box::new(PlyWriter::new(path, img1, vertex_mode)?)
+        Box::new(PlyWriter::new(path, images, vertex_mode)?)
     } else {
-        Box::new(ImageWriter::new(path, img1, &points)?)
+        Box::new(ImageWriter::new(path, images, &points)?)
     };
 
     if interpolation == InterpolationMode::Delaunay {
@@ -83,7 +84,7 @@ pub fn output<PL: ProgressListener>(
                 if let Some(pl) = progress_listener {
                     pl.report_status(0.4 + 0.2 * (i as f32 / nvertices));
                 }
-                writer.output_vertex_uv(v.data().original)
+                writer.output_vertex_uv(v.data())
             })?;
         let nfaces = triangulated_surface.num_inner_faces() as f32;
         triangulated_surface
@@ -111,7 +112,7 @@ pub fn output<PL: ProgressListener>(
         if let Some(pl) = progress_listener {
             pl.report_status(0.4 + 0.2 * (i as f32 / npoints));
         }
-        writer.output_vertex_uv(p.original)
+        writer.output_vertex_uv(p)
     })?;
     surface_vertices_uninterpolated
         .iter()
@@ -135,7 +136,10 @@ trait MeshWriter {
     ) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
-    fn output_vertex_uv(&mut self, _point: (usize, usize)) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex_uv(
+        &mut self,
+        _point: &triangulation::Point,
+    ) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
     fn output_face(&mut self, _f: TriangulatedSurfaceFace) -> Result<(), Box<dyn error::Error>> {
@@ -156,13 +160,13 @@ struct PlyWriter {
     writer: BufWriter<File>,
     buffer: Vec<u8>,
     vertex_mode: VertexMode,
-    img1: RgbImage,
+    images: Vec<RgbImage>,
 }
 
 impl PlyWriter {
     fn new(
         path: &str,
-        img1: RgbImage,
+        images: Vec<RgbImage>,
         vertex_mode: VertexMode,
     ) -> Result<PlyWriter, Box<dyn error::Error>> {
         let writer = BufWriter::new(File::create(path)?);
@@ -172,7 +176,7 @@ impl PlyWriter {
             writer,
             buffer,
             vertex_mode,
-            img1,
+            images,
         })
     }
     fn check_flush_buffer(&mut self) -> Result<(), std::io::Error> {
@@ -213,10 +217,10 @@ impl MeshWriter for PlyWriter {
     }
 
     fn output_vertex(&mut self, p: &triangulation::Point) -> Result<(), Box<dyn error::Error>> {
+        let img = &self.images[p.index];
         let color = match self.vertex_mode {
             VertexMode::Plain | VertexMode::Texture => None,
-            VertexMode::Color => self
-                .img1
+            VertexMode::Color => img
                 .get_pixel_checked(p.original.0 as u32, p.original.1 as u32)
                 .map(|pixel| pixel.0),
         };
@@ -266,14 +270,14 @@ struct ObjWriter {
     writer: BufWriter<File>,
     buffer: Vec<u8>,
     vertex_mode: VertexMode,
-    img1: RgbImage,
+    images: Vec<RgbImage>,
     path: String,
 }
 
 impl ObjWriter {
     fn new(
         path: &str,
-        img1: RgbImage,
+        images: Vec<RgbImage>,
         vertex_mode: VertexMode,
     ) -> Result<ObjWriter, Box<dyn error::Error>> {
         let writer = BufWriter::new(File::create(path)?);
@@ -282,7 +286,7 @@ impl ObjWriter {
             writer,
             buffer,
             vertex_mode,
-            img1,
+            images,
             path: path.to_string(),
         })
     }
@@ -318,7 +322,9 @@ impl ObjWriter {
         writeln!(w, "map_Ka {}", image_filename)?;
         writeln!(w, "map_Kd {}", image_filename)?;
 
-        self.img1.save(self.path.to_string() + ".png")?;
+        // TODO: support multiple textures
+        let img1 = &self.images[0];
+        img1.save(self.path.to_string() + ".png")?;
 
         Ok(())
     }
@@ -343,11 +349,11 @@ impl MeshWriter for ObjWriter {
     fn output_vertex(&mut self, p: &triangulation::Point) -> Result<(), Box<dyn error::Error>> {
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
+        let img = &self.images[p.index];
 
         let color = match self.vertex_mode {
             VertexMode::Plain | VertexMode::Texture => None,
-            VertexMode::Color => self
-                .img1
+            VertexMode::Color => img
                 .get_pixel_checked(p.original.0 as u32, p.original.1 as u32)
                 .map(|pixel| pixel.0),
         };
@@ -371,8 +377,9 @@ impl MeshWriter for ObjWriter {
         Ok(())
     }
 
-    fn output_vertex_uv(&mut self, p: (usize, usize)) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex_uv(&mut self, p: &triangulation::Point) -> Result<(), Box<dyn error::Error>> {
         self.check_flush_buffer()?;
+        let img = &self.images[p.index];
         match self.vertex_mode {
             VertexMode::Plain | VertexMode::Color => {}
             VertexMode::Texture => {
@@ -380,8 +387,8 @@ impl MeshWriter for ObjWriter {
                 writeln!(
                     w,
                     "vt {} {}",
-                    p.0 as f64 / self.img1.width() as f64,
-                    1.0f64 - p.1 as f64 / self.img1.height() as f64,
+                    p.original.0 as f64 / img.width() as f64,
+                    1.0f64 - p.original.1 as f64 / img.height() as f64,
                 )?;
             }
         }
@@ -448,13 +455,14 @@ struct ImageWriter {
 impl ImageWriter {
     fn new(
         path: &str,
-        img1: RgbImage,
+        images: Vec<RgbImage>,
         points: &triangulation::Surface,
     ) -> Result<ImageWriter, std::io::Error> {
         let (min_depth, max_depth) = points.iter().fold((f64::MAX, f64::MIN), |acc, p| {
             let z = p.reconstructed.z;
             (acc.0.min(z), acc.1.max(z))
         });
+        let img1 = &images[0];
         Ok(ImageWriter {
             output_image: RgbaImage::from_pixel(
                 img1.width(),
