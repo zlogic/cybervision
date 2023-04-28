@@ -15,7 +15,8 @@ const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 10;
 const RANSAC_N: usize = 6;
 const RANSAC_K: usize = 10_000_000;
 // TODO: this should pe proportional to image size
-const RANSAC_T: f64 = 2.0;
+const RANSAC_T: f64 = 5.0;
+const RANSAC_INLIERS_T: f64 = 1.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 1_000;
 const RANSAC_CHECK_INTERVAL: usize = 100_000;
@@ -404,15 +405,21 @@ impl PerspectiveTriangulation {
                     let mut projection = projection.clone();
                     projection.push(p);
 
-                    let (count, _) =
-                        PerspectiveTriangulation::reprojection_error(&inliers, &projection);
+                    let (count, _) = PerspectiveTriangulation::reprojection_error(
+                        &inliers,
+                        &projection,
+                        RANSAC_INLIERS_T,
+                    );
                     if count < RANSAC_N {
                         // Inliers cannot be reliably reprojected.
                         return None;
                     }
 
-                    let (count, error) =
-                        PerspectiveTriangulation::reprojection_error(&unlinked_tracks, &projection);
+                    let (count, error) = PerspectiveTriangulation::reprojection_error(
+                        &unlinked_tracks,
+                        &projection,
+                        RANSAC_T,
+                    );
 
                     Some((p, count, error))
                 })
@@ -427,17 +434,22 @@ impl PerspectiveTriangulation {
                     },
                 );
 
-            if count >= RANSAC_D_EARLY_EXIT {
-                return Some(projection);
-            } else if count >= RANSAC_D {
+            if count >= RANSAC_D {
                 result = Some(projection)
+            }
+            if count >= RANSAC_D_EARLY_EXIT {
+                break;
             }
         }
 
         result
     }
 
-    fn reprojection_error(tracks: &[Track], projection: &[Matrix3x4<f64>]) -> (usize, f64) {
+    fn reprojection_error(
+        tracks: &[Track],
+        projection: &[Matrix3x4<f64>],
+        threshold: f64,
+    ) -> (usize, f64) {
         tracks
             .iter()
             .filter_map(|track| {
@@ -460,7 +472,7 @@ impl PerspectiveTriangulation {
                     })
                     .reduce(|acc, val| acc.max(val))?;
 
-                if error < RANSAC_T {
+                if error < threshold {
                     Some(error)
                 } else {
                     None
