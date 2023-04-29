@@ -306,7 +306,6 @@ impl PerspectiveTriangulation {
         &self,
         progress_listener: Option<&PL>,
     ) -> Option<Matrix3x4<f64>> {
-        const SVD_ROWS: usize = RANSAC_N * 2;
         let unlinked_tracks = self
             .tracks
             .iter()
@@ -352,55 +351,7 @@ impl PerspectiveTriangulation {
                     }
 
                     // TODO: check if points are collinear?
-                    // TODO: extract this into separate functions
-                    let points4d = inliers
-                        .iter()
-                        .filter_map(|inlier| {
-                            let point4d =
-                                PerspectiveTriangulation::triangulate_track(inlier, projection)?;
-                            let projection = inlier.last()?.to_owned()?;
-                            Some((point4d, projection))
-                        })
-                        .collect::<Vec<_>>();
-
-                    if points4d.len() < RANSAC_N {
-                        return None;
-                    }
-
-                    let mut a = SMatrix::<f64, SVD_ROWS, 12>::zeros();
-                    for i in 0..RANSAC_N {
-                        let inlier = points4d[i];
-
-                        let point4d = inlier.0;
-                        let projection = inlier.1;
-                        let x = projection.1 as f64;
-                        let y = projection.0 as f64;
-                        let w = 1.0;
-                        a[(i * 2, 0)] = w * point4d.x;
-                        a[(i * 2, 1)] = w * point4d.y;
-                        a[(i * 2, 2)] = w * point4d.z;
-                        a[(i * 2, 3)] = w * point4d.w;
-                        a[(i * 2, 8)] = -x * point4d.x;
-                        a[(i * 2, 9)] = -x * point4d.y;
-                        a[(i * 2, 10)] = -x * point4d.z;
-                        a[(i * 2, 11)] = -x * point4d.w;
-                        a[(i * 2 + 1, 4)] = w * point4d.x;
-                        a[(i * 2 + 1, 5)] = w * point4d.y;
-                        a[(i * 2 + 1, 6)] = w * point4d.z;
-                        a[(i * 2 + 1, 7)] = w * point4d.w;
-                        a[(i * 2 + 1, 8)] = -y * point4d.x;
-                        a[(i * 2 + 1, 9)] = -y * point4d.y;
-                        a[(i * 2 + 1, 10)] = -y * point4d.z;
-                        a[(i * 2 + 1, 11)] = -y * point4d.w;
-                    }
-                    let usv = a.svd(false, true);
-                    let vt = &usv.v_t?;
-
-                    let vtc = vt.row(vt.nrows() - 1);
-                    let p = Matrix3x4::new(
-                        vtc[0], vtc[1], vtc[2], vtc[3], vtc[4], vtc[5], vtc[6], vtc[7], vtc[8],
-                        vtc[9], vtc[10], vtc[11],
-                    );
+                    let p = self.find_projection_matrix(&inliers)?;
 
                     let mut projection = projection.clone();
                     projection.push(p);
@@ -440,6 +391,60 @@ impl PerspectiveTriangulation {
         }
 
         result
+    }
+
+    fn find_projection_matrix(&self, inliers: &Vec<Track>) -> Option<Matrix3x4<f64>> {
+        const SVD_ROWS: usize = RANSAC_N * 2;
+        let points4d = inliers
+            .iter()
+            .filter_map(|inlier| {
+                let point4d =
+                    PerspectiveTriangulation::triangulate_track(inlier, &self.projection)?;
+                let projection = inlier.last()?.to_owned()?;
+                Some((point4d, projection))
+            })
+            .collect::<Vec<_>>();
+
+        if points4d.len() < RANSAC_N {
+            return None;
+        }
+
+        let mut a = SMatrix::<f64, SVD_ROWS, 12>::zeros();
+        for i in 0..RANSAC_N {
+            let inlier = points4d[i];
+
+            let point4d = inlier.0;
+            let projection = inlier.1;
+            let x = projection.1 as f64;
+            let y = projection.0 as f64;
+            let w = 1.0;
+            a[(i * 2, 0)] = w * point4d.x;
+            a[(i * 2, 1)] = w * point4d.y;
+            a[(i * 2, 2)] = w * point4d.z;
+            a[(i * 2, 3)] = w * point4d.w;
+            a[(i * 2, 8)] = -x * point4d.x;
+            a[(i * 2, 9)] = -x * point4d.y;
+            a[(i * 2, 10)] = -x * point4d.z;
+            a[(i * 2, 11)] = -x * point4d.w;
+            a[(i * 2 + 1, 4)] = w * point4d.x;
+            a[(i * 2 + 1, 5)] = w * point4d.y;
+            a[(i * 2 + 1, 6)] = w * point4d.z;
+            a[(i * 2 + 1, 7)] = w * point4d.w;
+            a[(i * 2 + 1, 8)] = -y * point4d.x;
+            a[(i * 2 + 1, 9)] = -y * point4d.y;
+            a[(i * 2 + 1, 10)] = -y * point4d.z;
+            a[(i * 2 + 1, 11)] = -y * point4d.w;
+        }
+        let usv = a.svd(false, true);
+        let vt = &usv.v_t?;
+        let vtc = vt.row(vt.nrows() - 1);
+        let p = Matrix3x4::new(
+            vtc[0], vtc[1], vtc[2], vtc[3], vtc[4], vtc[5], vtc[6], vtc[7], vtc[8], vtc[9],
+            vtc[10], vtc[11],
+        )
+        .unscale(vtc[11]);
+
+        Some(p)
     }
 
     fn reprojection_error(
