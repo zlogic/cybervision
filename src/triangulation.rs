@@ -18,8 +18,8 @@ const RANSAC_K: usize = 10_000_000;
 const RANSAC_T: f64 = 5.0;
 const RANSAC_INLIERS_T: f64 = 1.0;
 const RANSAC_D: usize = 100;
-const RANSAC_D_EARLY_EXIT: usize = 1_000;
-const RANSAC_CHECK_INTERVAL: usize = 100_000;
+const RANSAC_D_EARLY_EXIT: usize = 10_000;
+const RANSAC_CHECK_INTERVAL: usize = 10_000;
 
 #[derive(Clone, Copy)]
 pub struct Point {
@@ -331,7 +331,7 @@ impl PerspectiveTriangulation {
         let mut result = None;
         let counter = AtomicUsize::new(0);
         for _ in 0..ransac_outer {
-            let (projection, count, error) = (0..RANSAC_CHECK_INTERVAL)
+            let (projection, count, _error) = (0..RANSAC_CHECK_INTERVAL)
                 .into_iter()
                 .par_bridge()
                 .filter_map(|i| {
