@@ -15,11 +15,12 @@ const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 10;
 const RANSAC_N: usize = 6;
 const RANSAC_K: usize = 10_000_000;
 // TODO: this should pe proportional to image size
-const RANSAC_T: f64 = 1.0;
 const RANSAC_INLIERS_T: f64 = 1.0;
+const RANSAC_T: f64 = 3.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 10_000;
 const RANSAC_CHECK_INTERVAL: usize = 10_000;
+const REPROJECTION_ERROR_THRESHOLD: f64 = 50.0;
 
 #[derive(Clone, Copy)]
 pub struct Point {
@@ -333,7 +334,7 @@ impl PerspectiveTriangulation {
             let (projection, count, _error) = (0..RANSAC_CHECK_INTERVAL)
                 .into_iter()
                 .par_bridge()
-                .filter_map(|i| {
+                .filter_map(|_| {
                     if let Some(pl) = progress_listener {
                         let value =
                             counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / RANSAC_K as f32;
@@ -356,14 +357,17 @@ impl PerspectiveTriangulation {
                     let mut projection = projection.clone();
                     projection.push(p);
 
-                    let (count, _) =
-                        PerspectiveTriangulation::reprojection_error(&inliers, &projection, true);
+                    let (count, _) = PerspectiveTriangulation::tracks_reprojection_error(
+                        &inliers,
+                        &projection,
+                        true,
+                    );
                     if count < RANSAC_N {
                         // Inliers cannot be reliably reprojected.
                         return None;
                     }
 
-                    let (count, error) = PerspectiveTriangulation::reprojection_error(
+                    let (count, error) = PerspectiveTriangulation::tracks_reprojection_error(
                         &unlinked_tracks,
                         &projection,
                         false,
@@ -446,7 +450,7 @@ impl PerspectiveTriangulation {
         Some(p)
     }
 
-    fn reprojection_error(
+    fn tracks_reprojection_error(
         tracks: &[Track],
         projection: &[Matrix3x4<f64>],
         inliers: bool,
@@ -458,31 +462,35 @@ impl PerspectiveTriangulation {
         tracks
             .iter()
             .filter_map(|track| {
-                let point4d = PerspectiveTriangulation::triangulate_track(track, &projection)?;
-                let error = projection
-                    .iter()
-                    .enumerate()
-                    .skip(skip)
-                    .filter_map(|(i, p)| {
-                        let original = track[i]?;
-                        let mut projected = p * point4d;
-                        projected.unscale_mut(projected.z * projected.z.signum());
-                        let dx = projected.x - original.1 as f64;
-                        let dy = projected.y - original.0 as f64;
-                        let error = (dx * dx + dy * dy).sqrt();
-                        Some(error)
-                    })
-                    .reduce(|acc, val| acc.max(val))?;
-
-                if error < threshold {
-                    Some(error)
-                } else {
-                    None
-                }
+                PerspectiveTriangulation::point_reprojection_error(track, projection, skip)
+                    .filter(|error| *error < threshold)
             })
             .fold((0, 0.0f64), |(count, error), match_error| {
                 (count + 1, error.max(match_error))
             })
+    }
+
+    #[inline]
+    fn point_reprojection_error(
+        track: &Track,
+        projection: &[Matrix3x4<f64>],
+        skip: usize,
+    ) -> Option<f64> {
+        let point4d = PerspectiveTriangulation::triangulate_track(track, &projection)?;
+        projection
+            .iter()
+            .enumerate()
+            .skip(skip)
+            .filter_map(|(i, p)| {
+                let original = track[i]?;
+                let mut projected = p * point4d;
+                projected.unscale_mut(projected.z * projected.z.signum());
+                let dx = projected.x - original.1 as f64;
+                let dy = projected.y - original.0 as f64;
+                let error = (dx * dx + dy * dy).sqrt();
+                Some(error)
+            })
+            .reduce(|acc, val| acc.max(val))
     }
 
     fn triangulate_tracks(&self, tracks: &[Track]) -> Surface {
@@ -490,6 +498,16 @@ impl PerspectiveTriangulation {
             .par_iter()
             .flat_map(|track| {
                 let point4d = PerspectiveTriangulation::triangulate_track(track, &self.projection)?;
+
+                let reprojection_error = PerspectiveTriangulation::point_reprojection_error(
+                    &track,
+                    &self.projection,
+                    2,
+                )?;
+                if reprojection_error > REPROJECTION_ERROR_THRESHOLD {
+                    // Should points which are only found on one pair of images be dropped as well?
+                    return None;
+                }
 
                 let (point2d, index) = track
                     .iter()
