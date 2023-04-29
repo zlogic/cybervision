@@ -15,7 +15,7 @@ const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 10;
 const RANSAC_N: usize = 6;
 const RANSAC_K: usize = 10_000_000;
 // TODO: this should pe proportional to image size
-const RANSAC_T: f64 = 5.0;
+const RANSAC_T: f64 = 1.0;
 const RANSAC_INLIERS_T: f64 = 1.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 10_000;
@@ -441,10 +441,9 @@ impl PerspectiveTriangulation {
         let p = Matrix3x4::new(
             vtc[0], vtc[1], vtc[2], vtc[3], vtc[4], vtc[5], vtc[6], vtc[7], vtc[8], vtc[9],
             vtc[10], vtc[11],
-        )
-        .unscale(vtc[11]);
+        );
 
-        Some(p)
+        Some(p.unscale(p[(2, 2)]))
     }
 
     fn reprojection_error(
