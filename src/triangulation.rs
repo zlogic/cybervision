@@ -443,7 +443,7 @@ impl PerspectiveTriangulation {
             vtc[10], vtc[11],
         );
 
-        Some(p.unscale(p[(2, 2)]))
+        Some(p)
     }
 
     fn reprojection_error(
