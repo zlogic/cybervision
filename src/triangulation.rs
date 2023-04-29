@@ -405,11 +405,8 @@ impl PerspectiveTriangulation {
                     let mut projection = projection.clone();
                     projection.push(p);
 
-                    let (count, _) = PerspectiveTriangulation::reprojection_error(
-                        &inliers,
-                        &projection,
-                        RANSAC_INLIERS_T,
-                    );
+                    let (count, _) =
+                        PerspectiveTriangulation::reprojection_error(&inliers, &projection, true);
                     if count < RANSAC_N {
                         // Inliers cannot be reliably reprojected.
                         return None;
@@ -418,7 +415,7 @@ impl PerspectiveTriangulation {
                     let (count, error) = PerspectiveTriangulation::reprojection_error(
                         &unlinked_tracks,
                         &projection,
-                        RANSAC_T,
+                        false,
                     );
 
                     Some((p, count, error))
@@ -448,8 +445,12 @@ impl PerspectiveTriangulation {
     fn reprojection_error(
         tracks: &[Track],
         projection: &[Matrix3x4<f64>],
-        threshold: f64,
+        inliers: bool,
     ) -> (usize, f64) {
+        let threshold = if inliers { RANSAC_INLIERS_T } else { RANSAC_T };
+        // For inliers, check reprojection error only in the last images.
+        // For normal points, ignore the first images.
+        let skip = if inliers { projection.len() - 1 } else { 2 };
         tracks
             .iter()
             .filter_map(|track| {
@@ -457,11 +458,8 @@ impl PerspectiveTriangulation {
                 let error = projection
                     .iter()
                     .enumerate()
+                    .skip(skip)
                     .filter_map(|(i, p)| {
-                        if i < 2 {
-                            // First two cameras are predefined, could have a larger error than others.
-                            return None;
-                        }
                         let original = track[i]?;
                         let mut projected = p * point4d;
                         projected.unscale_mut(projected.z * projected.z.signum());
