@@ -20,7 +20,6 @@ const RANSAC_T: f64 = 3.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 10_000;
 const RANSAC_CHECK_INTERVAL: usize = 10_000;
-const REPROJECTION_ERROR_THRESHOLD: f64 = 50.0;
 
 #[derive(Clone, Copy)]
 pub struct Point {
@@ -498,16 +497,6 @@ impl PerspectiveTriangulation {
             .par_iter()
             .flat_map(|track| {
                 let point4d = PerspectiveTriangulation::triangulate_track(track, &self.projection)?;
-
-                let reprojection_error = PerspectiveTriangulation::point_reprojection_error(
-                    &track,
-                    &self.projection,
-                    2,
-                )?;
-                if reprojection_error > REPROJECTION_ERROR_THRESHOLD {
-                    // Should points which are only found on one pair of images be dropped as well?
-                    return None;
-                }
 
                 let (point2d, index) = track
                     .iter()
