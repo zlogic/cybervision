@@ -1,6 +1,9 @@
 use std::{fmt, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
 
-use nalgebra::{DMatrix, Matrix3, Matrix3x4, MatrixXx4, SMatrix, Vector3, Vector4};
+use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt};
+use nalgebra::{
+    DMatrix, Dyn, Matrix3, Matrix3x4, MatrixXx4, OMatrix, OVector, Owned, SMatrix, Vector3, Vector4,
+};
 
 use rand::seq::SliceRandom;
 use rand::{rngs::SmallRng, SeedableRng};
@@ -102,13 +105,13 @@ impl Triangulation {
             Err(TriangulationError::new("Triangulation not initialized"))
         }
     }
-    pub fn get_surface(&self) -> Surface {
+    pub fn triangulate_all(&mut self) -> Result<Surface, TriangulationError> {
         if let Some(affine) = &self.affine {
-            affine.get_surface()
-        } else if let Some(perspective) = &self.perspective {
-            perspective.get_surface()
+            affine.triangulate_all()
+        } else if let Some(perspective) = &mut self.perspective {
+            perspective.triangulate_all()
         } else {
-            vec![]
+            Err(TriangulationError::new("Triangulation not initialized"))
         }
     }
     pub fn complete(&mut self) {
@@ -155,9 +158,9 @@ impl AffineTriangulation {
         Ok(())
     }
 
-    fn get_surface(&self) -> Surface {
+    fn triangulate_all(&self) -> Result<Surface, TriangulationError> {
         // TODO: drop unused items?
-        self.scale_points()
+        Ok(self.scale_points())
     }
 
     #[inline]
@@ -226,10 +229,12 @@ impl PerspectiveTriangulation {
         Ok(())
     }
 
-    fn get_surface(&self) -> Surface {
+    fn triangulate_all(&mut self) -> Result<Surface, TriangulationError> {
+        let points3d = self.bundle_adjustment()?;
         let points3d = self.triangulate_tracks(&self.tracks);
         // TODO: drop unused items?
-        self.scale_points(points3d)
+
+        Ok(self.scale_points(points3d))
     }
 
     #[inline]
@@ -557,6 +562,99 @@ impl PerspectiveTriangulation {
         self.tracks.append(&mut new_tracks);
     }
 
+    fn bundle_adjustment(&mut self) -> Result<(), TriangulationError> {
+        const MAX_JACOBIAN: usize = 500_000_000;
+        let full_jacobian = std::mem::size_of::<f64>()
+            * (12 * self.projection.len() + 3 * self.tracks.len())
+            * (2 * self.projection.len() * self.tracks.len());
+
+        let full_jacobian = std::mem::size_of::<f64>()
+            * (12 * self.projection.len())
+            * (2 * self.projection.len() * self.tracks.len());
+        let tracks_stride = full_jacobian / MAX_JACOBIAN + 1;
+
+        for track_offset in 0..tracks_stride {
+            let tracks = (0..self.tracks.len())
+                .into_iter()
+                .skip(track_offset)
+                .step_by(tracks_stride)
+                .map(|i| self.tracks[i].to_owned())
+                .collect::<Vec<_>>();
+            println!(
+                "Processing offset {:?} out of {:?} {} {}",
+                track_offset,
+                tracks_stride,
+                tracks.len(),
+                self.tracks.len()
+            );
+            let problem = ReprojectionErrorMinimization::new(
+                &self.projection.as_slice(),
+                &tracks,
+                false,
+                true,
+            );
+            let (result, report) = LevenbergMarquardt::new().minimize(problem);
+            if !report.termination.was_successful() {
+                return Err(TriangulationError::from_string(format!(
+                    "Failed bundle adjustment: {:?}",
+                    report.termination
+                )));
+            }
+            self.projection = result.extract_projection();
+        }
+
+        Ok(())
+        /*
+        let tracks_stride = self.tracks.len() / 10 + 1;
+        let mut surface = Vec::new();
+        for track_offset in 0..tracks_stride {
+            let tracks = (0..self.tracks.len())
+                .into_iter()
+                .skip(track_offset)
+                .step_by(tracks_stride)
+                .map(|i| self.tracks[i].to_owned())
+                .collect::<Vec<_>>();
+            println!(
+                "Processing offset {:?} out of {:?} {}",
+                track_offset,
+                tracks_stride,
+                tracks.len()
+            );
+            let problem = ReprojectionErrorMinimization::new(
+                self.projection.as_slice(),
+                &tracks,
+                true,
+                false,
+            );
+            let (result, report) = LevenbergMarquardt::new().minimize(problem);
+            if !report.termination.was_successful() {
+                println!("Failed bundle adjustment: {:?}", report.termination);
+                continue;
+                /*
+                return Err(TriangulationError::from_string(format!(
+                    "Failed bundle adjustment: {:?}",
+                    report.termination
+                )));
+                */
+            }
+            let mut points3d = PerspectiveTriangulation::triangulate_tracks(&self, &tracks);
+
+            result
+                .extract_points3d()
+                .iter()
+                .enumerate()
+                .for_each(|(i, point3d)| {
+                    if let Some(point3d) = point3d {
+                        points3d[i].reconstructed = *point3d;
+                    }
+                });
+
+            surface.append(&mut points3d);
+        }
+        Ok(surface)
+        */
+    }
+
     fn scale_points(&self, points3d: Surface) -> Surface {
         let scale = &self.scale;
 
@@ -748,13 +846,272 @@ fn point_not_outlier(img: &DMatrix<Option<f64>>, row: usize, col: usize) -> bool
     (point_distance - avg).abs() < stdev * OUTLIER_FILTER_STDEV_THRESHOLD
 }
 
+struct ReprojectionErrorMinimization<'a> {
+    /// Optimization parameters vector.
+    /// First 12 items are columns of P2; followed by 3D coordinates of triangulated points.
+    params: OVector<f64, Dyn>,
+    projection: Vec<Matrix3x4<f64>>,
+    tracks: &'a [Track],
+    points_offset: usize,
+    optimize_points: bool,
+    optimize_projection: bool,
+}
+
+impl ReprojectionErrorMinimization<'_> {
+    pub fn new<'a>(
+        projection: &[Matrix3x4<f64>],
+        tracks: &'a [Track],
+        optimize_points: bool,
+        optimize_projection: bool,
+    ) -> ReprojectionErrorMinimization<'a> {
+        let points_offset = if optimize_projection {
+            projection.len() * 12
+        } else {
+            0
+        };
+        let parameters_len = if optimize_points {
+            points_offset + tracks.len() * 3
+        } else {
+            points_offset
+        };
+        let mut params = OVector::<f64, Dyn>::zeros(parameters_len);
+        if optimize_projection {
+            for (i, p) in projection.iter().enumerate() {
+                for col in 0..4 {
+                    for row in 0..3 {
+                        params[i * 12 + col * 3 + row] = p[(row, col)];
+                    }
+                }
+            }
+        }
+        if optimize_points {
+            for tr_i in 0..tracks.len() {
+                let track = &tracks[tr_i];
+                let point4d = if let Some(point4d) =
+                    PerspectiveTriangulation::triangulate_track(track, projection)
+                {
+                    point4d.unscale(point4d.w)
+                } else {
+                    Vector4::zeros()
+                };
+                for m_c in 0..3 {
+                    params[points_offset + tr_i * 3 + m_c] = point4d[m_c];
+                }
+            }
+        }
+        ReprojectionErrorMinimization {
+            params,
+            projection: projection.into(),
+            tracks,
+            points_offset,
+            optimize_points,
+            optimize_projection,
+        }
+    }
+
+    fn extract_projection(&self) -> Vec<Matrix3x4<f64>> {
+        if self.optimize_projection {
+            (0..self.projection.len())
+                .into_iter()
+                .map(|i| {
+                    let mut p = Matrix3x4::zeros();
+                    for col in 0..4 {
+                        for row in 0..3 {
+                            p[(row, col)] = self.params[i * 12 + col * 3 + row];
+                        }
+                    }
+                    p
+                })
+                .collect::<Vec<_>>()
+        } else {
+            self.projection.clone()
+        }
+    }
+
+    fn extract_points3d(&self) -> Vec<Option<Vector3<f64>>> {
+        let points_offset = self.points_offset;
+
+        self.tracks
+            .iter()
+            .enumerate()
+            .par_bridge()
+            .map(|(tr_i, _track)| {
+                if self.optimize_points {
+                    let mut point3d = Vector3::zeros();
+                    for m_c in 0..3 {
+                        point3d[m_c] = self.params[points_offset + tr_i * 3 + m_c];
+                    }
+                    Some(point3d)
+                } else {
+                    // TODO: triangulate points here?
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
+impl LeastSquaresProblem<f64, Dyn, Dyn> for ReprojectionErrorMinimization<'_> {
+    type ParameterStorage = Owned<f64, Dyn>;
+    type ResidualStorage = Owned<f64, Dyn>;
+    type JacobianStorage = Owned<f64, Dyn, Dyn>;
+
+    fn set_params(&mut self, params: &OVector<f64, Dyn>) {
+        self.params.copy_from(params);
+    }
+
+    fn params(&self) -> OVector<f64, Dyn> {
+        self.params.clone_owned()
+    }
+
+    fn residuals(&self) -> Option<OVector<f64, Dyn>> {
+        let points_offset = self.points_offset;
+        let projection = self.extract_projection();
+        // Residuals contain point reprojection errors.
+        let mut residuals = OVector::<f64, Dyn>::zeros(self.tracks.len() * 2 * projection.len());
+        for tr_i in 0..self.tracks.len() {
+            let track = &self.tracks[tr_i];
+            let point4d = if self.optimize_points {
+                let mut point4d = Vector4::zeros();
+                for m_c in 0..3 {
+                    point4d[m_c] = self.params[points_offset + tr_i * 3 + m_c];
+                }
+                point4d[3] = 1.0;
+                Some(point4d)
+            } else {
+                PerspectiveTriangulation::triangulate_track(track, &projection)
+            };
+            projection.iter().enumerate().for_each(|(i, p)| {
+                let offset = tr_i * projection.len() * 2 + i * 2;
+                let original = if let Some(original) = track[i] {
+                    original
+                } else {
+                    return;
+                };
+                let point4d = if let Some(point4d) = point4d {
+                    point4d
+                } else {
+                    return;
+                };
+                let mut projected = p * point4d;
+                projected.unscale_mut(projected.z * projected.z.signum());
+                let dx = original.1 as f64 - projected.x;
+                let dy = original.0 as f64 - projected.y;
+                residuals[offset + 0] = dx;
+                residuals[offset + 1] = dy;
+            });
+        }
+        Some(residuals)
+    }
+
+    fn jacobian(&self) -> Option<OMatrix<f64, Dyn, Dyn>> {
+        let points_offset = self.points_offset;
+        let parameters_len = if self.optimize_points {
+            points_offset + self.tracks.len() * 3
+        } else {
+            points_offset
+        };
+        // TODO: use a sparse LM method?
+        let projection = self.extract_projection();
+        let residuals_count = 2 * projection.len();
+        let mut jac =
+            OMatrix::<f64, Dyn, Dyn>::zeros(self.tracks.len() * residuals_count, parameters_len);
+        // Write a row for each residual (reprojection error).
+        // Using a symbolic formula (not finite differences/central difference), check the Rust LM library for more info.
+        for tr_i in 0..self.tracks.len() {
+            // Read data from parameters
+            let p3d = if self.optimize_points {
+                Vector4::new(
+                    self.params[points_offset + tr_i * 3 + 0],
+                    self.params[points_offset + tr_i * 3 + 1],
+                    self.params[points_offset + tr_i * 3 + 2],
+                    1.0,
+                )
+            } else {
+                let track = &self.tracks[tr_i];
+                if let Some(point4d) =
+                    PerspectiveTriangulation::triangulate_track(track, &projection)
+                {
+                    point4d.unscale(point4d.w)
+                } else {
+                    continue;
+                }
+            };
+            for (p_i, p) in projection.iter().enumerate() {
+                let rx = tr_i * residuals_count + p_i * 2 + 0;
+                let ry = tr_i * residuals_count + p_i * 2 + 1;
+                // P is the projection matrix for image
+                // Prc is the r-th row, c-th column of P
+                // X is a 3D coordinate (4-component vector [x y z 1])
+
+                // Image contains rx and ry (residuals for x and y), affected by projection matrix and the point coordinates.
+                // rx = -(P11*x+P12*y+P13*z+P14)/(P31*x+P32*y+P33*z+P34)
+                // ry = -(P21*x+P22*y+P23*z+P24)/(P31*x+P32*y+P33*z+P34)
+                // To keep things sane, create some aliases
+                // Poi -> i-th element of 3D point e.g. x, y, z, or w
+                // Pr1 = P11*x+P12*y+P13*z+P14
+                // Pr2 = P21*x+P22*y+P23*z+P24
+                // Pr3 = P31*x+P32*y+P33*z+P34
+                let p_r = p * p3d;
+                if self.optimize_projection {
+                    // drx/dP1i = -Poi/(P31*x+P32*y+P33*z+P34) = -Poi/Pr3
+                    for p_col in 0..4 {
+                        jac[(rx, p_i * 12 + p_col * 3 + 0)] = -p3d[p_col] / p_r[2];
+                    }
+                    // dry/dP2i = -Poi/(P31*x+P32*y+P33*z+P34) = -Poi/Pr3
+                    for p_col in 0..4 {
+                        jac[(ry, p_i * 12 + p_col * 3 + 1)] = -p3d[p_col] / p_r[2];
+                    }
+                    // drx/dP3i = Poi*(P11*x+P12*y+P13*z+P14)/((P31*x+P32*y+P33*z+P34)^2) = Poi*Pr1/(Pr3^2)
+                    for p_col in 0..4 {
+                        jac[(rx, p_i * 12 + p_col * 3 + 2)] =
+                            p3d[p_col] * p_r[0] / (p_r[2] * p_r[2]);
+                    }
+                    // dry/dP3i = Poi*(P21*x+P22*y+P23*z+P24)/((P31*x+P32*y+P33*z+P34)^2) = Poi*Pr2/(Pr3^2)
+                    for p_col in 0..4 {
+                        jac[(ry, p_i * 12 + p_col * 3 + 2)] =
+                            p3d[p_col] * p_r[1] / (p_r[2] * p_r[2]);
+                    }
+                }
+                if self.optimize_points {
+                    // drx/dx = -(P11*(P32*y+P33*z+P34)-P31*(P12*y+P13*z+P14))/(Pr3^2) = -(P11*Pr3[x=0]-P31*Pr1[x=0])/(Pr3^2)
+                    // drx/di = -(P1i*Pr3[i=0]-P3i*Pr1[i=0])/(Pr3^2)
+                    // dry/dx = -(P21*(P32*y+P33*z+P34)-P31*(P22*y+P23*z+P24))/(Pr3^2) = -(P21*Pr3[x=0]-P31*Pr2[x=0])/(Pr3^2)
+                    // dry/di = -(P2i*Pr3[i=0]-P3i*Pr2[i=0])/(Pr3^2)
+                    for coord in 0..3 {
+                        // Create a vector where coord = 0
+                        let mut vec_diff = p3d;
+                        vec_diff[coord] = 0.0;
+                        // Create projection where coord = 0
+                        let p_r_diff = p * vec_diff;
+                        jac[(rx, points_offset + tr_i * 3 + coord)] =
+                            -(p[(0, coord)] * p_r_diff[2] - p[(2, coord)] * p_r_diff[0])
+                                / (p_r[2] * p_r[2]);
+                        jac[(ry, points_offset + tr_i * 3 + coord)] =
+                            -(p[(1, coord)] * p_r_diff[2] - p[(2, coord)] * p_r_diff[1])
+                                / (p_r[2] * p_r[2]);
+                    }
+                }
+            }
+        }
+
+        Some(jac)
+    }
+}
+
 #[derive(Debug)]
 pub struct TriangulationError {
-    msg: &'static str,
+    msg: String,
 }
 
 impl TriangulationError {
     fn new(msg: &'static str) -> TriangulationError {
+        TriangulationError {
+            msg: msg.to_owned(),
+        }
+    }
+
+    fn from_string(msg: String) -> TriangulationError {
         TriangulationError { msg }
     }
 }

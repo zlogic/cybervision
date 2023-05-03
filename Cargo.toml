@@ -20,6 +20,7 @@ spade = { version = "2.2.0", default_features = false }
 wgpu = { version = "0.16.0", default-features = false, features = ["wgsl"] }
 pollster = { version = "0.3.0", default-features = false }
 bytemuck = { version = "*", features = ["derive"] }
+levenberg-marquardt = { version = "0.13.0", default-features = false }
 
 [profile.release]
 strip = true

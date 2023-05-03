@@ -453,7 +453,7 @@ impl ImageReconstruction {
 
         let pb = new_progress_bar(false);
 
-        let surface: triangulation::Surface = self.triangulation.get_surface();
+        let surface: triangulation::Surface = self.triangulation.triangulate_all()?;
         self.triangulation.complete();
 
         let images = texture_filenames
