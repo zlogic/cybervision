@@ -1,4 +1,4 @@
-use std::{fmt, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
+use std::{fmt, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
 
 use nalgebra::{
     DMatrix, Matrix2x3, Matrix3, Matrix3x4, MatrixXx1, MatrixXx4, SMatrix, Vector2, Vector3,
@@ -46,7 +46,51 @@ pub type Surface = Vec<Point>;
 
 type Match = (u32, u32);
 
-type Track = Vec<Option<Match>>;
+#[derive(Clone, Debug)]
+struct Track {
+    start_index: usize,
+    points: Vec<Match>,
+}
+
+impl Track {
+    fn new(start_index: usize, point: Match) -> Track {
+        let points = vec![point];
+        Track {
+            start_index,
+            points,
+        }
+    }
+
+    fn add(&mut self, index: usize, point: Match) -> bool {
+        if index == self.start_index + self.points.len() {
+            self.points.push(point);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn range(&self) -> Range<usize> {
+        // TODO: convert this into an iterator?
+        self.start_index..self.start_index + self.points.len()
+    }
+
+    fn get(&self, i: usize) -> Option<Match> {
+        if i < self.start_index || i >= self.start_index + self.points.len() {
+            None
+        } else {
+            Some(self.points[i - self.start_index])
+        }
+    }
+
+    fn first(&self) -> Option<&Match> {
+        self.points.first()
+    }
+
+    fn last(&self) -> Option<&Match> {
+        self.points.last()
+    }
+}
 
 pub trait ProgressListener
 where
@@ -245,46 +289,30 @@ impl PerspectiveTriangulation {
 
     #[inline]
     fn triangulate_track(track: &Track, projection: &[Matrix3x4<f64>]) -> Option<Vector4<f64>> {
-        let track_projection = track
-            .iter()
-            .enumerate()
-            .flat_map(|(i, point)| {
-                if point.is_some() && i < projection.len() {
-                    Some(&projection[i])
+        let points_projection = track
+            .range()
+            .into_iter()
+            .flat_map(|i| {
+                if i < projection.len() {
+                    let point = track.get(i)?;
+                    let point = (point.1 as f64, point.0 as f64);
+                    Some((point, &projection[i]))
                 } else {
                     None
                 }
             })
             .collect::<Vec<_>>();
 
-        if track_projection.is_empty() {
+        if points_projection.is_empty() {
             return None;
         }
 
-        let points = track
-            .iter()
-            .flat_map(|point| {
-                if let Some(point) = point {
-                    Some((point.1 as f64, point.0 as f64))
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-
-        if points.is_empty() {
-            return None;
-        }
-
-        let len = track_projection.len().min(points.len());
-        let mut a = MatrixXx4::zeros(len * 2);
-        for i in 0..len {
-            a.row_mut(i * 2).copy_from(
-                &(track_projection[i].row(2) * points[i].0 - track_projection[i].row(0)),
-            );
-            a.row_mut(i * 2 + 1).copy_from(
-                &(track_projection[i].row(2) * points[i].1 - track_projection[i].row(1)),
-            );
+        let mut a = MatrixXx4::zeros(points_projection.len() * 2);
+        for (i, (point, projection)) in points_projection.iter().enumerate() {
+            a.row_mut(i * 2)
+                .copy_from(&(projection.row(2) * point.0 - projection.row(0)));
+            a.row_mut(i * 2 + 1)
+                .copy_from(&(projection.row(2) * point.1 - projection.row(1)));
         }
 
         let usv = a.svd(false, true);
@@ -317,24 +345,22 @@ impl PerspectiveTriangulation {
         &self,
         progress_listener: Option<&PL>,
     ) -> Option<Matrix3x4<f64>> {
+        let projection = &self.projection;
+        let track_len = projection.len() + 1;
+
         let unlinked_tracks = self
             .tracks
             .iter()
-            .filter(|track| track.len() >= 1 && track[track.len() - 1].is_some())
+            .filter(|track| track.range().len() == 2 && track.range().end == track_len)
             .map(|track| track.to_owned())
             .collect::<Vec<_>>();
 
-        let linked_tracks = unlinked_tracks
+        let linked_tracks = self
+            .tracks
             .iter()
-            .filter(|track| {
-                track.len() >= 2
-                    && track[track.len() - 1].is_some()
-                    && track[track.len() - 2].is_some()
-            })
+            .filter(|track| track.range().len() > 2 && track.range().end == track_len)
             .map(|track| track.to_owned())
             .collect::<Vec<_>>();
-
-        let projection = &self.projection;
 
         let ransac_outer = RANSAC_K / RANSAC_CHECK_INTERVAL;
 
@@ -409,12 +435,13 @@ impl PerspectiveTriangulation {
 
     fn find_projection_matrix(&self, inliers: &Vec<Track>) -> Option<Matrix3x4<f64>> {
         const SVD_ROWS: usize = RANSAC_N * 2;
+        let index = self.projection.len();
         let points4d = inliers
             .iter()
             .filter_map(|inlier| {
                 let point4d =
                     PerspectiveTriangulation::triangulate_track(inlier, &self.projection)?;
-                let projection = inlier.last()?.to_owned()?;
+                let projection = inlier.get(index)?;
                 Some((point4d, projection))
             })
             .collect::<Vec<_>>();
@@ -492,7 +519,7 @@ impl PerspectiveTriangulation {
             .enumerate()
             .skip(skip)
             .filter_map(|(i, p)| {
-                let original = track[i]?;
+                let original = track.get(i)?;
                 let mut projected = p * point4d;
                 projected.unscale_mut(projected.z * projected.z.signum());
                 let dx = projected.x - original.1 as f64;
@@ -509,14 +536,11 @@ impl PerspectiveTriangulation {
         self.tracks.iter_mut().for_each(|track| {
             let last_pos = track
                 .last()
-                .map(|last| {
-                    last.map(|last| correlated_points[(last.0 as usize, last.1 as usize)])
-                        .flatten()
-                })
+                .map(|last| correlated_points[(last.0 as usize, last.1 as usize)])
                 .flatten();
 
-            track.push(last_pos);
             if let Some(last_pos) = last_pos {
+                track.add(index + 1, last_pos);
                 remaining_points[(last_pos.0 as usize, last_pos.1 as usize)] = None
             };
         });
@@ -532,9 +556,8 @@ impl PerspectiveTriangulation {
                         if m.is_none() {
                             return None;
                         }
-                        let mut track = vec![None; index];
-                        track.push(Some((row as u32, col as u32)));
-                        track.push(*m);
+                        let mut track = Track::new(index, (row as u32, col as u32));
+                        track.add(index + 1, (*m)?);
 
                         Some(track)
                     })
@@ -559,13 +582,9 @@ impl PerspectiveTriangulation {
             .enumerate()
             .par_bridge()
             .flat_map(|(i, track)| {
-                let (point2d, index) = track
-                    .iter()
-                    .enumerate()
-                    .flat_map(|(i, point)| {
-                        point.map(|point| ((point.1 as usize, point.0 as usize), i))
-                    })
-                    .next()?;
+                let index = track.range().start;
+                let point2d = track.first()?;
+                let point2d = (point2d.1 as usize, point2d.0 as usize);
 
                 let point3d = points3d[i]?;
 
@@ -820,7 +839,7 @@ impl BundleAdjustment<'_> {
     fn residual(&self, point_i: usize, projection_j: usize) -> Vector2<f64> {
         let point3d = &self.points3d[point_i];
         let projection = &self.projection[projection_j];
-        let original = if let Some(original) = self.tracks[point_i][projection_j] {
+        let original = if let Some(original) = self.tracks[point_i].get(projection_j) {
             original
         } else {
             return Vector2::zeros();
