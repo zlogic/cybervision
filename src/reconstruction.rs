@@ -202,8 +202,9 @@ pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
         reconstruction_task.reconstruct(img1_filename, img2_filename)?;
     }
 
+    let surface = reconstruction_task.complete_triangulation()?;
     let img_filenames = &args.img_src[0..args.img_src.len() - 1];
-    reconstruction_task.output_surface(img_filenames, &args.img_out)?;
+    reconstruction_task.output_surface(surface, img_filenames, &args.img_out)?;
 
     if let Ok(t) = start_time.elapsed() {
         println!("Completed reconstruction in {:.3} seconds", t.as_secs_f32());
@@ -444,18 +445,34 @@ impl ImageReconstruction {
         result
     }
 
-    fn output_surface(
-        &mut self,
-        texture_filenames: &[String],
-        output_filename: &str,
-    ) -> Result<(), Box<dyn error::Error>> {
+    fn complete_triangulation(&mut self) -> Result<triangulation::Surface, Box<dyn error::Error>> {
         let start_time = SystemTime::now();
 
         let pb = new_progress_bar(false);
 
-        let surface: triangulation::Surface = self.triangulation.triangulate_all()?;
+        let surface = self.triangulation.triangulate_all(Some(&pb))?;
         self.triangulation.complete();
 
+        pb.finish_and_clear();
+
+        if let Ok(t) = start_time.elapsed() {
+            println!(
+                "Completed triangulation post-processing in {:.3} seconds",
+                t.as_secs_f32()
+            );
+        }
+
+        Ok(surface)
+    }
+
+    fn output_surface(
+        &mut self,
+        surface: triangulation::Surface,
+        texture_filenames: &[String],
+        output_filename: &str,
+    ) -> Result<(), Box<dyn error::Error>> {
+        let start_time = SystemTime::now();
+        let pb = new_progress_bar(false);
         let images = texture_filenames
             .iter()
             .map(|img_filename| SourceImage::load_rgb(img_filename).unwrap())
