@@ -55,13 +55,16 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = ProjectionMode::Parallel)]
     projection: ProjectionMode,
 
+    /// Mesh options
     #[arg(long, value_enum, default_value_t = Mesh::Plain)]
     mesh: Mesh,
 
-    /// Source images
+    /// Source image(s)
+    #[arg(required = true, index = 1)]
     img_src: Vec<String>,
 
     /// Output image
+    #[arg(required = true, index = 2)]
     img_out: String,
 }
 

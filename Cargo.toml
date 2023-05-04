@@ -9,7 +9,7 @@ license = "Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.2.4", default_features = false, features = ["std", "derive", "help", "usage", "suggestions"] }
+clap = { version = "4.2.7", default_features = false, features = ["std", "derive", "help", "usage", "suggestions"] }
 image = { version = "0.24.6", default_features = false, features = ["png", "jpeg", "tiff", "jpeg_rayon"] }
 indicatif = { version = "0.17.3", default_features = false }
 tiff = "*"
