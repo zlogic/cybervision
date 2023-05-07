@@ -2,7 +2,7 @@ name: Cargo build
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "multi-view-reconstruction" ]
   pull_request:
     branches: [ "master" ]
 
