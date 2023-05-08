@@ -65,6 +65,7 @@ jobs:
       if: matrix.arch == 'aarch64'
       run: |
         rustup target add ${{ matrix.arch }}-unknown-linux-gnu
+        sudo apt-get update
         sudo apt-get install -y crossbuild-essential-arm64 qemu-user-static
         echo "LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
         echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=/usr/bin/aarch64-linux-gnu-gcc" >> $GITHUB_ENV
