@@ -433,7 +433,7 @@ impl ImageReconstruction {
         let result = self
             .triangulation
             .triangulate(&correlated_points, &f, Some(&pb));
-        pb.finish();
+        pb.finish_and_clear();
 
         if let Ok(t) = start_time.elapsed() {
             println!(
