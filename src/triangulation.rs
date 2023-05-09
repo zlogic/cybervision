@@ -1,8 +1,8 @@
 use std::{fmt, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
 
 use nalgebra::{
-    DMatrix, Matrix2x3, Matrix3, Matrix3x4, MatrixXx1, MatrixXx4, SMatrix, Vector2, Vector3,
-    Vector4,
+    DMatrix, Matrix2x3, Matrix2x6, Matrix3, Matrix3x4, Matrix6, Matrix6x1, Matrix6x3, MatrixXx1,
+    MatrixXx4, Vector2, Vector3, Vector4,
 };
 
 use rand::seq::SliceRandom;
@@ -16,7 +16,7 @@ const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
 const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 1.0;
 const OUTLIER_FILTER_SEARCH_AREA: usize = 5;
 const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 10;
-const RANSAC_N: usize = 6;
+const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 10_000_000;
 // TODO: this should pe proportional to image size
 const RANSAC_INLIERS_T: f64 = 1.0;
@@ -45,52 +45,6 @@ impl Point {
 pub type Surface = Vec<Point>;
 
 type Match = (u32, u32);
-
-#[derive(Clone, Debug)]
-struct Track {
-    start_index: usize,
-    points: Vec<Match>,
-}
-
-impl Track {
-    fn new(start_index: usize, point: Match) -> Track {
-        let points = vec![point];
-        Track {
-            start_index,
-            points,
-        }
-    }
-
-    fn add(&mut self, index: usize, point: Match) -> bool {
-        if index == self.start_index + self.points.len() {
-            self.points.push(point);
-            true
-        } else {
-            false
-        }
-    }
-
-    fn range(&self) -> Range<usize> {
-        // TODO: convert this into an iterator?
-        self.start_index..self.start_index + self.points.len()
-    }
-
-    fn get(&self, i: usize) -> Option<Match> {
-        if i < self.start_index || i >= self.start_index + self.points.len() {
-            None
-        } else {
-            Some(self.points[i - self.start_index])
-        }
-    }
-
-    fn first(&self) -> Option<&Match> {
-        self.points.first()
-    }
-
-    fn last(&self) -> Option<&Match> {
-        self.points.last()
-    }
-}
 
 pub trait ProgressListener
 where
@@ -123,8 +77,11 @@ impl Triangulation {
             ProjectionMode::Perspective => (
                 None,
                 Some(PerspectiveTriangulation {
-                    projection: vec![],
+                    calibration: Matrix3::identity(),
+                    projections: vec![],
+                    cameras: vec![],
                     tracks: vec![],
+                    points3d: vec![],
                     scale,
                 }),
             ),
@@ -239,9 +196,139 @@ impl AffineTriangulation {
     }
 }
 
-pub struct PerspectiveTriangulation {
-    projection: Vec<Matrix3x4<f64>>,
+#[derive(Clone, Debug)]
+struct Track {
+    start_index: usize,
+    points: Vec<Match>,
+}
+
+impl Track {
+    fn new(start_index: usize, point: Match) -> Track {
+        let points = vec![point];
+        Track {
+            start_index,
+            points,
+        }
+    }
+
+    fn add(&mut self, index: usize, point: Match) -> bool {
+        if index == self.start_index + self.points.len() {
+            self.points.push(point);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn range(&self) -> Range<usize> {
+        // TODO: convert this into an iterator?
+        self.start_index..self.start_index + self.points.len()
+    }
+
+    fn get(&self, i: usize) -> Option<Match> {
+        if i < self.start_index || i >= self.start_index + self.points.len() {
+            None
+        } else {
+            Some(self.points[i - self.start_index])
+        }
+    }
+
+    fn first(&self) -> Option<&Match> {
+        self.points.first()
+    }
+
+    fn last(&self) -> Option<&Match> {
+        self.points.last()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Camera {
+    r: Vector3<f64>,
+    t: Vector3<f64>,
+}
+
+impl Camera {
+    fn decode(r: &Matrix3<f64>, t: &Vector3<f64>) -> Camera {
+        let (r_x, r_y, r_z) = if r[(0, 2)] < 1.0 {
+            if r[(0, 2)] > -1.0 {
+                let r_y = r[(0, 2)].asin();
+                let r_x = (-r[(1, 2)]).atan2(r[(2, 2)]);
+                let r_z = (-r[(0, 1)]).atan2(r[(0, 0)]);
+                (r_x, r_y, r_z)
+            } else {
+                let r_y = -std::f64::consts::PI;
+                let r_x = r[(1, 0)].atan2(r[(0, 0)]);
+                let r_z = 0.0;
+                (r_x, r_y, r_z)
+            }
+        } else {
+            let r_y = std::f64::consts::PI;
+            let r_x = r[(1, 0)].atan2(r[(0, 0)]);
+            let r_z = 0.0;
+            (r_x, r_y, r_z)
+        };
+        let r = Vector3::new(r_x, r_y, r_z);
+
+        Camera { r, t: t.to_owned() }
+    }
+
+    fn matrix_r(&self) -> Matrix3<f64> {
+        let (r_x, r_y, r_z) = (self.r.x, self.r.y, self.r.z);
+        let rotation_x = Matrix3::new(
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            r_x.cos(),
+            -r_x.sin(),
+            0.0,
+            r_x.sin(),
+            r_x.cos(),
+        );
+        let rotation_y = Matrix3::new(
+            r_y.cos(),
+            0.0,
+            r_y.sin(),
+            0.0,
+            1.0,
+            0.0,
+            -r_y.sin(),
+            0.0,
+            r_y.cos(),
+        );
+        let rotation_z = Matrix3::new(
+            r_z.cos(),
+            -r_z.sin(),
+            0.0,
+            r_z.sin(),
+            r_z.cos(),
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+        );
+
+        rotation_x * rotation_y * rotation_z
+    }
+
+    fn projection(&self, calibration: &Matrix3<f64>) -> Matrix3x4<f64> {
+        let r = self.matrix_r();
+        let t = self.t;
+
+        let mut projection = Matrix3x4::identity();
+        projection.column_mut(3).copy_from(&t);
+
+        calibration * r * projection
+    }
+}
+
+struct PerspectiveTriangulation {
+    calibration: Matrix3<f64>,
+    projections: Vec<Matrix3x4<f64>>,
+    cameras: Vec<Camera>,
     tracks: Vec<Track>,
+    points3d: Vec<Option<Vector3<f64>>>,
     scale: (f64, f64, f64),
 }
 
@@ -252,27 +339,53 @@ impl PerspectiveTriangulation {
         fundamental_matrix: &Matrix3<f64>,
         progress_listener: Option<&PL>,
     ) -> Result<(), TriangulationError> {
-        let index = self.projection.len().saturating_sub(1);
+        let index = self.projections.len().saturating_sub(1);
         self.extend_tracks(correlated_points, index);
 
-        if self.projection.is_empty() {
-            self.projection.push(Matrix3x4::identity());
+        // TODO: read this from EXIF metadata.
+        /*
+        self.calibration = Matrix3::new(
+            760.0,
+            0.0,
+            (1024 / 2) as f64,
+            0.0,
+            760.0,
+            (768 / 2) as f64,
+            0.0,
+            0.0,
+            1.0,
+        );
+        */
+        self.calibration = Matrix3::identity();
+        if self.projections.is_empty() {
+            // For the first pair, find a temporary projection matrix to estimate 3D points.
+            self.projections.push(Matrix3x4::identity());
             let p2 = match PerspectiveTriangulation::f_to_projection_matrix(&fundamental_matrix) {
                 Some(p2) => p2,
                 None => return Err(TriangulationError::new("Unable to find projection matrix")),
             };
-            self.projection.push(p2);
-        } else {
-            let p2 = match self.next_projection_matrix(progress_listener) {
-                Some(p2) => p2,
-                None => return Err(TriangulationError::new("Unable to find projection matrix")),
-            };
-            self.projection.push(p2);
+            self.projections.push(p2);
+            self.triangulate_tracks();
+
+            self.projections = vec![Matrix3x4::identity()];
+            self.cameras = vec![Camera::decode(&Matrix3::identity(), &Vector3::zeros())];
         }
+        let camera2 = match self.recover_relative_pose(progress_listener) {
+            Some(camera2) => camera2,
+            None => return Err(TriangulationError::new("Unable to find projection matrix")),
+        };
+        self.cameras.push(camera2);
+        self.projections = self
+            .cameras
+            .iter()
+            .map(|camera| camera.projection(&self.calibration))
+            .collect();
+
+        self.points3d.clear();
+        self.triangulate_tracks();
 
         //let points = filter_outliers(correlated_points.shape(), &points);
         //self.points3d.push(points);
-        //self.track_points(correlated_points);
 
         Ok(())
     }
@@ -288,15 +401,19 @@ impl PerspectiveTriangulation {
     }
 
     #[inline]
-    fn triangulate_track(track: &Track, projection: &[Matrix3x4<f64>]) -> Option<Vector4<f64>> {
+    fn triangulate_track(
+        &self,
+        track: &Track,
+        projections: &[Matrix3x4<f64>],
+    ) -> Option<Vector4<f64>> {
         let points_projection = track
             .range()
             .into_iter()
             .flat_map(|i| {
-                if i < projection.len() {
+                if i < projections.len() {
                     let point = track.get(i)?;
                     let point = (point.1 as f64, point.0 as f64);
-                    Some((point, &projection[i]))
+                    Some((point, projections[i]))
                 } else {
                     None
                 }
@@ -316,10 +433,27 @@ impl PerspectiveTriangulation {
         }
 
         let usv = a.svd(false, true);
-        let vt = usv.v_t.unwrap();
+        let vt = usv.v_t?;
         let point4d = vt.row(vt.nrows() - 1).transpose();
 
         Some(point4d)
+    }
+
+    fn triangulate_tracks(&mut self) {
+        let mut new_points3d = self
+            .tracks
+            .par_iter()
+            .skip(self.points3d.len())
+            .map(|track: &Track| {
+                let point4d = self.triangulate_track(track, &self.projections)?;
+
+                let w = point4d.w * point4d.z.signum() * point4d.w.signum();
+                let point3d = point4d.remove_row(3).unscale(w);
+
+                Some(point3d)
+            })
+            .collect::<Vec<_>>();
+        self.points3d.append(&mut new_points3d)
     }
 
     fn f_to_projection_matrix(f: &Matrix3<f64>) -> Option<Matrix3x4<f64>> {
@@ -341,12 +475,13 @@ impl PerspectiveTriangulation {
         Some(p2)
     }
 
-    fn next_projection_matrix<PL: ProgressListener>(
+    fn recover_relative_pose<PL: ProgressListener>(
         &self,
         progress_listener: Option<&PL>,
-    ) -> Option<Matrix3x4<f64>> {
-        let projection = &self.projection;
-        let track_len = projection.len() + 1;
+    ) -> Option<Camera> {
+        let track_len = self.projections.len() + 1;
+        let linked_track_len = if self.projections.len() > 1 { 2 } else { 1 };
+        // Gaku Nakano, "A Simple Direct Solution to the Perspective-Three-Point Problem," BMVC2019
 
         let unlinked_tracks = self
             .tracks
@@ -358,7 +493,10 @@ impl PerspectiveTriangulation {
         let linked_tracks = self
             .tracks
             .iter()
-            .filter(|track| track.range().len() > 2 && track.range().end == track_len)
+            .enumerate()
+            .filter(|(_, track)| {
+                track.range().len() > linked_track_len && track.range().end == track_len
+            })
             .map(|track| track.to_owned())
             .collect::<Vec<_>>();
 
@@ -366,8 +504,16 @@ impl PerspectiveTriangulation {
 
         let mut result = None;
         let counter = AtomicUsize::new(0);
+        let reduce_best_result = |(c1, count1, error1), (c2, count2, error2)| {
+            if count1 > count2 || (count1 == count2 && error1 < error2) {
+                (c1, count1, error1)
+            } else {
+                (c2, count2, error2)
+            }
+        };
+
         for _ in 0..ransac_outer {
-            let (projection, count, _error) = (0..RANSAC_CHECK_INTERVAL)
+            let (camera, count, _error) = (0..RANSAC_CHECK_INTERVAL)
                 .into_iter()
                 .par_bridge()
                 .filter_map(|_| {
@@ -376,54 +522,64 @@ impl PerspectiveTriangulation {
                             counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / RANSAC_K as f32;
                         pl.report_status(value);
                     }
-                    let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
+                    let rng = &mut SmallRng::from_rng(rand::thread_rng()).ok()?;
 
                     // Select points
                     let inliers = linked_tracks
                         .choose_multiple(rng, RANSAC_N)
-                        .map(|track| track.to_owned())
+                        .filter_map(|(i, track)| Some((*i, *track)))
                         .collect::<Vec<_>>();
                     if inliers.len() != RANSAC_N {
                         return None;
                     }
 
+                    let inliers_tracks = inliers
+                        .iter()
+                        .map(|(_, track)| (*track).to_owned())
+                        .collect::<Vec<_>>();
+
                     // TODO: check if points are collinear?
-                    let p = self.find_projection_matrix(&inliers)?;
+                    self.recover_pose_from_points(&inliers)
+                        .into_iter()
+                        .filter_map(|(r, t)| {
+                            if !r.norm().is_finite() || !t.norm().is_finite() {
+                                // Sometimes the estimated pose returns a NaN
+                                return None;
+                            }
+                            let camera = Camera::decode(&r, &t);
+                            let projection = camera.projection(&self.calibration);
 
-                    let mut projection = projection.clone();
-                    projection.push(p);
+                            let mut projections = self.projections.clone();
+                            projections.push(projection);
 
-                    let (count, _) = PerspectiveTriangulation::tracks_reprojection_error(
-                        &inliers,
-                        &projection,
-                        true,
-                    );
-                    if count < RANSAC_N {
-                        // Inliers cannot be reliably reprojected.
-                        return None;
-                    }
+                            let (count, _) =
+                                self.tracks_reprojection_error(&inliers_tracks, &projections, true);
+                            if count != RANSAC_N {
+                                return None;
+                            }
 
-                    let (count, error) = PerspectiveTriangulation::tracks_reprojection_error(
-                        &unlinked_tracks,
-                        &projection,
-                        false,
-                    );
-
-                    Some((p, count, error))
+                            let (count, error) = self.tracks_reprojection_error(
+                                &unlinked_tracks,
+                                &projections,
+                                false,
+                            );
+                            Some((camera, count, error / (count as f64)))
+                        })
+                        .reduce(reduce_best_result)
                 })
                 .reduce(
-                    || (Matrix3x4::identity(), 0, f64::MAX),
-                    |(projection1, count1, error1), (projection2, count2, error2)| {
-                        if count1 > count2 || (count1 == count2 && error1 < error2) {
-                            (projection1, count1, error1)
-                        } else {
-                            (projection2, count2, error2)
-                        }
+                    || {
+                        (
+                            Camera::decode(&Matrix3::identity(), &Vector3::zeros()),
+                            0,
+                            f64::MAX,
+                        )
                     },
+                    reduce_best_result,
                 );
 
             if count >= RANSAC_D {
-                result = Some(projection)
+                result = Some(camera)
             }
             if count >= RANSAC_D_EARLY_EXIT {
                 break;
@@ -433,73 +589,157 @@ impl PerspectiveTriangulation {
         result
     }
 
-    fn find_projection_matrix(&self, inliers: &Vec<Track>) -> Option<Matrix3x4<f64>> {
-        const SVD_ROWS: usize = RANSAC_N * 2;
-        let index = self.projection.len();
-        let points4d = inliers
+    fn recover_pose_from_points(
+        &self,
+        inliers: &[(usize, &Track)],
+    ) -> Vec<(Matrix3<f64>, Vector3<f64>)> {
+        let mut inliers = inliers
             .iter()
-            .filter_map(|inlier| {
-                let point4d =
-                    PerspectiveTriangulation::triangulate_track(inlier, &self.projection)?;
-                let projection = inlier.get(index)?;
-                Some((point4d, projection))
+            .filter_map(|(i, track)| {
+                let p2 = track.last()?;
+                let p2 = Vector3::new(p2.1 as f64, p2.0 as f64, 1.0).normalize();
+                let point3d = (*(self.points3d.get(*i)?))?;
+
+                Some((p2, point3d))
             })
             .collect::<Vec<_>>();
 
-        if points4d.len() < RANSAC_N {
-            return None;
+        {
+            // Rearrange inliers so that 0-1 has the largest distance
+            let dist_01 = inliers[0].1.metric_distance(&inliers[1].1);
+            let dist_12 = inliers[1].1.metric_distance(&inliers[2].1);
+            let dist_02 = inliers[0].1.metric_distance(&inliers[2].1);
+            if dist_12 > dist_01 && dist_12 > dist_02 {
+                inliers.rotate_left(1)
+            } else if dist_02 > dist_01 && dist_02 > dist_12 {
+                inliers.swap(1, 2);
+            }
         }
 
-        let mut a = SMatrix::<f64, SVD_ROWS, 12>::zeros();
-        for i in 0..RANSAC_N {
-            let inlier = points4d[i];
+        let x10 = inliers[1].1 - inliers[0].1;
+        let x20 = inliers[2].1 - inliers[0].1;
+        let nx = x10.normalize();
+        let nz = nx.cross(&x20).normalize();
+        let ny = nz.cross(&nx).normalize();
+        let mut n = Matrix3::zeros();
+        n.column_mut(0).copy_from(&nx);
+        n.column_mut(1).copy_from(&ny);
+        n.column_mut(2).copy_from(&nz);
 
-            let point4d = inlier.0;
-            let projection = inlier.1;
-            let x = projection.1 as f64;
-            let y = projection.0 as f64;
-            let w = 1.0;
-            a[(i * 2, 0)] = w * point4d.x;
-            a[(i * 2, 1)] = w * point4d.y;
-            a[(i * 2, 2)] = w * point4d.z;
-            a[(i * 2, 3)] = w * point4d.w;
-            a[(i * 2, 8)] = -x * point4d.x;
-            a[(i * 2, 9)] = -x * point4d.y;
-            a[(i * 2, 10)] = -x * point4d.z;
-            a[(i * 2, 11)] = -x * point4d.w;
-            a[(i * 2 + 1, 4)] = w * point4d.x;
-            a[(i * 2 + 1, 5)] = w * point4d.y;
-            a[(i * 2 + 1, 6)] = w * point4d.z;
-            a[(i * 2 + 1, 7)] = w * point4d.w;
-            a[(i * 2 + 1, 8)] = -y * point4d.x;
-            a[(i * 2 + 1, 9)] = -y * point4d.y;
-            a[(i * 2 + 1, 10)] = -y * point4d.z;
-            a[(i * 2 + 1, 11)] = -y * point4d.w;
-        }
-        let usv = a.svd(false, true);
-        let vt = &usv.v_t?;
-        let vtc = vt.row(vt.nrows() - 1);
-        let p = Matrix3x4::new(
-            vtc[0], vtc[1], vtc[2], vtc[3], vtc[4], vtc[5], vtc[6], vtc[7], vtc[8], vtc[9],
-            vtc[10], vtc[11],
-        );
+        let a = nx.tr_mul(&x10)[0];
+        let b = nx.tr_mul(&x20)[0];
+        let c = ny.tr_mul(&x20)[0];
 
-        Some(p)
+        let m01 = inliers[0].0.tr_mul(&inliers[1].0)[0];
+        let m02 = inliers[0].0.tr_mul(&inliers[2].0)[0];
+        let m12 = inliers[1].0.tr_mul(&inliers[2].0)[0];
+
+        let p = b / a;
+        let q = (b * b + c * c) / (a * a);
+
+        let f = [p, -m12, 0.0, -m01 * (2.0 * p - 1.0), m02, p - 1.0];
+        let g = [q, 0.0, -1.0, -2.0 * m01 * q, 2.0 * m02, q - 1.0];
+
+        let h = [
+            -f[0] * f[0] + g[0] * f[1] * f[1],
+            f[1] * f[1] * g[3] - 2.0 * f[0] * f[3] - 2.0 * f[0] * f[1] * f[4]
+                + 2.0 * f[1] * f[4] * g[0],
+            f[4] * f[4] * g[0] - 2.0 * f[0] * f[4] * f[4] - 2.0 * f[0] * f[5] + f[1] * f[1] * g[5]
+                - f[3] * f[3]
+                - 2.0 * f[1] * f[3] * f[4]
+                + 2.0 * f[1] * f[4] * g[3],
+            f[4] * f[4] * g[3]
+                - 2.0 * f[3] * f[4] * f[4]
+                - 2.0 * f[3] * f[5]
+                - 2.0 * f[1] * f[4] * f[5]
+                + 2.0 * f[1] * f[4] * g[5],
+            -2.0 * f[4] * f[4] * f[5] + g[5] * f[4] * f[4] - f[5] * f[5],
+        ];
+
+        let mut xy = solve_quartic(h)
+            .into_iter()
+            .filter_map(|x| {
+                if !x.is_finite() {
+                    return None;
+                }
+                let y = -((f[0] * x + f[3]) * x + f[5]) / (f[4] + f[1] * x);
+                Some((x, y))
+            })
+            .collect::<Vec<_>>();
+
+        polish_roots(f, g, &mut xy);
+
+        let a_vector = Matrix3::new(
+            -inliers[0].0.x,
+            -inliers[0].0.y,
+            -inliers[0].0.z,
+            inliers[1].0.x,
+            inliers[1].0.y,
+            inliers[1].0.z,
+            0.0,
+            0.0,
+            0.0,
+        )
+        .transpose();
+        let b_vector = Matrix3::new(
+            -inliers[0].0.x,
+            -inliers[0].0.y,
+            -inliers[0].0.z,
+            0.0,
+            0.0,
+            0.0,
+            inliers[2].0.x,
+            inliers[2].0.y,
+            inliers[2].0.z,
+        )
+        .transpose();
+        let c_vector = b_vector - p * a_vector;
+
+        xy.iter()
+            .flat_map(|xy| {
+                let lambda = Vector3::new(1.0, xy.0, xy.1);
+                let s = (a_vector * lambda).norm() / a;
+                let d = lambda / s;
+                let r1 = (a_vector * d) / a;
+                let r2 = (c_vector * d) / c;
+                let r3 = r1.cross(&r2);
+                let mut rc = Matrix3::zeros();
+                rc.column_mut(0).copy_from(&r1);
+                rc.column_mut(1).copy_from(&r2);
+                rc.column_mut(2).copy_from(&r3);
+
+                let tc = d[0] * inliers[0].0;
+                let r = rc * n.transpose();
+                let t = tc - rc * n.transpose() * inliers[0].1;
+
+                if !r.norm().is_finite() || !t.norm().is_finite() {
+                    // Sometimes the estimated pose contains NaNs, and cause SVD to enter an infinite loop
+                    return None;
+                }
+
+                Some((r, t))
+            })
+            .collect()
     }
 
     fn tracks_reprojection_error(
+        &self,
         tracks: &[Track],
-        projection: &[Matrix3x4<f64>],
+        projections: &[Matrix3x4<f64>],
         inliers: bool,
     ) -> (usize, f64) {
         let threshold = if inliers { RANSAC_INLIERS_T } else { RANSAC_T };
         // For inliers, check reprojection error only in the last images.
         // For normal points, ignore the first images.
-        let skip = if inliers { projection.len() - 1 } else { 2 };
+        let skip: usize = if inliers || projections.len() <= 2 {
+            projections.len() - 1
+        } else {
+            2
+        };
         tracks
             .iter()
             .filter_map(|track| {
-                PerspectiveTriangulation::point_reprojection_error(track, projection, skip)
+                self.point_reprojection_error(track, projections, skip)
                     .filter(|error| *error < threshold)
             })
             .fold((0, 0.0f64), |(count, error), match_error| {
@@ -509,12 +749,13 @@ impl PerspectiveTriangulation {
 
     #[inline]
     fn point_reprojection_error(
+        &self,
         track: &Track,
-        projection: &[Matrix3x4<f64>],
+        projections: &[Matrix3x4<f64>],
         skip: usize,
     ) -> Option<f64> {
-        let point4d = PerspectiveTriangulation::triangulate_track(track, &projection)?;
-        projection
+        let point4d = self.triangulate_track(track, &projections)?;
+        projections
             .iter()
             .enumerate()
             .skip(skip)
@@ -572,8 +813,13 @@ impl PerspectiveTriangulation {
         &mut self,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
-        let mut ba: BundleAdjustment = BundleAdjustment::new(self.projection.clone(), &self.tracks);
-        let points3d = ba.optimize(progress_listener)?;
+        let mut ba = BundleAdjustment::new(
+            self.calibration.clone(),
+            self.cameras.clone(),
+            &self.tracks,
+            &mut self.points3d,
+        );
+        ba.optimize(progress_listener)?;
         drop(ba);
 
         let surface = self
@@ -586,7 +832,7 @@ impl PerspectiveTriangulation {
                 let point2d = track.first()?;
                 let point2d = (point2d.1 as usize, point2d.0 as usize);
 
-                let point3d = points3d[i]?;
+                let point3d = self.points3d[i]?;
 
                 let point = Point::new(point2d, point3d, index);
                 Some(point)
@@ -630,6 +876,80 @@ impl PerspectiveTriangulation {
                 point
             })
             .collect()
+    }
+}
+
+fn solve_quartic(factors: [f64; 5]) -> [f64; 4] {
+    let a = factors[0];
+    let b = factors[1];
+    let c = factors[2];
+    let d = factors[3];
+    let e = factors[4];
+
+    let a_pw2 = a * a;
+    let b_pw2 = b * b;
+    let a_pw3 = a_pw2 * a;
+    let b_pw3 = b_pw2 * b;
+    let a_pw4 = a_pw3 * a;
+    let b_pw4 = b_pw3 * b;
+
+    let alpha = -3.0 * b_pw2 / (8.0 * a_pw2) + c / a;
+    let beta = b_pw3 / (8.0 * a_pw3) - b * c / (2.0 * a_pw2) + d / a;
+    let gamma =
+        -3.0 * b_pw4 / (256.0 * a_pw4) + b_pw2 * c / (16.0 * a_pw3) - b * d / (4.0 * a_pw2) + e / a;
+
+    let alpha_pw2 = alpha * alpha;
+    let alpha_pw3 = alpha_pw2 * alpha;
+
+    let p = -alpha_pw2 / 12.0 - gamma;
+    let q = -alpha_pw3 / 108.0 + alpha * gamma / 3.0 - beta * beta / 8.0;
+    let r = -q / 2.0 + (q * q / 4.0 + p * p * p / 27.0).sqrt();
+    let u = r.powf(1.0 / 3.0);
+
+    let y = if u.abs() < f64::EPSILON {
+        -5.0 * alpha / 6.0 - q.powf(1.0 / 3.0)
+    } else {
+        -5.0 * alpha / 6.0 - p / (3.0 * u) + u
+    };
+    let w = (alpha + 2.0 * y).sqrt();
+    [
+        -b / (4.0 * a) + 0.5 * (w + (-(3.0 * alpha + 2.0 * y + 2.0 * beta / w)).sqrt()),
+        -b / (4.0 * a) + 0.5 * (w - (-(3.0 * alpha + 2.0 * y + 2.0 * beta / w)).sqrt()),
+        -b / (4.0 * a) + 0.5 * (-w + (-(3.0 * alpha + 2.0 * y - 2.0 * beta / w)).sqrt()),
+        -b / (4.0 * a) + 0.5 * (-w - (-(3.0 * alpha + 2.0 * y - 2.0 * beta / w)).sqrt()),
+    ]
+}
+
+fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut Vec<(f64, f64)>) {
+    const MAX_ITER: usize = 50;
+    for _ in 0..MAX_ITER {
+        for (x_target, y_target) in xy.iter_mut() {
+            let x = *x_target;
+            let y = *y_target;
+            let x2 = x * x;
+            let y2 = y * y;
+            let x_y = x * y;
+
+            let fv = f[0] * x2 + f[1] * x_y + f[3] * x + f[4] * y + f[5];
+            let gv = g[0] * x2 - y2 + g[3] * x + g[4] * y + g[5];
+
+            if fv.abs() < f64::EPSILON && gv.abs() < f64::EPSILON {
+                continue;
+            }
+
+            let dfdx = 2.0 * f[0] * x + f[1] * y + f[3];
+            let dfdy = f[1] * x + f[4];
+            let dgdx = 2.0 * g[0] * x + g[3];
+            let dgdy = -2.0 * y + g[4];
+
+            let inv_det_j = 1.0 / (dfdx * dgdy - dfdy * dgdx);
+
+            let dx = (dgdy * fv - dfdy * gv) * inv_det_j;
+            let dy = (-dgdx * fv + dfdx * gv) * inv_det_j;
+
+            *x_target -= dx;
+            *y_target -= dy;
+        }
     }
 }
 
@@ -712,36 +1032,40 @@ fn point_not_outlier(img: &DMatrix<Option<f64>>, row: usize, col: usize) -> bool
 }
 
 struct BundleAdjustment<'a> {
-    projection: Vec<Matrix3x4<f64>>,
+    calibration: Matrix3<f64>,
+    cameras: Vec<Camera>,
+    projections: Vec<Matrix3x4<f64>>,
     tracks: &'a [Track],
-    points3d: Vec<Option<Vector3<f64>>>,
+    points3d: &'a mut Vec<Option<Vector3<f64>>>,
     covariance: f64,
     mu: f64,
 }
 
-type Matrix12x12<T> =
-    nalgebra::Matrix<T, nalgebra::U12, nalgebra::U12, nalgebra::ArrayStorage<T, 12, 12>>;
-type Matrix12x3<T> =
-    nalgebra::Matrix<T, nalgebra::U12, nalgebra::U3, nalgebra::ArrayStorage<T, 12, 3>>;
-type Matrix12x1<T> =
-    nalgebra::Matrix<T, nalgebra::U12, nalgebra::U1, nalgebra::ArrayStorage<T, 12, 1>>;
-type Matrix2x12<T> =
-    nalgebra::Matrix<T, nalgebra::U2, nalgebra::U12, nalgebra::ArrayStorage<T, 2, 12>>;
-
 impl BundleAdjustment<'_> {
-    const PROJECTION_PARAMETERS: usize = 12;
+    const CAMERA_PARAMETERS: usize = 6;
     const INITIAL_MU: f64 = 1E-2;
+    const JACOBIAN_H: f64 = 0.001;
     const GRADIENT_EPSILON: f64 = 1E-12;
     const DELTA_EPSILON: f64 = 1E-12;
     const RESIDUAL_EPSILON: f64 = 1E-12;
     const RESIDUAL_REDUCTION_EPSILON: f64 = 0.0;
 
-    fn new<'a>(projection: Vec<Matrix3x4<f64>>, tracks: &'a [Track]) -> BundleAdjustment {
-        let points3d = BundleAdjustment::triangulate_tracks(&projection, tracks);
+    fn new<'a>(
+        calibration: Matrix3<f64>,
+        cameras: Vec<Camera>,
+        tracks: &'a [Track],
+        points3d: &'a mut Vec<Option<Vector3<f64>>>,
+    ) -> BundleAdjustment<'a> {
         // For now, identity covariance is acceptable.
         let covariance = 1.0;
+        let projections = cameras
+            .iter()
+            .map(|camera| camera.projection(&calibration))
+            .collect();
         BundleAdjustment {
-            projection,
+            calibration,
+            cameras,
+            projections,
             tracks,
             points3d,
             covariance,
@@ -749,28 +1073,62 @@ impl BundleAdjustment<'_> {
         }
     }
 
-    fn triangulate_tracks(
-        projection: &Vec<Matrix3x4<f64>>,
-        tracks: &[Track],
-    ) -> Vec<Option<Vector3<f64>>> {
-        tracks
-            .par_iter()
-            .map(|track| {
-                let point4d = PerspectiveTriangulation::triangulate_track(track, projection)?;
+    fn jacobian_view(&self, camera: &Camera, point: &Vector4<f64>, param: usize) -> Vector2<f64> {
+        let delta_r = match param {
+            0 => Vector3::new(BundleAdjustment::JACOBIAN_H, 0.0, 0.0),
+            1 => Vector3::new(0.0, BundleAdjustment::JACOBIAN_H, 0.0),
+            2 => Vector3::new(0.0, 0.0, BundleAdjustment::JACOBIAN_H),
+            _ => Vector3::zeros(),
+        };
+        let delta_t = match param {
+            3 => Vector3::new(BundleAdjustment::JACOBIAN_H, 0.0, 0.0),
+            4 => Vector3::new(0.0, BundleAdjustment::JACOBIAN_H, 0.0),
+            5 => Vector3::new(0.0, 0.0, BundleAdjustment::JACOBIAN_H),
+            _ => Vector3::zeros(),
+        };
+        let mut p_plus = camera.clone();
+        p_plus.r += delta_r;
+        p_plus.t += delta_t;
+        let mut p_minus = camera.clone();
+        p_minus.r -= delta_r;
+        p_minus.t -= delta_t;
 
-                let w = point4d.w * point4d.z.signum() * point4d.w.signum();
-                let point3d = point4d.remove_row(3).unscale(w);
+        let p_plus = p_plus.projection(&self.calibration);
+        let p_minus = p_minus.projection(&self.calibration);
 
-                Some(point3d)
-            })
-            .collect::<Vec<_>>()
+        let projection_plus = p_plus * point;
+        let projection_plus = projection_plus.remove_row(2).unscale(projection_plus.z);
+        let projection_minus = p_minus * point;
+        let projection_minus = projection_minus.remove_row(2).unscale(projection_minus.z);
+        (projection_plus - projection_minus).unscale(2.0 * BundleAdjustment::JACOBIAN_H)
     }
 
-    fn jacobian_a(&self, point3d: &Vector3<f64>, projection: &Matrix3x4<f64>) -> Matrix2x12<f64> {
-        // Projection matrix is unrolled to a single row with 12 elements.
-        // jac is a 2x12 Jacobian for point i and projection matrix j.
-        let mut jac = Matrix2x12::zeros();
+    fn jacobian_a(&self, point3d: &Vector3<f64>, view_j: usize) -> Matrix2x6<f64> {
+        // jac is a 2x6 Jacobian for point i and projection matrix parameter j.
+        let mut jac = Matrix2x6::zeros();
+
+        if view_j == 0 {
+            return jac;
+        }
+
+        let camera = &self.cameras[view_j];
         let point4d = point3d.insert_row(3, 1.0);
+        // Calculate Jacobian using finite differences (central difference)
+        for i in 0..6 {
+            jac.column_mut(i)
+                .copy_from(&self.jacobian_view(&camera, &point4d, i));
+        }
+
+        jac
+    }
+
+    fn jacobian_b(&self, point3d: &Vector3<f64>, view_j: usize) -> Matrix2x3<f64> {
+        // Point coordinates matrix is converted to a single row with coordinates x, y and z.
+        // jac is a 2x3 Jacobian for point i and projection matrix j.
+        let mut jac = Matrix2x3::zeros();
+        let point4d = point3d.insert_row(3, 1.0);
+
+        let projection = self.projections[view_j];
 
         // Using a symbolic formula (not finite differences/central difference), check the Rust LM library for more info.
         // P is the projection matrix for image
@@ -785,34 +1143,6 @@ impl BundleAdjustment<'_> {
         // Pr1 = P11*x+P12*y+P13*z+P14
         // Pr2 = P21*x+P22*y+P23*z+P24
         // Pr3 = P31*x+P32*y+P33*z+P34
-        let p_r = projection * point4d;
-        // dxpro/dP1i = Poi/(P31*x+P32*y+P33*z+P34) = Poi/Pr3
-        for p_col in 0..4 {
-            jac[(0, p_col * 3 + 0)] = point4d[p_col] / p_r[2];
-        }
-        // dypro/dP2i = Poi/(P31*x+P32*y+P33*z+P34) = Poi/Pr3
-        for p_col in 0..4 {
-            jac[(1, p_col * 3 + 1)] = point4d[p_col] / p_r[2];
-        }
-        // dxpro/dP3i = Poi*(P11*x+P12*y+P13*z+P14)/((P31*x+P32*y+P33*z+P34)^2) = Poi*Pr1/(Pr3^2)
-        for p_col in 0..4 {
-            jac[(0, p_col * 3 + 2)] = -point4d[p_col] * p_r[0] / (p_r[2] * p_r[2]);
-        }
-        // dypro/dP3i = Poi*(P21*x+P22*y+P23*z+P24)/((P31*x+P32*y+P33*z+P34)^2) = Poi*Pr2/(Pr3^2)
-        for p_col in 0..4 {
-            jac[(1, p_col * 3 + 2)] = -point4d[p_col] * p_r[1] / (p_r[2] * p_r[2]);
-        }
-
-        jac
-    }
-
-    fn jacobian_b(&self, point3d: &Vector3<f64>, projection: &Matrix3x4<f64>) -> Matrix2x3<f64> {
-        // Point coordinates matrix is converted to a single row with coordinates x, y and z.
-        // jac is a 2x3 Jacobian for point i and projection matrix j.
-        let mut jac = Matrix2x3::zeros();
-        let point4d = point3d.insert_row(3, 1.0);
-
-        // See jacobian_a for more details.
         let p_r = projection * point4d;
         // dxpro/dx = (P11*(P32*y+P33*z+P34)-P31*(P12*y+P13*z+P14))/(Pr3^2) = (P11*Pr3[x=0]-P31*Pr1[x=0])/(Pr3^2)
         // dxpro/di = (P1i*Pr3[i=0]-P3i*Pr1[i=0])/(Pr3^2)
@@ -836,10 +1166,10 @@ impl BundleAdjustment<'_> {
     }
 
     #[inline]
-    fn residual(&self, point_i: usize, projection_j: usize) -> Vector2<f64> {
+    fn residual(&self, point_i: usize, view_j: usize) -> Vector2<f64> {
         let point3d = &self.points3d[point_i];
-        let projection = &self.projection[projection_j];
-        let original = if let Some(original) = self.tracks[point_i].get(projection_j) {
+        let projection = &self.projections[view_j];
+        let original = if let Some(original) = self.tracks[point_i].get(view_j) {
             original
         } else {
             return Vector2::zeros();
@@ -857,13 +1187,12 @@ impl BundleAdjustment<'_> {
         }
     }
 
-    fn residual_a(&self, projection_j: usize) -> Option<Matrix12x1<f64>> {
-        let mut residual = Matrix12x1::zeros();
-        let projection = &self.projection[projection_j];
+    fn residual_a(&self, view_j: usize) -> Option<Matrix6x1<f64>> {
+        let mut residual = Matrix6x1::zeros();
         for (point_i, point3d) in self.points3d.iter().enumerate() {
             let point3d = (*point3d)?;
-            let a = self.jacobian_a(&point3d, &projection);
-            let res = self.residual(point_i, projection_j);
+            let a = self.jacobian_a(&point3d, view_j);
+            let res = self.residual(point_i, view_j);
             residual += a.transpose() * self.covariance * res;
         }
         Some(residual)
@@ -872,24 +1201,24 @@ impl BundleAdjustment<'_> {
     fn residual_b(&self, point_i: usize) -> Option<Vector3<f64>> {
         let mut residual = Vector3::zeros();
         let point3d = &self.points3d[point_i];
-        for (projection_j, projection) in self.projection.iter().enumerate() {
+        for view_j in 0..self.cameras.len() {
             let point3d = (*point3d)?;
-            let b = self.jacobian_b(&point3d, &projection);
-            let res = self.residual(point_i, projection_j);
+            let b = self.jacobian_b(&point3d, view_j);
+            let res = self.residual(point_i, view_j);
             residual += b.transpose() * self.covariance * res;
         }
         Some(residual)
     }
 
     #[inline]
-    fn calculate_u(&self, projection: &Matrix3x4<f64>) -> Option<Matrix12x12<f64>> {
-        let mut u = Matrix12x12::zeros();
-        for point3d in &self.points3d {
+    fn calculate_u(&self, view_j: usize) -> Option<Matrix6<f64>> {
+        let mut u = Matrix6::zeros();
+        for point3d in self.points3d.iter() {
             let point3d = (*point3d)?;
-            let a = self.jacobian_a(&point3d, &projection);
+            let a = self.jacobian_a(&point3d, view_j);
             u += a.transpose() * self.covariance * a;
         }
-        for i in 0..BundleAdjustment::PROJECTION_PARAMETERS {
+        for i in 0..BundleAdjustment::CAMERA_PARAMETERS {
             u[(i, i)] += self.mu;
         }
         Some(u)
@@ -899,8 +1228,8 @@ impl BundleAdjustment<'_> {
     fn calculate_v_inv(&self, point3d: &Option<Vector3<f64>>) -> Option<Matrix3<f64>> {
         let mut v = Matrix3::zeros();
         let point3d = (*point3d)?;
-        for projection in &self.projection {
-            let b = self.jacobian_b(&point3d, &projection);
+        for view_j in 0..self.cameras.len() {
+            let b = self.jacobian_b(&point3d, view_j);
             v += b.transpose() * self.covariance * b;
         }
         for i in 0..3 {
@@ -913,38 +1242,30 @@ impl BundleAdjustment<'_> {
     }
 
     #[inline]
-    fn calculate_w(
-        &self,
-        point3d: &Option<Vector3<f64>>,
-        projection: &Matrix3x4<f64>,
-    ) -> Option<Matrix12x3<f64>> {
+    fn calculate_w(&self, point3d: &Option<Vector3<f64>>, view_j: usize) -> Option<Matrix6x3<f64>> {
         let point3d = (*point3d)?;
-        let a = self.jacobian_a(&point3d, &projection);
-        let b = self.jacobian_b(&point3d, &projection);
+        let a = self.jacobian_a(&point3d, view_j);
+        let b = self.jacobian_b(&point3d, view_j);
         Some(a.transpose() * self.covariance * b)
     }
 
     #[inline]
-    fn calculate_y(
-        &self,
-        point3d: &Option<Vector3<f64>>,
-        projection: &Matrix3x4<f64>,
-    ) -> Option<Matrix12x3<f64>> {
+    fn calculate_y(&self, point3d: &Option<Vector3<f64>>, view_j: usize) -> Option<Matrix6x3<f64>> {
         let v_inv = self.calculate_v_inv(point3d)?;
-        let w = self.calculate_w(point3d, projection)?;
+        let w = self.calculate_w(point3d, view_j)?;
         Some(w * v_inv)
     }
 
     fn calculate_s(&self) -> DMatrix<f64> {
         let mut s = DMatrix::<f64>::zeros(
-            self.projection.len() * BundleAdjustment::PROJECTION_PARAMETERS,
-            self.projection.len() * BundleAdjustment::PROJECTION_PARAMETERS,
+            self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS,
+            self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS,
         );
         // Divide blocks for parallelization.
-        let s_blocks = (0..self.projection.len())
+        let s_blocks = (0..self.cameras.len())
             .into_iter()
             .flat_map(|j| {
-                (0..self.projection.len())
+                (0..self.cameras.len())
                     .into_iter()
                     .map(|k| (j, k))
                     .collect::<Vec<_>>()
@@ -953,21 +1274,19 @@ impl BundleAdjustment<'_> {
 
         let s_blocks = s_blocks
             .into_par_iter()
-            .map(|(j, k)| {
-                let projection_j = &self.projection[j];
-                let mut s_jk = Matrix12x12::zeros();
-                if j == k {
-                    let u = self.calculate_u(projection_j)?;
+            .map(|(view_j, view_k)| {
+                let mut s_jk = Matrix6::zeros();
+                if view_j == view_k {
+                    let u = self.calculate_u(view_j)?;
                     s_jk += u;
                 }
-                let projection_k = &self.projection[k];
                 for point3d in self.points3d.iter() {
-                    let y_ij = self.calculate_y(point3d, projection_j)?;
-                    let w_ik = self.calculate_w(point3d, projection_k)?;
+                    let y_ij = self.calculate_y(point3d, view_j)?;
+                    let w_ik = self.calculate_w(point3d, view_k)?;
                     let y_ij_w = y_ij * w_ik.transpose();
                     s_jk -= y_ij_w;
                 }
-                Some((j, k, s_jk))
+                Some((view_j, view_k, s_jk))
             })
             .collect::<Vec<_>>();
 
@@ -977,9 +1296,9 @@ impl BundleAdjustment<'_> {
             } else {
                 return;
             };
-            s.fixed_view_mut::<12, 12>(
-                j * BundleAdjustment::PROJECTION_PARAMETERS,
-                k * BundleAdjustment::PROJECTION_PARAMETERS,
+            s.fixed_view_mut::<6, 6>(
+                j * BundleAdjustment::CAMERA_PARAMETERS,
+                k * BundleAdjustment::CAMERA_PARAMETERS,
             )
             .copy_from(s_jk);
         });
@@ -988,23 +1307,20 @@ impl BundleAdjustment<'_> {
     }
 
     fn calculate_e(&self) -> MatrixXx1<f64> {
-        let mut e =
-            MatrixXx1::zeros(self.projection.len() * BundleAdjustment::PROJECTION_PARAMETERS);
+        let mut e = MatrixXx1::zeros(self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS);
 
-        let e_blocks = self
-            .projection
-            .iter()
-            .enumerate()
+        let e_blocks = (0..self.cameras.len())
+            .into_iter()
             .par_bridge()
-            .map(|(j, projection_j)| {
-                let mut e_j = self.residual_a(j)?;
+            .map(|view_j| {
+                let mut e_j = self.residual_a(view_j)?;
 
                 for (i, point3d) in self.points3d.iter().enumerate() {
-                    let y_ij = self.calculate_y(point3d, projection_j)?;
+                    let y_ij = self.calculate_y(point3d, view_j)?;
                     let res = self.residual_b(i)?;
                     e_j -= y_ij * res;
                 }
-                Some((j, e_j))
+                Some((view_j, e_j))
             })
             .collect::<Vec<_>>();
 
@@ -1014,7 +1330,7 @@ impl BundleAdjustment<'_> {
             } else {
                 return;
             };
-            e.fixed_view_mut::<12, 1>(j * BundleAdjustment::PROJECTION_PARAMETERS, 0)
+            e.fixed_view_mut::<6, 1>(j * BundleAdjustment::CAMERA_PARAMETERS, 0)
                 .copy_from(e_j);
         });
 
@@ -1032,10 +1348,10 @@ impl BundleAdjustment<'_> {
             .map(|(point_i, point3d)| {
                 let mut residual_b = self.residual_b(point_i)?;
 
-                for (j, projection_j) in self.projection.iter().enumerate() {
-                    let w_ij = self.calculate_w(point3d, projection_j)?;
+                for view_j in 0..self.cameras.len() {
+                    let w_ij = self.calculate_w(point3d, view_j)?;
                     let delta_a_j =
-                        delta_a.fixed_view::<12, 1>(j * BundleAdjustment::PROJECTION_PARAMETERS, 0);
+                        delta_a.fixed_view::<6, 1>(view_j * BundleAdjustment::CAMERA_PARAMETERS, 0);
                     residual_b -= w_ij.tr_mul(&delta_a_j);
                 }
 
@@ -1060,16 +1376,17 @@ impl BundleAdjustment<'_> {
     }
 
     fn calculate_residual_vector(&self) -> MatrixXx1<f64> {
-        let mut residuals = MatrixXx1::zeros(self.points3d.len() * self.projection.len() * 2);
+        let mut residuals = MatrixXx1::zeros(self.points3d.len() * self.cameras.len() * 2);
 
+        // TODO: run this in parallel
         for (i, point_i) in self.points3d.iter().enumerate() {
             if point_i.is_none() {
                 continue;
             }
-            for (j, _) in self.projection.iter().enumerate() {
-                let residual_b_i = self.residual(i, j);
+            for view_j in 0..self.cameras.len() {
+                let residual_b_i = self.residual(i, view_j);
                 residuals
-                    .fixed_rows_mut::<2>(i * self.projection.len() * 2 + j)
+                    .fixed_rows_mut::<2>(i * self.cameras.len() * 2 + view_j)
                     .copy_from(&residual_b_i);
             }
         }
@@ -1079,31 +1396,31 @@ impl BundleAdjustment<'_> {
 
     fn calculate_jt_residual(&self) -> MatrixXx1<f64> {
         let mut g = MatrixXx1::zeros(
-            self.projection.len() * BundleAdjustment::PROJECTION_PARAMETERS
-                + self.points3d.len() * 3,
+            self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS + self.points3d.len() * 3,
         );
 
-        // g = Jt * residual
-        // First 12*m rows of Jt are residuals from projection matrices.
+        // TODO: run this in parallel
+        // gradient = Jt * residual
+        // First 6*m rows of Jt are residuals from camera matrices.
         for (i, point_i) in self.points3d.iter().enumerate() {
             let point_i = if let Some(point_i) = point_i {
                 point_i
             } else {
                 continue;
             };
-            for (j, projection_j) in self.projection.iter().enumerate() {
-                let jac_a_i = self.jacobian_a(point_i, projection_j);
-                let residual_a_i = self.residual(i, j);
+            for view_j in 0..self.cameras.len() {
+                let jac_a_i = self.jacobian_a(point_i, view_j);
+                let residual_a_i = self.residual(i, view_j);
                 let block = jac_a_i.tr_mul(&residual_a_i);
                 let mut target_block =
-                    g.fixed_rows_mut::<12>(j * BundleAdjustment::PROJECTION_PARAMETERS);
+                    g.fixed_rows_mut::<6>(view_j * BundleAdjustment::CAMERA_PARAMETERS);
                 target_block += block;
             }
         }
 
         // Last 3*n rows of Jt are residuals from point coordinates.
         let mut points_target = g.rows_mut(
-            self.projection.len() * BundleAdjustment::PROJECTION_PARAMETERS,
+            self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS,
             self.points3d.len() * 3,
         );
         for (i, point_i) in self.points3d.iter().enumerate() {
@@ -1112,9 +1429,9 @@ impl BundleAdjustment<'_> {
             } else {
                 continue;
             };
-            for (j, projection_j) in self.projection.iter().enumerate() {
-                let jac_b_i = self.jacobian_b(point_i, projection_j);
-                let residual_b_i = self.residual(i, j);
+            for view_j in 0..self.cameras.len() {
+                let jac_b_i = self.jacobian_b(point_i, view_j);
+                let residual_b_i = self.residual(i, view_j);
                 let block = jac_b_i.tr_mul(&residual_b_i);
                 let mut target_block = points_target.fixed_rows_mut::<3>(i * 3);
                 target_block += block;
@@ -1140,19 +1457,19 @@ impl BundleAdjustment<'_> {
     }
 
     fn update_params(&mut self, delta: &MatrixXx1<f64>) {
-        for (j, projection_j) in self.projection.iter_mut().enumerate() {
-            for col in 0..4 {
-                for row in 0..3 {
-                    projection_j[(row, col)] += delta[(
-                        BundleAdjustment::PROJECTION_PARAMETERS * j + col * 3 + row,
-                        0,
-                    )]
-                }
-            }
+        for view_j in 1..self.cameras.len() {
+            let camera = &mut self.cameras[view_j];
+            camera.r += delta.fixed_rows::<3>(BundleAdjustment::CAMERA_PARAMETERS * view_j + 0);
+            camera.t += delta.fixed_rows::<3>(BundleAdjustment::CAMERA_PARAMETERS * view_j + 3);
         }
+        self.projections = self
+            .cameras
+            .iter()
+            .map(|camera| camera.projection(&self.calibration))
+            .collect();
 
         let points_source = delta.rows(
-            self.projection.len() * BundleAdjustment::PROJECTION_PARAMETERS,
+            self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS,
             self.points3d.len() * 3,
         );
 
@@ -1171,7 +1488,7 @@ impl BundleAdjustment<'_> {
     fn optimize<PL: ProgressListener>(
         &mut self,
         progress_listener: Option<&PL>,
-    ) -> Result<Vec<Option<Vector3<f64>>>, TriangulationError> {
+    ) -> Result<Vec<Camera>, TriangulationError> {
         // Levenberg-Marquardt optimization loop.
         let mut residual = self.calculate_residual_vector();
         let mut jt_residual = self.calculate_jt_residual();
@@ -1199,17 +1516,17 @@ impl BundleAdjustment<'_> {
 
             let params_norm;
             {
-                let sum_projection = self
-                    .projection
+                let sum_cameras = self
+                    .cameras
                     .iter()
-                    .map(|p| p.norm_squared())
+                    .map(|camera| camera.r.norm_squared() + camera.t.norm_squared())
                     .sum::<f64>();
                 let sum_points = self
                     .points3d
                     .iter()
                     .filter_map(|p| Some((*p)?.norm_squared()))
                     .sum::<f64>();
-                params_norm = (sum_projection + sum_points).sqrt();
+                params_norm = (sum_cameras + sum_points).sqrt();
             }
 
             if delta.norm()
@@ -1219,8 +1536,9 @@ impl BundleAdjustment<'_> {
                 break;
             }
 
-            let current_projection = self.projection.clone();
-            let current_points3d = self.points3d.clone();
+            let current_cameras = self.cameras.clone();
+            let current_projections = self.projections.clone();
+            let mut current_points3d = self.points3d.clone();
 
             self.update_params(&delta);
 
@@ -1245,8 +1563,10 @@ impl BundleAdjustment<'_> {
                 self.mu *= (1.0f64 / 3.0).max(1.0 - (2.0 * rho - 1.0).powf(3.0));
                 nu = 2.0;
             } else {
-                self.projection = current_projection;
-                self.points3d = current_points3d;
+                self.cameras = current_cameras;
+                self.projections = current_projections;
+                self.points3d.clear();
+                self.points3d.append(&mut current_points3d);
                 self.mu *= nu;
                 nu *= 2.0;
             }
@@ -1263,10 +1583,7 @@ impl BundleAdjustment<'_> {
             ));
         }
 
-        let mut result = Vec::new();
-        result.append(&mut self.points3d);
-
-        Ok(result)
+        Ok(self.cameras.clone())
     }
 }
 
