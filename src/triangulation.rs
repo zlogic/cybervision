@@ -77,7 +77,6 @@ impl Triangulation {
             ProjectionMode::Perspective => (
                 None,
                 Some(PerspectiveTriangulation {
-                    calibration: Matrix3::identity(),
                     projections: vec![],
                     cameras: vec![],
                     tracks: vec![],
@@ -312,19 +311,18 @@ impl Camera {
         rotation_x * rotation_y * rotation_z
     }
 
-    fn projection(&self, calibration: &Matrix3<f64>) -> Matrix3x4<f64> {
+    fn projection(&self) -> Matrix3x4<f64> {
         let r = self.matrix_r();
         let t = self.t;
 
         let mut projection = Matrix3x4::identity();
         projection.column_mut(3).copy_from(&t);
 
-        calibration * r * projection
+        r * projection
     }
 }
 
 struct PerspectiveTriangulation {
-    calibration: Matrix3<f64>,
     projections: Vec<Matrix3x4<f64>>,
     cameras: Vec<Camera>,
     tracks: Vec<Track>,
@@ -342,21 +340,6 @@ impl PerspectiveTriangulation {
         let index = self.projections.len().saturating_sub(1);
         self.extend_tracks(correlated_points, index);
 
-        // TODO: read this from EXIF metadata.
-        /*
-        self.calibration = Matrix3::new(
-            760.0,
-            0.0,
-            (1024 / 2) as f64,
-            0.0,
-            760.0,
-            (768 / 2) as f64,
-            0.0,
-            0.0,
-            1.0,
-        );
-        */
-        self.calibration = Matrix3::identity();
         if self.projections.is_empty() {
             // For the first pair, find a temporary projection matrix to estimate 3D points.
             self.projections.push(Matrix3x4::identity());
@@ -378,7 +361,7 @@ impl PerspectiveTriangulation {
         self.projections = self
             .cameras
             .iter()
-            .map(|camera| camera.projection(&self.calibration))
+            .map(|camera| camera.projection())
             .collect();
 
         self.points3d.clear();
@@ -542,12 +525,8 @@ impl PerspectiveTriangulation {
                     self.recover_pose_from_points(&inliers)
                         .into_iter()
                         .filter_map(|(r, t)| {
-                            if !r.norm().is_finite() || !t.norm().is_finite() {
-                                // Sometimes the estimated pose returns a NaN
-                                return None;
-                            }
                             let camera = Camera::decode(&r, &t);
-                            let projection = camera.projection(&self.calibration);
+                            let projection = camera.projection();
 
                             let mut projections = self.projections.clone();
                             projections.push(projection);
@@ -813,12 +792,7 @@ impl PerspectiveTriangulation {
         &mut self,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
-        let mut ba = BundleAdjustment::new(
-            self.calibration.clone(),
-            self.cameras.clone(),
-            &self.tracks,
-            &mut self.points3d,
-        );
+        let mut ba = BundleAdjustment::new(self.cameras.clone(), &self.tracks, &mut self.points3d);
         ba.optimize(progress_listener)?;
         drop(ba);
 
@@ -1032,7 +1006,6 @@ fn point_not_outlier(img: &DMatrix<Option<f64>>, row: usize, col: usize) -> bool
 }
 
 struct BundleAdjustment<'a> {
-    calibration: Matrix3<f64>,
     cameras: Vec<Camera>,
     projections: Vec<Matrix3x4<f64>>,
     tracks: &'a [Track],
@@ -1051,19 +1024,14 @@ impl BundleAdjustment<'_> {
     const RESIDUAL_REDUCTION_EPSILON: f64 = 0.0;
 
     fn new<'a>(
-        calibration: Matrix3<f64>,
         cameras: Vec<Camera>,
         tracks: &'a [Track],
         points3d: &'a mut Vec<Option<Vector3<f64>>>,
     ) -> BundleAdjustment<'a> {
         // For now, identity covariance is acceptable.
         let covariance = 1.0;
-        let projections = cameras
-            .iter()
-            .map(|camera| camera.projection(&calibration))
-            .collect();
+        let projections = cameras.iter().map(|camera| camera.projection()).collect();
         BundleAdjustment {
-            calibration,
             cameras,
             projections,
             tracks,
@@ -1093,8 +1061,8 @@ impl BundleAdjustment<'_> {
         p_minus.r -= delta_r;
         p_minus.t -= delta_t;
 
-        let p_plus = p_plus.projection(&self.calibration);
-        let p_minus = p_minus.projection(&self.calibration);
+        let p_plus = p_plus.projection();
+        let p_minus = p_minus.projection();
 
         let projection_plus = p_plus * point;
         let projection_plus = projection_plus.remove_row(2).unscale(projection_plus.z);
@@ -1465,7 +1433,7 @@ impl BundleAdjustment<'_> {
         self.projections = self
             .cameras
             .iter()
-            .map(|camera| camera.projection(&self.calibration))
+            .map(|camera| camera.projection())
             .collect();
 
         let points_source = delta.rows(
