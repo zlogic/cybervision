@@ -367,9 +367,6 @@ impl PerspectiveTriangulation {
         self.points3d.clear();
         self.triangulate_tracks();
 
-        //let points = filter_outliers(correlated_points.shape(), &points);
-        //self.points3d.push(points);
-
         Ok(())
     }
 
@@ -379,6 +376,8 @@ impl PerspectiveTriangulation {
     ) -> Result<Surface, TriangulationError> {
         let points3d = self.bundle_adjustment(progress_listener)?;
         // TODO: drop unused items?
+
+        self.filter_outliers();
 
         Ok(self.scale_points(points3d))
     }
@@ -816,6 +815,57 @@ impl PerspectiveTriangulation {
         Ok(surface)
     }
 
+    fn filter_outliers(&mut self) {
+        // TODO: replace this with something better?
+        for img_i in 0..self.cameras.len() {
+            let projection = self.cameras[img_i].projection();
+            let (nrows, ncols) = self
+                .tracks
+                .iter()
+                .flat_map(|track| {
+                    let point = track.get(img_i)?;
+                    Some((point.0 as usize, point.1 as usize))
+                })
+                .fold((usize::MIN, usize::MIN), |acc, (row, col)| {
+                    (acc.0.max(row), acc.1.max(col))
+                });
+
+            let mut point_depths: DMatrix<Option<f64>> =
+                DMatrix::from_element(nrows + 1, ncols + 1, None);
+
+            self.tracks.iter().enumerate().for_each(|(i, track)| {
+                let point2d = if let Some(point) = track.get(img_i) {
+                    (point.0 as usize, point.1 as usize)
+                } else {
+                    return;
+                };
+                let point3d = if let Some(point3d) = self.points3d[i] {
+                    point3d.insert_row(3, 1.0)
+                } else {
+                    return;
+                };
+                let depth = (projection * point3d).z;
+                point_depths[point2d] = Some(depth)
+            });
+
+            self.points3d
+                .iter_mut()
+                .enumerate()
+                .par_bridge()
+                .for_each(|(i, point3d)| {
+                    let track = &self.tracks[i];
+                    let point2d = if let Some(point) = track.get(img_i) {
+                        (point.0 as usize, point.1 as usize)
+                    } else {
+                        return;
+                    };
+                    if !point_not_outlier(&point_depths, point2d.0, point2d.1) {
+                        *point3d = None;
+                    }
+                });
+        }
+    }
+
     fn scale_points(&self, points3d: Surface) -> Surface {
         let scale = &self.scale;
 
@@ -925,26 +975,6 @@ fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut Vec<(f64, f64)>) {
             *y_target -= dy;
         }
     }
-}
-
-fn filter_outliers(shape: (usize, usize), points: &Vec<Point>) -> Vec<Point> {
-    // TODO: replace this with something better?
-    let mut point_depths: DMatrix<Option<f64>> = DMatrix::from_element(shape.0, shape.1, None);
-
-    points
-        .iter()
-        .for_each(|p| point_depths[(p.original.1, p.original.0)] = Some(p.reconstructed.z));
-
-    points
-        .par_iter()
-        .filter_map(|p| {
-            if point_not_outlier(&point_depths, p.original.1, p.original.0) {
-                Some(*p)
-            } else {
-                None
-            }
-        })
-        .collect()
 }
 
 #[inline]
