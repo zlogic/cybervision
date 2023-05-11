@@ -377,7 +377,7 @@ impl PerspectiveTriangulation {
         let points3d = self.bundle_adjustment(progress_listener)?;
         // TODO: drop unused items?
 
-        self.filter_outliers();
+        //self.filter_outliers();
 
         Ok(self.scale_points(points3d))
     }
