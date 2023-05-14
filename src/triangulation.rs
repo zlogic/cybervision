@@ -1162,10 +1162,6 @@ impl BundleAdjustment<'_> {
         // jac is a 2x6 Jacobian for point i and projection matrix parameter j.
         let mut jac = Matrix2x6::zeros();
 
-        if view_j == 0 {
-            return jac;
-        }
-
         let camera = &self.cameras[view_j];
         let point4d = point3d.insert_row(3, 1.0);
         // Calculate Jacobian using finite differences (central difference)
@@ -1514,7 +1510,7 @@ impl BundleAdjustment<'_> {
     }
 
     fn update_params(&mut self, delta: &MatrixXx1<f64>) {
-        for view_j in 1..self.cameras.len() {
+        for view_j in 0..self.cameras.len() {
             let camera = &mut self.cameras[view_j];
             camera.r += delta.fixed_rows::<3>(BundleAdjustment::CAMERA_PARAMETERS * view_j + 0);
             camera.t += delta.fixed_rows::<3>(BundleAdjustment::CAMERA_PARAMETERS * view_j + 3);
