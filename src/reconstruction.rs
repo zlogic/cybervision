@@ -18,6 +18,7 @@ use nalgebra::DMatrix;
 use nalgebra::Matrix3;
 use rayon::prelude::*;
 use std::error;
+use std::fmt;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::BufReader;
@@ -197,6 +198,13 @@ pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
         vertex_mode,
         triangulation,
     };
+
+    if args.img_src.len() > 2 && interpolation_mode != output::InterpolationMode::None {
+        return Err(ReconstructionError::new(
+            "Interpolation should be none when reconstructing from more than 2 images",
+        )
+        .into());
+    }
 
     for i in 0..args.img_src.len() - 1 {
         let img1_filename = &args.img_src[i];
@@ -561,5 +569,24 @@ impl triangulation::ProgressListener for ProgressBar {
 impl output::ProgressListener for ProgressBar {
     fn report_status(&self, pos: f32) {
         self.set_position((pos * 10000.0) as u64);
+    }
+}
+
+#[derive(Debug)]
+struct ReconstructionError {
+    msg: &'static str,
+}
+
+impl ReconstructionError {
+    fn new(msg: &'static str) -> ReconstructionError {
+        ReconstructionError { msg }
+    }
+}
+
+impl std::error::Error for ReconstructionError {}
+
+impl fmt::Display for ReconstructionError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.msg)
     }
 }

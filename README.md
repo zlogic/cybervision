@@ -1,13 +1,5 @@
 # Cybervision
 
-# Experimental multi view branch
-
-**⚠️ Warning** This `multi-view-reconstruction` is an experimental branch, attempting to reconstruct 3D images from a set of photos.
-Unfortunately, it requires either camera calibration, or using [advanced math for self-calibration](https://www.researchgate.net/publication/3659897_The_modulus_constraint_A_new_constraint_self-calibration) - solving a quartic equation system with up to 64 roots.
-It's a bit too much and out of my scope of expertise.
-Without calibration, each pair of images uses its own coordinate system and it's impossible to align images in a single 3D model.
-It also doesn't help that sometimes noise or incorrectly detected features cause images to be incorrectly reconstructed, and adding that data to a combined mesh ruins the end result.
-
 ![Build status](https://github.com/zlogic/cybervision/actions/workflows/cargo-build.yml/badge.svg)
 
 <img src="https://raw.githubusercontent.com/wiki/zlogic/cybervision/Cybervision.svg" width="100"/>
@@ -17,7 +9,7 @@ Cybervision is a 3D reconstruction software for Scanning Electron Microscope ima
 The tool needs two images of an object taken from slighly different angles.
 Cybervision can match those images and use the parallax effect to determine the object's 3D shape.
 
-⚠️ Cybervision works best with high-contrast images with parallel (affine) projection.
+**⚠️ Warning** Cybervision works best with high-contrast images with parallel (affine) projection.
 Regular photos with perspective projection can be reconstructed as well, but this is a secondary use case.
 
 More information is available in the [Wiki](https://github.com/zlogic/cybervision/wiki).
@@ -62,9 +54,12 @@ Adding this flag can significantly reduce processing time, at the cost of produc
 * If the filename ends with `.png`, this will save a PNG depth map file.
 * If the filename ends with `.jpg`, this will save a JPEG depth map file.
 
-⚠️ The optimal image size is 1024x1024 (or similar).
+**⚠️ Warning** The optimal image size is 1024x1024 (or similar).
 Using larger images will result in increased processing times, increased memory usage, and run into GPU hardware limitations.
 Smaller images might not have enough details.
+
+**⚠️ Warning** Structure-from-motion (attempting to reconstruct 3D images from a set of photos) works, but the results are often full of noise.
+Unfortunately, it requires either camera calibration, which depends on complicated math - a bit too much for me and out of my scope of expertise.
 
 ### GPU details
 
