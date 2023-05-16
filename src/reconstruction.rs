@@ -186,7 +186,9 @@ pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
         crate::ProjectionMode::Parallel => triangulation::ProjectionMode::Affine,
         crate::ProjectionMode::Perspective => triangulation::ProjectionMode::Perspective,
     };
-    let triangulation = triangulation::Triangulation::new(triangulation_projection, out_scale);
+    let bundle_adjustment = !args.no_bundle_adjustment;
+    let triangulation =
+        triangulation::Triangulation::new(triangulation_projection, out_scale, bundle_adjustment);
 
     let mut reconstruction_task = ImageReconstruction {
         hardware_mode,

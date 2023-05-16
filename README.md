@@ -33,7 +33,7 @@ Download a release distribution from [releases](/zlogic/cybervision/releases).
 Run cybervision:
 
 ```shell
-cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] [--projection=<parallel|perspective>] [--mesh=<plain|vertex-colors|texture-coordinates>] <img1> <img2> <output>
+cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] [--projection=<parallel|perspective>] [--mesh=<plain|vertex-colors|texture-coordinates>] [--no-bundle-adjustment] <img1> <img2> <output>
 ```
 
 `--scale=<scale>` is an optional argument to specify a depth scale, for example `--scale=-10.0`.
@@ -51,6 +51,9 @@ cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay
 `--mesh=<plain|vertex-colors|texture-coordinates>` is an optional argument to specify how to output OBJ and PLY meshes mode, for example `--mesh=vertex-colors` or `--mesh=texture-coordinates`. 
 `plain` (the default option) outputs the mesh without any color or texture, `vertex-colors` outputs the mesh with colors assigned to every vertex, and `texture-coordinates` will add texture coordinates.
 
+`--no-bundle-adjustment` disables bundle adjustment when reconstructing images with perspective projection.
+Adding this flag can significantly reduce processing time, at the cost of producing incorrect data.
+
 `<img1>` and `<img2>` are input filenames for image 1 and 2; supported formats are `jpg`, `tif` and `png`.
 
 `<output>` is the output filename:
@@ -58,6 +61,10 @@ cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay
 * If the filename ends with `.ply`, this will save a 3D [PLY binary file](https://en.wikipedia.org/wiki/PLY_(file_format)).
 * If the filename ends with `.png`, this will save a PNG depth map file.
 * If the filename ends with `.jpg`, this will save a JPEG depth map file.
+
+⚠️ The optimal image size is 1024x1024 (or similar).
+Using larger images will result in increased processing times, increased memory usage, and run into GPU hardware limitations.
+Smaller images might not have enough details.
 
 ### GPU details
 

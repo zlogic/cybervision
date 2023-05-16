@@ -51,6 +51,10 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = InterpolationMode::Delaunay)]
     interpolation: InterpolationMode,
 
+    /// Bundle adjustment
+    #[arg(long, default_value_t = false)]
+    no_bundle_adjustment: bool,
+
     /// Hardware mode
     #[arg(long, value_enum, default_value_t = ProjectionMode::Parallel)]
     projection: ProjectionMode,

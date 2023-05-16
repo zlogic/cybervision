@@ -66,7 +66,11 @@ pub struct Triangulation {
 }
 
 impl Triangulation {
-    pub fn new(projection: ProjectionMode, scale: (f64, f64, f64)) -> Triangulation {
+    pub fn new(
+        projection: ProjectionMode,
+        scale: (f64, f64, f64),
+        bundle_adjustment: bool,
+    ) -> Triangulation {
         let (affine, perspective) = match projection {
             ProjectionMode::Affine => (
                 Some(AffineTriangulation {
@@ -84,6 +88,7 @@ impl Triangulation {
                     image_shapes: vec![],
                     points3d: vec![],
                     scale,
+                    bundle_adjustment,
                 }),
             ),
         };
@@ -345,6 +350,7 @@ struct PerspectiveTriangulation {
     image_shapes: Vec<(usize, usize)>,
     points3d: Vec<Option<Vector3<f64>>>,
     scale: (f64, f64, f64),
+    bundle_adjustment: bool,
 }
 
 impl PerspectiveTriangulation {
@@ -391,10 +397,11 @@ impl PerspectiveTriangulation {
         &mut self,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
-        self.bundle_adjustment(progress_listener)?;
-        // TODO: drop unused items?
+        if self.bundle_adjustment {
+            self.bundle_adjustment(progress_listener)?;
+        }
 
-        //self.filter_outliers();
+        self.filter_outliers();
 
         let surface = self
             .tracks
