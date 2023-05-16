@@ -190,7 +190,7 @@ impl AffineTriangulation {
     fn scale_points(&self) -> Surface {
         let scale = &self.scale;
 
-        let depth_scale = (scale.2 * ((scale.0 + scale.1) / 2.0)) as f64;
+        let depth_scale = scale.2 * ((scale.0 + scale.1) / 2.0);
         self.surface
             .iter()
             .map(|point| {
@@ -366,7 +366,7 @@ impl PerspectiveTriangulation {
         if self.projections.is_empty() {
             // For the first pair, find a temporary projection matrix to estimate 3D points.
             self.projections.push(Matrix3x4::identity());
-            let p2 = match PerspectiveTriangulation::f_to_projection_matrix(&fundamental_matrix) {
+            let p2 = match PerspectiveTriangulation::f_to_projection_matrix(fundamental_matrix) {
                 Some(p2) => p2,
                 None => return Err(TriangulationError::new("Unable to find projection matrix")),
             };
@@ -431,7 +431,6 @@ impl PerspectiveTriangulation {
     ) -> Option<Vector4<f64>> {
         let points_projection = track
             .range()
-            .into_iter()
             .flat_map(|i| {
                 if i < projections.len() {
                     let point = track.get_inside_center(i, self.image_shapes[i])?;
@@ -543,7 +542,6 @@ impl PerspectiveTriangulation {
 
         for _ in 0..ransac_outer {
             let (camera, count, _error) = (0..RANSAC_CHECK_INTERVAL)
-                .into_iter()
                 .par_bridge()
                 .filter_map(|_| {
                     if let Some(pl) = progress_listener {
@@ -556,7 +554,7 @@ impl PerspectiveTriangulation {
                     // Select points
                     let inliers = linked_tracks
                         .choose_multiple(rng, RANSAC_N)
-                        .filter_map(|(i, track)| Some((*i, *track)))
+                        .map(|(i, track)| (*i, *track))
                         .collect::<Vec<_>>();
                     if inliers.len() != RANSAC_N {
                         return None;
@@ -779,7 +777,7 @@ impl PerspectiveTriangulation {
         projections: &[Matrix3x4<f64>],
         skip: usize,
     ) -> Option<f64> {
-        let point4d = self.triangulate_track(track, &projections)?;
+        let point4d = self.triangulate_track(track, projections)?;
         projections
             .iter()
             .enumerate()
@@ -802,8 +800,7 @@ impl PerspectiveTriangulation {
         self.tracks.iter_mut().for_each(|track| {
             let last_pos = track
                 .last()
-                .map(|last| correlated_points[(last.0 as usize, last.1 as usize)])
-                .flatten();
+                .and_then(|last| correlated_points[(last.0 as usize, last.1 as usize)]);
 
             if let Some(last_pos) = last_pos {
                 track.add(index + 1, last_pos);
@@ -1005,7 +1002,7 @@ fn solve_quartic(factors: [f64; 5]) -> [f64; 4] {
     ]
 }
 
-fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut Vec<(f64, f64)>) {
+fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut [(f64, f64)]) {
     const MAX_ITER: usize = 50;
     for _ in 0..MAX_ITER {
         for (x_target, y_target) in xy.iter_mut() {
@@ -1174,7 +1171,7 @@ impl BundleAdjustment<'_> {
         // Calculate Jacobian using finite differences (central difference)
         for i in 0..6 {
             jac.column_mut(i)
-                .copy_from(&self.jacobian_view(&camera, &point4d, i));
+                .copy_from(&self.jacobian_view(camera, &point4d, i));
         }
 
         jac
@@ -1323,13 +1320,7 @@ impl BundleAdjustment<'_> {
         );
         // Divide blocks for parallelization.
         let s_blocks = (0..self.cameras.len())
-            .into_iter()
-            .flat_map(|j| {
-                (0..self.cameras.len())
-                    .into_iter()
-                    .map(|k| (j, k))
-                    .collect::<Vec<_>>()
-            })
+            .flat_map(|j| (0..self.cameras.len()).map(|k| (j, k)).collect::<Vec<_>>())
             .collect::<Vec<_>>();
 
         let s_blocks = s_blocks
@@ -1370,7 +1361,6 @@ impl BundleAdjustment<'_> {
         let mut e = MatrixXx1::zeros(self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS);
 
         let e_blocks = (0..self.cameras.len())
-            .into_iter()
             .par_bridge()
             .map(|view_j| {
                 let mut e_j = self.residual_a(view_j)?;
@@ -1519,7 +1509,7 @@ impl BundleAdjustment<'_> {
     fn update_params(&mut self, delta: &MatrixXx1<f64>) {
         for view_j in 0..self.cameras.len() {
             let camera = &mut self.cameras[view_j];
-            camera.r += delta.fixed_rows::<3>(BundleAdjustment::CAMERA_PARAMETERS * view_j + 0);
+            camera.r += delta.fixed_rows::<3>(BundleAdjustment::CAMERA_PARAMETERS * view_j);
             camera.t += delta.fixed_rows::<3>(BundleAdjustment::CAMERA_PARAMETERS * view_j + 3);
         }
         self.projections = self

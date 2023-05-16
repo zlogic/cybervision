@@ -264,7 +264,7 @@ impl ImageReconstruction {
             Ok(()) => Ok(()),
             Err(err) => {
                 eprintln!("Failed to triangulate surface: {}", err);
-                return Err(err.into());
+                Err(err.into())
             }
         }
     }
@@ -481,7 +481,7 @@ impl ImageReconstruction {
             .collect();
 
         let result = output::output(
-            surface.to_owned(),
+            surface,
             images,
             output_filename,
             self.interpolation_mode,
