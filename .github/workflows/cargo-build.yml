@@ -2,7 +2,7 @@ name: Cargo build
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "perspective-improvements" ]
   pull_request:
     branches: [ "master" ]
 
