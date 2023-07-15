@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 type Point = (usize, usize);
 
-const THRESHOLD: f32 = 0.90;
-const KERNEL_SIZE: usize = 5;
+const THRESHOLD: f32 = 0.80;
+const KERNEL_SIZE: usize = 7;
 const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
 const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
 
@@ -64,7 +64,7 @@ impl KeypointMatching {
                     Some(it) => it,
                     None => return vec![],
                 };
-                let points2 = &points2;
+                let points2 = points2;
                 points2
                     .iter()
                     .enumerate()
@@ -112,9 +112,9 @@ pub fn compute_point_data<const KS: usize, const KPC: usize>(
     };
     let mut avg = 0.0;
     for r in 0..=KS * 2 {
-        let row = (row + r).saturating_sub(KERNEL_SIZE);
+        let row = (row + r).saturating_sub(KS);
         for c in 0..=KS * 2 {
-            let col = (col + c).saturating_sub(KERNEL_SIZE);
+            let col = (col + c).saturating_sub(KS);
             let value = img[(row, col)];
             let delta_pos = r * kernel_width + c;
             result.delta[delta_pos] = value.into();

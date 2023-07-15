@@ -4,7 +4,7 @@ use rayon::prelude::*;
 use std::{cell::RefCell, error, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering};
 
 const SCALE_MIN_SIZE: usize = 64;
-const KERNEL_SIZE: usize = 5;
+const KERNEL_SIZE: usize = 7;
 const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
 const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
 
@@ -496,13 +496,13 @@ impl PointCorrelations {
     }
 
     pub fn optimal_scale_steps(dimensions: (u32, u32)) -> usize {
-        // TODO: replace this with log2
         let min_dimension = dimensions.1.min(dimensions.0) as usize;
-        let mut scale = 0;
-        while min_dimension / (1 << scale) > SCALE_MIN_SIZE {
-            scale += 1;
+        if min_dimension <= SCALE_MIN_SIZE {
+            return 0;
         }
-        scale - 1
+        (min_dimension as f64 / SCALE_MIN_SIZE as f64)
+            .log2()
+            .floor() as usize
     }
 
     fn cross_check_filter(&mut self, scale: f32, dir: CorrelationDirection) {

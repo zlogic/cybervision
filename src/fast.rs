@@ -26,7 +26,7 @@ const FAST_CIRCLE_PIXELS: [(i8, i8); 16] = [
 const KERNEL_SIZE: usize = 3;
 // TODO: update to match results from previous C version
 const FAST_THRESHOLD: u8 = 15;
-const KEYPOINT_SCALE_MIN_SIZE: usize = 512;
+const KEYPOINT_SCALE_MIN_SIZE: usize = 256;
 const FAST_NUM_POINTS: usize = 12;
 const FAST_CIRCLE_LENGTH: usize = FAST_CIRCLE_PIXELS.len() + FAST_NUM_POINTS - 1;
 
@@ -128,15 +128,14 @@ impl Fast {
         &self.points
     }
 
-    pub fn optimal_keypoint_scale(dimensions: (u32, u32)) -> f32 {
-        // TODO: replace this with log2
+    pub fn optimal_scale_steps(dimensions: (u32, u32)) -> usize {
         let min_dimension = dimensions.1.min(dimensions.0) as usize;
-        let mut scale = 0;
-        while min_dimension / (1 << scale) > KEYPOINT_SCALE_MIN_SIZE {
-            scale += 1;
+        if min_dimension <= KEYPOINT_SCALE_MIN_SIZE {
+            return 0;
         }
-        scale = (scale - 1).max(0);
-        1.0 / ((1 << scale) as f32)
+        (min_dimension as f64 / KEYPOINT_SCALE_MIN_SIZE as f64)
+            .log2()
+            .floor() as usize
     }
 }
 

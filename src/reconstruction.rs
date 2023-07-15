@@ -32,7 +32,6 @@ struct SourceImage {
     img: GrayImage,
     scale: (f32, f32),
     tilt_angle: Option<f32>,
-    filename: String,
 }
 
 #[derive(Debug)]
@@ -52,7 +51,6 @@ impl SourceImage {
             img: img.to_image(),
             scale: metadata.scale,
             tilt_angle: metadata.tilt_angle,
-            filename: path.to_string(),
         })
     }
 
@@ -284,63 +282,67 @@ impl ImageReconstruction {
     ) -> Vec<((usize, usize), (usize, usize))> {
         let start_time = SystemTime::now();
 
-        let keypoint_scale = Fast::optimal_keypoint_scale(img1.img.dimensions());
-        let img1_scaled = img1.resize(keypoint_scale);
-        let img2_scaled = img2.resize(keypoint_scale);
+        let scale_steps = Fast::optimal_scale_steps(img1.img.dimensions());
+        let total_percent: f32 = (0..scale_steps)
+            .map(|step| 1.0 / ((1 << (scale_steps - step)) as f32).powi(2))
+            .sum::<f32>();
 
-        let keypoints1 = Fast::new(&img1_scaled);
-        let keypoints2 = Fast::new(&img2_scaled);
+        let mut total_percent_complete = 0.0;
 
-        if let Ok(t) = start_time.elapsed() {
-            println!("Extracted feature points in {:.3} seconds", t.as_secs_f32(),);
-        }
-        println!(
-            "Image {} has {} feature points",
-            img1.filename,
-            keypoints1.keypoints().len()
-        );
-        println!(
-            "Image {} has {} feature points",
-            img2.filename,
-            keypoints2.keypoints().len()
-        );
-
-        let start_time = SystemTime::now();
-
+        let mut point_matches = vec![];
         let pb = new_progress_bar(false);
-        let matcher = correlation::KeypointMatching::new(
-            &img1_scaled,
-            &img2_scaled,
-            keypoints1.keypoints(),
-            keypoints2.keypoints(),
-            Some(&pb),
-        );
+        // TODO 0.17 do something about scale 1 (max size or max number of point matches?)
+        for i in 0..scale_steps {
+            let scale = 1.0 / (1 << (scale_steps - i)) as f32;
+
+            let img1_scaled = img1.resize(scale);
+            let img2_scaled = img2.resize(scale);
+
+            let pb = CorrelationProgressBar {
+                total_percent_complete,
+                total_percent,
+                pb: &pb,
+                scale,
+            };
+
+            let keypoints1 = Fast::new(&img1_scaled);
+            let keypoints2 = Fast::new(&img2_scaled);
+
+            let matcher = correlation::KeypointMatching::new(
+                &img1_scaled,
+                &img2_scaled,
+                keypoints1.keypoints(),
+                keypoints2.keypoints(),
+                Some(&pb),
+            );
+            drop(keypoints1);
+            drop(keypoints2);
+
+            matcher
+                .matches
+                .into_par_iter()
+                .map(|(p1, p2)| {
+                    (
+                        (
+                            (p1.0 as f32 / scale) as usize,
+                            (p1.1 as f32 / scale) as usize,
+                        ),
+                        (
+                            (p2.0 as f32 / scale) as usize,
+                            (p2.1 as f32 / scale) as usize,
+                        ),
+                    )
+                })
+                .collect_into_vec(&mut point_matches);
+
+            total_percent_complete += scale * scale / total_percent;
+        }
         pb.finish_and_clear();
-        let point_matches = matcher.matches;
-        drop(keypoints1);
-        drop(keypoints2);
-        drop(img1_scaled);
-        drop(img2_scaled);
         if let Ok(t) = start_time.elapsed() {
-            println!("Matched keypoints in {:.3} seconds", t.as_secs_f32(),);
+            println!("Matched keypoints in {:.3} seconds", t.as_secs_f32());
         }
         println!("Found {} matches", point_matches.len());
-
         point_matches
-            .into_par_iter()
-            .map(|(p1, p2)| {
-                (
-                    (
-                        (p1.0 as f32 / keypoint_scale) as usize,
-                        (p1.1 as f32 / keypoint_scale) as usize,
-                    ),
-                    (
-                        (p2.0 as f32 / keypoint_scale) as usize,
-                        (p2.1 as f32 / keypoint_scale) as usize,
-                    ),
-                )
-            })
-            .collect()
     }
 
     fn find_fundamental_matrix(
@@ -409,7 +411,7 @@ impl ImageReconstruction {
             let img1 = img1.resize(scale);
             let img2 = img2.resize(scale);
 
-            let pb = CrossCorrelationProgressBar {
+            let pb = CorrelationProgressBar {
                 total_percent_complete,
                 total_percent,
                 pb: &pb,
@@ -528,12 +530,6 @@ fn new_progress_bar(show_message: bool) -> ProgressBar {
     ProgressBar::new(10000).with_style(pb_style)
 }
 
-impl correlation::ProgressListener for ProgressBar {
-    fn report_status(&self, pos: f32) {
-        self.set_position((pos * 10000.0) as u64);
-    }
-}
-
 impl fundamentalmatrix::ProgressListener for ProgressBar {
     fn report_status(&self, pos: f32) {
         self.set_position((pos * 10000.0) as u64);
@@ -545,14 +541,22 @@ impl fundamentalmatrix::ProgressListener for ProgressBar {
     }
 }
 
-struct CrossCorrelationProgressBar<'p> {
+struct CorrelationProgressBar<'p> {
     total_percent_complete: f32,
     total_percent: f32,
     scale: f32,
     pb: &'p ProgressBar,
 }
 
-impl crosscorrelation::ProgressListener for CrossCorrelationProgressBar<'_> {
+impl correlation::ProgressListener for CorrelationProgressBar<'_> {
+    fn report_status(&self, pos: f32) {
+        let percent_complete =
+            self.total_percent_complete + pos * self.scale * self.scale / self.total_percent;
+        self.pb.set_position((percent_complete * 10000.0) as u64);
+    }
+}
+
+impl crosscorrelation::ProgressListener for CorrelationProgressBar<'_> {
     fn report_status(&self, pos: f32) {
         let percent_complete =
             self.total_percent_complete + pos * self.scale * self.scale / self.total_percent;
