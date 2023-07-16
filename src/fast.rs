@@ -26,7 +26,7 @@ const FAST_CIRCLE_PIXELS: [(i8, i8); 16] = [
 const KERNEL_SIZE: usize = 3;
 // TODO: update to match results from previous C version
 const FAST_THRESHOLD: u8 = 15;
-const KEYPOINT_SCALE_MIN_SIZE: usize = 256;
+const KEYPOINT_SCALE_MIN_SIZE: usize = 512;
 const FAST_NUM_POINTS: usize = 12;
 const FAST_CIRCLE_LENGTH: usize = FAST_CIRCLE_PIXELS.len() + FAST_NUM_POINTS - 1;
 

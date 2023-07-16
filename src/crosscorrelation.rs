@@ -4,7 +4,7 @@ use rayon::prelude::*;
 use std::{cell::RefCell, error, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering};
 
 const SCALE_MIN_SIZE: usize = 64;
-const KERNEL_SIZE: usize = 7;
+const KERNEL_SIZE: usize = 5;
 const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
 const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
 

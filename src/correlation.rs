@@ -4,10 +4,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 type Point = (usize, usize);
 
+// TODO 0.17 Improve performance with feature-rich images.
 const THRESHOLD: f32 = 0.80;
-const KERNEL_SIZE: usize = 7;
+const KERNEL_SIZE: usize = 15;
 const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
 const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
+const MIN_STDEV: f32 = 3.0;
 
 #[derive(Debug)]
 pub struct PointData<const KPC: usize> {
@@ -64,6 +66,9 @@ impl KeypointMatching {
                     Some(it) => it,
                     None => return vec![],
                 };
+                if data1.stdev < MIN_STDEV {
+                    return vec![];
+                }
                 let points2 = points2;
                 points2
                     .iter()
@@ -73,6 +78,9 @@ impl KeypointMatching {
                             Some(it) => it,
                             None => return None,
                         };
+                        if data2.stdev < MIN_STDEV {
+                            return None;
+                        }
                         correlate_points(data1, data2)
                             .filter(|corr| *corr > THRESHOLD)
                             .map(|_| (*p1, *p2))

@@ -249,7 +249,7 @@ impl ImageReconstruction {
 
         let point_matches = self.match_keypoints(&img1, &img2);
 
-        let fm = match self.find_fundamental_matrix(point_matches, img1.img.dimensions()) {
+        let fm = match self.find_fundamental_matrix(point_matches) {
             Ok(f) => f,
             Err(err) => {
                 eprintln!("Failed to complete RANSAC task: {}", err);
@@ -282,8 +282,9 @@ impl ImageReconstruction {
     ) -> Vec<((usize, usize), (usize, usize))> {
         let start_time = SystemTime::now();
 
+        // TODO 0.17 Decide what to do with scale=1
         let scale_steps = Fast::optimal_scale_steps(img1.img.dimensions());
-        let total_percent: f32 = (0..scale_steps)
+        let total_percent: f32 = (0..=scale_steps)
             .map(|step| 1.0 / ((1 << (scale_steps - step)) as f32).powi(2))
             .sum::<f32>();
 
@@ -291,8 +292,7 @@ impl ImageReconstruction {
 
         let mut point_matches = vec![];
         let pb = new_progress_bar(false);
-        // TODO 0.17 do something about scale 1 (max size or max number of point matches?)
-        for i in 0..scale_steps {
+        for i in 0..=scale_steps {
             let scale = 1.0 / (1 << (scale_steps - i)) as f32;
 
             let img1_scaled = img1.resize(scale);
@@ -348,14 +348,11 @@ impl ImageReconstruction {
     fn find_fundamental_matrix(
         &self,
         point_matches: Vec<((usize, usize), (usize, usize))>,
-        img1_dimensions: (u32, u32),
     ) -> Result<FundamentalMatrix, fundamentalmatrix::RansacError> {
         let start_time = SystemTime::now();
-        let match_buckets = FundamentalMatrix::matches_to_buckets(&point_matches, img1_dimensions);
-        drop(point_matches);
         let pb = new_progress_bar(true);
 
-        let result = FundamentalMatrix::new(self.projection_mode, &match_buckets, Some(&pb));
+        let result = FundamentalMatrix::new(self.projection_mode, &point_matches, Some(&pb));
         pb.finish_and_clear();
 
         if let Ok(t) = start_time.elapsed() {
