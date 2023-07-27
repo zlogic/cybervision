@@ -7,17 +7,18 @@ use std::{fmt, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrderi
 
 const MIN_INLIER_DISTANCE: usize = 4;
 const RANSAC_K_AFFINE: usize = 1_000_000;
-const RANSAC_K_PERSPECTIVE: usize = 1_000_000;
+const RANSAC_K_PERSPECTIVE: usize = 10_000_000;
 const RANSAC_N_AFFINE: usize = 4;
 const RANSAC_N_PERSPECTIVE: usize = 7;
 const RANSAC_T_AFFINE: f64 = 0.1;
-const RANSAC_T_PERSPECTIVE: f64 = 1.0;
+// TODO 0.17 This might need to be adjusted based on the image size.
+const RANSAC_T_PERSPECTIVE: f64 = 3.0;
 const RANSAC_D: usize = 10;
 const RANSAC_D_EARLY_EXIT_AFFINE: usize = 1000;
 const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 1000;
 const RANSAC_CHECK_INTERVAL: usize = 50_000;
 const RANSAC_RANK_EPSILON_AFFINE: f64 = 0.001;
-const RANSAC_RANK_EPSILON_PERSPECTIVE: f64 = 0.001;
+const RANSAC_RANK_EPSILON_PERSPECTIVE: f64 = 0.01;
 
 type Point = (usize, usize);
 type Match = (Point, Point);

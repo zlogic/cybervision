@@ -9,17 +9,19 @@ const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
 const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
 
 const THRESHOLD_AFFINE: f32 = 0.6;
-const THRESHOLD_PERSPECTIVE: f32 = 0.6;
+const THRESHOLD_PERSPECTIVE: f32 = 0.5;
 const MIN_STDEV_AFFINE: f32 = 1.0;
 const MIN_STDEV_PERSPECTIVE: f32 = 5.0;
-const CORRIDOR_SIZE: usize = 2;
+const CORRIDOR_SIZE_AFFINE: usize = 2;
+const CORRIDOR_SIZE_PERSPECTIVE: usize = 3;
 // Decrease when using a low-powered GPU
 const CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 512;
 const SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 1024;
 const CORRIDOR_SEGMENT_LENGTH_LOWPOWER: usize = 8;
 const SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER: usize = 128;
 const NEIGHBOR_DISTANCE: usize = 10;
-const CORRIDOR_EXTEND_RANGE: f64 = 1.0;
+const CORRIDOR_EXTEND_RANGE_AFFINE: f64 = 1.0;
+const CORRIDOR_EXTEND_RANGE_PERSPECTIVE: f64 = 2.0;
 const CORRIDOR_MIN_RANGE: f64 = 2.5;
 const CROSS_CHECK_SEARCH_AREA: usize = 2;
 
@@ -50,7 +52,9 @@ pub struct PointCorrelations {
     correlated_points_reverse: DMatrix<Option<Match>>,
     first_pass: bool,
     min_stdev: f32,
+    corridor_size: usize,
     correlation_threshold: f32,
+    corridor_extend_range: f64,
     fundamental_matrix: Matrix3<f64>,
     gpu_context: Option<gpu::GpuContext>,
     selected_hardware: String,
@@ -89,10 +93,21 @@ impl PointCorrelations {
         projection_mode: ProjectionMode,
         hardware_mode: HardwareMode,
     ) -> PointCorrelations {
-        let (min_stdev, correlation_threshold) = match projection_mode {
-            ProjectionMode::Affine => (MIN_STDEV_AFFINE, THRESHOLD_AFFINE),
-            ProjectionMode::Perspective => (MIN_STDEV_PERSPECTIVE, THRESHOLD_PERSPECTIVE),
-        };
+        let (min_stdev, correlation_threshold, corridor_size, corridor_extend_range) =
+            match projection_mode {
+                ProjectionMode::Affine => (
+                    MIN_STDEV_AFFINE,
+                    THRESHOLD_AFFINE,
+                    CORRIDOR_SIZE_AFFINE,
+                    CORRIDOR_EXTEND_RANGE_AFFINE,
+                ),
+                ProjectionMode::Perspective => (
+                    MIN_STDEV_PERSPECTIVE,
+                    THRESHOLD_PERSPECTIVE,
+                    CORRIDOR_SIZE_PERSPECTIVE,
+                    CORRIDOR_EXTEND_RANGE_PERSPECTIVE,
+                ),
+            };
         let selected_hardware;
         let gpu_context = if matches!(hardware_mode, HardwareMode::Gpu | HardwareMode::GpuLowPower)
         {
@@ -102,6 +117,8 @@ impl PointCorrelations {
                 (img2_dimensions.0 as usize, img2_dimensions.1 as usize),
                 min_stdev,
                 correlation_threshold,
+                corridor_size,
+                corridor_extend_range,
                 fundamental_matrix,
                 low_power,
             ) {
@@ -135,7 +152,9 @@ impl PointCorrelations {
             correlated_points_reverse,
             first_pass: true,
             min_stdev,
+            corridor_size,
             correlation_threshold,
+            corridor_extend_range,
             fundamental_matrix,
             gpu_context,
             selected_hardware,
@@ -330,7 +349,8 @@ impl PointCorrelations {
             corr: None,
         };
 
-        for corridor_offset in -(CORRIDOR_SIZE as isize)..=CORRIDOR_SIZE as isize {
+        let corridor_size = self.corridor_size as isize;
+        for corridor_offset in -corridor_size..=corridor_size {
             self.correlate_corridor_area(
                 correlation_step,
                 &e_line,
@@ -485,7 +505,7 @@ impl PointCorrelations {
 
         let corridor_center = mid_corridor.round() as usize;
         let corridor_length =
-            (CORRIDOR_MIN_RANGE + range_stdev * CORRIDOR_EXTEND_RANGE).round() as usize;
+            (CORRIDOR_MIN_RANGE + range_stdev * self.corridor_extend_range).round() as usize;
         let corridor_start = corridor_center
             .saturating_sub(corridor_length)
             .clamp(corridor_start, corridor_end);
@@ -666,10 +686,9 @@ mod gpu {
     use std::sync::mpsc;
 
     use super::{
-        CORRIDOR_EXTEND_RANGE, CORRIDOR_MIN_RANGE, CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE,
-        CORRIDOR_SEGMENT_LENGTH_LOWPOWER, CORRIDOR_SIZE, CROSS_CHECK_SEARCH_AREA, KERNEL_SIZE,
-        NEIGHBOR_DISTANCE, SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE,
-        SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER,
+        CORRIDOR_MIN_RANGE, CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE,
+        CORRIDOR_SEGMENT_LENGTH_LOWPOWER, CROSS_CHECK_SEARCH_AREA, KERNEL_SIZE, NEIGHBOR_DISTANCE,
+        SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE, SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER,
     };
 
     #[repr(C)]
@@ -704,6 +723,8 @@ mod gpu {
 
         corridor_segment_length: usize,
         search_area_segment_length: usize,
+        corridor_size: usize,
+        corridor_extend_range: f64,
 
         device_name: String,
         device: wgpu::Device,
@@ -736,6 +757,8 @@ mod gpu {
             img2_dimensions: (usize, usize),
             min_stdev: f32,
             correlation_threshold: f32,
+            corridor_size: usize,
+            corridor_extend_range: f64,
             fundamental_matrix: Matrix3<f64>,
             low_power: bool,
         ) -> Result<GpuContext, Box<dyn error::Error>> {
@@ -843,6 +866,8 @@ mod gpu {
             let result = GpuContext {
                 min_stdev,
                 correlation_threshold,
+                corridor_size,
+                corridor_extend_range,
                 fundamental_matrix,
                 img1_shape,
                 img2_shape,
@@ -913,7 +938,7 @@ mod gpu {
                 threshold: self.correlation_threshold,
                 min_stdev: self.min_stdev,
                 neighbor_distance: NEIGHBOR_DISTANCE as u32,
-                extend_range: CORRIDOR_EXTEND_RANGE as f32,
+                extend_range: self.corridor_extend_range as f32,
                 min_range: CORRIDOR_MIN_RANGE as f32,
             };
 
@@ -968,12 +993,13 @@ mod gpu {
 
             self.run_shader(max_shape, &dir, "prepare_initialdata_correlation", params);
 
-            let corridor_stripes = 2 * CORRIDOR_SIZE + 1;
+            let corridor_size = self.corridor_size;
+            let corridor_stripes = 2 * corridor_size + 1;
             let max_length = img2.nrows().max(img2.ncols());
             let segment_length = self.corridor_segment_length;
             let corridor_length = max_length - (KERNEL_SIZE * 2);
             let corridor_segments = corridor_length / segment_length + 1;
-            for corridor_offset in -(CORRIDOR_SIZE as i32)..=CORRIDOR_SIZE as i32 {
+            for corridor_offset in -(corridor_size as i32)..=corridor_size as i32 {
                 for l in 0u32..corridor_segments as u32 {
                     params.corridor_offset = corridor_offset;
                     params.corridor_start = l * segment_length as u32;
@@ -986,7 +1012,7 @@ mod gpu {
                     let corridor_complete = params.corridor_end as f32 / corridor_length as f32;
                     let percent_complete = progressbar_completed_percentage
                         + (1.0 - progressbar_completed_percentage)
-                            * (corridor_offset as f32 + CORRIDOR_SIZE as f32 + corridor_complete)
+                            * (corridor_offset as f32 + corridor_size as f32 + corridor_complete)
                             / corridor_stripes as f32;
                     send_progress(percent_complete);
                 }

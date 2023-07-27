@@ -4,20 +4,22 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 type Point = (usize, usize);
 
-// TODO 0.17 Improve performance with feature-rich images.
-const THRESHOLD: f32 = 0.80;
-const KERNEL_SIZE: usize = 15;
-const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
-const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
-const MIN_STDEV: f32 = 3.0;
+const THRESHOLD_AFFINE: f32 = 0.90;
+const THRESHOLD_PERSPECTIVE: f32 = 0.80;
+const KERNEL_SIZE_AFFINE: usize = 15;
+const KERNEL_SIZE_PERSPECTIVE: usize = 3;
+
+#[derive(Debug, Clone, Copy)]
+pub enum ProjectionMode {
+    Affine,
+    Perspective,
+}
 
 #[derive(Debug)]
 pub struct PointData<const KPC: usize> {
     pub delta: [f32; KPC],
     pub stdev: f32,
 }
-
-type KeypointPointData = PointData<KERNEL_POINT_COUNT>;
 
 pub struct KeypointMatching {
     pub matches: Vec<(Point, Point)>,
@@ -36,22 +38,48 @@ impl KeypointMatching {
         img2: &DMatrix<u8>,
         points1: &Vec<Point>,
         points2: &Vec<Point>,
+        projection_mode: ProjectionMode,
         progress_listener: Option<&PL>,
     ) -> KeypointMatching {
-        let matches =
-            KeypointMatching::match_points(img1, img2, points1, points2, progress_listener);
+        let matches = match projection_mode {
+            ProjectionMode::Affine => {
+                const KERNEL_WIDTH: usize = KERNEL_SIZE_AFFINE * 2 + 1;
+                const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
+                KeypointMatching::match_points::<PL, KERNEL_SIZE_AFFINE, KERNEL_POINT_COUNT>(
+                    img1,
+                    img2,
+                    points1,
+                    points2,
+                    THRESHOLD_AFFINE,
+                    progress_listener,
+                )
+            }
+            ProjectionMode::Perspective => {
+                const KERNEL_WIDTH: usize = KERNEL_SIZE_PERSPECTIVE * 2 + 1;
+                const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
+                KeypointMatching::match_points::<PL, KERNEL_SIZE_PERSPECTIVE, KERNEL_POINT_COUNT>(
+                    img1,
+                    img2,
+                    points1,
+                    points2,
+                    THRESHOLD_PERSPECTIVE,
+                    progress_listener,
+                )
+            }
+        };
         KeypointMatching { matches }
     }
 
-    fn match_points<PL: ProgressListener>(
+    fn match_points<PL: ProgressListener, const KS: usize, const KPC: usize>(
         img1: &DMatrix<u8>,
         img2: &DMatrix<u8>,
         points1: &Vec<Point>,
         points2: &Vec<Point>,
+        threshold: f32,
         progress_listener: Option<&PL>,
     ) -> Vec<(Point, Point)> {
-        let data1: Vec<Option<KeypointPointData>> = compute_points_data(img1, points1);
-        let data2: Vec<Option<KeypointPointData>> = compute_points_data(img2, points2);
+        let data1: Vec<Option<PointData<KPC>>> = compute_points_data::<KS, KPC>(img1, points1);
+        let data2: Vec<Option<PointData<KPC>>> = compute_points_data::<KS, KPC>(img2, points2);
         let counter = AtomicUsize::new(0);
         points1
             .into_par_iter()
@@ -66,10 +94,6 @@ impl KeypointMatching {
                     Some(it) => it,
                     None => return vec![],
                 };
-                if data1.stdev < MIN_STDEV {
-                    return vec![];
-                }
-                let points2 = points2;
                 points2
                     .iter()
                     .enumerate()
@@ -78,11 +102,8 @@ impl KeypointMatching {
                             Some(it) => it,
                             None => return None,
                         };
-                        if data2.stdev < MIN_STDEV {
-                            return None;
-                        }
                         correlate_points(data1, data2)
-                            .filter(|corr| *corr > THRESHOLD)
+                            .filter(|corr| *corr > threshold)
                             .map(|_| (*p1, *p2))
                     })
                     .collect::<Vec<_>>()
@@ -97,10 +118,13 @@ pub fn point_inside_bounds<const KS: usize>(shape: (usize, usize), row: usize, c
 }
 
 #[inline]
-fn compute_points_data(img: &DMatrix<u8>, points: &Vec<Point>) -> Vec<Option<KeypointPointData>> {
+fn compute_points_data<const KS: usize, const KPC: usize>(
+    img: &DMatrix<u8>,
+    points: &Vec<Point>,
+) -> Vec<Option<PointData<KPC>>> {
     points
         .into_par_iter()
-        .map(|p| compute_point_data::<KERNEL_SIZE, KERNEL_POINT_COUNT>(img, p.1, p.0))
+        .map(|p| compute_point_data::<KS, KPC>(img, p.1, p.0))
         .collect()
 }
 
@@ -142,7 +166,7 @@ pub fn compute_point_data<const KS: usize, const KPC: usize>(
 }
 
 #[inline]
-fn correlate_points(
+fn correlate_points<const KERNEL_POINT_COUNT: usize>(
     data1: &PointData<KERNEL_POINT_COUNT>,
     data2: &PointData<KERNEL_POINT_COUNT>,
 ) -> Option<f32> {

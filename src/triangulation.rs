@@ -16,15 +16,15 @@ const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
 const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 1.0;
 const OUTLIER_FILTER_SEARCH_AREA: usize = 5;
 const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 10;
-const PERSPECTIVE_DISTORTION_SAFETY_RADIUS: f64 = 0.5;
+const PERSPECTIVE_DISTORTION_SAFETY_RADIUS: f64 = 1.0;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 10_000_000;
 // TODO: this should pe proportional to image size
-const RANSAC_INLIERS_T: f64 = 1.0;
-const RANSAC_T: f64 = 3.0;
+const RANSAC_INLIERS_T: f64 = 3.0;
+const RANSAC_T: f64 = 10.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 10_000;
-const RANSAC_CHECK_INTERVAL: usize = 10_000;
+const RANSAC_CHECK_INTERVAL: usize = 50_000;
 
 #[derive(Clone, Copy)]
 pub struct Point {
@@ -482,6 +482,7 @@ impl PerspectiveTriangulation {
         let usv = f.svd(true, false);
         let u = usv.u?;
         let e2 = u.column(2);
+        let e2 = e2.unscale(e2[2]);
         let e2_skewsymmetric =
             Matrix3::new(0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0);
         let e2s_f = e2_skewsymmetric * f;
