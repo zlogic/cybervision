@@ -12,7 +12,7 @@ const RANSAC_N_AFFINE: usize = 4;
 const RANSAC_N_PERSPECTIVE: usize = 7;
 const RANSAC_T_AFFINE: f64 = 0.1;
 // TODO 0.17 This might need to be adjusted based on the image size.
-const RANSAC_T_PERSPECTIVE: f64 = 3.0;
+const RANSAC_T_PERSPECTIVE: f64 = 7.0;
 const RANSAC_D: usize = 10;
 const RANSAC_D_EARLY_EXIT_AFFINE: usize = 1000;
 const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 1000;
