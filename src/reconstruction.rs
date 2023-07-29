@@ -1,9 +1,9 @@
 use crate::correlation;
 use crate::crosscorrelation;
 use crate::crosscorrelation::PointCorrelations;
-use crate::fast::Fast;
 use crate::fundamentalmatrix;
 use crate::fundamentalmatrix::FundamentalMatrix;
+use crate::orb::ORB;
 use crate::output;
 use crate::triangulation;
 use crate::Cli;
@@ -283,7 +283,7 @@ impl ImageReconstruction {
         let start_time = SystemTime::now();
 
         // TODO 0.17 Decide what to do with scale=1
-        let scale_steps = Fast::optimal_scale_steps(img1.img.dimensions());
+        let scale_steps = ORB::optimal_scale_steps(img1.img.dimensions());
         let total_percent: f32 = (0..=scale_steps)
             .map(|step| 1.0 / ((1 << (scale_steps - step)) as f32).powi(2))
             .sum::<f32>();
@@ -305,8 +305,13 @@ impl ImageReconstruction {
                 scale,
             };
 
-            let keypoints1 = Fast::new(&img1_scaled);
-            let keypoints2 = Fast::new(&img2_scaled);
+            let apply_harris_filter = match self.projection_mode {
+                fundamentalmatrix::ProjectionMode::Affine => false,
+                fundamentalmatrix::ProjectionMode::Perspective => true,
+            };
+
+            let keypoints1 = ORB::new(&img1_scaled, apply_harris_filter);
+            let keypoints2 = ORB::new(&img2_scaled, apply_harris_filter);
 
             let projection_mode = match self.projection_mode {
                 fundamentalmatrix::ProjectionMode::Affine => correlation::ProjectionMode::Affine,

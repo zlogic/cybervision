@@ -330,7 +330,7 @@ impl FundamentalMatrix {
         roots
             .iter()
             .flat_map(|root| {
-                let f = root.to_owned() * f1 + (1.0 - root) * f2;
+                let mut f = root.to_owned() * f1 + (1.0 - root) * f2;
 
                 let usv = f.transpose().svd(false, true);
                 let s = usv.singular_values;
@@ -341,7 +341,7 @@ impl FundamentalMatrix {
                 }
 
                 // Normalize by last element of F.
-                //f.unscale_mut(f[(2, 2)]);
+                f.unscale_mut(f[(2, 2)]);
 
                 // Check sign consistency.
                 let v_t = usv.v_t?;
