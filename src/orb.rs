@@ -31,7 +31,7 @@ const FAST_NUM_POINTS: usize = 12;
 const FAST_CIRCLE_LENGTH: usize = FAST_CIRCLE_PIXELS.len() + FAST_NUM_POINTS - 1;
 const HARRIS_K: f64 = 0.04;
 const HARRIS_CORNER_THRESHOLD: f64 = 0.1;
-const MAX_KEYPOINTS: usize = 10000;
+const MAX_KEYPOINTS: usize = 5_000;
 
 pub struct ORB {
     points: Vec<Point>,

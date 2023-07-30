@@ -1,4 +1,8 @@
-use nalgebra::{Matrix3, SMatrix, Vector3};
+use nalgebra::allocator::Allocator;
+use nalgebra::{
+    DefaultAllocator, Dim, DimMin, DimMinimum, Matrix3, OMatrix, OVector, SMatrix, SVector,
+    Vector3, U7,
+};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use rayon::prelude::*;
 use roots::find_roots_cubic;
@@ -12,13 +16,13 @@ const RANSAC_N_AFFINE: usize = 4;
 const RANSAC_N_PERSPECTIVE: usize = 7;
 const RANSAC_T_AFFINE: f64 = 0.1;
 // TODO 0.17 This might need to be adjusted based on the image size.
-const RANSAC_T_PERSPECTIVE: f64 = 7.0;
+const RANSAC_T_PERSPECTIVE: f64 = 5.0;
 const RANSAC_D: usize = 10;
 const RANSAC_D_EARLY_EXIT_AFFINE: usize = 1000;
-const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 1000;
+const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 10_000;
 const RANSAC_CHECK_INTERVAL: usize = 50_000;
 const RANSAC_RANK_EPSILON_AFFINE: f64 = 0.001;
-const RANSAC_RANK_EPSILON_PERSPECTIVE: f64 = 0.01;
+const RANSAC_RANK_EPSILON_PERSPECTIVE: f64 = 0.001;
 
 type Point = (usize, usize);
 type Match = (Point, Point);
@@ -195,6 +199,11 @@ impl FundamentalMatrix {
         if !f.iter().all(|v| v.is_finite()) {
             return None;
         }
+        let f = if self.projection == ProjectionMode::Perspective {
+            FundamentalMatrix::optimize_perspective_f(&f, inliers)?
+        } else {
+            f
+        };
         let inliers_pass = inliers
             .into_iter()
             .all(|m| self.fits_model(&f, &m).is_some());
@@ -359,8 +368,88 @@ impl FundamentalMatrix {
             .collect::<Vec<_>>()
     }
 
+    fn optimize_perspective_f(f: &Matrix3<f64>, inliers: &Vec<Match>) -> Option<Matrix3<f64>> {
+        const JACOBIAN_H: f64 = 0.001;
+        let f_params = FundamentalMatrix::params_from_perspective_f(&f);
+        let f_residuals = |p: &OVector<f64, U7>| {
+            let f = FundamentalMatrix::f_from_perspective_params(&p);
+            let mut residuals = SVector::<f64, 7>::zeros();
+            for i in 0..RANSAC_N_PERSPECTIVE {
+                residuals[i] = FundamentalMatrix::reprojection_error(&f, &inliers[i]);
+            }
+            residuals
+        };
+        let f_jacobian = |p: &OVector<f64, U7>| {
+            let mut jacobian = SMatrix::<f64, 7, 7>::zeros();
+            for i in 0..7 {
+                let f_plus;
+                let f_minus;
+                {
+                    let mut p_plus = p.clone();
+                    p_plus[i] += JACOBIAN_H;
+                    f_plus = FundamentalMatrix::f_from_perspective_params(&p_plus);
+                    let mut p_minus = p.clone();
+                    p_minus[i] -= JACOBIAN_H;
+                    f_minus = FundamentalMatrix::f_from_perspective_params(&p_minus);
+                }
+                for j in 0..RANSAC_N_PERSPECTIVE {
+                    let err = (FundamentalMatrix::reprojection_error(&f_plus, &inliers[j])
+                        - FundamentalMatrix::reprojection_error(&f_minus, &inliers[j]))
+                        / (2.0 * JACOBIAN_H);
+                    jacobian[(j, i)] = err;
+                }
+            }
+            jacobian
+        };
+
+        let f = match least_squares(f_params, f_residuals, f_jacobian) {
+            Ok(f_params) => FundamentalMatrix::f_from_perspective_params(&f_params),
+            Err(_) => return None,
+        };
+
+        let usv = f.transpose().svd(false, true);
+        let s = usv.singular_values;
+        if s[1].abs() < RANSAC_RANK_EPSILON_PERSPECTIVE
+            || s[2].abs() > RANSAC_RANK_EPSILON_PERSPECTIVE
+        {
+            return None;
+        }
+        Some(f)
+    }
+
+    #[inline]
+    fn params_from_perspective_f(f: &Matrix3<f64>) -> SVector<f64, 7> {
+        // Use the first 7 elements of f as degrees of freedom.
+        SVector::from([
+            f[(0, 0)],
+            f[(0, 1)],
+            f[(0, 2)],
+            f[(1, 0)],
+            f[(1, 1)],
+            f[(1, 2)],
+            f[(2, 0)],
+        ])
+    }
+
+    #[inline]
+    fn f_from_perspective_params(p: &SVector<f64, 7>) -> Matrix3<f64> {
+        // Parametrize f so that det(f)=0 (to enforce rank<=2) and f has 7 degrees of freedom.
+        let x = -(-p[0] * p[4] + p[6] * p[2] * p[4] + p[3] * p[1] - p[6] * p[1] * p[5])
+            / (-p[3] * p[2] + p[0] * p[5]);
+
+        Matrix3::new(p[0], p[1], p[2], p[3], p[4], p[5], p[6], x, 1.0)
+    }
     #[inline]
     fn fits_model(&self, f: &Matrix3<f64>, m: &Match) -> Option<f64> {
+        let err = FundamentalMatrix::reprojection_error(f, m);
+        if !err.is_finite() || err.abs() > self.ransac_t {
+            return None;
+        }
+        Some(err)
+    }
+
+    #[inline]
+    fn reprojection_error(f: &Matrix3<f64>, m: &Match) -> f64 {
         let p1 = Vector3::new(m.0 .0 as f64, m.0 .1 as f64, 1.0);
         let p2 = Vector3::new(m.1 .0 as f64, m.1 .1 as f64, 1.0);
         let p2t_f_p1 = p2.tr_mul(f) * p1;
@@ -369,12 +458,116 @@ impl FundamentalMatrix {
         let nominator = (p2t_f_p1[0]) * (p2t_f_p1[0]);
         let denominator =
             f_p1[0] * f_p1[0] + f_p1[1] * f_p1[1] + ft_p2[0] * ft_p2[0] + ft_p2[1] * ft_p2[1];
-        let err = nominator / denominator;
-        if !err.is_finite() || err.abs() > self.ransac_t {
-            return None;
-        }
-        Some(err)
+        nominator / denominator
     }
+}
+
+fn least_squares<NP, NR, RF, JF>(
+    params: OVector<f64, NP>,
+    calc_residuals: RF,
+    calc_jacobian: JF,
+) -> Result<OVector<f64, NP>, RansacError>
+where
+    NR: Dim,
+    NP: Dim + DimMin<NR> + DimMin<NP, Output = NP>,
+    RF: Fn(&OVector<f64, NP>) -> OVector<f64, NR>,
+    JF: Fn(&OVector<f64, NP>) -> OMatrix<f64, NR, NP>,
+    DefaultAllocator: Allocator<f64, NR, NP>
+        + Allocator<f64, NP>
+        + Allocator<f64, DimMinimum<NP, NP>>
+        + Allocator<f64, DimMinimum<NP, NP>, NP>
+        + Allocator<f64, NR>
+        + Allocator<f64, NR, NP>
+        + Allocator<(usize, usize), NP>,
+{
+    const MAX_ITERATIONS: usize = 1000;
+    const TAU: f64 = 1E-3;
+    const GRADIENT_EPSILON: f64 = 1E-12;
+    const DELTA_EPSILON: f64 = 1E-12;
+    const RESIDUAL_EPSILON: f64 = 1E-12;
+    const RESIDUAL_REDUCTION_EPSILON: f64 = 0.0;
+
+    // Levenberg-Marquardt optimization loop.
+    let mut residual = calc_residuals(&params);
+    let mut jacobian = calc_jacobian(&params);
+    let mut jt_residual = jacobian.tr_mul(&residual);
+
+    if jt_residual.max().abs() <= GRADIENT_EPSILON {
+        return Ok(params);
+    }
+
+    let mut mu;
+    {
+        let jt_j = jacobian.tr_mul(&jacobian);
+        mu = TAU
+            * (0..jt_j.nrows())
+                .map(|i| jt_j[(i, i)])
+                .max_by(|a, b| a.total_cmp(&b))
+                .unwrap_or(1.0);
+    }
+    let mut nu = 2.0;
+    let mut found = false;
+    let mut params = params.clone();
+
+    for _ in 0..MAX_ITERATIONS {
+        let delta;
+        {
+            let mut jt_j = jacobian.tr_mul(&jacobian);
+            for i in 0..jt_j.nrows() {
+                jt_j[(i, i)] += mu;
+            }
+            delta = jt_j.lu().solve(&jt_residual);
+        }
+        let delta = if let Some(delta) = delta {
+            delta
+        } else {
+            return Err(RansacError::new("Failed to compute delta vector"));
+        };
+
+        if delta.norm() <= DELTA_EPSILON * (params.norm() + DELTA_EPSILON) {
+            found = true;
+            break;
+        }
+
+        let new_params = (&params) + (&delta);
+        let new_residual = calc_residuals(&new_params);
+        let residual_norm_squared = residual.norm_squared();
+        let new_residual_norm_squared = new_residual.norm_squared();
+
+        let rho = (residual.norm_squared() - new_residual.norm_squared())
+            / (delta.tr_mul(&(delta.scale(mu) + &jt_residual)))[0];
+
+        if rho > 0.0 {
+            let converged = residual_norm_squared.sqrt() - new_residual_norm_squared.sqrt()
+                < RESIDUAL_REDUCTION_EPSILON * residual_norm_squared.sqrt();
+
+            residual = new_residual;
+            params = new_params;
+            jacobian = calc_jacobian(&params);
+            jt_residual = jacobian.tr_mul(&residual);
+
+            if converged || jt_residual.max().abs() <= GRADIENT_EPSILON {
+                found = true;
+                break;
+            }
+            mu *= (1.0f64 / 3.0).max(1.0 - (2.0 * rho - 1.0).powi(3));
+            nu = 2.0;
+        } else {
+            mu *= nu;
+            nu *= 2.0;
+        }
+
+        if residual.norm() <= RESIDUAL_EPSILON {
+            found = true;
+            break;
+        }
+    }
+
+    if !found {
+        return Err(RansacError::new("Levenberg-Marquardt failed to converge"));
+    }
+
+    Ok(params)
 }
 
 impl Ord for RansacIterationResult {

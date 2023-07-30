@@ -5,10 +5,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 type Point = (usize, usize);
 
 const THRESHOLD_AFFINE: f32 = 0.90;
-const THRESHOLD_PERSPECTIVE: f32 = 0.80;
+const THRESHOLD_PERSPECTIVE: f32 = 0.60;
 const KERNEL_SIZE_AFFINE: usize = 15;
 const KERNEL_SIZE_PERSPECTIVE: usize = 3;
-const MIN_STDEV: f32 = 3.0;
 
 #[derive(Debug, Clone, Copy)]
 pub enum ProjectionMode {
@@ -95,9 +94,6 @@ impl KeypointMatching {
                     Some(it) => it,
                     None => return vec![],
                 };
-                if data1.stdev < MIN_STDEV {
-                    return vec![];
-                }
                 points2
                     .iter()
                     .enumerate()
@@ -106,9 +102,6 @@ impl KeypointMatching {
                             Some(it) => it,
                             None => return None,
                         };
-                        if data2.stdev < MIN_STDEV {
-                            return None;
-                        }
                         correlate_points(data1, data2)
                             .filter(|corr| *corr > threshold)
                             .map(|_| (*p1, *p2))

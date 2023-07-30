@@ -20,8 +20,8 @@ const PERSPECTIVE_DISTORTION_SAFETY_RADIUS: f64 = 1.0;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 10_000_000;
 // TODO: this should pe proportional to image size
-const RANSAC_INLIERS_T: f64 = 3.0;
-const RANSAC_T: f64 = 10.0;
+const RANSAC_INLIERS_T: f64 = 5.0;
+const RANSAC_T: f64 = 15.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 10_000;
 const RANSAC_CHECK_INTERVAL: usize = 50_000;
@@ -1106,7 +1106,7 @@ struct BundleAdjustment<'a> {
 
 impl BundleAdjustment<'_> {
     const CAMERA_PARAMETERS: usize = 6;
-    const INITIAL_MU: f64 = 1E-2;
+    const INITIAL_MU: f64 = 1E-3;
     const JACOBIAN_H: f64 = 0.001;
     const GRADIENT_EPSILON: f64 = 1E-12;
     const DELTA_EPSILON: f64 = 1E-12;
@@ -1153,6 +1153,7 @@ impl BundleAdjustment<'_> {
         p_minus.r -= delta_r;
         p_minus.t -= delta_t;
 
+        // TODO: pre-compute projection matrices
         let p_plus = p_plus.projection();
         let p_minus = p_minus.projection();
 
@@ -1544,19 +1545,17 @@ impl BundleAdjustment<'_> {
         let mut residual = self.calculate_residual_vector();
         let mut jt_residual = self.calculate_jt_residual();
 
+        if jt_residual.max().abs() <= BundleAdjustment::GRADIENT_EPSILON {
+            return Ok(self.cameras.clone());
+        }
+
         self.mu = BundleAdjustment::INITIAL_MU;
         let mut nu = 2.0;
-
         let mut found = false;
-
         for iter in 0..BUNDLE_ADJUSTMENT_MAX_ITERATIONS {
             if let Some(pl) = progress_listener {
                 let value = iter as f32 / BUNDLE_ADJUSTMENT_MAX_ITERATIONS as f32;
                 pl.report_status(value);
-            }
-            if jt_residual.max().abs() <= BundleAdjustment::GRADIENT_EPSILON {
-                found = true;
-                break;
             }
             let delta = self.calculate_delta_step();
             let delta = if let Some(delta) = delta {
