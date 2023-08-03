@@ -29,6 +29,8 @@ const FAST_THRESHOLD: u8 = 15;
 const KEYPOINT_SCALE_MIN_SIZE: usize = 256;
 const FAST_NUM_POINTS: usize = 12;
 const FAST_CIRCLE_LENGTH: usize = FAST_CIRCLE_PIXELS.len() + FAST_NUM_POINTS - 1;
+const HARRIS_KERNEL_SIZE: usize = 1;
+const HARRIS_KERNEL_WIDTH: usize = HARRIS_KERNEL_SIZE * 2 + 1;
 const HARRIS_K: f64 = 0.04;
 const HARRIS_CORNER_THRESHOLD: f64 = 0.1;
 const MAX_KEYPOINTS: usize = 5_000;
@@ -42,7 +44,6 @@ impl ORB {
     pub fn new(img: &DMatrix<u8>, apply_harris_filter: bool) -> ORB {
         let mut img = img.clone();
         adjust_contrast(&mut img);
-        let harris_corners = ORB::harris_corners(&img);
         let keypoints = ORB::find_fast_keypoints(&img);
         if !apply_harris_filter {
             return ORB { points: keypoints };
@@ -50,7 +51,7 @@ impl ORB {
 
         let mut keypoints = keypoints
             .iter()
-            .map(|(col, row)| ((*row, *col), harris_corners[(*row, *col)]))
+            .filter_map(|(col, row)| Some(((*row, *col), ORB::harris_response(&img, *row, *col)?)))
             .filter(|(_, corner_score)| *corner_score > HARRIS_CORNER_THRESHOLD)
             .collect::<Vec<_>>();
 
@@ -148,39 +149,36 @@ impl ORB {
             .collect()
     }
 
-    fn convolve_kernel(img: &DMatrix<f64>, kernel: Matrix3<f64>) -> DMatrix<f64> {
-        const KERNEL_SIZE: usize = 1;
-        const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
-        let mut result = DMatrix::<f64>::zeros(img.nrows(), img.ncols());
-        let (nrows, ncols) = (result.nrows(), result.ncols());
-        result
-            .column_iter_mut()
-            .enumerate()
-            .par_bridge()
-            .for_each(|(col, mut out_col)| {
-                if col < KERNEL_SIZE || col + KERNEL_SIZE >= ncols {
-                    return;
-                }
-                out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                    if row < KERNEL_SIZE || row + KERNEL_SIZE >= nrows {
-                        return;
-                    }
+    fn convolve_kernel(
+        img: &DMatrix<u8>,
+        row: usize,
+        col: usize,
+        kernel: Matrix3<f64>,
+    ) -> Option<f64> {
+        let (nrows, ncols) = (img.nrows(), img.ncols());
+        if col < HARRIS_KERNEL_SIZE || col + HARRIS_KERNEL_SIZE >= ncols {
+            return None;
+        }
+        if row < HARRIS_KERNEL_SIZE || row + HARRIS_KERNEL_SIZE >= nrows {
+            return None;
+        }
 
-                    let mut sum = 0.0;
-                    for k_row in 0..KERNEL_WIDTH {
-                        for k_col in 0..KERNEL_WIDTH {
-                            sum += kernel[(k_row, k_col)]
-                                * img[(row + k_row - KERNEL_SIZE, col + k_col - KERNEL_SIZE)];
-                        }
-                    }
-                    *out_point = sum;
-                })
-            });
+        let mut result = 0.0;
+        for k_row in 0..HARRIS_KERNEL_WIDTH {
+            for k_col in 0..HARRIS_KERNEL_WIDTH {
+                result += kernel[(k_row, k_col)]
+                    * img[(
+                        row + k_row - HARRIS_KERNEL_SIZE,
+                        col + k_col - HARRIS_KERNEL_SIZE,
+                    )] as f64
+                    / 255.0;
+            }
+        }
 
-        result
+        Some(result)
     }
 
-    fn harris_corners(img: &DMatrix<u8>) -> DMatrix<f64> {
+    fn harris_response(img: &DMatrix<u8>, row: usize, col: usize) -> Option<f64> {
         const KERNEL_SOBEL_X: Matrix3<f64> =
             Matrix3::new(-1.0, -2.0, -1.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0);
         const KERNEL_SOBEL_Y: Matrix3<f64> =
@@ -196,53 +194,37 @@ impl ORB {
             2.0 / 16.0,
             1.0 / 16.0,
         );
-        let mut img_float = DMatrix::<f64>::zeros(img.nrows(), img.ncols());
-        img_float
-            .column_iter_mut()
-            .enumerate()
-            .for_each(|(col, mut out_col)| {
-                out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                    *out_point = img[(row, col)] as f64 / 255.0;
-                })
-            });
-        let img = img_float;
 
-        let mut dx = ORB::convolve_kernel(&img, KERNEL_SOBEL_X);
-        let mut dy = ORB::convolve_kernel(&img, KERNEL_SOBEL_Y);
-        let (nrows, ncols) = (img.nrows(), img.ncols());
-        drop(img);
-        let mut dx_dy = DMatrix::<f64>::zeros(nrows, ncols);
-        dx_dy
-            .column_iter_mut()
-            .enumerate()
-            .for_each(|(col, mut out_col)| {
-                out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                    *out_point = dx[(row, col)] * dy[(row, col)];
-                })
-            });
-        dx.apply(|val| *val = val.powi(2));
-        dy.apply(|val| *val = val.powi(2));
+        let mut g_dx2 = 0.0;
+        let mut g_dy2 = 0.0;
+        let mut g_dx_dy = 0.0;
+        for k_row in 0..HARRIS_KERNEL_WIDTH {
+            for k_col in 0..HARRIS_KERNEL_WIDTH {
+                let dx = ORB::convolve_kernel(
+                    img,
+                    row + k_row - HARRIS_KERNEL_SIZE,
+                    col + k_col - HARRIS_KERNEL_SIZE,
+                    KERNEL_SOBEL_X,
+                )?;
+                let dy = ORB::convolve_kernel(
+                    img,
+                    row + k_row - HARRIS_KERNEL_SIZE,
+                    col + k_col - HARRIS_KERNEL_SIZE,
+                    KERNEL_SOBEL_Y,
+                )?;
 
-        let g_dx2 = ORB::convolve_kernel(&dx, KERNEL_GAUSS);
-        let g_dy2 = ORB::convolve_kernel(&dy, KERNEL_GAUSS);
-        let g_dx_dy = ORB::convolve_kernel(&dx_dy, KERNEL_GAUSS);
-        drop(dx);
-        drop(dy);
-        drop(dx_dy);
+                let gauss_mul = KERNEL_GAUSS[(k_row, k_col)];
+                g_dx2 += dx * dx * gauss_mul;
+                g_dy2 += dy * dy * gauss_mul;
+                g_dx_dy += dx * dy * gauss_mul;
+            }
+        }
 
-        let mut corner_map = DMatrix::<f64>::zeros(nrows, ncols);
-        corner_map
-            .column_iter_mut()
-            .enumerate()
-            .for_each(|(col, mut out_col)| {
-                out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                    let det = g_dx2[(row, col)] * g_dy2[(row, col)] - g_dx_dy[(row, col)].powi(2);
-                    let trace = g_dx2[(row, col)] + g_dy2[(row, col)];
-                    *out_point = det - HARRIS_K * trace.powi(2);
-                })
-            });
+        let det = g_dx2 * g_dy2 - g_dx_dy.powi(2);
+        let trace = g_dx2 + g_dy2;
+        let harris_response = det - HARRIS_K * trace.powi(2);
 
-        corner_map
+        Some(harris_response)
     }
 
     pub fn keypoints(&self) -> &Vec<Point> {
