@@ -1,10 +1,10 @@
-use crate::correlation;
 use crate::crosscorrelation;
 use crate::crosscorrelation::PointCorrelations;
 use crate::fundamentalmatrix;
 use crate::fundamentalmatrix::FundamentalMatrix;
-use crate::orb::ORB;
+use crate::orb;
 use crate::output;
+use crate::pointmatching;
 use crate::triangulation;
 use crate::Cli;
 
@@ -16,7 +16,6 @@ use indicatif::ProgressState;
 use indicatif::{ProgressBar, ProgressStyle};
 use nalgebra::DMatrix;
 use nalgebra::Matrix3;
-use rayon::prelude::*;
 use std::error;
 use std::fmt;
 use std::fmt::Write;
@@ -32,6 +31,7 @@ struct SourceImage {
     img: GrayImage,
     scale: (f32, f32),
     tilt_angle: Option<f32>,
+    filename: String,
 }
 
 #[derive(Debug)]
@@ -51,6 +51,7 @@ impl SourceImage {
             img: img.to_image(),
             scale: metadata.scale,
             tilt_angle: metadata.tilt_angle,
+            filename: path.to_string(),
         })
     }
 
@@ -282,74 +283,100 @@ impl ImageReconstruction {
     ) -> Vec<((usize, usize), (usize, usize))> {
         let start_time = SystemTime::now();
 
-        // TODO 0.17 Decide what to do with scale=1
-        let scale_steps = ORB::optimal_scale_steps(img1.img.dimensions());
+        let scale_steps = orb::optimal_scale_steps(img1.img.dimensions());
         let total_percent: f32 = (0..=scale_steps)
             .map(|step| 1.0 / ((1 << (scale_steps - step)) as f32).powi(2))
-            .sum::<f32>();
+            .sum::<f32>()
+            * 2.0;
 
         let mut total_percent_complete = 0.0;
 
-        let mut point_matches = vec![];
         let pb = new_progress_bar(false);
+        let mut keypoints1 = vec![];
+        let mut keypoints2 = vec![];
         for i in 0..=scale_steps {
             let scale = 1.0 / (1 << (scale_steps - i)) as f32;
 
             let img1_scaled = img1.resize(scale);
             let img2_scaled = img2.resize(scale);
 
-            let pb = CorrelationProgressBar {
+            let img1_pb = CorrelationProgressBar {
                 total_percent_complete,
                 total_percent,
                 pb: &pb,
                 scale,
             };
-
-            let apply_harris_filter = match self.projection_mode {
-                fundamentalmatrix::ProjectionMode::Affine => false,
-                fundamentalmatrix::ProjectionMode::Perspective => true,
-            };
-
-            let keypoints1 = ORB::new(&img1_scaled, apply_harris_filter);
-            let keypoints2 = ORB::new(&img2_scaled, apply_harris_filter);
-
-            let projection_mode = match self.projection_mode {
-                fundamentalmatrix::ProjectionMode::Affine => correlation::ProjectionMode::Affine,
-                fundamentalmatrix::ProjectionMode::Perspective => {
-                    correlation::ProjectionMode::Perspective
-                }
-            };
-            let matcher = correlation::KeypointMatching::new(
-                &img1_scaled,
-                &img2_scaled,
-                keypoints1.keypoints(),
-                keypoints2.keypoints(),
-                projection_mode,
-                Some(&pb),
-            );
-            drop(keypoints1);
-            drop(keypoints2);
-
-            matcher
-                .matches
-                .into_par_iter()
-                .map(|(p1, p2)| {
+            let mut new_keypoints1 = orb::extract_points(&img1_scaled, Some(&img1_pb))
+                .iter()
+                .map(|((row, col), descriptor)| {
                     (
                         (
-                            (p1.0 as f32 / scale) as usize,
-                            (p1.1 as f32 / scale) as usize,
+                            (*col as f32 / scale) as usize,
+                            (*row as f32 / scale) as usize,
                         ),
-                        (
-                            (p2.0 as f32 / scale) as usize,
-                            (p2.1 as f32 / scale) as usize,
-                        ),
+                        descriptor.to_owned(),
                     )
                 })
-                .collect_into_vec(&mut point_matches);
+                .collect::<Vec<_>>();
+            keypoints1.append(&mut new_keypoints1);
+            total_percent_complete += scale * scale / total_percent;
 
+            let img2_pb = CorrelationProgressBar {
+                total_percent_complete,
+                total_percent,
+                pb: &pb,
+                scale,
+            };
+            let mut new_keypoints2 = orb::extract_points(&img2_scaled, Some(&img2_pb))
+                .iter()
+                .map(|((row, col), descriptor)| {
+                    (
+                        (
+                            (*col as f32 / scale) as usize,
+                            (*row as f32 / scale) as usize,
+                        ),
+                        descriptor.to_owned(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            keypoints2.append(&mut new_keypoints2);
             total_percent_complete += scale * scale / total_percent;
         }
         pb.finish_and_clear();
+        if let Ok(t) = start_time.elapsed() {
+            println!("Extracted feature points in {:.3} seconds", t.as_secs_f32(),);
+        }
+        println!(
+            "Image {} has {} feature points",
+            img1.filename,
+            keypoints1.len()
+        );
+        println!(
+            "Image {} has {} feature points",
+            img2.filename,
+            keypoints2.len()
+        );
+
+        let start_time = SystemTime::now();
+        let projection_mode = match self.projection_mode {
+            fundamentalmatrix::ProjectionMode::Affine => pointmatching::ProjectionMode::Affine,
+            fundamentalmatrix::ProjectionMode::Perspective => {
+                pointmatching::ProjectionMode::Perspective
+            }
+        };
+        let pb = new_progress_bar(false);
+        let matcher = pointmatching::KeypointMatching::new(
+            &keypoints1,
+            &keypoints2,
+            projection_mode,
+            Some(&pb),
+        );
+        pb.finish_and_clear();
+        drop(keypoints1);
+        drop(keypoints2);
+
+        let point_matches = matcher.matches;
+
         if let Ok(t) = start_time.elapsed() {
             println!("Matched keypoints in {:.3} seconds", t.as_secs_f32());
         }
@@ -557,11 +584,17 @@ struct CorrelationProgressBar<'p> {
     pb: &'p ProgressBar,
 }
 
-impl correlation::ProgressListener for CorrelationProgressBar<'_> {
+impl orb::ProgressListener for CorrelationProgressBar<'_> {
     fn report_status(&self, pos: f32) {
         let percent_complete =
             self.total_percent_complete + pos * self.scale * self.scale / self.total_percent;
         self.pb.set_position((percent_complete * 10000.0) as u64);
+    }
+}
+
+impl pointmatching::ProgressListener for ProgressBar {
+    fn report_status(&self, pos: f32) {
+        self.set_position((pos * 10000.0) as u64);
     }
 }
 

@@ -1,11 +1,11 @@
 use std::process::exit;
 
 use clap::Parser;
-mod correlation;
 mod crosscorrelation;
 mod fundamentalmatrix;
 mod orb;
 mod output;
+mod pointmatching;
 mod reconstruction;
 mod triangulation;
 

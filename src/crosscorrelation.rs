@@ -1,4 +1,3 @@
-use crate::correlation;
 use nalgebra::{DMatrix, Matrix3, Vector3};
 use rayon::prelude::*;
 use std::{cell::RefCell, error, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering};
@@ -26,6 +25,12 @@ const CORRIDOR_MIN_RANGE: f64 = 2.5;
 const CROSS_CHECK_SEARCH_AREA: usize = 2;
 
 type Match = (u32, u32);
+
+#[derive(Debug)]
+pub struct PointData<const KPC: usize> {
+    pub delta: [f32; KPC],
+    pub stdev: f32,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum ProjectionMode {
@@ -305,8 +310,7 @@ impl PointCorrelations {
     ) {
         let img1 = &correlation_step.img1;
         let img2 = &correlation_step.img2;
-        let p1_data =
-            correlation::compute_point_data::<KERNEL_SIZE, KERNEL_POINT_COUNT>(img1, row, col);
+        let p1_data = compute_point_data::<KERNEL_SIZE, KERNEL_POINT_COUNT>(img1, row, col);
         let p1_data = match p1_data {
             Some(p) => p,
             None => return,
@@ -389,7 +393,7 @@ impl PointCorrelations {
         &self,
         correlation_step: &CorrelationStep,
         e_line: &EpipolarLine,
-        p1_data: &correlation::PointData<KERNEL_POINT_COUNT>,
+        p1_data: &PointData<KERNEL_POINT_COUNT>,
         best_match: &mut BestMatch,
         corridor_offset: isize,
         corridor_range: Range<usize>,
@@ -609,7 +613,7 @@ impl PointCorrelations {
     }
 }
 
-struct PointData {
+struct PointDataCompact {
     avg: f32,
     stdev: f32,
 }
@@ -643,11 +647,15 @@ fn compute_image_point_data(img: &DMatrix<u8>) -> ImagePointData {
 }
 
 #[inline]
-fn compute_compact_point_data(img: &DMatrix<u8>, row: usize, col: usize) -> Option<PointData> {
-    if !correlation::point_inside_bounds::<KERNEL_SIZE>(img.shape(), row, col) {
+fn compute_compact_point_data(
+    img: &DMatrix<u8>,
+    row: usize,
+    col: usize,
+) -> Option<PointDataCompact> {
+    if !point_inside_bounds::<KERNEL_SIZE>(img.shape(), row, col) {
         return None;
     };
-    let mut result = PointData {
+    let mut result = PointDataCompact {
         avg: 0.0,
         stdev: 0.0,
     };
@@ -671,6 +679,48 @@ fn compute_compact_point_data(img: &DMatrix<u8>, row: usize, col: usize) -> Opti
         }
     }
     result.stdev = (result.stdev / KERNEL_POINT_COUNT as f32).sqrt();
+
+    Some(result)
+}
+
+#[inline]
+pub fn point_inside_bounds<const KS: usize>(shape: (usize, usize), row: usize, col: usize) -> bool {
+    row >= KS && col >= KS && row + KS < shape.0 && col + KS < shape.1
+}
+
+#[inline]
+pub fn compute_point_data<const KS: usize, const KPC: usize>(
+    img: &DMatrix<u8>,
+    row: usize,
+    col: usize,
+) -> Option<PointData<KPC>> {
+    if !point_inside_bounds::<KS>(img.shape(), row, col) {
+        return None;
+    };
+    let kernel_width = KS * 2 + 1;
+    let mut result = PointData::<KPC> {
+        delta: [0.0; KPC],
+        stdev: 0.0,
+    };
+    let mut avg = 0.0;
+    for r in 0..=KS * 2 {
+        let row = (row + r).saturating_sub(KS);
+        for c in 0..=KS * 2 {
+            let col = (col + c).saturating_sub(KS);
+            let value = img[(row, col)];
+            let delta_pos = r * kernel_width + c;
+            result.delta[delta_pos] = value.into();
+            avg += value as f32;
+        }
+    }
+    avg /= KPC as f32;
+
+    for i in 0..KPC {
+        let delta = result.delta[i] - avg;
+        result.delta[i] = delta;
+        result.stdev += delta * delta;
+    }
+    result.stdev = (result.stdev / KPC as f32).sqrt();
 
     Some(result)
 }

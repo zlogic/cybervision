@@ -9,7 +9,7 @@ use rand::seq::SliceRandom;
 use rand::{rngs::SmallRng, SeedableRng};
 use rayon::prelude::*;
 
-use crate::correlation;
+use crate::crosscorrelation;
 
 const PERSPECTIVE_VALUE_RANGE: f64 = 100.0;
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
@@ -1040,7 +1040,7 @@ fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut [(f64, f64)]) {
 fn point_not_outlier(img: &DMatrix<Option<f64>>, row: usize, col: usize) -> bool {
     const SEARCH_RADIUS: usize = OUTLIER_FILTER_SEARCH_AREA;
     const SEARCH_WIDTH: usize = SEARCH_RADIUS * 2 + 1;
-    if !correlation::point_inside_bounds::<SEARCH_RADIUS>(img.shape(), row, col) {
+    if !crosscorrelation::point_inside_bounds::<SEARCH_RADIUS>(img.shape(), row, col) {
         return false;
     };
     let point_distance = if let Some(v) = img[(row, col)] {
