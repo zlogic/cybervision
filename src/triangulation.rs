@@ -19,9 +19,9 @@ const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 10;
 const PERSPECTIVE_DISTORTION_SAFETY_RADIUS: f64 = 1.0;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 10_000_000;
-// TODO: this should pe proportional to image size
-const RANSAC_INLIERS_T: f64 = 5.0;
-const RANSAC_T: f64 = 15.0;
+// TODO: this should be proportional to image size
+const RANSAC_INLIERS_T: f64 = 3.0;
+const RANSAC_T: f64 = 5.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 10_000;
 const RANSAC_CHECK_INTERVAL: usize = 50_000;
@@ -401,7 +401,7 @@ impl PerspectiveTriangulation {
             self.bundle_adjustment(progress_listener)?;
         }
 
-        self.filter_outliers();
+        //self.filter_outliers();
 
         let surface = self
             .tracks

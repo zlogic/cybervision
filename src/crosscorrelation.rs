@@ -12,7 +12,7 @@ const THRESHOLD_PERSPECTIVE: f32 = 0.5;
 const MIN_STDEV_AFFINE: f32 = 1.0;
 const MIN_STDEV_PERSPECTIVE: f32 = 1.0;
 const CORRIDOR_SIZE_AFFINE: usize = 2;
-const CORRIDOR_SIZE_PERSPECTIVE: usize = 5;
+const CORRIDOR_SIZE_PERSPECTIVE: usize = 3;
 // Decrease when using a low-powered GPU
 const CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 512;
 const SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 1024;
@@ -20,9 +20,9 @@ const CORRIDOR_SEGMENT_LENGTH_LOWPOWER: usize = 8;
 const SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER: usize = 128;
 const NEIGHBOR_DISTANCE: usize = 10;
 const CORRIDOR_EXTEND_RANGE_AFFINE: f64 = 1.0;
-const CORRIDOR_EXTEND_RANGE_PERSPECTIVE: f64 = 1.5;
+const CORRIDOR_EXTEND_RANGE_PERSPECTIVE: f64 = 1.0;
 const CORRIDOR_MIN_RANGE: f64 = 2.5;
-const CROSS_CHECK_SEARCH_AREA: usize = 2;
+const CROSS_CHECK_SEARCH_AREA: usize = 10;
 
 type Match = (u32, u32);
 
@@ -584,10 +584,10 @@ impl PointCorrelations {
             .saturating_add(search_area + 1)
             .clamp(0, reverse.nrows());
         let min_col = (m.1 as usize)
-            .saturating_sub(search_area + 1)
+            .saturating_sub(search_area)
             .clamp(0, reverse.ncols());
         let max_col = (m.1 as usize)
-            .saturating_add(search_area)
+            .saturating_add(search_area + 1)
             .clamp(0, reverse.ncols());
 
         let r_min_row = row.saturating_sub(search_area);
