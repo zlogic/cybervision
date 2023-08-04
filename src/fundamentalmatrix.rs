@@ -9,7 +9,7 @@ use roots::find_roots_cubic;
 use std::cmp::Ordering;
 use std::{fmt, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
 
-const MIN_INLIER_DISTANCE: usize = 4;
+const MIN_INLIER_DISTANCE: usize = 10;
 const RANSAC_K_AFFINE: usize = 1_000_000;
 const RANSAC_K_PERSPECTIVE: usize = 1_000_000;
 const RANSAC_N_AFFINE: usize = 4;
