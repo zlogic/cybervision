@@ -4,8 +4,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 type Point = (usize, usize);
 type Keypoint = (Point, [u32; 8]);
 
-const THRESHOLD_AFFINE: u32 = 16;
+const THRESHOLD_AFFINE: u32 = 32;
 const THRESHOLD_PERSPECTIVE: u32 = 32;
+const MAX_MATCHES: usize = 10_000;
 
 #[derive(Debug, Clone, Copy)]
 pub enum ProjectionMode {
@@ -47,7 +48,7 @@ impl KeypointMatching {
         progress_listener: Option<&PL>,
     ) -> Vec<(Point, Point)> {
         let counter = AtomicUsize::new(0);
-        points1
+        let mut point_matches = points1
             .into_par_iter()
             .flat_map(|p1| {
                 if let Some(pl) = progress_listener {
@@ -63,13 +64,20 @@ impl KeypointMatching {
                         let distance: u32 =
                             (0..8).map(|i| (brief1[i] ^ (brief2[i])).count_ones()).sum();
                         if distance < threshold {
-                            Some((p1.0, p2.0))
+                            Some(((p1.0, p2.0), distance))
                         } else {
                             None
                         }
                     })
                     .collect::<Vec<_>>()
             })
+            .collect::<Vec<_>>();
+        point_matches.sort_by(|(_, distance1), (_, distance2)| distance1.cmp(distance2));
+
+        point_matches
+            .iter()
+            .take(MAX_MATCHES)
+            .map(|(p, _)| *p)
             .collect()
     }
 }
