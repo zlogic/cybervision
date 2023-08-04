@@ -1,5 +1,3 @@
 # Rust build directory
 /target
 
-# Visual Studio Code configuration
-/.vscode/
