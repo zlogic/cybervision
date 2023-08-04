@@ -5,7 +5,7 @@ type Point = (usize, usize);
 type Keypoint = (Point, [u32; 8]);
 
 const THRESHOLD_AFFINE: u32 = 32;
-const THRESHOLD_PERSPECTIVE: u32 = 32;
+const THRESHOLD_PERSPECTIVE: u32 = 48;
 const MAX_MATCHES: usize = 5_000;
 
 #[derive(Debug, Clone, Copy)]

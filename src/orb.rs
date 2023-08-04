@@ -32,8 +32,10 @@ const FAST_NUM_POINTS: usize = 9;
 const FAST_CIRCLE_LENGTH: usize = FAST_CIRCLE_PIXELS.len() + FAST_NUM_POINTS - 1;
 const HARRIS_KERNEL_SIZE: usize = 3;
 const HARRIS_KERNEL_WIDTH: usize = HARRIS_KERNEL_SIZE * 2 + 1;
-const ORB_GAUSS_KERNEL_WIDTH: usize = 11;
 const HARRIS_K: f64 = 0.04;
+const ORB_GAUSS_KERNEL_WIDTH: usize = 11;
+const ORB_PATCH_WIDTH: usize = 31;
+const ORB_PATCH_SIZE: usize = ORB_PATCH_WIDTH / 2;
 const MAX_KEYPOINTS: usize = 10_000;
 
 pub trait ProgressListener
@@ -84,19 +86,19 @@ fn find_fast_keypoints<PL: ProgressListener>(
     progress_listener: Option<&PL>,
 ) -> Vec<(usize, usize)> {
     // Detect points
-    let total_rows = img.nrows() - FAST_KERNEL_SIZE * 2;
+    let total_cols = img.ncols() - FAST_KERNEL_SIZE * 2;
     let counter = AtomicUsize::new(0);
-    let keypoints: Vec<(usize, usize)> = (FAST_KERNEL_SIZE..(img.nrows() - FAST_KERNEL_SIZE))
+    let keypoints: Vec<(usize, usize)> = (FAST_KERNEL_SIZE..(img.ncols() - FAST_KERNEL_SIZE))
         .into_par_iter()
-        .map(|row| {
+        .map(|col| {
             if let Some(pl) = progress_listener {
                 let value =
-                    0.20 * (counter.fetch_add(1, Ordering::Relaxed) as f32 / total_rows as f32);
+                    0.20 * (counter.fetch_add(1, Ordering::Relaxed) as f32 / total_cols as f32);
                 pl.report_status(value);
             }
-            let kp: Vec<(usize, usize)> = (FAST_KERNEL_SIZE..(img.ncols() - FAST_KERNEL_SIZE))
+            let kp: Vec<(usize, usize)> = (FAST_KERNEL_SIZE..(img.nrows() - FAST_KERNEL_SIZE))
                 .filter_map(
-                    |col| match is_keypoint(&img, FAST_THRESHOLD.into(), row, col) {
+                    |row| match is_keypoint(&img, FAST_THRESHOLD.into(), row, col) {
                         true => Some((row, col)),
                         false => None,
                     },
@@ -210,8 +212,8 @@ fn convolve_kernel<const KERNEL_WIDTH: usize>(
     }
 
     let mut result = 0.0;
-    for k_row in 0..KERNEL_WIDTH {
-        for k_col in 0..KERNEL_WIDTH {
+    for k_col in 0..KERNEL_WIDTH {
+        for k_row in 0..KERNEL_WIDTH {
             result += kernel[(k_row, k_col)]
                 * img[(row + k_row - kernel_size, col + k_col - kernel_size)] as f64
                 / 255.0;
@@ -335,6 +337,36 @@ fn gaussian_blur<const KERNEL_WIDTH: usize>(
     result
 }
 
+fn get_brief_orientation(img: &DMatrix<Option<f64>>, point: (usize, usize)) -> Option<f64> {
+    let (row, col) = point;
+    if row < ORB_PATCH_SIZE
+        || col < ORB_PATCH_SIZE
+        || row + ORB_PATCH_SIZE >= img.nrows()
+        || col + ORB_PATCH_SIZE >= img.ncols()
+    {
+        return None;
+    }
+
+    let mut m_00 = 0;
+    let mut m_01 = 0;
+    let mut m_10 = 0;
+    for m_col in 0..ORB_PATCH_WIDTH {
+        for m_row in 0..ORB_PATCH_WIDTH {
+            let (s_row, s_col) = (row + m_row - ORB_PATCH_SIZE, col + m_col - ORB_PATCH_SIZE);
+            let val = img[(s_row, s_col)]?.clamp(0.0, 255.0) as usize;
+            m_00 += val;
+            m_01 += s_row * val;
+            m_10 += s_col * val;
+        }
+    }
+
+    let centroid_row = m_01 as f64 / m_00 as f64;
+    let centroid_col = m_10 as f64 / m_00 as f64;
+    let angle = (centroid_row - row as f64).atan2(centroid_col - col as f64);
+
+    Some(angle)
+}
+
 fn extract_brief_descriptors<PL: ProgressListener>(
     img: &DMatrix<u8>,
     points: Vec<(usize, usize)>,
@@ -353,17 +385,28 @@ fn extract_brief_descriptors<PL: ProgressListener>(
                     + 0.30 * (counter.fetch_add(1, Ordering::Relaxed) as f32 / points.len() as f32);
                 pl.report_status(value);
             }
+            let angle = get_brief_orientation(&img, *coords)?;
+            let angle_sin = angle.sin();
+            let angle_cos = angle.cos();
             let mut orb_descriptor = [0 as u32; 8];
             for i in 0..ORB_MATCH_PATTERN.len() {
                 let offset1 = ORB_MATCH_PATTERN[i].0;
                 let offset2 = ORB_MATCH_PATTERN[i].1;
+                let offset1 = (
+                    (offset1.1 as f64 * angle_cos - offset1.0 as f64 * angle_sin).round() as isize,
+                    (offset1.1 as f64 * angle_sin + offset1.0 as f64 * angle_cos).round() as isize,
+                );
+                let offset2 = (
+                    (offset2.1 as f64 * angle_cos - offset2.0 as f64 * angle_sin).round() as isize,
+                    (offset2.1 as f64 * angle_sin + offset2.0 as f64 * angle_cos).round() as isize,
+                );
                 let p1_coords = (
-                    coords.0.saturating_add_signed(offset1.1 as isize),
-                    coords.1.saturating_add_signed(offset1.0 as isize),
+                    coords.0.saturating_add_signed(offset1.0 as isize),
+                    coords.1.saturating_add_signed(offset1.1 as isize),
                 );
                 let p2_coords = (
-                    coords.0.saturating_add_signed(offset2.1 as isize),
-                    coords.1.saturating_add_signed(offset2.0 as isize),
+                    coords.0.saturating_add_signed(offset2.0 as isize),
+                    coords.1.saturating_add_signed(offset2.1 as isize),
                 );
                 if p1_coords.0 == 0
                     || p2_coords.0 == 0
