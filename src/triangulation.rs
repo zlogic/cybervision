@@ -16,7 +16,6 @@ const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
 const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 1.0;
 const OUTLIER_FILTER_SEARCH_AREA: usize = 5;
 const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 10;
-const PERSPECTIVE_DISTORTION_SAFETY_RADIUS: f64 = 1.0;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 1_000;
@@ -242,20 +241,6 @@ impl Track {
         }
     }
 
-    fn get_inside_center(&self, i: usize, image_shape: (usize, usize)) -> Option<Match> {
-        let point = self.get(i)?;
-
-        let center = (image_shape.0 as f64 / 2.0, image_shape.1 as f64 / 2.0);
-        let radius =
-            PERSPECTIVE_DISTORTION_SAFETY_RADIUS * (center.0 * center.0 + center.1 * center.1);
-
-        if (point.0 as f64 - center.0).powi(2) + (point.1 as f64 - center.1).powi(2) < radius {
-            Some(point)
-        } else {
-            None
-        }
-    }
-
     fn first(&self) -> Option<&Match> {
         self.points.first()
     }
@@ -461,7 +446,7 @@ impl PerspectiveTriangulation {
             .range()
             .flat_map(|i| {
                 if i < projections.len() {
-                    let point = track.get_inside_center(i, self.image_shapes[i])?;
+                    let point = track.get(i)?;
                     let point = self.calibration_matrix_inv
                         * Vector3::new(point.1 as f64, point.0 as f64, 1.0);
                     let point = (point.x / point.z, point.y / point.z);
@@ -616,9 +601,7 @@ impl PerspectiveTriangulation {
                 let view_i = self.image_shapes.len() - 1;
                 track.range().len() > linked_track_len
                     && track.range().end == track_len
-                    && track
-                        .get_inside_center(view_i, self.image_shapes[view_i])
-                        .is_some()
+                    && track.get(view_i).is_some()
                     && self.points3d[*track_i].is_some()
             })
             .map(|track| track.to_owned())
@@ -881,7 +864,7 @@ impl PerspectiveTriangulation {
             .enumerate()
             .skip(skip)
             .filter_map(|(i, p)| {
-                let original = track.get_inside_center(i, self.image_shapes[i])?;
+                let original = track.get(i)?;
                 let mut original = self.calibration_matrix_inv
                     * Vector3::new(original.1 as f64, original.0 as f64, 1.0);
                 original.unscale_mut(original.z);
@@ -1328,9 +1311,7 @@ impl BundleAdjustment<'_> {
     fn residual(&self, point_i: usize, view_j: usize) -> Vector2<f64> {
         let point3d = &self.points3d[point_i];
         let projection = &self.projections[view_j];
-        let original = if let Some(original) =
-            self.tracks[point_i].get_inside_center(view_j, self.image_shapes[view_j])
-        {
+        let original = if let Some(original) = self.tracks[point_i].get(view_j) {
             original
         } else {
             return Vector2::zeros();
