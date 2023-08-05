@@ -19,13 +19,13 @@ const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 10;
 const PERSPECTIVE_DISTORTION_SAFETY_RADIUS: f64 = 1.0;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
-const RANSAC_K: usize = 10_000_000;
+const RANSAC_K: usize = 1_000;
 // TODO: this should be proportional to image size
-const RANSAC_INLIERS_T: f64 = 1.0;
+const RANSAC_INLIERS_T: f64 = 0.1;
 const RANSAC_T: f64 = 3.0;
 const RANSAC_D: usize = 100;
-const RANSAC_D_EARLY_EXIT: usize = 10_000;
-const RANSAC_CHECK_INTERVAL: usize = 50_000;
+const RANSAC_D_EARLY_EXIT: usize = 100_000;
+const RANSAC_CHECK_INTERVAL: usize = 100;
 
 #[derive(Clone, Copy)]
 pub struct Point {
@@ -394,20 +394,16 @@ impl PerspectiveTriangulation {
 
             // For the first pair, find a temporary projection matrix to estimate 3D points.
             self.projections.push(Matrix3x4::identity());
-            //let p2 = match PerspectiveTriangulation::f_to_projection_matrix(fundamental_matrix) {
             let p2 = match self.find_projection_matrix(fundamental_matrix, correlated_points) {
                 Some(p2) => p2,
                 None => return Err(TriangulationError::new("Unable to find projection matrix")),
             };
             self.projections.push(p2);
             self.triangulate_tracks();
-            self.calibration_matrix = Matrix3::identity();
-            self.calibration_matrix_inv = Matrix3::identity();
 
             self.projections = vec![Matrix3x4::identity()];
             self.cameras = vec![Camera::decode(&Matrix3::identity(), &Vector3::zeros())];
         }
-        /*
         let camera2 = match self.recover_relative_pose(progress_listener) {
             Some(camera2) => camera2,
             None => return Err(TriangulationError::new("Unable to find projection matrix")),
@@ -421,7 +417,6 @@ impl PerspectiveTriangulation {
 
         self.points3d.clear();
         self.triangulate_tracks();
-        */
 
         Ok(())
     }
@@ -518,22 +513,6 @@ impl PerspectiveTriangulation {
         self.points3d.append(&mut new_points3d)
     }
 
-    fn f_to_projection_matrix(f: &Matrix3<f64>) -> Option<Matrix3x4<f64>> {
-        //let f = f.unscale(f[(2, 2)]);
-        let usv = f.svd(true, false);
-        let u = usv.u?;
-        let e2 = u.column(2);
-        let e2 = e2.unscale(e2[2]);
-        let e2_skewsymmetric =
-            Matrix3::new(0.0, -e2[2], e2[1], e2[2], 0.0, -e2[0], -e2[1], e2[0], 0.0);
-        let e2s_f = e2_skewsymmetric * f;
-
-        let mut p2 = e2s_f.insert_column(3, 0.0);
-        p2.column_mut(3).copy_from(&e2);
-
-        Some(p2)
-    }
-
     fn find_projection_matrix(
         &self,
         fundamental_matrix: &Matrix3<f64>,
@@ -548,22 +527,24 @@ impl PerspectiveTriangulation {
 
         // Create camera matrices and find one where
         let svd = essential_matrix.svd(true, true);
-        let mut u = svd.u?;
-        let mut vt = svd.v_t?;
+        let u = svd.u?;
+        let vt = svd.v_t?;
         let u3 = u.column(2).clone();
         let u3 = u3.unscale(u3[2]);
-        if u.determinant() < 0.0 {
-            u = -u;
-        };
-        if vt.determinant() < 0.0 {
-            vt = -vt;
-        }
         const W: Matrix3<f64> = Matrix3::new(0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+        let mut r1 = u * (W) * vt;
+        let mut r2 = u * (W.transpose()) * vt;
+        if r1.determinant() < 0.0 {
+            r1 = -r1;
+        }
+        if r2.determinant() < 0.0 {
+            r2 = -r2;
+        }
 
-        let mut p2_1 = (u * (W) * vt).insert_column(3, 0.0);
-        let mut p2_2 = (u * (W) * vt).insert_column(3, 0.0);
-        let mut p2_3 = (u * (W.transpose()) * vt).insert_column(3, 0.0);
-        let mut p2_4 = (u * (W.transpose()) * vt).insert_column(3, 0.0);
+        let mut p2_1 = r1.insert_column(3, 0.0);
+        let mut p2_2 = r1.insert_column(3, 0.0);
+        let mut p2_3 = r2.insert_column(3, 0.0);
+        let mut p2_4 = r2.insert_column(3, 0.0);
 
         let p1 = Matrix3x4::identity();
 
@@ -685,7 +666,7 @@ impl PerspectiveTriangulation {
                         .into_iter()
                         .filter_map(|(r, t)| {
                             let camera = Camera::decode(&r, &t);
-                            let projection = camera.projection();
+                            let projection = self.calibration_matrix * camera.projection();
 
                             let mut projections = self.projections.clone();
                             projections.push(projection);
@@ -735,7 +716,9 @@ impl PerspectiveTriangulation {
             .iter()
             .filter_map(|(i, track)| {
                 let p2 = track.last()?;
-                let p2 = Vector3::new(p2.1 as f64, p2.0 as f64, 1.0).normalize();
+                let p2 = (self.calibration_matrix_inv
+                    * Vector3::new(p2.1 as f64, p2.0 as f64, 1.0))
+                .normalize();
                 let point3d = (*(self.points3d.get(*i)?))?;
 
                 Some((p2, point3d))
@@ -899,10 +882,13 @@ impl PerspectiveTriangulation {
             .skip(skip)
             .filter_map(|(i, p)| {
                 let original = track.get_inside_center(i, self.image_shapes[i])?;
+                let mut original = self.calibration_matrix_inv
+                    * Vector3::new(original.1 as f64, original.0 as f64, 1.0);
+                original.unscale_mut(original.z);
                 let mut projected = p * point4d;
                 projected.unscale_mut(projected.z * projected.z.signum());
-                let dx = projected.x - original.1 as f64;
-                let dy = projected.y - original.0 as f64;
+                let dx = projected.x - original.x;
+                let dy = projected.y - original.y;
                 let error = (dx * dx + dy * dy).sqrt();
                 Some(error)
             })
@@ -1120,7 +1106,7 @@ fn solve_quartic(factors: [f64; 5]) -> [f64; 4] {
 }
 
 fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut [(f64, f64)]) {
-    const MAX_ITER: usize = 50;
+    const MAX_ITER: usize = 5;
     for _ in 0..MAX_ITER {
         for (x_target, y_target) in xy.iter_mut() {
             let x = *x_target;
