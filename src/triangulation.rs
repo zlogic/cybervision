@@ -16,12 +16,12 @@ const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
 const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 1.0;
 const OUTLIER_FILTER_SEARCH_AREA: usize = 5;
 const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 10;
-const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
+const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.001;
 const RANSAC_N: usize = 3;
-const RANSAC_K: usize = 1_000;
+const RANSAC_K: usize = 100_000;
 // TODO: this should be proportional to image size
-const RANSAC_INLIERS_T: f64 = 0.1;
-const RANSAC_T: f64 = 3.0;
+const RANSAC_INLIERS_T: f64 = 3.0;
+const RANSAC_T: f64 = 10.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 100;
@@ -265,13 +265,13 @@ impl Camera {
                 let r_z = (-r[(0, 1)]).atan2(r[(0, 0)]);
                 (r_x, r_y, r_z)
             } else {
-                let r_y = -std::f64::consts::PI;
+                let r_y = -std::f64::consts::FRAC_PI_2;
                 let r_x = r[(1, 0)].atan2(r[(0, 0)]);
                 let r_z = 0.0;
                 (r_x, r_y, r_z)
             }
         } else {
-            let r_y = std::f64::consts::PI;
+            let r_y = std::f64::consts::FRAC_PI_2;
             let r_x = r[(1, 0)].atan2(r[(0, 0)]);
             let r_z = 0.0;
             (r_x, r_y, r_z)
@@ -321,13 +321,9 @@ impl Camera {
     }
 
     fn projection(&self) -> Matrix3x4<f64> {
-        let r = self.matrix_r();
-        let t = self.t;
-
-        let mut projection = Matrix3x4::identity();
-        projection.column_mut(3).copy_from(&t);
-
-        r * projection
+        let mut projection = self.matrix_r().insert_column(3, 0.0);
+        projection.column_mut(3).copy_from(&self.t);
+        projection
     }
 }
 
@@ -353,21 +349,21 @@ impl PerspectiveTriangulation {
         let index = self.projections.len().saturating_sub(1);
         self.extend_tracks(correlated_points, index);
 
+        // TODO 0.17 Get focal distance from EXIF metadata.
+        let focal_distance =
+            26.0 / 36.0 * correlated_points.nrows().max(correlated_points.ncols()) as f64;
+        let k = Matrix3::new(
+            focal_distance,
+            0.0,
+            correlated_points.ncols() as f64 / 2.0,
+            0.0,
+            focal_distance,
+            correlated_points.nrows() as f64 / 2.0,
+            0.0,
+            0.0,
+            1.0,
+        );
         if self.projections.is_empty() {
-            // TODO 0.17 Get focal distance from EXIF metadata.
-            let focal_distance =
-                26.0 / 36.0 * correlated_points.nrows().max(correlated_points.ncols()) as f64;
-            let k = Matrix3::new(
-                focal_distance,
-                0.0,
-                correlated_points.ncols() as f64 / 2.0,
-                0.0,
-                focal_distance,
-                correlated_points.nrows() as f64 / 2.0,
-                0.0,
-                0.0,
-                1.0,
-            );
             self.calibration_matrix = k;
             self.calibration_matrix_inv = if let Some(k_inverse) = k.lu().try_inverse() {
                 k_inverse
@@ -386,8 +382,11 @@ impl PerspectiveTriangulation {
             self.projections.push(p2);
             self.triangulate_tracks();
 
-            self.projections = vec![Matrix3x4::identity()];
+            // First pair shoudn't be re-calibrated, as it's used to define all other structure.
+            let camera_r = p2.fixed_view::<3, 3>(0, 0);
+            let camera_t = p2.column(3);
             self.cameras = vec![Camera::decode(&Matrix3::identity(), &Vector3::zeros())];
+            self.projections = vec![Matrix3x4::identity()];
         }
         let camera2 = match self.recover_relative_pose(progress_listener) {
             Some(camera2) => camera2,
@@ -489,9 +488,6 @@ impl PerspectiveTriangulation {
                 }
                 let w = point4d.w * point4d.z.signum() * point4d.w.signum();
                 let point3d = point4d.remove_row(3).unscale(w);
-                if point3d.z < 0.0 {
-                    return None;
-                }
                 Some(point3d)
             })
             .collect::<Vec<_>>();
@@ -649,7 +645,7 @@ impl PerspectiveTriangulation {
                         .into_iter()
                         .filter_map(|(r, t)| {
                             let camera = Camera::decode(&r, &t);
-                            let projection = self.calibration_matrix * camera.projection();
+                            let projection = camera.projection();
 
                             let mut projections = self.projections.clone();
                             projections.push(projection);
@@ -942,7 +938,6 @@ impl PerspectiveTriangulation {
         let mut ba = BundleAdjustment::new(
             self.cameras.clone(),
             &filtered_tracks,
-            self.image_shapes.clone(),
             &mut filtered_points3d,
         );
         self.cameras = ba.optimize(progress_listener)?;
@@ -1089,8 +1084,10 @@ fn solve_quartic(factors: [f64; 5]) -> [f64; 4] {
 }
 
 fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut [(f64, f64)]) {
-    const MAX_ITER: usize = 5;
+    const MAX_ITER: usize = 50;
     for _ in 0..MAX_ITER {
+        let mut stable = true;
+
         for (x_target, y_target) in xy.iter_mut() {
             let x = *x_target;
             let y = *y_target;
@@ -1104,6 +1101,7 @@ fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut [(f64, f64)]) {
             if fv.abs() < f64::EPSILON && gv.abs() < f64::EPSILON {
                 continue;
             }
+            stable = false;
 
             let dfdx = 2.0 * f[0] * x + f[1] * y + f[3];
             let dfdy = f[1] * x + f[4];
@@ -1117,6 +1115,9 @@ fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut [(f64, f64)]) {
 
             *x_target -= dx;
             *y_target -= dy;
+        }
+        if stable {
+            break;
         }
     }
 }
@@ -1183,7 +1184,6 @@ struct BundleAdjustment<'a> {
     cameras: Vec<Camera>,
     projections: Vec<Matrix3x4<f64>>,
     tracks: &'a [Track],
-    image_shapes: Vec<(usize, usize)>,
     points3d: &'a mut Vec<Option<Vector3<f64>>>,
     covariance: f64,
     mu: f64,
@@ -1201,7 +1201,6 @@ impl BundleAdjustment<'_> {
     fn new<'a>(
         cameras: Vec<Camera>,
         tracks: &'a [Track],
-        image_shapes: Vec<(usize, usize)>,
         points3d: &'a mut Vec<Option<Vector3<f64>>>,
     ) -> BundleAdjustment<'a> {
         // For now, identity covariance is acceptable.
@@ -1211,7 +1210,6 @@ impl BundleAdjustment<'_> {
             cameras,
             projections,
             tracks,
-            image_shapes,
             points3d,
             covariance,
             mu: BundleAdjustment::INITIAL_MU,
