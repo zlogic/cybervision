@@ -11,7 +11,7 @@ use std::{fmt, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrderi
 
 const MIN_INLIER_DISTANCE: usize = 10;
 const RANSAC_K_AFFINE: usize = 1_000_000;
-const RANSAC_K_PERSPECTIVE: usize = 1_000_000;
+const RANSAC_K_PERSPECTIVE: usize = 10_000_000;
 const RANSAC_N_AFFINE: usize = 4;
 const RANSAC_N_PERSPECTIVE: usize = 7;
 const RANSAC_T_AFFINE: f64 = 0.1;
