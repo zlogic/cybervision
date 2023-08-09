@@ -63,7 +63,7 @@ impl KeypointMatching {
                         let brief2 = p2.1;
                         let distance: u32 =
                             (0..8).map(|i| (brief1[i] ^ (brief2[i])).count_ones()).sum();
-                        if distance < threshold {
+                        if distance <= threshold {
                             Some(((p1.0, p2.0), distance))
                         } else {
                             None

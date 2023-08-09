@@ -388,7 +388,6 @@ impl PerspectiveTriangulation {
                 None => return Err(TriangulationError::new("Unable to find projection matrix")),
             };
 
-            // First pair shoudn't be re-calibrated, as it's used to define all other structure.
             let p2 = k * p2;
             self.projections.push(p2);
             self.triangulate_tracks();
@@ -481,6 +480,18 @@ impl PerspectiveTriangulation {
         if point4d.w.abs() < PERSPECTIVE_SCALE_THRESHOLD {
             return None;
         }
+        // TODO 0.17 Extract this into a separate function; LM optimization still needs an error
+        // value.
+        let point3d = point4d.remove_row(3).unscale(point4d.w);
+        track.range().all(|i| {
+            if i >= self.cameras.len() {
+                return true;
+            }
+            let camera = &self.cameras[i];
+            let r = camera.matrix_r();
+            let t = camera.t;
+            (r * (point3d + r.transpose() * t)).z > 0.0
+        });
 
         Some(point4d)
     }
@@ -492,9 +503,7 @@ impl PerspectiveTriangulation {
             .skip(self.points3d.len())
             .map(|track: &Track| {
                 let point4d = self.triangulate_track(track, &self.projections)?;
-
-                let point3d = point4d.remove_row(3).unscale(point4d.w);
-                Some(point3d)
+                Some(point4d.remove_row(3).unscale(point4d.w))
             })
             .collect::<Vec<_>>();
         self.points3d.append(&mut new_points3d)
@@ -520,16 +529,12 @@ impl PerspectiveTriangulation {
         const W: Matrix3<f64> = Matrix3::new(0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
         let mut r1 = u * (W) * vt;
         let mut r2 = u * (W.transpose()) * vt;
-        if r1.determinant() < 0.0 {
-            r1 = -r1;
-        }
-        if r2.determinant() < 0.0 {
-            r2 = -r2;
-        }
+        r1.scale_mut(r1.determinant().signum());
+        r2.scale_mut(r2.determinant().signum());
 
         let p1 = k * Matrix3x4::identity();
 
-        // Solve chirality and find the matrix that the most points in front of the image.
+        // Solve cheirality and find the matrix that the most points in front of the image.
         let combinations: [(Matrix3<f64>, Vector3<f64>); 4] =
             [(r1, u3.into()), (r1, -u3), (r2, u3.into()), (r2, -u3)];
         combinations
@@ -561,11 +566,13 @@ impl PerspectiveTriangulation {
                                 };
                                 let point4d = self.triangulate_track(&track, &[p1, p2_calibrated]);
                                 let point4d = if let Some(point4d) = point4d {
-                                    point4d.unscale(point4d.w)
+                                    point4d
                                 } else {
                                     return false;
                                 };
-                                (p1 * point4d).z > 0.0 && (p2_calibrated * point4d).z > 0.0
+                                // TODO 0.17 Use the extracted "point in front of camera" function.
+                                let point3d = point4d.remove_row(3).unscale(point4d.w);
+                                point3d.z > 0.0 && (r * (point3d + r.transpose() * t)).z > 0.0
                             })
                             .count()
                     })
@@ -644,20 +651,9 @@ impl PerspectiveTriangulation {
                         .map(|(_, track)| (*track).to_owned())
                         .collect::<Vec<_>>();
 
-                    // TODO: check if points are collinear?
                     self.recover_pose_from_points(&inliers)
                         .into_iter()
                         .filter_map(|(r, t)| {
-                            /*
-                            let (r, t) = if r.determinant() < 0.0 {
-                                (-r, -t)
-                            } else {
-                                (r, t)
-                            };
-                            */
-                            //let r = r;
-                            //let t = r.transpose() * t;
-                            //let t = r * t;
                             let camera = Camera::decode(&k, &r, &t);
                             let projection = camera.projection();
 
@@ -869,9 +865,6 @@ impl PerspectiveTriangulation {
         skip: usize,
     ) -> Option<f64> {
         let point4d = self.triangulate_track(track, projections)?;
-        if point4d.w.abs() < PERSPECTIVE_SCALE_THRESHOLD {
-            return None;
-        }
         projections
             .iter()
             .enumerate()
@@ -879,9 +872,6 @@ impl PerspectiveTriangulation {
             .filter_map(|(i, p)| {
                 let original = track.get(i)?;
                 let mut projected = p * point4d;
-                if projected.z < 0.0 {
-                    return Some(f64::MAX);
-                }
                 projected.unscale_mut(projected.z);
                 let dx = projected.x - original.1 as f64;
                 let dy = projected.y - original.0 as f64;
@@ -999,9 +989,6 @@ impl PerspectiveTriangulation {
                     return;
                 };
                 let depth = (projection * point3d).z;
-                if depth < 0.0 {
-                    return;
-                }
                 point_depths[point2d] = Some(depth)
             });
 
