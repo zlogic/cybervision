@@ -43,6 +43,10 @@ pub struct Cli {
     #[arg(long, default_value_t = -1.0)]
     scale: f32,
 
+    /// Focal length in 35mm equivalent
+    #[arg(long)]
+    focal_length: Option<u32>,
+
     /// Hardware mode
     #[arg(long, value_enum, default_value_t = HardwareMode::Gpu)]
     mode: HardwareMode,

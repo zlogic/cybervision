@@ -8,28 +8,23 @@ use crate::pointmatching;
 use crate::triangulation;
 use crate::Cli;
 
-use image::imageops::FilterType;
-use image::GenericImageView;
-use image::GrayImage;
-use image::RgbImage;
-use indicatif::ProgressState;
-use indicatif::{ProgressBar, ProgressStyle};
-use nalgebra::DMatrix;
-use nalgebra::Matrix3;
+use image::{imageops::FilterType, GenericImageView, GrayImage, RgbImage};
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+use nalgebra::{DMatrix, Matrix3};
 use std::error;
-use std::fmt;
-use std::fmt::Write;
 use std::fs::File;
 use std::io::BufReader;
 use std::str::FromStr;
 use std::time::SystemTime;
+use std::{fmt, fmt::Write};
 
-const TIFFTAG_META_PHENOM: tiff::tags::Tag = tiff::tags::Tag::Unknown(34683);
-const TIFFTAG_META_QUANTA: tiff::tags::Tag = tiff::tags::Tag::Unknown(34682);
+const TIFFTAG_META_PHENOM: exif::Tag = exif::Tag(exif::Context::Tiff, 34683);
+const TIFFTAG_META_QUANTA: exif::Tag = exif::Tag(exif::Context::Tiff, 34682);
 
 struct SourceImage {
     img: GrayImage,
     scale: (f32, f32),
+    focal_length: Option<u32>,
     tilt_angle: Option<f32>,
     filename: String,
 }
@@ -39,6 +34,7 @@ struct ImageMeta {
     scale: (f32, f32),
     tilt_angle: Option<f32>,
     databar_height: u32,
+    focal_length: Option<u32>,
 }
 
 impl SourceImage {
@@ -50,6 +46,7 @@ impl SourceImage {
         Ok(SourceImage {
             img: img.to_image(),
             scale: metadata.scale,
+            focal_length: metadata.focal_length,
             tilt_angle: metadata.tilt_angle,
             filename: path.to_string(),
         })
@@ -68,12 +65,11 @@ impl SourceImage {
             scale: (1.0, 1.0),
             tilt_angle: None,
             databar_height: 0,
+            focal_length: None,
         };
-        match image::ImageFormat::from_path(path) {
-            Ok(image::ImageFormat::Tiff) => {
-                SourceImage::get_metadata_tiff(path).unwrap_or(default_metadata)
-            }
-            _ => default_metadata,
+        match SourceImage::get_metadata_exif(path) {
+            Ok(metadata) => metadata,
+            Err(_) => default_metadata,
         }
     }
 
@@ -82,51 +78,69 @@ impl SourceImage {
             .and_then(|(_, value)| value.parse::<F>().ok())
     }
 
-    fn get_metadata_tiff(path: &str) -> Result<ImageMeta, tiff::TiffError> {
-        let reader = BufReader::new(File::open(path)?);
-        let mut decoder = tiff::decoder::Decoder::new(reader)?;
-        let metadata = decoder
-            .get_tag_ascii_string(TIFFTAG_META_PHENOM)
-            .or(decoder.get_tag_ascii_string(TIFFTAG_META_QUANTA));
+    fn get_metadata_exif(path: &str) -> Result<ImageMeta, exif::Error> {
+        let mut reader = BufReader::new(File::open(path)?);
+        let exif = exif::Reader::new().read_from_container(&mut reader)?;
+        let sem_metadata = exif
+            .get_field(TIFFTAG_META_PHENOM, exif::In::PRIMARY)
+            .or(exif.get_field(TIFFTAG_META_QUANTA, exif::In::PRIMARY));
 
-        match metadata {
-            Ok(data) => {
-                let separators = ['\r', '\n'];
-                let mut section = "";
-                let mut scale_width = None;
-                let mut scale_height = None;
-                let mut tilt_angle = None;
-                let mut databar_height = None;
-                for line in data.split_terminator(&separators[..]) {
-                    if line.starts_with('[') && line.ends_with(']') {
-                        section = line;
-                        continue;
+        let mut result_metadata = ImageMeta {
+            scale: (1.0, 1.0),
+            tilt_angle: None,
+            databar_height: 0,
+            focal_length: None,
+        };
+        let sem_metadata = if let Some(metadata) = sem_metadata {
+            match metadata.value {
+                exif::Value::Ascii(ref data) => {
+                    Some(data.iter().fold(String::new(), |acc, block| {
+                        acc + std::str::from_utf8(block.as_slice())
+                            .ok()
+                            .unwrap_or_default()
+                    }))
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
+        if let Some(data) = sem_metadata {
+            const SEPARATORS: [char; 2] = ['\r', '\n'];
+            let mut section = "";
+            let mut scale_width = None;
+            let mut scale_height = None;
+            for line in data.split_terminator(&SEPARATORS[..]) {
+                if line.starts_with('[') && line.ends_with(']') {
+                    section = line;
+                    continue;
+                }
+                if section.eq("[Scan]") {
+                    if line.starts_with("PixelWidth") {
+                        scale_width = scale_width.or(SourceImage::tag_value(line));
+                    } else if line.starts_with("PixelHeight") {
+                        scale_height = scale_height.or(SourceImage::tag_value(line));
                     }
-                    if section.eq("[Scan]") {
-                        if line.starts_with("PixelWidth") {
-                            scale_width = scale_width.or(SourceImage::tag_value(line));
-                        } else if line.starts_with("PixelHeight") {
-                            scale_height = scale_height.or(SourceImage::tag_value(line));
-                        }
-                    } else if section.eq("[Stage]") {
-                        if line.starts_with("StageT=") {
-                            // TODO: use rotation (see "Real scale (Tomasi) stuff.pdf")
-                            // or allow to specify a custom depth scale (e.g. a negative one)
-                            tilt_angle = tilt_angle.or(SourceImage::tag_value(line))
-                        }
-                    } else if section.eq("[PrivateFei]") && line.starts_with("DatabarHeight=") {
-                        databar_height = databar_height.or(SourceImage::tag_value(line))
+                } else if section.eq("[Stage]") {
+                    if line.starts_with("StageT=") {
+                        // TODO: use rotation (see "Real scale (Tomasi) stuff.pdf")
+                        result_metadata.tilt_angle = SourceImage::tag_value(line)
+                    }
+                } else if section.eq("[PrivateFei]") && line.starts_with("DatabarHeight=") {
+                    if let Some(databar_height) = SourceImage::tag_value(line) {
+                        result_metadata.databar_height = databar_height;
                     }
                 }
-                let metadata = ImageMeta {
-                    scale: (scale_width.unwrap_or(1.0), scale_height.unwrap_or(1.0)),
-                    tilt_angle,
-                    databar_height: databar_height.unwrap_or(0),
-                };
-                Ok(metadata)
             }
-            Err(e) => Err(e),
+            result_metadata.scale = (scale_width.unwrap_or(1.0), scale_height.unwrap_or(1.0));
         }
+
+        if let Some(focal_length) =
+            exif.get_field(exif::Tag::FocalLengthIn35mmFilm, exif::In::PRIMARY)
+        {
+            result_metadata.focal_length = focal_length.value.get_uint(0);
+        }
+        Ok(result_metadata)
     }
 
     fn resize(&self, scale: f32) -> DMatrix<u8> {
@@ -143,6 +157,24 @@ impl SourceImage {
         }
         img
     }
+
+    fn calibration_matrix(&self, focal_length: Option<u32>) -> Matrix3<f64> {
+        // Scale focal length: f_img/f_35mm == width / 36mm (because 35mm film is 36mm wide).
+        let max_width = self.img.width().max(self.img.height()) as f64;
+        let focal_length =
+            focal_length.or(self.focal_length).unwrap_or(1) as f64 / 36.0 * max_width;
+        Matrix3::new(
+            focal_length,
+            0.0,
+            self.img.width() as f64 / 2.0,
+            0.0,
+            focal_length,
+            self.img.height() as f64 / 2.0,
+            0.0,
+            0.0,
+            1.0,
+        )
+    }
 }
 
 struct ImageReconstruction {
@@ -151,6 +183,7 @@ struct ImageReconstruction {
     projection_mode: fundamentalmatrix::ProjectionMode,
     vertex_mode: output::VertexMode,
     triangulation: triangulation::Triangulation,
+    focal_length: Option<u32>,
 }
 
 pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
@@ -181,6 +214,7 @@ pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
     // Most 3D viewers don't display coordinates below 0, reset to default 1.0 - instead of image metadata
     //let out_scale = img1.scale;
     let out_scale = (1.0, 1.0, args.scale as f64);
+    let focal_length = args.focal_length;
 
     let triangulation_projection = match args.projection {
         crate::ProjectionMode::Parallel => triangulation::ProjectionMode::Affine,
@@ -196,6 +230,7 @@ pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
         projection_mode,
         vertex_mode,
         triangulation,
+        focal_length,
     };
 
     if args.img_src.len() > 2 && interpolation_mode != output::InterpolationMode::None {
@@ -237,10 +272,26 @@ impl ImageReconstruction {
             "Image {} has scale width {:?}, height {:?}",
             img1_filename, img1.scale.0, img1.scale.1
         );
+        if let Some(focal_length) = img1.focal_length {
+            println!(
+                "Image {} has focal length {} equivalent to 35mm film",
+                img1.filename, focal_length
+            );
+        } else if self.projection_mode == fundamentalmatrix::ProjectionMode::Perspective {
+            println!("Couldn't extract focal length from image {}", img1.filename);
+        }
         println!(
             "Image {} has scale width {:?}, height {:?}",
             img2_filename, img2.scale.0, img1.scale.1
         );
+        if let Some(focal_length) = img1.focal_length {
+            println!(
+                "Image {} has focal length {} equivalent to 35mm film",
+                img2.filename, focal_length
+            );
+        } else if self.projection_mode == fundamentalmatrix::ProjectionMode::Perspective {
+            println!("Couldn't extract focal length from image {}", img2.filename);
+        }
         let tilt_angle = img1
             .tilt_angle
             .and_then(|a1| img2.tilt_angle.map(|a2| a2 - a1));
@@ -267,6 +318,10 @@ impl ImageReconstruction {
             }
         };
 
+        self.triangulation.push_calibration(
+            &img1.calibration_matrix(self.focal_length),
+            &img2.calibration_matrix(self.focal_length),
+        );
         match self.triangulate_surface(fm.f, correlated_points) {
             Ok(()) => Ok(()),
             Err(err) => {
