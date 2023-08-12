@@ -264,8 +264,6 @@ struct Camera {
     r: Vector3<f64>,
     r_matrix: Matrix3<f64>,
     t: Vector3<f64>,
-    epipole1: Option<(f64, f64)>,
-    epipole2: Option<(f64, f64)>,
 }
 
 impl Camera {
@@ -296,8 +294,6 @@ impl Camera {
             r,
             r_matrix,
             t: t.to_owned(),
-            epipole1: None,
-            epipole2: None,
         }
     }
 
@@ -378,14 +374,6 @@ impl PerspectiveTriangulation {
         let index = self.projections.len().saturating_sub(1);
         self.extend_tracks(correlated_points, index);
 
-        let (epipole1, epipole2) = if let Some(epipoles) =
-            PerspectiveTriangulation::extract_epipoles(fundamental_matrix)
-        {
-            epipoles
-        } else {
-            return Err(TriangulationError::new("Failed to extract epipoles"));
-        };
-
         if self.projections.is_empty() {
             let (k1, k2) = if self.calibration.len() == 2 {
                 (self.calibration[0], self.calibration[1])
@@ -393,8 +381,7 @@ impl PerspectiveTriangulation {
                 return Err(TriangulationError::new("Missing calibration matrix"));
             };
             let p1 = k1 * Matrix3x4::identity();
-            let mut camera1 = Camera::decode(&k1, &Matrix3::identity(), &Vector3::zeros());
-            camera1.epipole2 = Some(epipole1);
+            let camera1 = Camera::decode(&k1, &Matrix3::identity(), &Vector3::zeros());
             self.projections.push(p1);
             let p2 = match self.find_projection_matrix(
                 fundamental_matrix,
@@ -407,8 +394,7 @@ impl PerspectiveTriangulation {
             };
             let camera2_r = p2.fixed_view::<3, 3>(0, 0);
             let camera2_t = p2.column(3);
-            let mut camera2 = Camera::decode(&k2, &camera2_r.into(), &camera2_t.into());
-            camera2.epipole1 = Some(epipole2);
+            let camera2 = Camera::decode(&k2, &camera2_r.into(), &camera2_t.into());
 
             let p2 = k2 * p2;
             self.projections.push(p2);
@@ -428,14 +414,10 @@ impl PerspectiveTriangulation {
                     ))
                 }
             };
-            let mut camera2 = match self.recover_relative_pose(&k2, &k2_inv, progress_listener) {
+            let camera2 = match self.recover_relative_pose(&k2, &k2_inv, progress_listener) {
                 Some(camera2) => camera2,
                 None => return Err(TriangulationError::new("Unable to find projection matrix")),
             };
-            if let Some(camera1) = self.cameras.last_mut() {
-                camera1.epipole2 = Some(epipole1);
-            }
-            camera2.epipole1 = Some(epipole2);
             self.cameras.push(camera2);
             self.projections = self
                 .cameras
@@ -616,18 +598,6 @@ impl PerspectiveTriangulation {
             })
             .max_by(|r1, r2| r1.1.cmp(&r2.1))
             .map(|(p2, _)| p2)
-    }
-
-    fn extract_epipoles(fundamental_matrix: &Matrix3<f64>) -> Option<((f64, f64), (f64, f64))> {
-        let usv = fundamental_matrix.svd(true, false);
-        let u = usv.u?;
-        let e2 = u.column(2);
-        let e2 = (e2[1] / e2[2], e2[0] / e2[2]);
-        let usv = fundamental_matrix.transpose().svd(true, false);
-        let u = usv.u?;
-        let e1 = u.column(2);
-        let e1 = (e1[1] / e1[2], e1[0] / e1[2]);
-        Some((e1, e2))
     }
 
     fn recover_relative_pose<PL: ProgressListener>(
@@ -971,43 +941,20 @@ impl PerspectiveTriangulation {
     }
 
     fn prune_tracks(&mut self) {
-        const EPIPOLE_SAFETY_RADIUS: f64 = 15.0;
         for img_i in 0..self.cameras.len() {
             let camera = &self.cameras[img_i];
 
             // Clear points which are in the back of the camers.
             self.points3d
                 .iter_mut()
-                .enumerate()
                 .par_bridge()
-                .for_each(|(i, out_point3d)| {
+                .for_each(|out_point3d| {
                     let point3d = if let Some(point3d) = out_point3d {
                         point3d
                     } else {
                         return;
                     };
                     if !camera.point_in_front(&point3d) {
-                        *out_point3d = None;
-                    }
-                    let track = &self.tracks[i];
-                    let near_epipole = track.range().flat_map(|i| track.get(i)).all(|point2d| {
-                        let outside_epipole1 = if let Some(epipole) = camera.epipole1 {
-                            let dx = point2d.0 as f64 - epipole.0;
-                            let dy = point2d.1 as f64 - epipole.1;
-                            (dx * dx + dy * dy).sqrt() < EPIPOLE_SAFETY_RADIUS
-                        } else {
-                            true
-                        };
-                        let outside_epipole2 = if let Some(epipole) = camera.epipole2 {
-                            let dx = point2d.0 as f64 - epipole.0;
-                            let dy = point2d.1 as f64 - epipole.1;
-                            (dx * dx + dy * dy).sqrt() < EPIPOLE_SAFETY_RADIUS
-                        } else {
-                            true
-                        };
-                        outside_epipole1 && outside_epipole2
-                    });
-                    if near_epipole {
                         *out_point3d = None;
                     }
                 });
