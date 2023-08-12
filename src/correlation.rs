@@ -821,7 +821,11 @@ mod gpu {
             // Init adapter.
             let instance = wgpu::Instance::default();
             let adapter_options = wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::None,
+                power_preference: if low_power {
+                    wgpu::PowerPreference::LowPower
+                } else {
+                    wgpu::PowerPreference::HighPerformance
+                },
                 force_fallback_adapter: false,
                 compatible_surface: None,
             };
