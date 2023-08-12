@@ -262,11 +262,13 @@ impl Track {
 struct Camera {
     k: Matrix3<f64>,
     r: Vector3<f64>,
+    r_matrix: Matrix3<f64>,
     t: Vector3<f64>,
 }
 
 impl Camera {
     fn decode(k: &Matrix3<f64>, r: &Matrix3<f64>, t: &Vector3<f64>) -> Camera {
+        let r_matrix = r.clone();
         let (r_x, r_y, r_z) = if r[(0, 2)] < 1.0 {
             if r[(0, 2)] > -1.0 {
                 let r_y = r[(0, 2)].asin();
@@ -290,8 +292,15 @@ impl Camera {
         Camera {
             k: k.to_owned(),
             r,
+            r_matrix,
             t: t.to_owned(),
         }
+    }
+
+    fn update_params(&mut self, delta_r: &Vector3<f64>, delta_t: &Vector3<f64>) {
+        self.r += delta_r;
+        self.t += delta_t;
+        self.r_matrix = self.matrix_r();
     }
 
     fn matrix_r(&self) -> Matrix3<f64> {
@@ -333,8 +342,12 @@ impl Camera {
         rotation_x * rotation_y * rotation_z
     }
 
+    fn point_in_front(&self, point3d: &Vector3<f64>) -> bool {
+        (self.r_matrix * (point3d + self.r_matrix.tr_mul(&self.t))).z > 0.0
+    }
+
     fn projection(&self) -> Matrix3x4<f64> {
-        let mut projection = self.matrix_r().insert_column(3, 0.0);
+        let mut projection = self.r_matrix.insert_column(3, 0.0);
         projection.column_mut(3).copy_from(&self.t);
         self.k * projection
     }
@@ -367,7 +380,6 @@ impl PerspectiveTriangulation {
             } else {
                 return Err(TriangulationError::new("Missing calibration matrix"));
             };
-            // For the first pair, find a temporary projection matrix to estimate 3D points.
             let p1 = k1 * Matrix3x4::identity();
             let camera1 = Camera::decode(&k1, &Matrix3::identity(), &Vector3::zeros());
             self.projections.push(p1);
@@ -380,41 +392,42 @@ impl PerspectiveTriangulation {
                 Some(p2) => p2,
                 None => return Err(TriangulationError::new("Unable to find projection matrix")),
             };
+            let camera2_r = p2.fixed_view::<3, 3>(0, 0);
+            let camera2_t = p2.column(3);
+            let camera2 = Camera::decode(&k2, &camera2_r.into(), &camera2_t.into());
 
             let p2 = k2 * p2;
             self.projections.push(p2);
+            self.cameras = vec![camera1.clone(), camera2];
             self.triangulate_tracks();
-
-            self.cameras = vec![camera1];
-            self.projections = vec![p1];
-        }
-
-        let k2 = if self.calibration.len() == self.projections.len() + 1 {
-            self.calibration[self.projections.len()]
         } else {
-            return Err(TriangulationError::new("Missing calibration matrix"));
-        };
-        let k2_inv = match k2.pseudo_inverse(f64::EPSILON) {
-            Ok(k_inverse) => k_inverse,
-            Err(_) => {
-                return Err(TriangulationError::new(
-                    "Unable to invert calibration matrix",
-                ))
-            }
-        };
-        let camera2 = match self.recover_relative_pose(&k2, &k2_inv, progress_listener) {
-            Some(camera2) => camera2,
-            None => return Err(TriangulationError::new("Unable to find projection matrix")),
-        };
-        self.cameras.push(camera2);
-        self.projections = self
-            .cameras
-            .iter()
-            .map(|camera| camera.projection())
-            .collect();
+            let k2 = if self.calibration.len() == self.projections.len() + 1 {
+                self.calibration[self.projections.len()]
+            } else {
+                return Err(TriangulationError::new("Missing calibration matrix"));
+            };
+            let k2_inv = match k2.pseudo_inverse(f64::EPSILON) {
+                Ok(k_inverse) => k_inverse,
+                Err(_) => {
+                    return Err(TriangulationError::new(
+                        "Unable to invert calibration matrix",
+                    ))
+                }
+            };
+            let camera2 = match self.recover_relative_pose(&k2, &k2_inv, progress_listener) {
+                Some(camera2) => camera2,
+                None => return Err(TriangulationError::new("Unable to find projection matrix")),
+            };
+            self.cameras.push(camera2);
+            self.projections = self
+                .cameras
+                .iter()
+                .map(|camera| camera.projection())
+                .collect();
 
-        self.points3d.clear();
-        self.triangulate_tracks();
+            self.points3d.clear();
+            self.triangulate_tracks();
+        }
 
         Ok(())
     }
@@ -494,18 +507,6 @@ impl PerspectiveTriangulation {
         if point4d.w.abs() < PERSPECTIVE_SCALE_THRESHOLD {
             return None;
         }
-        // TODO 0.17 Extract this into a separate function; LM optimization still needs an error
-        // value.
-        let point3d = point4d.remove_row(3).unscale(point4d.w);
-        track.range().all(|i| {
-            if i >= self.cameras.len() {
-                return true;
-            }
-            let camera = &self.cameras[i];
-            let r = camera.matrix_r();
-            let t = camera.t;
-            (r * (point3d + r.transpose() * t)).z > 0.0
-        });
 
         Some(point4d)
     }
@@ -520,7 +521,8 @@ impl PerspectiveTriangulation {
                 Some(point4d.remove_row(3).unscale(point4d.w))
             })
             .collect::<Vec<_>>();
-        self.points3d.append(&mut new_points3d)
+        self.points3d.append(&mut new_points3d);
+        self.prune_tracks();
     }
 
     fn find_projection_matrix(
@@ -559,6 +561,7 @@ impl PerspectiveTriangulation {
                 p2.fixed_view_mut::<3, 3>(0, 0).copy_from(&r);
                 p2.column_mut(3).copy_from(&t);
                 let p2_calibrated = k2 * p2;
+                let camera2 = Camera::decode(&k2, &r, &t);
                 let points_count: usize = correlated_points
                     .column_iter()
                     .enumerate()
@@ -585,9 +588,8 @@ impl PerspectiveTriangulation {
                                 } else {
                                     return false;
                                 };
-                                // TODO 0.17 Use the extracted "point in front of camera" function.
                                 let point3d = point4d.remove_row(3).unscale(point4d.w);
-                                point3d.z > 0.0 && (r * (point3d + r.transpose() * t)).z > 0.0
+                                point3d.z > 0.0 && camera2.point_in_front(&point3d)
                             })
                             .count()
                     })
@@ -938,6 +940,46 @@ impl PerspectiveTriangulation {
         self.image_shapes.push(correlated_points.shape());
     }
 
+    fn prune_tracks(&mut self) {
+        for img_i in 0..self.cameras.len() {
+            let camera = &self.cameras[img_i];
+
+            // Clear points which are in the back of the camers.
+            self.points3d
+                .iter_mut()
+                .par_bridge()
+                .for_each(|out_point3d| {
+                    let point3d = if let Some(point3d) = out_point3d {
+                        point3d
+                    } else {
+                        return;
+                    };
+                    if !camera.point_in_front(&point3d) {
+                        *out_point3d = None;
+                    }
+                });
+
+            // Remove tracks which have ended and have an invalid configuration.
+            // TODO 0.17 Use Vec::retain (store point3d inside track).
+            let mut insert_pos = 0usize;
+            for i in 0..self.points3d.len() {
+                if self.tracks[i].range().end < self.cameras.len() && self.points3d[i].is_none() {
+                    continue;
+                }
+                if i == insert_pos {
+                    continue;
+                }
+                self.points3d[insert_pos] = self.points3d[i];
+                self.tracks[insert_pos] = self.tracks[i].clone();
+                insert_pos += 1;
+            }
+            self.tracks.truncate(insert_pos);
+            self.points3d.truncate(insert_pos);
+            self.tracks.shrink_to_fit();
+            self.points3d.shrink_to_fit();
+        }
+    }
+
     fn bundle_adjustment<PL: ProgressListener>(
         &mut self,
         progress_listener: Option<&PL>,
@@ -976,7 +1018,9 @@ impl PerspectiveTriangulation {
     fn filter_outliers(&mut self) {
         // TODO: replace this with something better?
         for img_i in 0..self.cameras.len() {
-            let projection = self.cameras[img_i].projection();
+            let camera = &self.cameras[img_i];
+            let camera_r = camera.r_matrix;
+            let camera_rt_t = camera_r.tr_mul(&camera.t);
             let (nrows, ncols) = self
                 .tracks
                 .iter()
@@ -998,11 +1042,11 @@ impl PerspectiveTriangulation {
                     return;
                 };
                 let point3d = if let Some(point3d) = self.points3d[i] {
-                    point3d.insert_row(3, 1.0)
+                    point3d
                 } else {
                     return;
                 };
-                let depth = (projection * point3d).z;
+                let depth = (camera_r * (point3d + camera_rt_t)).z;
                 point_depths[point2d] = Some(depth)
             });
 
@@ -1010,7 +1054,7 @@ impl PerspectiveTriangulation {
                 .iter_mut()
                 .enumerate()
                 .par_bridge()
-                .for_each(|(i, point3d)| {
+                .for_each(|(i, out_point3d)| {
                     let track = &self.tracks[i];
                     let point2d = if let Some(point) = track.get(img_i) {
                         (point.0 as usize, point.1 as usize)
@@ -1018,7 +1062,7 @@ impl PerspectiveTriangulation {
                         return;
                     };
                     if !point_not_outlier(&point_depths, point2d.0, point2d.1) {
-                        *point3d = None;
+                        *out_point3d = None;
                     }
                 });
         }
@@ -1251,13 +1295,10 @@ impl BundleAdjustment<'_> {
             _ => Vector3::zeros(),
         };
         let mut p_plus = camera.clone();
-        p_plus.r += delta_r;
-        p_plus.t += delta_t;
+        p_plus.update_params(&delta_r, &delta_t);
         let mut p_minus = camera.clone();
-        p_minus.r -= delta_r;
-        p_minus.t -= delta_t;
+        p_minus.update_params(&-delta_r, &-delta_t);
 
-        // TODO: pre-compute projection matrices
         let p_plus = p_plus.projection();
         let p_minus = p_minus.projection();
 
