@@ -1660,8 +1660,9 @@ impl BundleAdjustment<'_> {
     fn update_params(&mut self, delta: &MatrixXx1<f64>) {
         for view_j in 0..self.cameras.len() {
             let camera = &mut self.cameras[view_j];
-            camera.r += delta.fixed_rows::<3>(BundleAdjustment::CAMERA_PARAMETERS * view_j);
-            camera.t += delta.fixed_rows::<3>(BundleAdjustment::CAMERA_PARAMETERS * view_j + 3);
+            let delta_r = delta.fixed_rows::<3>(BundleAdjustment::CAMERA_PARAMETERS * view_j);
+            let delta_t = delta.fixed_rows::<3>(BundleAdjustment::CAMERA_PARAMETERS * view_j + 3);
+            camera.update_params(&delta_r.into(), &delta_t.into());
         }
         self.projections = self
             .cameras
