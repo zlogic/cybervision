@@ -14,8 +14,8 @@ use crate::correlation;
 const PERSPECTIVE_VALUE_RANGE: f64 = 100.0;
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
 const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 1.0;
-const OUTLIER_FILTER_SEARCH_AREA: usize = 5;
-const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 10;
+const OUTLIER_FILTER_SEARCH_AREA: usize = 50;
+const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 250;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 10_000;
@@ -443,11 +443,10 @@ impl PerspectiveTriangulation {
         &mut self,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
+        self.filter_outliers(progress_listener);
         if self.bundle_adjustment {
             self.bundle_adjustment(progress_listener)?;
         }
-
-        //self.filter_outliers();
 
         let surface = self
             .tracks
@@ -1015,8 +1014,10 @@ impl PerspectiveTriangulation {
         Ok(())
     }
 
-    fn filter_outliers(&mut self) {
+    fn filter_outliers<PL: ProgressListener>(&mut self, progress_listener: Option<&PL>) {
         // TODO: replace this with something better?
+        let counter = AtomicUsize::new(0);
+        let points_count = (self.cameras.len() * self.points3d.len()) as f32;
         for img_i in 0..self.cameras.len() {
             let camera = &self.cameras[img_i];
             let camera_r = camera.r_matrix;
@@ -1055,6 +1056,11 @@ impl PerspectiveTriangulation {
                 .enumerate()
                 .par_bridge()
                 .for_each(|(i, out_point3d)| {
+                    if let Some(pl) = progress_listener {
+                        let value =
+                            counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / points_count;
+                        pl.report_status(0.1 * value);
+                    }
                     let track = &self.tracks[i];
                     let point2d = if let Some(point) = track.get(img_i) {
                         (point.0 as usize, point.1 as usize)
@@ -1698,7 +1704,7 @@ impl BundleAdjustment<'_> {
         for iter in 0..BUNDLE_ADJUSTMENT_MAX_ITERATIONS {
             if let Some(pl) = progress_listener {
                 let value = iter as f32 / BUNDLE_ADJUSTMENT_MAX_ITERATIONS as f32;
-                pl.report_status(value);
+                pl.report_status(0.1 + 0.9 * value);
             }
             let delta = self.calculate_delta_step();
             let delta = if let Some(delta) = delta {
