@@ -1,5 +1,5 @@
-use crate::crosscorrelation;
-use crate::crosscorrelation::PointCorrelations;
+use crate::correlation;
+use crate::correlation::PointCorrelations;
 use crate::fundamentalmatrix;
 use crate::fundamentalmatrix::FundamentalMatrix;
 use crate::orb;
@@ -178,7 +178,7 @@ impl SourceImage {
 }
 
 struct ImageReconstruction {
-    hardware_mode: crosscorrelation::HardwareMode,
+    hardware_mode: correlation::HardwareMode,
     interpolation_mode: output::InterpolationMode,
     projection_mode: fundamentalmatrix::ProjectionMode,
     vertex_mode: output::VertexMode,
@@ -195,9 +195,9 @@ pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
     };
 
     let hardware_mode = match args.mode {
-        crate::HardwareMode::Gpu => crosscorrelation::HardwareMode::Gpu,
-        crate::HardwareMode::GpuLowPower => crosscorrelation::HardwareMode::GpuLowPower,
-        crate::HardwareMode::Cpu => crosscorrelation::HardwareMode::Cpu,
+        crate::HardwareMode::Gpu => correlation::HardwareMode::Gpu,
+        crate::HardwareMode::GpuLowPower => correlation::HardwareMode::GpuLowPower,
+        crate::HardwareMode::Cpu => correlation::HardwareMode::Cpu,
     };
 
     let interpolation_mode = match args.interpolation {
@@ -472,9 +472,9 @@ impl ImageReconstruction {
 
         let pb = new_progress_bar(false);
         let projection_mode = match self.projection_mode {
-            fundamentalmatrix::ProjectionMode::Affine => crosscorrelation::ProjectionMode::Affine,
+            fundamentalmatrix::ProjectionMode::Affine => correlation::ProjectionMode::Affine,
             fundamentalmatrix::ProjectionMode::Perspective => {
-                crosscorrelation::ProjectionMode::Perspective
+                correlation::ProjectionMode::Perspective
             }
         };
 
@@ -653,7 +653,7 @@ impl pointmatching::ProgressListener for ProgressBar {
     }
 }
 
-impl crosscorrelation::ProgressListener for CorrelationProgressBar<'_> {
+impl correlation::ProgressListener for CorrelationProgressBar<'_> {
     fn report_status(&self, pos: f32) {
         let percent_complete =
             self.total_percent_complete + pos * self.scale * self.scale / self.total_percent;

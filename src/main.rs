@@ -1,7 +1,7 @@
 use std::process::exit;
 
 use clap::Parser;
-mod crosscorrelation;
+mod correlation;
 mod fundamentalmatrix;
 mod orb;
 mod output;
