@@ -87,7 +87,6 @@ impl Triangulation {
                     cameras: vec![],
                     tracks: vec![],
                     image_shapes: vec![],
-                    points3d: vec![],
                     scale,
                     bundle_adjustment,
                 }),
@@ -216,14 +215,15 @@ impl AffineTriangulation {
 struct Track {
     start_index: usize,
     points: Vec<Match>,
+    point3d: Option<Vector3<f64>>,
 }
 
 impl Track {
     fn new(start_index: usize, point: Match) -> Track {
-        let points = vec![point];
         Track {
             start_index,
-            points,
+            points: vec![point],
+            point3d: None,
         }
     }
 
@@ -359,7 +359,6 @@ struct PerspectiveTriangulation {
     cameras: Vec<Camera>,
     tracks: Vec<Track>,
     image_shapes: Vec<(usize, usize)>,
-    points3d: Vec<Option<Vector3<f64>>>,
     scale: (f64, f64, f64),
     bundle_adjustment: bool,
 }
@@ -383,7 +382,7 @@ impl PerspectiveTriangulation {
             let p1 = k1 * Matrix3x4::identity();
             let camera1 = Camera::decode(&k1, &Matrix3::identity(), &Vector3::zeros());
             self.projections.push(p1);
-            let p2 = match self.find_projection_matrix(
+            let p2 = match PerspectiveTriangulation::find_projection_matrix(
                 fundamental_matrix,
                 &k1,
                 &k2,
@@ -425,7 +424,6 @@ impl PerspectiveTriangulation {
                 .map(|camera| camera.projection())
                 .collect();
 
-            self.points3d.clear();
             self.triangulate_tracks();
         }
 
@@ -451,14 +449,13 @@ impl PerspectiveTriangulation {
         let surface = self
             .tracks
             .iter()
-            .enumerate()
             .par_bridge()
-            .flat_map(|(i, track)| {
+            .flat_map(|track| {
                 let index = track.range().start;
                 let point2d = track.first()?;
                 let point2d = (point2d.1 as usize, point2d.0 as usize);
 
-                let point3d = self.points3d[i]?;
+                let point3d = track.point3d?;
 
                 let point = Point::new(point2d, point3d, index);
                 Some(point)
@@ -469,11 +466,7 @@ impl PerspectiveTriangulation {
     }
 
     #[inline]
-    fn triangulate_track(
-        &self,
-        track: &Track,
-        projections: &[Matrix3x4<f64>],
-    ) -> Option<Vector4<f64>> {
+    fn triangulate_track(track: &Track, projections: &[Matrix3x4<f64>]) -> Option<Vector4<f64>> {
         let points_projection = track
             .range()
             .flat_map(|i| {
@@ -511,21 +504,15 @@ impl PerspectiveTriangulation {
     }
 
     fn triangulate_tracks(&mut self) {
-        let mut new_points3d = self
-            .tracks
-            .par_iter()
-            .skip(self.points3d.len())
-            .map(|track: &Track| {
-                let point4d = self.triangulate_track(track, &self.projections)?;
-                Some(point4d.remove_row(3).unscale(point4d.w))
-            })
-            .collect::<Vec<_>>();
-        self.points3d.append(&mut new_points3d);
+        self.tracks.par_iter_mut().for_each(|track| {
+            // All existing triangulated points will be overwritten.
+            track.point3d = PerspectiveTriangulation::triangulate_track(track, &self.projections)
+                .map(|point4d| point4d.remove_row(3).unscale(point4d.w));
+        });
         self.prune_tracks();
     }
 
     fn find_projection_matrix(
-        &self,
         fundamental_matrix: &Matrix3<f64>,
         k1: &Matrix3<f64>,
         k2: &Matrix3<f64>,
@@ -580,8 +567,12 @@ impl PerspectiveTriangulation {
                                 let track = Track {
                                     start_index: 0,
                                     points: vec![point1, point2],
+                                    point3d: None,
                                 };
-                                let point4d = self.triangulate_track(&track, &[p1, p2_calibrated]);
+                                let point4d = PerspectiveTriangulation::triangulate_track(
+                                    &track,
+                                    &[p1, p2_calibrated],
+                                );
                                 let point4d = if let Some(point4d) = point4d {
                                     point4d
                                 } else {
@@ -619,13 +610,12 @@ impl PerspectiveTriangulation {
         let linked_tracks = self
             .tracks
             .iter()
-            .enumerate()
-            .filter(|(track_i, track)| {
+            .filter(|track| {
                 let view_i = self.image_shapes.len() - 1;
                 track.range().len() > linked_track_len
                     && track.range().end == track_len
                     && track.get(view_i).is_some()
-                    && self.points3d[*track_i].is_some()
+                    && track.point3d.is_some()
             })
             .map(|track| track.to_owned())
             .collect::<Vec<_>>();
@@ -656,7 +646,6 @@ impl PerspectiveTriangulation {
                     // Select points
                     let inliers = linked_tracks
                         .choose_multiple(rng, RANSAC_N)
-                        .map(|(i, track)| (*i, *track))
                         .collect::<Vec<_>>();
                     if inliers.len() != RANSAC_N {
                         return None;
@@ -664,10 +653,10 @@ impl PerspectiveTriangulation {
 
                     let inliers_tracks = inliers
                         .iter()
-                        .map(|(_, track)| (*track).to_owned())
+                        .map(|track| (*track).to_owned())
                         .collect::<Vec<_>>();
 
-                    self.recover_pose_from_points(k_inv, &inliers)
+                    PerspectiveTriangulation::recover_pose_from_points(k_inv, inliers.as_slice())
                         .into_iter()
                         .filter_map(|(r, t)| {
                             let camera = Camera::decode(k, &r, &t);
@@ -676,17 +665,21 @@ impl PerspectiveTriangulation {
                             let mut projections = self.projections.clone();
                             projections.push(projection);
 
-                            let (count, _) =
-                                self.tracks_reprojection_error(&inliers_tracks, &projections, true);
+                            let (count, _) = PerspectiveTriangulation::tracks_reprojection_error(
+                                &inliers_tracks,
+                                &projections,
+                                true,
+                            );
                             if count != RANSAC_N {
                                 return None;
                             }
 
-                            let (count, error) = self.tracks_reprojection_error(
-                                &unlinked_tracks,
-                                &projections,
-                                false,
-                            );
+                            let (count, error) =
+                                PerspectiveTriangulation::tracks_reprojection_error(
+                                    &unlinked_tracks,
+                                    &projections,
+                                    false,
+                                );
                             Some((camera, count, error / (count as f64)))
                         })
                         .reduce(reduce_best_result)
@@ -714,16 +707,15 @@ impl PerspectiveTriangulation {
     }
 
     fn recover_pose_from_points(
-        &self,
         k_inv: &Matrix3<f64>,
-        inliers: &[(usize, &Track)],
+        inliers: &[&Track],
     ) -> Vec<(Matrix3<f64>, Vector3<f64>)> {
         let mut inliers = inliers
             .iter()
-            .filter_map(|(i, track)| {
+            .filter_map(|track| {
                 let p2 = track.last()?;
                 let p2 = (k_inv * Vector3::new(p2.1 as f64, p2.0 as f64, 1.0)).normalize();
-                let point3d = (*(self.points3d.get(*i)?))?;
+                let point3d = track.point3d?;
 
                 Some((p2, point3d))
             })
@@ -848,7 +840,6 @@ impl PerspectiveTriangulation {
     }
 
     fn tracks_reprojection_error(
-        &self,
         tracks: &[Track],
         projections: &[Matrix3x4<f64>],
         inliers: bool,
@@ -864,7 +855,7 @@ impl PerspectiveTriangulation {
         tracks
             .iter()
             .filter_map(|track| {
-                self.point_reprojection_error(track, projections, skip)
+                PerspectiveTriangulation::point_reprojection_error(track, projections, skip)
                     .filter(|error| *error < threshold)
             })
             .fold((0, 0.0f64), |(count, error), match_error| {
@@ -874,12 +865,11 @@ impl PerspectiveTriangulation {
 
     #[inline]
     fn point_reprojection_error(
-        &self,
         track: &Track,
         projections: &[Matrix3x4<f64>],
         skip: usize,
     ) -> Option<f64> {
-        let point4d = self.triangulate_track(track, projections)?;
+        let point4d = PerspectiveTriangulation::triangulate_track(track, projections)?;
         projections
             .iter()
             .enumerate()
@@ -944,38 +934,21 @@ impl PerspectiveTriangulation {
             let camera = &self.cameras[img_i];
 
             // Clear points which are in the back of the camers.
-            self.points3d
-                .iter_mut()
-                .par_bridge()
-                .for_each(|out_point3d| {
-                    let point3d = if let Some(point3d) = out_point3d {
-                        point3d
-                    } else {
-                        return;
-                    };
-                    if !camera.point_in_front(&point3d) {
-                        *out_point3d = None;
-                    }
-                });
+            self.tracks.par_iter_mut().for_each(|track| {
+                let point3d = if let Some(point3d) = track.point3d {
+                    point3d
+                } else {
+                    return;
+                };
+                if !camera.point_in_front(&point3d) {
+                    track.point3d = None;
+                }
+            });
 
             // Remove tracks which have ended and have an invalid configuration.
-            // TODO 0.17 Use Vec::retain (store point3d inside track).
-            let mut insert_pos = 0usize;
-            for i in 0..self.points3d.len() {
-                if self.tracks[i].range().end < self.cameras.len() && self.points3d[i].is_none() {
-                    continue;
-                }
-                if i == insert_pos {
-                    continue;
-                }
-                self.points3d[insert_pos] = self.points3d[i];
-                self.tracks[insert_pos] = self.tracks[i].clone();
-                insert_pos += 1;
-            }
-            self.tracks.truncate(insert_pos);
-            self.points3d.truncate(insert_pos);
+            self.tracks
+                .retain(|track| track.range().end >= self.cameras.len() || track.point3d.is_some());
             self.tracks.shrink_to_fit();
-            self.points3d.shrink_to_fit();
         }
     }
 
@@ -984,32 +957,10 @@ impl PerspectiveTriangulation {
         progress_listener: Option<&PL>,
     ) -> Result<(), TriangulationError> {
         // Only send tracks/points that could be triangulated.
-        let filtered_tracks = self
-            .tracks
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| self.points3d[*i].is_some())
-            .map(|(_, track)| track.to_owned())
-            .collect::<Vec<_>>();
-        let mut filtered_points3d = self
-            .points3d
-            .iter()
-            .filter(|point3d| point3d.is_some())
-            .map(|point3d| point3d.to_owned())
-            .collect::<Vec<_>>();
-        let mut ba = BundleAdjustment::new(
-            self.cameras.clone(),
-            &filtered_tracks,
-            &mut filtered_points3d,
-        );
+        self.tracks.retain(|track| track.point3d.is_some());
+        self.tracks.shrink_to_fit();
+        let mut ba = BundleAdjustment::new(self.cameras.clone(), self.tracks.as_mut_slice());
         self.cameras = ba.optimize(progress_listener)?;
-        drop(ba);
-        drop(filtered_tracks);
-
-        // Write pack updated 3D points.
-        let iter_dest = self.points3d.iter_mut().filter(|point3d| point3d.is_some());
-        let iter_src = filtered_points3d.into_iter();
-        iter_dest.zip(iter_src).for_each(|(dest, src)| *dest = src);
 
         Ok(())
     }
@@ -1017,7 +968,7 @@ impl PerspectiveTriangulation {
     fn filter_outliers<PL: ProgressListener>(&mut self, progress_listener: Option<&PL>) {
         // TODO: replace this with something better?
         let counter = AtomicUsize::new(0);
-        let points_count = (self.cameras.len() * self.points3d.len()) as f32;
+        let points_count = (self.cameras.len() * self.tracks.len()) as f32;
         for img_i in 0..self.cameras.len() {
             let camera = &self.cameras[img_i];
             let camera_r = camera.r_matrix;
@@ -1036,13 +987,13 @@ impl PerspectiveTriangulation {
             let mut point_depths: DMatrix<Option<f64>> =
                 DMatrix::from_element(nrows + 1, ncols + 1, None);
 
-            self.tracks.iter().enumerate().for_each(|(i, track)| {
+            self.tracks.iter().for_each(|track| {
                 let point2d = if let Some(point) = track.get(img_i) {
                     (point.0 as usize, point.1 as usize)
                 } else {
                     return;
                 };
-                let point3d = if let Some(point3d) = self.points3d[i] {
+                let point3d = if let Some(point3d) = track.point3d {
                     point3d
                 } else {
                     return;
@@ -1051,26 +1002,20 @@ impl PerspectiveTriangulation {
                 point_depths[point2d] = Some(depth)
             });
 
-            self.points3d
-                .iter_mut()
-                .enumerate()
-                .par_bridge()
-                .for_each(|(i, out_point3d)| {
-                    if let Some(pl) = progress_listener {
-                        let value =
-                            counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / points_count;
-                        pl.report_status(0.1 * value);
-                    }
-                    let track = &self.tracks[i];
-                    let point2d = if let Some(point) = track.get(img_i) {
-                        (point.0 as usize, point.1 as usize)
-                    } else {
-                        return;
-                    };
-                    if !point_not_outlier(&point_depths, point2d.0, point2d.1) {
-                        *out_point3d = None;
-                    }
-                });
+            self.tracks.par_iter_mut().for_each(|track| {
+                if let Some(pl) = progress_listener {
+                    let value = counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / points_count;
+                    pl.report_status(0.1 * value);
+                }
+                let point2d = if let Some(point) = track.get(img_i) {
+                    (point.0 as usize, point.1 as usize)
+                } else {
+                    return;
+                };
+                if !point_not_outlier(&point_depths, point2d.0, point2d.1) {
+                    track.point3d = None;
+                }
+            });
         }
     }
 
@@ -1254,8 +1199,7 @@ fn point_not_outlier(img: &DMatrix<Option<f64>>, row: usize, col: usize) -> bool
 struct BundleAdjustment<'a> {
     cameras: Vec<Camera>,
     projections: Vec<Matrix3x4<f64>>,
-    tracks: &'a [Track],
-    points3d: &'a mut Vec<Option<Vector3<f64>>>,
+    tracks: &'a mut [Track],
     covariance: f64,
     mu: f64,
 }
@@ -1269,11 +1213,7 @@ impl BundleAdjustment<'_> {
     const RESIDUAL_EPSILON: f64 = 1E-12;
     const RESIDUAL_REDUCTION_EPSILON: f64 = 0.0;
 
-    fn new<'a>(
-        cameras: Vec<Camera>,
-        tracks: &'a [Track],
-        points3d: &'a mut Vec<Option<Vector3<f64>>>,
-    ) -> BundleAdjustment<'a> {
+    fn new<'a>(cameras: Vec<Camera>, tracks: &'a mut [Track]) -> BundleAdjustment<'a> {
         // For now, identity covariance is acceptable.
         let covariance = 1.0;
         let projections = cameras.iter().map(|camera| camera.projection()).collect();
@@ -1281,7 +1221,6 @@ impl BundleAdjustment<'_> {
             cameras,
             projections,
             tracks,
-            points3d,
             covariance,
             mu: BundleAdjustment::INITIAL_MU,
         }
@@ -1375,7 +1314,7 @@ impl BundleAdjustment<'_> {
 
     #[inline]
     fn residual(&self, point_i: usize, view_j: usize) -> Vector2<f64> {
-        let point3d = &self.points3d[point_i];
+        let point3d = &self.tracks[point_i].point3d;
         let projection = &self.projections[view_j];
         let original = if let Some(original) = self.tracks[point_i].get(view_j) {
             original
@@ -1397,8 +1336,8 @@ impl BundleAdjustment<'_> {
 
     fn residual_a(&self, view_j: usize) -> Option<Matrix6x1<f64>> {
         let mut residual = Matrix6x1::zeros();
-        for (point_i, point3d) in self.points3d.iter().enumerate() {
-            let point3d = (*point3d)?;
+        for (point_i, track) in self.tracks.iter().enumerate() {
+            let point3d = track.point3d?;
             let a = self.jacobian_a(&point3d, view_j);
             let res = self.residual(point_i, view_j);
             residual += a.transpose() * self.covariance * res;
@@ -1408,8 +1347,7 @@ impl BundleAdjustment<'_> {
 
     fn residual_b(&self, point_i: usize) -> Option<Vector3<f64>> {
         let mut residual = Vector3::zeros();
-        let point3d = &self.points3d[point_i];
-        let point3d = (*point3d)?;
+        let point3d = self.tracks[point_i].point3d?;
         for view_j in 0..self.cameras.len() {
             let b = self.jacobian_b(&point3d, view_j);
             let res = self.residual(point_i, view_j);
@@ -1421,8 +1359,8 @@ impl BundleAdjustment<'_> {
     #[inline]
     fn calculate_u(&self, view_j: usize) -> Option<Matrix6<f64>> {
         let mut u = Matrix6::zeros();
-        for point3d in self.points3d.iter() {
-            let point3d = (*point3d)?;
+        for track in self.tracks.iter() {
+            let point3d = track.point3d?;
             let a = self.jacobian_a(&point3d, view_j);
             u += a.transpose() * self.covariance * a;
         }
@@ -1482,7 +1420,8 @@ impl BundleAdjustment<'_> {
                     let u = self.calculate_u(view_j)?;
                     s_jk += u;
                 }
-                for point3d in self.points3d.iter() {
+                for track in self.tracks.iter() {
+                    let point3d = &track.point3d;
                     let y_ij = self.calculate_y(point3d, view_j)?;
                     let w_ik = self.calculate_w(point3d, view_k)?;
                     let y_ij_w = y_ij * w_ik.transpose();
@@ -1516,7 +1455,8 @@ impl BundleAdjustment<'_> {
             .map(|view_j| {
                 let mut e_j = self.residual_a(view_j)?;
 
-                for (i, point3d) in self.points3d.iter().enumerate() {
+                for (i, track) in self.tracks.iter().enumerate() {
+                    let point3d = &track.point3d;
                     let y_ij = self.calculate_y(point3d, view_j)?;
                     let res = self.residual_b(i)?;
                     e_j -= y_ij * res;
@@ -1539,16 +1479,17 @@ impl BundleAdjustment<'_> {
     }
 
     fn calculate_delta_b(&self, delta_a: &MatrixXx1<f64>) -> MatrixXx1<f64> {
-        let mut delta_b = MatrixXx1::zeros(self.points3d.len() * 3);
+        let mut delta_b = MatrixXx1::zeros(self.tracks.len() * 3);
 
         let delta_b_blocks = self
-            .points3d
+            .tracks
             .iter()
             .enumerate()
             .par_bridge()
-            .map(|(point_i, point3d)| {
+            .map(|(point_i, track)| {
                 let mut residual_b = self.residual_b(point_i)?;
 
+                let point3d = &track.point3d;
                 for view_j in 0..self.cameras.len() {
                     let w_ij = self.calculate_w(point3d, view_j)?;
                     let delta_a_j =
@@ -1577,11 +1518,11 @@ impl BundleAdjustment<'_> {
     }
 
     fn calculate_residual_vector(&self) -> MatrixXx1<f64> {
-        let mut residuals = MatrixXx1::zeros(self.points3d.len() * self.cameras.len() * 2);
+        let mut residuals = MatrixXx1::zeros(self.tracks.len() * self.cameras.len() * 2);
 
         // TODO: run this in parallel
-        for (i, point_i) in self.points3d.iter().enumerate() {
-            if point_i.is_none() {
+        for (i, track_i) in self.tracks.iter().enumerate() {
+            if track_i.point3d.is_none() {
                 continue;
             }
             for view_j in 0..self.cameras.len() {
@@ -1597,14 +1538,14 @@ impl BundleAdjustment<'_> {
 
     fn calculate_jt_residual(&self) -> MatrixXx1<f64> {
         let mut g = MatrixXx1::zeros(
-            self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS + self.points3d.len() * 3,
+            self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS + self.tracks.len() * 3,
         );
 
         // TODO: run this in parallel
         // gradient = Jt * residual
         // First 6*m rows of Jt are residuals from camera matrices.
-        for (i, point_i) in self.points3d.iter().enumerate() {
-            let point_i = if let Some(point_i) = point_i {
+        for (i, track_i) in self.tracks.iter().enumerate() {
+            let point_i = if let Some(point_i) = &track_i.point3d {
                 point_i
             } else {
                 continue;
@@ -1622,10 +1563,10 @@ impl BundleAdjustment<'_> {
         // Last 3*n rows of Jt are residuals from point coordinates.
         let mut points_target = g.rows_mut(
             self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS,
-            self.points3d.len() * 3,
+            self.tracks.len() * 3,
         );
-        for (i, point_i) in self.points3d.iter().enumerate() {
-            let point_i = if let Some(point_i) = point_i {
+        for (i, track_i) in self.tracks.iter().enumerate() {
+            let point_i = if let Some(point_i) = &track_i.point3d {
                 point_i
             } else {
                 continue;
@@ -1672,18 +1613,18 @@ impl BundleAdjustment<'_> {
 
         let points_source = delta.rows(
             self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS,
-            self.points3d.len() * 3,
+            self.tracks.len() * 3,
         );
 
-        for (i, point_i) in self.points3d.iter_mut().enumerate() {
-            let point_i = if let Some(point_i) = point_i {
+        for (i, track_i) in self.tracks.iter_mut().enumerate() {
+            let point_i = if let Some(point_i) = &track_i.point3d {
                 point_i
             } else {
                 continue;
             };
 
             let point_source = points_source.fixed_rows::<3>(i * 3);
-            *point_i += Vector3::from(point_source);
+            track_i.point3d = Some(point_i + Vector3::from(point_source));
         }
     }
 
@@ -1722,9 +1663,9 @@ impl BundleAdjustment<'_> {
                     .map(|camera| camera.r.norm_squared() + camera.t.norm_squared())
                     .sum::<f64>();
                 let sum_points = self
-                    .points3d
+                    .tracks
                     .iter()
-                    .filter_map(|p| Some((*p)?.norm_squared()))
+                    .filter_map(|track| Some(track.point3d?.norm_squared()))
                     .sum::<f64>();
                 params_norm = (sum_cameras + sum_points).sqrt();
             }
@@ -1735,12 +1676,6 @@ impl BundleAdjustment<'_> {
                 found = true;
                 break;
             }
-
-            let current_cameras = self.cameras.clone();
-            let current_projections = self.projections.clone();
-            let mut current_points3d = self.points3d.clone();
-
-            self.update_params(&delta);
 
             let new_residual = self.calculate_residual_vector();
             let residual_norm_squared = residual.norm_squared();
@@ -1756,6 +1691,7 @@ impl BundleAdjustment<'_> {
                 residual = new_residual;
                 jt_residual = self.calculate_jt_residual();
 
+                self.update_params(&delta);
                 if converged || jt_residual.max().abs() <= BundleAdjustment::GRADIENT_EPSILON {
                     found = true;
                     break;
@@ -1763,10 +1699,6 @@ impl BundleAdjustment<'_> {
                 self.mu *= (1.0f64 / 3.0).max(1.0 - (2.0 * rho - 1.0).powf(3.0));
                 nu = 2.0;
             } else {
-                self.cameras = current_cameras;
-                self.projections = current_projections;
-                self.points3d.clear();
-                self.points3d.append(&mut current_points3d);
                 self.mu *= nu;
                 nu *= 2.0;
             }
