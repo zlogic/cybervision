@@ -1,8 +1,8 @@
 use std::{fmt, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
 
 use nalgebra::{
-    DMatrix, Matrix2x3, Matrix2x6, Matrix3, Matrix3x4, Matrix6, Matrix6x1, Matrix6x3, MatrixXx1,
-    MatrixXx4, Vector2, Vector3, Vector4,
+    DMatrix, Matrix2x3, Matrix2x6, Matrix3, Matrix3x4, Matrix6, MatrixXx1, MatrixXx4, Vector2,
+    Vector3, Vector4,
 };
 
 use rand::seq::SliceRandom;
@@ -441,10 +441,10 @@ impl PerspectiveTriangulation {
         &mut self,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
-        self.filter_outliers(progress_listener);
         if self.bundle_adjustment {
             self.bundle_adjustment(progress_listener)?;
         }
+        self.filter_outliers(progress_listener);
 
         let surface = self
             .tracks
@@ -1005,7 +1005,7 @@ impl PerspectiveTriangulation {
             self.tracks.par_iter_mut().for_each(|track| {
                 if let Some(pl) = progress_listener {
                     let value = counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / points_count;
-                    pl.report_status(0.1 * value);
+                    pl.report_status(0.9 + 0.1 * value);
                 }
                 let point2d = if let Some(point) = track.get(img_i) {
                     (point.0 as usize, point.1 as usize)
@@ -1212,6 +1212,7 @@ impl BundleAdjustment<'_> {
     const DELTA_EPSILON: f64 = 1E-12;
     const RESIDUAL_EPSILON: f64 = 1E-12;
     const RESIDUAL_REDUCTION_EPSILON: f64 = 0.0;
+    const PARALLEL_CHUNK_SIZE: usize = 10000;
 
     fn new<'a>(cameras: Vec<Camera>, tracks: &'a mut [Track]) -> BundleAdjustment<'a> {
         // For now, identity covariance is acceptable.
@@ -1325,49 +1326,13 @@ impl BundleAdjustment<'_> {
             let point4d = point3d.insert_row(3, 1.0);
             let mut projected = projection * point4d;
             projected.unscale_mut(projected.z);
-            let dx = original.1 as f64 - projected.x;
-            let dy = original.0 as f64 - projected.y;
+            let dx = projected.x - original.1 as f64;
+            let dy = projected.y - original.0 as f64;
 
             Vector2::new(dx, dy)
         } else {
             Vector2::zeros()
         }
-    }
-
-    fn residual_a(&self, view_j: usize) -> Option<Matrix6x1<f64>> {
-        let mut residual = Matrix6x1::zeros();
-        for (point_i, track) in self.tracks.iter().enumerate() {
-            let point3d = track.point3d?;
-            let a = self.jacobian_a(&point3d, view_j);
-            let res = self.residual(point_i, view_j);
-            residual += a.transpose() * self.covariance * res;
-        }
-        Some(residual)
-    }
-
-    fn residual_b(&self, point_i: usize) -> Option<Vector3<f64>> {
-        let mut residual = Vector3::zeros();
-        let point3d = self.tracks[point_i].point3d?;
-        for view_j in 0..self.cameras.len() {
-            let b = self.jacobian_b(&point3d, view_j);
-            let res = self.residual(point_i, view_j);
-            residual += b.transpose() * self.covariance * res;
-        }
-        Some(residual)
-    }
-
-    #[inline]
-    fn calculate_u(&self, view_j: usize) -> Option<Matrix6<f64>> {
-        let mut u = Matrix6::zeros();
-        for track in self.tracks.iter() {
-            let point3d = track.point3d?;
-            let a = self.jacobian_a(&point3d, view_j);
-            u += a.transpose() * self.covariance * a;
-        }
-        for i in 0..BundleAdjustment::CAMERA_PARAMETERS {
-            u[(i, i)] += self.mu;
-        }
-        Some(u)
     }
 
     #[inline]
@@ -1387,213 +1352,221 @@ impl BundleAdjustment<'_> {
         }
     }
 
-    #[inline]
-    fn calculate_w(&self, point3d: &Option<Vector3<f64>>, view_j: usize) -> Option<Matrix6x3<f64>> {
-        let point3d = (*point3d)?;
-        let a = self.jacobian_a(&point3d, view_j);
-        let b = self.jacobian_b(&point3d, view_j);
-        Some(a.transpose() * self.covariance * b)
-    }
-
-    #[inline]
-    fn calculate_y(&self, point3d: &Option<Vector3<f64>>, view_j: usize) -> Option<Matrix6x3<f64>> {
-        let v_inv = self.calculate_v_inv(point3d)?;
-        let w = self.calculate_w(point3d, view_j)?;
-        Some(w * v_inv)
-    }
-
-    fn calculate_s(&self) -> DMatrix<f64> {
-        let mut s = DMatrix::<f64>::zeros(
-            self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS,
-            self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS,
-        );
-        // Divide blocks for parallelization.
-        let s_blocks = (0..self.cameras.len())
-            .flat_map(|j| (0..self.cameras.len()).map(|k| (j, k)).collect::<Vec<_>>())
-            .collect::<Vec<_>>();
-
-        let s_blocks = s_blocks
-            .into_par_iter()
-            .map(|(view_j, view_k)| {
-                let mut s_jk = Matrix6::zeros();
-                if view_j == view_k {
-                    let u = self.calculate_u(view_j)?;
-                    s_jk += u;
-                }
-                for track in self.tracks.iter() {
-                    let point3d = &track.point3d;
-                    let y_ij = self.calculate_y(point3d, view_j)?;
-                    let w_ik = self.calculate_w(point3d, view_k)?;
-                    let y_ij_w = y_ij * w_ik.transpose();
-                    s_jk -= y_ij_w;
-                }
-                Some((view_j, view_k, s_jk))
-            })
-            .collect::<Vec<_>>();
-
-        s_blocks.iter().for_each(|block| {
-            let (j, k, s_jk) = if let Some((j, k, s_jk)) = block {
-                (j, k, s_jk)
-            } else {
-                return;
-            };
-            s.fixed_view_mut::<6, 6>(
-                j * BundleAdjustment::CAMERA_PARAMETERS,
-                k * BundleAdjustment::CAMERA_PARAMETERS,
-            )
-            .copy_from(s_jk);
-        });
-
-        s
-    }
-
-    fn calculate_e(&self) -> MatrixXx1<f64> {
-        let mut e = MatrixXx1::zeros(self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS);
-
-        let e_blocks = (0..self.cameras.len())
-            .par_bridge()
-            .map(|view_j| {
-                let mut e_j = self.residual_a(view_j)?;
-
-                for (i, track) in self.tracks.iter().enumerate() {
-                    let point3d = &track.point3d;
-                    let y_ij = self.calculate_y(point3d, view_j)?;
-                    let res = self.residual_b(i)?;
-                    e_j -= y_ij * res;
-                }
-                Some((view_j, e_j))
-            })
-            .collect::<Vec<_>>();
-
-        e_blocks.iter().for_each(|block| {
-            let (j, e_j) = if let Some((j, e_j)) = block {
-                (j, e_j)
-            } else {
-                return;
-            };
-            e.fixed_view_mut::<6, 1>(j * BundleAdjustment::CAMERA_PARAMETERS, 0)
-                .copy_from(e_j);
-        });
-
-        e
-    }
-
-    fn calculate_delta_b(&self, delta_a: &MatrixXx1<f64>) -> MatrixXx1<f64> {
-        let mut delta_b = MatrixXx1::zeros(self.tracks.len() * 3);
-
-        let delta_b_blocks = self
-            .tracks
-            .iter()
-            .enumerate()
-            .par_bridge()
-            .map(|(point_i, track)| {
-                let mut residual_b = self.residual_b(point_i)?;
-
-                let point3d = &track.point3d;
-                for view_j in 0..self.cameras.len() {
-                    let w_ij = self.calculate_w(point3d, view_j)?;
-                    let delta_a_j =
-                        delta_a.fixed_view::<6, 1>(view_j * BundleAdjustment::CAMERA_PARAMETERS, 0);
-                    residual_b -= w_ij.tr_mul(&delta_a_j);
-                }
-
-                let v_inv = self.calculate_v_inv(point3d)?;
-                let delta_b_i = v_inv * residual_b;
-                Some((point_i, delta_b_i))
-            })
-            .collect::<Vec<_>>();
-
-        delta_b_blocks.iter().for_each(|block| {
-            let (i, delta_b_i) = if let Some((i, delta_b_i)) = block {
-                (i, delta_b_i)
-            } else {
-                return;
-            };
-            delta_b
-                .fixed_view_mut::<3, 1>(i * 3, 0)
-                .copy_from(delta_b_i);
-        });
-
-        delta_b
-    }
-
     fn calculate_residual_vector(&self) -> MatrixXx1<f64> {
-        let mut residuals = MatrixXx1::zeros(self.tracks.len() * self.cameras.len() * 2);
+        const PARALLEL_CHUNK_SIZE: usize = BundleAdjustment::PARALLEL_CHUNK_SIZE;
+        let cameras_len = self.cameras.len();
+        let tracks_len = self.tracks.len();
+        let mut residuals = MatrixXx1::zeros(tracks_len * cameras_len * 2);
 
-        // TODO: run this in parallel
-        for (i, track_i) in self.tracks.iter().enumerate() {
-            if track_i.point3d.is_none() {
-                continue;
-            }
-            for view_j in 0..self.cameras.len() {
-                let residual_b_i = self.residual(i, view_j);
-                residuals
-                    .fixed_rows_mut::<2>(i * self.cameras.len() * 2 + view_j)
-                    .copy_from(&residual_b_i);
-            }
+        for (track_i, _) in self.tracks.iter().enumerate().step_by(PARALLEL_CHUNK_SIZE) {
+            let tracks_residuals = self
+                .tracks
+                .iter()
+                .enumerate()
+                .skip(track_i)
+                .take(PARALLEL_CHUNK_SIZE)
+                .par_bridge()
+                .flat_map(|(track_i, track)| {
+                    if track.point3d.is_none() {
+                        return None;
+                    }
+                    let track_residuals = self
+                        .cameras
+                        .iter()
+                        .enumerate()
+                        .map(|(view_j, _)| self.residual(track_i, view_j))
+                        .collect::<Vec<_>>();
+                    Some((track_i, track_residuals))
+                })
+                .collect::<Vec<_>>();
+
+            tracks_residuals
+                .iter()
+                .for_each(|(track_i, track_residuals)| {
+                    for (view_j, residual) in track_residuals.iter().enumerate() {
+                        residuals
+                            .fixed_rows_mut::<2>(track_i * cameras_len * 2 + view_j * 2)
+                            .copy_from(residual);
+                    }
+                });
         }
 
         residuals
     }
 
     fn calculate_jt_residual(&self) -> MatrixXx1<f64> {
-        let mut g = MatrixXx1::zeros(
-            self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS + self.tracks.len() * 3,
-        );
+        const PARALLEL_CHUNK_SIZE: usize = BundleAdjustment::PARALLEL_CHUNK_SIZE;
+        let camera_residuals_len = self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS;
+        let track_residuals_len = self.tracks.len() * 3;
 
-        // TODO: run this in parallel
         // gradient = Jt * residual
-        // First 6*m rows of Jt are residuals from camera matrices.
-        for (i, track_i) in self.tracks.iter().enumerate() {
-            let point_i = if let Some(point_i) = &track_i.point3d {
-                point_i
-            } else {
-                continue;
-            };
-            for view_j in 0..self.cameras.len() {
-                let jac_a_i = self.jacobian_a(point_i, view_j);
-                let residual_a_i = self.residual(i, view_j);
-                let block = jac_a_i.tr_mul(&residual_a_i);
-                let mut target_block =
-                    g.fixed_rows_mut::<6>(view_j * BundleAdjustment::CAMERA_PARAMETERS);
-                target_block += block;
-            }
-        }
+        let mut g = MatrixXx1::zeros(camera_residuals_len + track_residuals_len);
+        for (track_i, _) in self.tracks.iter().enumerate().step_by(PARALLEL_CHUNK_SIZE) {
+            let tracks_gradients = self
+                .tracks
+                .iter()
+                .enumerate()
+                .skip(track_i)
+                .take(PARALLEL_CHUNK_SIZE)
+                .par_bridge()
+                .flat_map(|(track_i, track)| {
+                    let point_i = if let Some(point_i) = &track.point3d {
+                        point_i
+                    } else {
+                        return None;
+                    };
+                    let track_residuals = self
+                        .cameras
+                        .iter()
+                        .enumerate()
+                        .map(|(view_j, _)| {
+                            let jac_a_i = self.jacobian_a(point_i, view_j);
+                            let residual_a_i = self.residual(track_i, view_j);
+                            let camera_jt_residual = jac_a_i.tr_mul(&residual_a_i);
 
-        // Last 3*n rows of Jt are residuals from point coordinates.
-        let mut points_target = g.rows_mut(
-            self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS,
-            self.tracks.len() * 3,
-        );
-        for (i, track_i) in self.tracks.iter().enumerate() {
-            let point_i = if let Some(point_i) = &track_i.point3d {
-                point_i
-            } else {
-                continue;
-            };
-            for view_j in 0..self.cameras.len() {
-                let jac_b_i = self.jacobian_b(point_i, view_j);
-                let residual_b_i = self.residual(i, view_j);
-                let block = jac_b_i.tr_mul(&residual_b_i);
-                let mut target_block = points_target.fixed_rows_mut::<3>(i * 3);
-                target_block += block;
-            }
+                            let jac_b_i = self.jacobian_b(point_i, view_j);
+                            let residual_b_i = self.residual(track_i, view_j);
+                            let point_jt_residual = jac_b_i.tr_mul(&residual_b_i);
+
+                            (camera_jt_residual, point_jt_residual)
+                        })
+                        .collect::<Vec<_>>();
+                    Some((track_i, track_residuals))
+                })
+                .collect::<Vec<_>>();
+
+            tracks_gradients
+                .iter()
+                .for_each(|(track_i, track_residuals)| {
+                    for (view_j, (camera_residual, point_residual)) in
+                        track_residuals.iter().enumerate()
+                    {
+                        // First 6*m rows of Jt are residuals from camera matrices.
+                        let mut target_block =
+                            g.fixed_rows_mut::<6>(view_j * BundleAdjustment::CAMERA_PARAMETERS);
+                        target_block += camera_residual;
+                        // Last 3*n rows of Jt are residuals from point coordinates.
+                        let mut target_block =
+                            g.fixed_rows_mut::<3>(camera_residuals_len + track_i * 3);
+                        target_block += point_residual;
+                    }
+                });
         }
 
         g
     }
 
     fn calculate_delta_step(&self) -> Option<MatrixXx1<f64>> {
-        let s = self.calculate_s();
-        let e = self.calculate_e();
-        let delta_a = s.lu().solve(&e)?;
-        let delta_b = self.calculate_delta_b(&delta_a);
+        const PARALLEL_CHUNK_SIZE: usize = BundleAdjustment::PARALLEL_CHUNK_SIZE;
+        let (mut s, e) = self
+            .tracks
+            .iter()
+            .enumerate()
+            .par_bridge()
+            .flat_map(|(track_i, track)| {
+                let point3d = track.point3d?;
+                let v_inv = self.calculate_v_inv(&track.point3d)?;
 
-        let mut delta = MatrixXx1::zeros(delta_a.len() + delta_b.len());
-        delta.rows_mut(0, delta_a.len()).copy_from(&delta_a);
-        delta
-            .rows_mut(delta_a.len(), delta_b.len())
-            .copy_from(&delta_b);
+                let mut e =
+                    MatrixXx1::zeros(self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS);
+                let mut s = DMatrix::<f64>::zeros(
+                    self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS,
+                    self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS,
+                );
+                for view_j in 0..self.cameras.len() {
+                    let jac_a_j = self.jacobian_a(&point3d, view_j);
+                    let jac_b_j = self.jacobian_b(&point3d, view_j);
+                    let w_ij = jac_a_j.tr_mul(&jac_b_j) * self.covariance;
+                    let u_j = jac_a_j.tr_mul(&jac_a_j) * self.covariance;
+                    let y_ij = w_ij * v_inv;
+                    for view_k in 0..self.cameras.len() {
+                        let jac_ak = self.jacobian_a(&point3d, view_k);
+                        let jac_bk = self.jacobian_b(&point3d, view_k);
+                        let w_ik = jac_ak.tr_mul(&jac_bk) * self.covariance;
+                        let mut s_jk = s.fixed_view_mut::<6, 6>(
+                            view_j * BundleAdjustment::CAMERA_PARAMETERS,
+                            view_k * BundleAdjustment::CAMERA_PARAMETERS,
+                        );
+                        if view_j == view_k {
+                            s_jk += u_j;
+                        }
+                        s_jk -= y_ij * (w_ik.transpose());
+                    }
+
+                    let res_ij = self.residual(track_i, view_j);
+                    let residual_a_ij = jac_a_j.tr_mul(&res_ij) * self.covariance;
+                    let residual_b_ij = jac_b_j.tr_mul(&res_ij) * self.covariance;
+
+                    let mut e_j =
+                        e.fixed_rows_mut::<6>(view_j * BundleAdjustment::CAMERA_PARAMETERS);
+                    e_j.copy_from(&(residual_a_ij - y_ij * residual_b_ij));
+                }
+                Some((s, e))
+            })
+            .reduce(
+                || {
+                    (
+                        DMatrix::<f64>::zeros(
+                            self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS,
+                            self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS,
+                        ),
+                        MatrixXx1::zeros(self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS),
+                    )
+                },
+                |a, b| (a.0 + b.0, a.1 + b.1),
+            );
+
+        for view_i in 0..self.cameras.len() {
+            let mut s_jk = s.fixed_view_mut::<6, 6>(
+                view_i * BundleAdjustment::CAMERA_PARAMETERS,
+                view_i * BundleAdjustment::CAMERA_PARAMETERS,
+            );
+            s_jk.copy_from(&(Matrix6::identity() * self.mu));
+        }
+
+        let delta_a_len = self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS;
+        let delta_b_len = self.tracks.len() * 3;
+
+        let delta_a = s.lu().solve(&e)?;
+
+        let mut delta = MatrixXx1::zeros(delta_a_len + delta_b_len);
+        delta.rows_mut(0, delta_a_len).copy_from(&delta_a);
+        let mut delta_b = delta.rows_mut(delta_a_len, delta_b_len);
+        for (track_i, _) in self.tracks.iter().enumerate().step_by(PARALLEL_CHUNK_SIZE) {
+            let tracks_delta_b = self
+                .tracks
+                .iter()
+                .enumerate()
+                .skip(track_i)
+                .take(PARALLEL_CHUNK_SIZE)
+                .par_bridge()
+                .flat_map(|(track_i, track)| {
+                    let point3d = track.point3d?;
+                    let v_inv = self.calculate_v_inv(&track.point3d)?;
+
+                    let mut delta_b_i = Vector3::zeros();
+                    for view_j in 0..self.cameras.len() {
+                        let jac_a_j = self.jacobian_a(&point3d, view_j);
+                        let jac_b_j = self.jacobian_b(&point3d, view_j);
+                        let w_ij = jac_a_j.tr_mul(&jac_b_j) * self.covariance;
+
+                        let res_ij = self.residual(track_i, view_j);
+                        let residual_b_ij = jac_b_j.tr_mul(&res_ij) * self.covariance;
+
+                        let delta_a_j =
+                            delta_a.fixed_rows::<6>(view_j * BundleAdjustment::CAMERA_PARAMETERS);
+
+                        delta_b_i += v_inv * residual_b_ij - v_inv * w_ij.tr_mul(&delta_a_j);
+                    }
+                    Some((track_i, delta_b_i))
+                })
+                .collect::<Vec<_>>();
+
+            tracks_delta_b.iter().for_each(|(track_i, delta_b_i)| {
+                let mut delta_b = delta_b.fixed_rows_mut::<3>(track_i * 3);
+                delta_b.copy_from(&delta_b_i);
+            });
+        }
 
         Some(delta)
     }
@@ -1646,10 +1619,9 @@ impl BundleAdjustment<'_> {
         for iter in 0..BUNDLE_ADJUSTMENT_MAX_ITERATIONS {
             if let Some(pl) = progress_listener {
                 let value = iter as f32 / BUNDLE_ADJUSTMENT_MAX_ITERATIONS as f32;
-                pl.report_status(0.1 + 0.9 * value);
+                pl.report_status(0.9 * value);
             }
-            let delta = self.calculate_delta_step();
-            let delta = if let Some(delta) = delta {
+            let delta = if let Some(delta) = self.calculate_delta_step() {
                 delta
             } else {
                 return Err(TriangulationError::new("Failed to compute delta vector"));
@@ -1677,6 +1649,16 @@ impl BundleAdjustment<'_> {
                 break;
             }
 
+            let current_cameras = self.cameras.clone();
+            let current_projections = self.projections.clone();
+            let current_points3d = self
+                .tracks
+                .iter()
+                .map(|track| track.point3d)
+                .collect::<Vec<_>>();
+
+            self.update_params(&delta);
+
             let new_residual = self.calculate_residual_vector();
             let residual_norm_squared = residual.norm_squared();
             let new_residual_norm_squared = new_residual.norm_squared();
@@ -1690,8 +1672,6 @@ impl BundleAdjustment<'_> {
 
                 residual = new_residual;
                 jt_residual = self.calculate_jt_residual();
-
-                self.update_params(&delta);
                 if converged || jt_residual.max().abs() <= BundleAdjustment::GRADIENT_EPSILON {
                     found = true;
                     break;
@@ -1699,6 +1679,12 @@ impl BundleAdjustment<'_> {
                 self.mu *= (1.0f64 / 3.0).max(1.0 - (2.0 * rho - 1.0).powf(3.0));
                 nu = 2.0;
             } else {
+                self.cameras = current_cameras;
+                self.projections = current_projections;
+                self.tracks
+                    .iter_mut()
+                    .zip(current_points3d)
+                    .for_each(|(track, point3d)| track.point3d = point3d);
                 self.mu *= nu;
                 nu *= 2.0;
             }
