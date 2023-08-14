@@ -1,8 +1,8 @@
 use std::{fmt, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
 
 use nalgebra::{
-    DMatrix, Matrix2x3, Matrix2x6, Matrix3, Matrix3x4, Matrix6, MatrixXx1, MatrixXx4, Vector2,
-    Vector3, Vector4,
+    DMatrix, Matrix2x3, Matrix2x6, Matrix3, Matrix3x4, Matrix3x6, Matrix6, MatrixXx1, MatrixXx4,
+    Vector2, Vector3, Vector4,
 };
 
 use rand::seq::SliceRandom;
@@ -330,10 +330,9 @@ impl Camera {
             Matrix3::identity()
         } else {
             let u = self.r / theta;
-            let u_skewsymmetric = Matrix3::new(0.0, -u.z, u.y, u.z, 0.0, -u.x, -u.y, u.x, 0.0);
             Matrix3::identity() * theta.cos()
                 + (1.0 - theta.cos()) * u * u.transpose()
-                + u_skewsymmetric * theta.sin()
+                + u.cross_matrix() * theta.sin()
         }
     }
 
@@ -1186,7 +1185,6 @@ struct BundleAdjustment<'a> {
 impl BundleAdjustment<'_> {
     const CAMERA_PARAMETERS: usize = 6;
     const INITIAL_MU: f64 = 1E-3;
-    const JACOBIAN_H: f64 = 0.001;
     const GRADIENT_EPSILON: f64 = 1E-12;
     const DELTA_EPSILON: f64 = 1E-12;
     const RESIDUAL_EPSILON: f64 = 1E-12;
@@ -1206,90 +1204,66 @@ impl BundleAdjustment<'_> {
         }
     }
 
-    fn jacobian_view(&self, camera: &Camera, point: &Vector4<f64>, param: usize) -> Vector2<f64> {
-        let delta_r = match param {
-            0 => Vector3::new(BundleAdjustment::JACOBIAN_H, 0.0, 0.0),
-            1 => Vector3::new(0.0, BundleAdjustment::JACOBIAN_H, 0.0),
-            2 => Vector3::new(0.0, 0.0, BundleAdjustment::JACOBIAN_H),
-            _ => Vector3::zeros(),
-        };
-        let delta_t = match param {
-            3 => Vector3::new(BundleAdjustment::JACOBIAN_H, 0.0, 0.0),
-            4 => Vector3::new(0.0, BundleAdjustment::JACOBIAN_H, 0.0),
-            5 => Vector3::new(0.0, 0.0, BundleAdjustment::JACOBIAN_H),
-            _ => Vector3::zeros(),
-        };
-        let mut p_plus = camera.clone();
-        p_plus.update_params(&delta_r, &delta_t);
-        let mut p_minus = camera.clone();
-        p_minus.update_params(&-delta_r, &-delta_t);
-
-        let p_plus = p_plus.projection();
-        let p_minus = p_minus.projection();
-
-        let projection_plus = p_plus * point;
-        let projection_plus = projection_plus.remove_row(2).unscale(projection_plus.z);
-        let projection_minus = p_minus * point;
-        let projection_minus = projection_minus.remove_row(2).unscale(projection_minus.z);
-        (projection_plus - projection_minus).unscale(2.0 * BundleAdjustment::JACOBIAN_H)
-    }
-
     fn jacobian_a(&self, point3d: &Vector3<f64>, view_j: usize) -> Matrix2x6<f64> {
-        // jac is a 2x6 Jacobian for point i and projection matrix parameter j.
-        let mut jac = Matrix2x6::zeros();
-
+        // See BundleAdjustmentAnalytical.webarchive for more details (using chain rule).
         let camera = &self.cameras[view_j];
+        let projection = &self.projections[view_j];
         let point4d = point3d.insert_row(3, 1.0);
-        // Calculate Jacobian using finite differences (central difference)
-        for i in 0..6 {
-            jac.column_mut(i)
-                .copy_from(&self.jacobian_view(camera, &point4d, i));
-        }
+        let point_projected = projection * point4d;
 
-        jac
+        let d_projection_hpoint =
+            Matrix2x3::new(1.0, 0.0, -point_projected.x, 0.0, 1.0, -point_projected.y)
+                .unscale(point_projected.z);
+        let d_hpoint_translation = &camera.k;
+
+        let mut d_translation_camerapose = Matrix3x6::zeros();
+        // Derivative of rotation matrix, using formula from
+        // "A compact formula for the derivative of a 3-D rotation in exponential coordinates" by Guillermo Gallego, Anthony Yezzi
+        let u = &camera.r;
+        let u_skewsymmetric = u.cross_matrix();
+        if u.norm() > f64::EPSILON {
+            for i in 0..3 {
+                let mut e_i = Vector3::zeros();
+                e_i[i] = 1.0;
+                let d_r_i = (u[i] * u_skewsymmetric
+                    + u.cross(&((Matrix3::identity() - camera.r_matrix) * e_i))
+                        .cross_matrix())
+                    * camera.r_matrix
+                    / u.norm_squared();
+
+                d_translation_camerapose
+                    .column_mut(i)
+                    .copy_from(&(d_r_i * point3d));
+            }
+        } else {
+            // When near zero, derivative of R is equal to u_skewsymmetric.
+            d_translation_camerapose
+                .fixed_view_mut::<3, 3>(0, 0)
+                .copy_from(&-u_skewsymmetric);
+        }
+        d_translation_camerapose
+            .fixed_view_mut::<3, 3>(0, 3)
+            .copy_from(&Matrix3::identity());
+
+        d_projection_hpoint * d_hpoint_translation * d_translation_camerapose
     }
 
     fn jacobian_b(&self, point3d: &Vector3<f64>, view_j: usize) -> Matrix2x3<f64> {
-        // Point coordinates matrix is converted to a single row with coordinates x, y and z.
-        // jac is a 2x3 Jacobian for point i and projection matrix j.
-        let mut jac = Matrix2x3::zeros();
+        // See BundleAdjustmentAnalytical.webarchive for more details (using chain rule).
+        let camera = &self.cameras[view_j];
+        let projection = &self.projections[view_j];
         let point4d = point3d.insert_row(3, 1.0);
+        let point_projected = projection * point4d;
 
-        let projection = self.projections[view_j];
+        let d_projection_hpoint =
+            Matrix2x3::new(1.0, 0.0, -point_projected.x, 0.0, 1.0, -point_projected.y)
+                .unscale(point_projected.z);
 
-        // Using a symbolic formula (not finite differences/central difference), check the Rust LM library for more info.
-        // P is the projection matrix for image
-        // Prc is the r-th row, c-th column of P
-        // X is a 3D coordinate (4-component vector [x y z 1])
+        let d_hpoint_translation = &camera.k;
 
-        // Image contains xpro and ypro (projected point coordinates), affected by projection matrix and the point coordinates.
-        // xpro = (P11*x+P12*y+P13*z+P14)/(P31*x+P32*y+P33*z+P34)
-        // ypro = (P21*x+P22*y+P23*z+P24)/(P31*x+P32*y+P33*z+P34)
-        // To keep things sane, create some aliases
-        // Poi -> i-th element of 3D point e.g. x, y, z, or w
-        // Pr1 = P11*x+P12*y+P13*z+P14
-        // Pr2 = P21*x+P22*y+P23*z+P24
-        // Pr3 = P31*x+P32*y+P33*z+P34
-        let p_r = projection * point4d;
-        // dxpro/dx = (P11*(P32*y+P33*z+P34)-P31*(P12*y+P13*z+P14))/(Pr3^2) = (P11*Pr3[x=0]-P31*Pr1[x=0])/(Pr3^2)
-        // dxpro/di = (P1i*Pr3[i=0]-P3i*Pr1[i=0])/(Pr3^2)
-        // dypro/dx = (P21*(P32*y+P33*z+P34)-P31*(P22*y+P23*z+P24))/(Pr3^2) = (P21*Pr3[x=0]-P31*Pr2[x=0])/(Pr3^2)
-        // dypro/di = (P2i*Pr3[i=0]-P3i*Pr2[i=0])/(Pr3^2)
-        for coord in 0..3 {
-            // Create a vector where coord = 0
-            let mut vec_diff = point4d;
-            vec_diff[coord] = 0.0;
-            // Create projection where coord = 0
-            let p_r_diff = projection * vec_diff;
-            jac[(0, coord)] = (projection[(0, coord)] * p_r_diff[2]
-                - projection[(2, coord)] * p_r_diff[0])
-                / (p_r[2] * p_r[2]);
-            jac[(1, coord)] = (projection[(1, coord)] * p_r_diff[2]
-                - projection[(2, coord)] * p_r_diff[1])
-                / (p_r[2] * p_r[2]);
-        }
+        let d_translation_camerapose = &camera.r_matrix;
 
-        jac
+        d_projection_hpoint * d_hpoint_translation * d_translation_camerapose
     }
 
     #[inline]

@@ -353,9 +353,8 @@ impl FundamentalMatrix {
 
                 // Check sign consistency.
                 let v_t = usv.v_t?;
-                let e1 = v_t.row(v_t.nrows() - 1);
-                let e1_skewsymmetric =
-                    Matrix3::new(0.0, -e1[2], e1[1], e1[2], 0.0, -e1[0], -e1[1], e1[0], 0.0);
+                let e1 = v_t.row(v_t.nrows() - 1).transpose();
+                let e1_skewsymmetric = e1.cross_matrix();
                 let l1 = e1_skewsymmetric * x1;
                 let s = (f * x2).component_mul(&l1).column_sum();
                 if s.iter().all(|s_c| *s_c > 0.0) || s.iter().all(|s_c| *s_c < 0.0) {
