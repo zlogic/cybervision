@@ -15,6 +15,7 @@ const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
 const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 1.0;
 const OUTLIER_FILTER_SEARCH_AREA: usize = 50;
 const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 250;
+const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 10_000;
 // TODO: this should be proportional to image size
@@ -494,6 +495,10 @@ impl PerspectiveTriangulation {
         let usv = a.svd(false, true);
         let vt = usv.v_t?;
         let point4d = vt.row(vt.nrows() - 1).transpose();
+
+        if point4d.w.abs() < PERSPECTIVE_SCALE_THRESHOLD {
+            return None;
+        }
 
         Some(point4d)
     }
