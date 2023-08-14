@@ -15,7 +15,7 @@ const RANSAC_K_PERSPECTIVE: usize = 10_000_000;
 const RANSAC_N_AFFINE: usize = 4;
 const RANSAC_N_PERSPECTIVE: usize = 7;
 const RANSAC_T_AFFINE: f64 = 0.1;
-// TODO 0.17 This might need to be adjusted based on the image size.
+// TODO: This might need to be adjusted based on the image size.
 const RANSAC_T_PERSPECTIVE: f64 = 0.5;
 const RANSAC_D: usize = 10;
 const RANSAC_D_EARLY_EXIT_AFFINE: usize = 1000;
@@ -74,7 +74,6 @@ impl FundamentalMatrix {
         };
         let ransac_t = match projection {
             ProjectionMode::Affine => RANSAC_T_AFFINE,
-            // TODO: should the scale be used here, like it was done in the C version?
             ProjectionMode::Perspective => RANSAC_T_PERSPECTIVE,
         };
         let ransac_d_early_exit = match projection {

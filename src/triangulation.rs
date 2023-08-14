@@ -11,12 +11,10 @@ use rayon::prelude::*;
 
 use crate::correlation;
 
-const PERSPECTIVE_VALUE_RANGE: f64 = 100.0;
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
 const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 1.0;
 const OUTLIER_FILTER_SEARCH_AREA: usize = 50;
 const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 250;
-const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 10_000;
 // TODO: this should be proportional to image size
@@ -343,6 +341,7 @@ impl Camera {
     }
 
     fn point_in_front(&self, point3d: &Vector3<f64>) -> bool {
+        // This is how OpenMVG does it, works great!
         (self.r_matrix * (point3d + self.r_matrix.tr_mul(&self.t))).z > 0.0
     }
 
@@ -495,10 +494,6 @@ impl PerspectiveTriangulation {
         let usv = a.svd(false, true);
         let vt = usv.v_t?;
         let point4d = vt.row(vt.nrows() - 1).transpose();
-
-        if point4d.w.abs() < PERSPECTIVE_SCALE_THRESHOLD {
-            return None;
-        }
 
         Some(point4d)
     }
@@ -1022,35 +1017,14 @@ impl PerspectiveTriangulation {
     fn scale_points(&self, points3d: Surface) -> Surface {
         let scale = &self.scale;
 
-        let (min_x, max_x, min_y, max_y, min_z, max_z) = points3d.iter().fold(
-            (f64::MAX, f64::MIN, f64::MAX, f64::MIN, f64::MAX, f64::MIN),
-            |acc, p| {
-                let x = p.reconstructed.x;
-                let y = p.reconstructed.y;
-                let z = p.reconstructed.z;
-                (
-                    acc.0.min(x),
-                    acc.1.max(x),
-                    acc.2.min(y),
-                    acc.3.max(y),
-                    acc.4.min(z),
-                    acc.5.max(z),
-                )
-            },
-        );
-        let range_adjusted = (max_x - min_x).max(max_y - min_y).max(max_z - min_z);
-
         points3d
             .iter()
             .map(|point| {
                 let mut point = *point;
                 let point3d = &mut point.reconstructed;
-                point3d.x =
-                    scale.0 * PERSPECTIVE_VALUE_RANGE * (point3d.x - min_x) / range_adjusted;
-                point3d.y =
-                    scale.1 * PERSPECTIVE_VALUE_RANGE * (point3d.y - min_y) / range_adjusted;
-                point3d.z =
-                    scale.2 * PERSPECTIVE_VALUE_RANGE * (point3d.z - min_z) / range_adjusted;
+                point3d.x = scale.0 * point3d.x;
+                point3d.y = scale.1 * point3d.y;
+                point3d.z = scale.2 * point3d.z;
 
                 point
             })
