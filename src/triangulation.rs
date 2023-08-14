@@ -266,27 +266,49 @@ struct Camera {
 }
 
 impl Camera {
-    fn decode(k: &Matrix3<f64>, r: &Matrix3<f64>, t: &Vector3<f64>) -> Camera {
+    fn from_matrix(k: &Matrix3<f64>, r: &Matrix3<f64>, t: &Vector3<f64>) -> Camera {
         let r_matrix = r.clone();
-        let (r_x, r_y, r_z) = if r[(0, 2)] < 1.0 {
-            if r[(0, 2)] > -1.0 {
-                let r_y = r[(0, 2)].asin();
-                let r_x = (-r[(1, 2)]).atan2(r[(2, 2)]);
-                let r_z = (-r[(0, 1)]).atan2(r[(0, 0)]);
-                (r_x, r_y, r_z)
+        // Rodrigues formula, using method from "Vector Representation of Rotations" by Carlo Tomasi.
+        let a = (r - r.transpose()) / 2.0;
+        // Decode skew-symmetric matrix a.
+        let rho = Vector3::new(
+            a[(2, 1)] - a[(1, 2)],
+            a[(0, 2)] - a[(2, 0)],
+            a[(1, 0)] - a[(0, 1)],
+        );
+        let s = rho.norm();
+        let c = (r.trace() - 1.0) / 2.0;
+        let r = if s.abs() < f64::EPSILON && (c - 1.0).abs() < f64::EPSILON {
+            Vector3::zeros()
+        } else if s.abs() < f64::EPSILON && (c + 1.0).abs() < f64::EPSILON {
+            let mut v_i = 0;
+            let mut v_norm = 0.0;
+            let r_i = r + Matrix3::identity();
+            for (v_candidate_i, v_candidate) in r_i.column_iter().enumerate() {
+                let v_candidate_norm = v_candidate.norm();
+                if v_candidate_norm > v_norm {
+                    v_i = v_candidate_i;
+                    v_norm = v_candidate_norm;
+                }
+            }
+            let v = r_i.column(v_i);
+            let u = v / v.norm();
+
+            let r = u * std::f64::consts::PI;
+            if (r.norm() - std::f64::consts::PI).abs() < f64::EPSILON
+                && ((r.x.abs() < f64::EPSILON && r.y.abs() < f64::EPSILON && r.z < 0.0)
+                    || (r.x.abs() < f64::EPSILON && r.y < 0.0)
+                    || r.x < 0.0)
+            {
+                -r
             } else {
-                let r_y = -std::f64::consts::FRAC_PI_2;
-                let r_x = r[(1, 0)].atan2(r[(0, 0)]);
-                let r_z = 0.0;
-                (r_x, r_y, r_z)
+                r
             }
         } else {
-            let r_y = std::f64::consts::FRAC_PI_2;
-            let r_x = r[(1, 0)].atan2(r[(0, 0)]);
-            let r_z = 0.0;
-            (r_x, r_y, r_z)
+            let u = rho / s;
+            let theta = s.atan2(c);
+            u * theta
         };
-        let r = Vector3::new(r_x, r_y, r_z);
 
         Camera {
             k: k.to_owned(),
@@ -303,42 +325,16 @@ impl Camera {
     }
 
     fn matrix_r(&self) -> Matrix3<f64> {
-        let (r_x, r_y, r_z) = (self.r.x, self.r.y, self.r.z);
-        let rotation_x = Matrix3::new(
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            r_x.cos(),
-            -r_x.sin(),
-            0.0,
-            r_x.sin(),
-            r_x.cos(),
-        );
-        let rotation_y = Matrix3::new(
-            r_y.cos(),
-            0.0,
-            r_y.sin(),
-            0.0,
-            1.0,
-            0.0,
-            -r_y.sin(),
-            0.0,
-            r_y.cos(),
-        );
-        let rotation_z = Matrix3::new(
-            r_z.cos(),
-            -r_z.sin(),
-            0.0,
-            r_z.sin(),
-            r_z.cos(),
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-        );
-
-        rotation_x * rotation_y * rotation_z
+        let theta = self.r.norm();
+        if theta.abs() < f64::EPSILON {
+            Matrix3::identity()
+        } else {
+            let u = self.r / theta;
+            let u_skewsymmetric = Matrix3::new(0.0, -u.z, u.y, u.z, 0.0, -u.x, -u.y, u.x, 0.0);
+            Matrix3::identity() * theta.cos()
+                + (1.0 - theta.cos()) * u * u.transpose()
+                + u_skewsymmetric * theta.sin()
+        }
     }
 
     fn point_in_front(&self, point3d: &Vector3<f64>) -> bool {
@@ -380,7 +376,7 @@ impl PerspectiveTriangulation {
                 return Err(TriangulationError::new("Missing calibration matrix"));
             };
             let p1 = k1 * Matrix3x4::identity();
-            let camera1 = Camera::decode(&k1, &Matrix3::identity(), &Vector3::zeros());
+            let camera1 = Camera::from_matrix(&k1, &Matrix3::identity(), &Vector3::zeros());
             self.projections.push(p1);
             let p2 = match PerspectiveTriangulation::find_projection_matrix(
                 fundamental_matrix,
@@ -393,7 +389,7 @@ impl PerspectiveTriangulation {
             };
             let camera2_r = p2.fixed_view::<3, 3>(0, 0);
             let camera2_t = p2.column(3);
-            let camera2 = Camera::decode(&k2, &camera2_r.into(), &camera2_t.into());
+            let camera2 = Camera::from_matrix(&k2, &camera2_r.into(), &camera2_t.into());
 
             let p2 = k2 * p2;
             self.projections.push(p2);
@@ -547,7 +543,7 @@ impl PerspectiveTriangulation {
                 p2.fixed_view_mut::<3, 3>(0, 0).copy_from(&r);
                 p2.column_mut(3).copy_from(&t);
                 let p2_calibrated = k2 * p2;
-                let camera2 = Camera::decode(&k2, &r, &t);
+                let camera2 = Camera::from_matrix(&k2, &r, &t);
                 let points_count: usize = correlated_points
                     .column_iter()
                     .enumerate()
@@ -659,7 +655,7 @@ impl PerspectiveTriangulation {
                     PerspectiveTriangulation::recover_pose_from_points(k_inv, inliers.as_slice())
                         .into_iter()
                         .filter_map(|(r, t)| {
-                            let camera = Camera::decode(k, &r, &t);
+                            let camera = Camera::from_matrix(k, &r, &t);
                             let projection = camera.projection();
 
                             let mut projections = self.projections.clone();
@@ -687,7 +683,7 @@ impl PerspectiveTriangulation {
                 .reduce(
                     || {
                         (
-                            Camera::decode(k, &Matrix3::identity(), &Vector3::zeros()),
+                            Camera::from_matrix(k, &Matrix3::identity(), &Vector3::zeros()),
                             0,
                             f64::MAX,
                         )
