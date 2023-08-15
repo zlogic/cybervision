@@ -267,7 +267,6 @@ struct Camera {
 
 impl Camera {
     fn from_matrix(k: &Matrix3<f64>, r: &Matrix3<f64>, t: &Vector3<f64>) -> Camera {
-        let r_matrix = r.clone();
         // Rodrigues formula, using method from "Vector Representation of Rotations" by Carlo Tomasi.
         let a = (r - r.transpose()) / 2.0;
         // Decode skew-symmetric matrix a.
@@ -310,6 +309,7 @@ impl Camera {
             u * theta
         };
 
+        let r_matrix = Camera::matrix_r(&r);
         Camera {
             k: k.to_owned(),
             r,
@@ -321,15 +321,15 @@ impl Camera {
     fn update_params(&mut self, delta_r: &Vector3<f64>, delta_t: &Vector3<f64>) {
         self.r += delta_r;
         self.t += delta_t;
-        self.r_matrix = self.matrix_r();
+        self.r_matrix = Camera::matrix_r(&self.r);
     }
 
-    fn matrix_r(&self) -> Matrix3<f64> {
-        let theta = self.r.norm();
+    fn matrix_r(r: &Vector3<f64>) -> Matrix3<f64> {
+        let theta = r.norm();
         if theta.abs() < f64::EPSILON {
             Matrix3::identity()
         } else {
-            let u = self.r / theta;
+            let u = r / theta;
             Matrix3::identity() * theta.cos()
                 + (1.0 - theta.cos()) * u * u.transpose()
                 + u.cross_matrix() * theta.sin()
@@ -1278,8 +1278,8 @@ impl BundleAdjustment<'_> {
             let point4d = point3d.insert_row(3, 1.0);
             let mut projected = projection * point4d;
             projected.unscale_mut(projected.z);
-            let dx = projected.x - original.1 as f64;
-            let dy = projected.y - original.0 as f64;
+            let dx = original.1 as f64 - projected.x;
+            let dy = original.0 as f64 - projected.y;
 
             Vector2::new(dx, dy)
         } else {
@@ -1372,13 +1372,12 @@ impl BundleAdjustment<'_> {
                         .iter()
                         .enumerate()
                         .map(|(view_j, _)| {
+                            let residual_i_j = self.residual(track_i, view_j);
                             let jac_a_i = self.jacobian_a(point_i, view_j);
-                            let residual_a_i = self.residual(track_i, view_j);
-                            let camera_jt_residual = jac_a_i.tr_mul(&residual_a_i);
+                            let camera_jt_residual = jac_a_i.tr_mul(&residual_i_j);
 
                             let jac_b_i = self.jacobian_b(point_i, view_j);
-                            let residual_b_i = self.residual(track_i, view_j);
-                            let point_jt_residual = jac_b_i.tr_mul(&residual_b_i);
+                            let point_jt_residual = jac_b_i.tr_mul(&residual_i_j);
 
                             (camera_jt_residual, point_jt_residual)
                         })
@@ -1473,7 +1472,7 @@ impl BundleAdjustment<'_> {
                 view_i * BundleAdjustment::CAMERA_PARAMETERS,
                 view_i * BundleAdjustment::CAMERA_PARAMETERS,
             );
-            s_jk.copy_from(&(Matrix6::identity() * self.mu));
+            s_jk += Matrix6::identity() * self.mu;
         }
 
         let delta_a_len = self.cameras.len() * BundleAdjustment::CAMERA_PARAMETERS;
