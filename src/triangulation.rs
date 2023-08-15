@@ -1206,6 +1206,10 @@ impl BundleAdjustment<'_> {
 
     fn jacobian_a(&self, point3d: &Vector3<f64>, view_j: usize) -> Matrix2x6<f64> {
         // See BundleAdjustmentAnalytical.webarchive for more details (using chain rule).
+        if view_j == 0 {
+            // Exclude first camera from bundle adjustment.
+            return Matrix2x6::zeros();
+        }
         let camera = &self.cameras[view_j];
         let projection = &self.projections[view_j];
         let point4d = point3d.insert_row(3, 1.0);
@@ -1260,7 +1264,6 @@ impl BundleAdjustment<'_> {
                 .unscale(point_projected.z);
 
         let d_hpoint_translation = &camera.k;
-
         let d_translation_camerapose = &camera.r_matrix;
 
         d_projection_hpoint * d_hpoint_translation * d_translation_camerapose
