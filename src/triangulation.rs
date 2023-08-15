@@ -439,7 +439,7 @@ impl PerspectiveTriangulation {
         if self.bundle_adjustment {
             self.bundle_adjustment(progress_listener)?;
         }
-        self.filter_outliers(progress_listener);
+        //self.filter_outliers(progress_listener);
 
         let surface = self
             .tracks
@@ -1570,7 +1570,7 @@ impl BundleAdjustment<'_> {
         for iter in 0..BUNDLE_ADJUSTMENT_MAX_ITERATIONS {
             if let Some(pl) = progress_listener {
                 let value = iter as f32 / BUNDLE_ADJUSTMENT_MAX_ITERATIONS as f32;
-                pl.report_status(0.9 * value);
+                pl.report_status(value);
             }
             let delta = if let Some(delta) = self.calculate_delta_step() {
                 delta
