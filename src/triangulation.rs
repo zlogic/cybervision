@@ -19,8 +19,8 @@ const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 10_000;
 // TODO: this should be proportional to image size
-const RANSAC_INLIERS_T: f64 = 5.0;
-const RANSAC_T: f64 = 5.0;
+const RANSAC_INLIERS_T: f64 = 1.0;
+const RANSAC_T: f64 = 3.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 100;
@@ -1202,18 +1202,14 @@ impl BundleAdjustment<'_> {
 
     fn jacobian_a(&self, point3d: &Vector3<f64>, view_j: usize) -> Matrix2x6<f64> {
         // See BundleAdjustmentAnalytical.webarchive for more details (using chain rule).
-        if view_j == 0 {
-            // Exclude first camera from bundle adjustment.
-            return Matrix2x6::zeros();
-        }
         let camera = &self.cameras[view_j];
         let projection = &self.projections[view_j];
         let point4d = point3d.insert_row(3, 1.0);
         let point_projected = projection * point4d;
 
+        let (u, v, w) = (point_projected.x, point_projected.y, point_projected.z);
         let d_projection_hpoint =
-            Matrix2x3::new(1.0, 0.0, -point_projected.x, 0.0, 1.0, -point_projected.y)
-                .unscale(point_projected.z);
+            Matrix2x3::new(1.0 / w, 0.0, -u / (w * w), 0.0, 1.0 / w, -v / (w * w));
         let d_hpoint_translation = &camera.k;
 
         let mut d_translation_camerapose = Matrix3x6::zeros();
@@ -1255,9 +1251,9 @@ impl BundleAdjustment<'_> {
         let point4d = point3d.insert_row(3, 1.0);
         let point_projected = projection * point4d;
 
+        let (u, v, w) = (point_projected.x, point_projected.y, point_projected.z);
         let d_projection_hpoint =
-            Matrix2x3::new(1.0, 0.0, -point_projected.x, 0.0, 1.0, -point_projected.y)
-                .unscale(point_projected.z);
+            Matrix2x3::new(1.0 / w, 0.0, -u / (w * w), 0.0, 1.0 / w, -v / (w * w));
 
         let d_hpoint_translation = &camera.k;
         let d_translation_camerapose = &camera.r_matrix;
@@ -1278,8 +1274,8 @@ impl BundleAdjustment<'_> {
             let point4d = point3d.insert_row(3, 1.0);
             let mut projected = projection * point4d;
             projected.unscale_mut(projected.z);
-            let dx = original.1 as f64 - projected.x;
-            let dy = original.0 as f64 - projected.y;
+            let dx = projected.x - original.1 as f64;
+            let dy = projected.y - original.0 as f64;
 
             Vector2::new(dx, dy)
         } else {
@@ -1289,14 +1285,11 @@ impl BundleAdjustment<'_> {
 
     #[inline]
     fn calculate_v_inv(&self, point3d: &Option<Vector3<f64>>) -> Option<Matrix3<f64>> {
-        let mut v = Matrix3::zeros();
+        let mut v = Matrix3::identity() * self.mu;
         let point3d = (*point3d)?;
         for view_j in 0..self.cameras.len() {
             let b = self.jacobian_b(&point3d, view_j);
-            v += b.transpose() * self.covariance * b;
-        }
-        for i in 0..3 {
-            v[(i, i)] += self.mu;
+            v += b.tr_mul(&b) * self.covariance;
         }
         match v.pseudo_inverse(f64::EPSILON) {
             Ok(v_inv) => Some(v_inv),
@@ -1362,11 +1355,7 @@ impl BundleAdjustment<'_> {
                 .take(PARALLEL_CHUNK_SIZE)
                 .par_bridge()
                 .flat_map(|(track_i, track)| {
-                    let point_i = if let Some(point_i) = &track.point3d {
-                        point_i
-                    } else {
-                        return None;
-                    };
+                    let point_i = &track.point3d?;
                     let track_residuals = self
                         .cameras
                         .iter()
@@ -1431,9 +1420,9 @@ impl BundleAdjustment<'_> {
                     let u_j = jac_a_j.tr_mul(&jac_a_j) * self.covariance;
                     let y_ij = w_ij * v_inv;
                     for view_k in 0..self.cameras.len() {
-                        let jac_ak = self.jacobian_a(&point3d, view_k);
-                        let jac_bk = self.jacobian_b(&point3d, view_k);
-                        let w_ik = jac_ak.tr_mul(&jac_bk) * self.covariance;
+                        let jac_a_k = self.jacobian_a(&point3d, view_k);
+                        let jac_b_k = self.jacobian_b(&point3d, view_k);
+                        let w_ik = jac_a_k.tr_mul(&jac_b_k) * self.covariance;
                         let mut s_jk = s.fixed_view_mut::<6, 6>(
                             view_j * BundleAdjustment::CAMERA_PARAMETERS,
                             view_k * BundleAdjustment::CAMERA_PARAMETERS,
@@ -1450,7 +1439,7 @@ impl BundleAdjustment<'_> {
 
                     let mut e_j =
                         e.fixed_rows_mut::<6>(view_j * BundleAdjustment::CAMERA_PARAMETERS);
-                    e_j.copy_from(&(residual_a_ij - y_ij * residual_b_ij));
+                    e_j += residual_a_ij - y_ij * residual_b_ij;
                 }
                 Some((s, e))
             })
@@ -1614,8 +1603,12 @@ impl BundleAdjustment<'_> {
             let residual_norm_squared = residual.norm_squared();
             let new_residual_norm_squared = new_residual.norm_squared();
 
-            let rho = (residual_norm_squared - new_residual_norm_squared)
-                / (delta.tr_mul(&(delta.scale(self.mu) + &jt_residual)))[0];
+            let rho_denominator = delta
+                .row_iter()
+                .enumerate()
+                .map(|(i, delta_i)| delta_i[0] * (delta_i[0] * self.mu + jt_residual[i]))
+                .sum::<f64>();
+            let rho = (residual_norm_squared - new_residual_norm_squared) / rho_denominator;
 
             if rho > 0.0 {
                 let converged = residual_norm_squared.sqrt() - new_residual_norm_squared.sqrt()
