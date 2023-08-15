@@ -9,12 +9,8 @@ use rand::seq::SliceRandom;
 use rand::{rngs::SmallRng, SeedableRng};
 use rayon::prelude::*;
 
-use crate::correlation;
-
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
-const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 1.0;
-const OUTLIER_FILTER_SEARCH_AREA: usize = 50;
-const OUTLIER_FILTER_MIN_NEIGHBORS: usize = 250;
+const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 2.0;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 10_000;
@@ -436,10 +432,10 @@ impl PerspectiveTriangulation {
         &mut self,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
+        self.filter_outliers();
         if self.bundle_adjustment {
             self.bundle_adjustment(progress_listener)?;
         }
-        //self.filter_outliers(progress_listener);
 
         let surface = self
             .tracks
@@ -960,58 +956,52 @@ impl PerspectiveTriangulation {
         Ok(())
     }
 
-    fn filter_outliers<PL: ProgressListener>(&mut self, progress_listener: Option<&PL>) {
+    fn filter_outliers(&mut self) {
         // TODO: replace this with something better?
-        let counter = AtomicUsize::new(0);
-        let points_count = (self.cameras.len() * self.tracks.len()) as f32;
-        for img_i in 0..self.cameras.len() {
-            let camera = &self.cameras[img_i];
-            let camera_r = camera.r_matrix;
-            let camera_rt_t = camera_r.tr_mul(&camera.t);
-            let (nrows, ncols) = self
-                .tracks
-                .iter()
-                .flat_map(|track| {
-                    let point = track.get(img_i)?;
-                    Some((point.0 as usize, point.1 as usize))
-                })
-                .fold((usize::MIN, usize::MIN), |acc, (row, col)| {
-                    (acc.0.max(row), acc.1.max(col))
-                });
-
-            let mut point_depths: DMatrix<Option<f64>> =
-                DMatrix::from_element(nrows + 1, ncols + 1, None);
-
-            self.tracks.iter().for_each(|track| {
-                let point2d = if let Some(point) = track.get(img_i) {
-                    (point.0 as usize, point.1 as usize)
-                } else {
-                    return;
-                };
-                let point3d = if let Some(point3d) = track.point3d {
-                    point3d
-                } else {
-                    return;
-                };
-                let depth = (camera_r * (point3d + camera_rt_t)).z;
-                point_depths[point2d] = Some(depth)
-            });
-
-            self.tracks.par_iter_mut().for_each(|track| {
-                if let Some(pl) = progress_listener {
-                    let value = counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / points_count;
-                    pl.report_status(0.9 + 0.1 * value);
-                }
-                let point2d = if let Some(point) = track.get(img_i) {
-                    (point.0 as usize, point.1 as usize)
-                } else {
-                    return;
-                };
-                if !point_not_outlier(&point_depths, point2d.0, point2d.1) {
-                    track.point3d = None;
-                }
-            });
+        let (sum_coords, npoints) = self
+            .tracks
+            .par_iter()
+            .flat_map(|track| {
+                let point3d = track.point3d?;
+                Some((point3d, 1))
+            })
+            .reduce(
+                || (Vector3::zeros(), 0),
+                |acc, (point3d, npoints)| (acc.0 + point3d, acc.1 + npoints),
+            );
+        if npoints == 0 {
+            return;
         }
+        let center_mass = sum_coords.unscale(npoints as f64);
+        let stdev = self
+            .tracks
+            .par_iter()
+            .flat_map(|track| {
+                let point3d = &track.point3d?;
+                let delta = point3d - center_mass;
+                let stdev = Vector3::new(delta.x * delta.x, delta.y * delta.y, delta.z * delta.z);
+                Some(stdev)
+            })
+            .reduce(|| (Vector3::zeros()), |acc, stdev| (acc + stdev));
+        let stdev = stdev / npoints as f64;
+        let inlier_range = stdev * OUTLIER_FILTER_STDEV_THRESHOLD;
+
+        self.tracks.par_iter_mut().for_each(|track| {
+            let point3d = if let Some(point3d) = &track.point3d {
+                point3d
+            } else {
+                return;
+            };
+            let fits = (point3d - center_mass)
+                .iter()
+                .enumerate()
+                .all(|(i, val)| val.abs() < inlier_range[i]);
+            if !fits {
+                track.point3d = None;
+            }
+        });
+        self.tracks.retain(|track| track.point3d.is_some());
+        self.tracks.shrink_to_fit();
     }
 
     fn scale_points(&self, points3d: Surface) -> Surface {
@@ -1110,64 +1100,6 @@ fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut [(f64, f64)]) {
             break;
         }
     }
-}
-
-#[inline]
-fn point_not_outlier(img: &DMatrix<Option<f64>>, row: usize, col: usize) -> bool {
-    const SEARCH_RADIUS: usize = OUTLIER_FILTER_SEARCH_AREA;
-    const SEARCH_WIDTH: usize = SEARCH_RADIUS * 2 + 1;
-    if !correlation::point_inside_bounds::<SEARCH_RADIUS>(img.shape(), row, col) {
-        return false;
-    };
-    let point_distance = if let Some(v) = img[(row, col)] {
-        v
-    } else {
-        return false;
-    };
-    let mut avg = 0.0;
-    let mut stdev = 0.0;
-    let mut count = 0;
-    for r in 0..SEARCH_WIDTH {
-        let srow = (row + r).saturating_sub(SEARCH_RADIUS);
-        for c in 0..SEARCH_WIDTH {
-            let scol = (col + c).saturating_sub(SEARCH_RADIUS);
-            if srow == row && scol == col {
-                continue;
-            }
-            let value = if let Some(v) = img[(srow, scol)] {
-                v
-            } else {
-                continue;
-            };
-            avg += value;
-            count += 1;
-        }
-    }
-    if count < OUTLIER_FILTER_MIN_NEIGHBORS {
-        return false;
-    }
-
-    avg /= count as f64;
-
-    for r in 0..SEARCH_WIDTH {
-        let srow = (row + r).saturating_sub(SEARCH_RADIUS);
-        for c in 0..SEARCH_WIDTH {
-            let scol = (col + c).saturating_sub(SEARCH_RADIUS);
-            if srow == row && scol == col {
-                continue;
-            }
-            let value = if let Some(v) = img[(srow, scol)] {
-                v
-            } else {
-                continue;
-            };
-            let delta = value - avg;
-            stdev += delta * delta;
-        }
-    }
-    stdev = (stdev / count as f64).sqrt();
-
-    (point_distance - avg).abs() < stdev * OUTLIER_FILTER_STDEV_THRESHOLD
 }
 
 struct BundleAdjustment<'a> {
