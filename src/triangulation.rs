@@ -504,7 +504,7 @@ impl PerspectiveTriangulation {
             track.point3d = PerspectiveTriangulation::triangulate_track(track, &self.projections)
                 .map(|point4d| point4d.remove_row(3).unscale(point4d.w));
         });
-        self.prune_tracks(false);
+        self.prune_tracks();
     }
 
     fn find_projection_matrix(
@@ -924,7 +924,7 @@ impl PerspectiveTriangulation {
         self.image_shapes.push(correlated_points.shape());
     }
 
-    fn prune_tracks(&mut self, remove_permanently: bool) {
+    fn prune_tracks(&mut self) {
         for img_i in 0..self.cameras.len() {
             let camera = &self.cameras[img_i];
 
@@ -941,12 +941,9 @@ impl PerspectiveTriangulation {
             });
 
             // Remove tracks which have ended and have an invalid configuration.
-            if remove_permanently {
-                self.tracks.retain(|track| {
-                    track.range().end >= self.cameras.len() || track.point3d.is_some()
-                });
-                self.tracks.shrink_to_fit();
-            }
+            self.tracks
+                .retain(|track| track.range().end >= self.cameras.len() || track.point3d.is_some());
+            self.tracks.shrink_to_fit();
         }
     }
 
@@ -964,7 +961,6 @@ impl PerspectiveTriangulation {
     }
 
     fn filter_outliers<PL: ProgressListener>(&mut self, progress_listener: Option<&PL>) {
-        self.prune_tracks(true);
         // TODO: replace this with something better?
         let counter = AtomicUsize::new(0);
         let points_count = (self.cameras.len() * self.tracks.len()) as f32;
