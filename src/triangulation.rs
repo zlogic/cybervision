@@ -11,6 +11,7 @@ use rayon::prelude::*;
 
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
 const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 2.0;
+const EXTEND_TRACKS_SEARCH_RADIUS: usize = 3;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 10_000;
@@ -879,11 +880,34 @@ impl PerspectiveTriangulation {
 
     fn extend_tracks(&mut self, correlated_points: &DMatrix<Option<Match>>, index: usize) {
         let mut remaining_points = correlated_points.clone();
-
         self.tracks.iter_mut().for_each(|track| {
-            let last_pos = track
-                .last()
-                .and_then(|last| correlated_points[(last.0 as usize, last.1 as usize)]);
+            let last_pos = track.last().and_then(|last| {
+                let row_start = (last.0 as usize).saturating_sub(EXTEND_TRACKS_SEARCH_RADIUS);
+                let col_start = (last.1 as usize).saturating_sub(EXTEND_TRACKS_SEARCH_RADIUS);
+                let row_end =
+                    (last.0 as usize + EXTEND_TRACKS_SEARCH_RADIUS).min(correlated_points.nrows());
+                let col_end =
+                    (last.1 as usize + EXTEND_TRACKS_SEARCH_RADIUS).min(correlated_points.ncols());
+                let mut min_distance = None;
+                let mut best_match = None;
+                for row in row_start..row_end {
+                    for col in col_start..col_end {
+                        let next_point = if let Some(point) = correlated_points[(row, col)] {
+                            point
+                        } else {
+                            continue;
+                        };
+                        let drow = row.max(last.0 as usize) - row.min(last.0 as usize);
+                        let dcol = col.max(last.1 as usize) - col.min(last.1 as usize);
+                        let distance = drow * drow + dcol * dcol;
+                        if min_distance.map_or(true, |min_distance| distance < min_distance) {
+                            min_distance = Some(distance);
+                            best_match = Some(next_point);
+                        }
+                    }
+                }
+                best_match
+            });
 
             if let Some(last_pos) = last_pos {
                 track.add(index + 1, last_pos);
