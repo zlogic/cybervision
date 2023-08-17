@@ -11,13 +11,13 @@ use rayon::prelude::*;
 
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
 const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 2.0;
-const EXTEND_TRACKS_SEARCH_RADIUS: usize = 5;
+const EXTEND_TRACKS_SEARCH_RADIUS: usize = 7;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 10_000;
 // TODO: this should be proportional to image size
-const RANSAC_INLIERS_T: f64 = 3.0;
-const RANSAC_T: f64 = 3.0;
+const RANSAC_INLIERS_T: f64 = 15.0;
+const RANSAC_T: f64 = 50.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 100;
