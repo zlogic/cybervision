@@ -17,8 +17,8 @@ const POSE_ESTIMATION_MIN_CORRELATION: f32 = 0.8;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 100_000;
 // TODO: this should be proportional to image size
-const RANSAC_INLIERS_T: f64 = 3.0;
-const RANSAC_T: f64 = 5.0;
+const RANSAC_INLIERS_T: f64 = 15.0;
+const RANSAC_T: f64 = 25.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 1000;
