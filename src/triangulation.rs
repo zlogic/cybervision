@@ -13,11 +13,11 @@ const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
 const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 2.0;
 const EXTEND_TRACKS_SEARCH_RADIUS: usize = 3;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
-const POSE_ESTIMATION_MIN_CORRELATION: f32 = 0.9;
+const POSE_ESTIMATION_MIN_CORRELATION: f32 = 0.8;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 100_000;
 // TODO: this should be proportional to image size
-const RANSAC_INLIERS_T: f64 = 1.0;
+const RANSAC_INLIERS_T: f64 = 3.0;
 const RANSAC_T: f64 = 5.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 100_000;
@@ -441,10 +441,10 @@ impl PerspectiveTriangulation {
         &mut self,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
-        self.filter_outliers();
         if self.bundle_adjustment {
             self.bundle_adjustment(progress_listener)?;
         }
+        self.filter_outliers();
 
         let surface = self
             .tracks
@@ -631,6 +631,10 @@ impl PerspectiveTriangulation {
             })
             .map(|track| track.to_owned())
             .collect::<Vec<_>>();
+
+        if linked_tracks.len() < RANSAC_N || unlinked_tracks.len() < RANSAC_D {
+            return None;
+        }
 
         let ransac_outer = RANSAC_K / RANSAC_CHECK_INTERVAL;
 
