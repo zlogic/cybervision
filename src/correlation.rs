@@ -293,12 +293,18 @@ impl PointCorrelations {
         for row in 0..nrows {
             for col in 0..ncols {
                 let point = out_data[(row, col)];
-                if point.is_none() {
-                    continue;
-                }
                 let out_row = (row as f32 / scale) as usize;
                 let out_col = (col as f32 / scale) as usize;
-                correlated_points[(out_row, out_col)] = point;
+                let out_point = &mut correlated_points[(out_row, out_col)];
+                let point_corr = if let Some(point) = point {
+                    point.2
+                } else {
+                    continue;
+                };
+                if out_point.map_or(false, |out_point| out_point.2 < point_corr) {
+                    continue;
+                }
+                *out_point = point;
             }
         }
 
@@ -891,7 +897,7 @@ mod gpu {
             );
             let buffer_internal_img1 = init_buffer(
                 &device,
-                (img1_pixels * 4) * std::mem::size_of::<f32>(),
+                (img1_pixels * 2) * std::mem::size_of::<f32>(),
                 true,
                 false,
             );
