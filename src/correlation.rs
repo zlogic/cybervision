@@ -189,20 +189,19 @@ impl PointCorrelations {
         scale: f32,
         progress_listener: Option<&PL>,
     ) -> Result<(), Box<dyn error::Error>> {
-        // Start with reverse direction - so that the last correlation values will be from the forward direction.
-        self.correlate_images_step(
-            &img2,
-            &img1,
-            scale,
-            progress_listener,
-            CorrelationDirection::Reverse,
-        )?;
         self.correlate_images_step(
             &img1,
             &img2,
             scale,
             progress_listener,
             CorrelationDirection::Forward,
+        )?;
+        self.correlate_images_step(
+            &img2,
+            &img1,
+            scale,
+            progress_listener,
+            CorrelationDirection::Reverse,
         )?;
 
         self.cross_check_filter(scale, CorrelationDirection::Forward);
@@ -272,8 +271,8 @@ impl PointCorrelations {
                 if let Some(pl) = progress_listener {
                     let value = counter.fetch_add(1, Ordering::Relaxed) as f32 / out_data_cols;
                     let value = match dir {
-                        CorrelationDirection::Forward => 0.5 + value / 2.0,
-                        CorrelationDirection::Reverse => value / 2.0,
+                        CorrelationDirection::Forward => value / 2.0,
+                        CorrelationDirection::Reverse => 0.5 + value / 2.0,
                     };
                     pl.report_status(value);
                 }
@@ -797,8 +796,9 @@ mod gpu {
         buffer_internal_img2: wgpu::Buffer,
         buffer_internal_int: wgpu::Buffer,
         buffer_out: wgpu::Buffer,
-        buffer_out_corr: wgpu::Buffer,
         buffer_out_reverse: wgpu::Buffer,
+        buffer_out_corr: wgpu::Buffer,
+        buffer_reverse_corr: wgpu::Buffer,
 
         pipeline_configs: HashMap<String, ComputePipelineConfig>,
     }
@@ -919,16 +919,22 @@ mod gpu {
                 false,
                 false,
             );
-            let buffer_out_corr = init_buffer(
-                &device,
-                img1_pixels * 1 * std::mem::size_of::<f32>(),
-                false,
-                false,
-            );
             let buffer_out_reverse = init_buffer(
                 &device,
                 img2_pixels * 2 * std::mem::size_of::<i32>(),
                 true,
+                false,
+            );
+            let buffer_out_corr = init_buffer(
+                &device,
+                img1_pixels * std::mem::size_of::<f32>(),
+                false,
+                false,
+            );
+            let buffer_reverse_corr = init_buffer(
+                &device,
+                img2_pixels * std::mem::size_of::<f32>(),
+                false,
                 false,
             );
 
@@ -951,8 +957,9 @@ mod gpu {
                 buffer_internal_img2,
                 buffer_internal_int,
                 buffer_out,
-                buffer_out_corr,
                 buffer_out_reverse,
+                buffer_out_corr,
+                buffer_reverse_corr,
                 pipeline_configs: HashMap::new(),
             };
             Ok(result)
@@ -983,8 +990,8 @@ mod gpu {
             let mut progressbar_completed_percentage = 0.02;
             let send_progress = |value| {
                 let value = match dir {
-                    CorrelationDirection::Forward => 0.5 + value * 0.98 / 2.0,
-                    CorrelationDirection::Reverse => value * 0.98 / 2.0,
+                    CorrelationDirection::Forward => value * 0.98 / 2.0,
+                    CorrelationDirection::Reverse => 0.5 + value * 0.98 / 2.0,
                 };
                 if let Some(pl) = progress_listener {
                     pl.report_status(value);
@@ -1202,6 +1209,7 @@ mod gpu {
             self.buffer_internal_img2.destroy();
             self.buffer_internal_int.destroy();
             self.buffer_out_reverse.destroy();
+            self.buffer_reverse_corr.destroy();
 
             let mut out_image = DMatrix::from_element(self.img1_shape.0, self.img1_shape.1, None);
 
@@ -1258,7 +1266,7 @@ mod gpu {
             let out_buffer_slice_mapped = out_buffer_slice.get_mapped_range();
             let out_corr_buffer_slice_mapped = out_corr_buffer_slice.get_mapped_range();
             let out_data: &[i32] = bytemuck::cast_slice(&out_buffer_slice_mapped);
-            let out_corr_data: &[f32] = bytemuck::cast_slice(&out_buffer_slice_mapped);
+            let out_corr_data: &[f32] = bytemuck::cast_slice(&out_corr_buffer_slice_mapped);
             for col in 0..out_image.ncols() {
                 for row in 0..out_image.nrows() {
                     let pos = 2 * (row * out_image.ncols() + col);
@@ -1283,9 +1291,17 @@ mod gpu {
             entry_point: &str,
             dir: &CorrelationDirection,
         ) -> ComputePipelineConfig {
-            let (buffer_out, buffer_out_reverse) = match dir {
-                CorrelationDirection::Forward => (&self.buffer_out, &self.buffer_out_reverse),
-                CorrelationDirection::Reverse => (&self.buffer_out_reverse, &self.buffer_out),
+            let (buffer_out, buffer_out_reverse, buffer_out_corr) = match dir {
+                CorrelationDirection::Forward => (
+                    &self.buffer_out,
+                    &self.buffer_out_reverse,
+                    &self.buffer_out_corr,
+                ),
+                CorrelationDirection::Reverse => (
+                    &self.buffer_out_reverse,
+                    &self.buffer_out,
+                    &self.buffer_reverse_corr,
+                ),
             };
 
             let correlation_layout =
@@ -1355,9 +1371,7 @@ mod gpu {
                                 ty: wgpu::BindingType::Buffer {
                                     ty: wgpu::BufferBindingType::Storage { read_only: false },
                                     has_dynamic_offset: false,
-                                    min_binding_size: wgpu::BufferSize::new(
-                                        self.buffer_out_corr.size(),
-                                    ),
+                                    min_binding_size: wgpu::BufferSize::new(buffer_out_corr.size()),
                                 },
                                 count: None,
                             },
@@ -1440,7 +1454,7 @@ mod gpu {
                         },
                         wgpu::BindGroupEntry {
                             binding: 5,
-                            resource: self.buffer_out_corr.as_entire_binding(),
+                            resource: buffer_out_corr.as_entire_binding(),
                         },
                     ],
                 });

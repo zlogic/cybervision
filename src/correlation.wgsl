@@ -272,7 +272,6 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var data_img1 = internals_img1[img1_width*y1+x1];
     let avg1 = data_img1[0];
     let stdev1 = data_img1[1];
-    let current_corr = result_corr[img1_width*y1+x1];
     if stdev1 < min_stdev {
         return;
     }
@@ -343,12 +342,12 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
     }
 
+    let out_pos = out_width*u32((f32(y1)/scale)) + u32(f32(x1)/scale);
+    let current_corr = result_corr[out_pos];
     if (best_corr >= threshold && best_corr > current_corr)
     {
-        let out_pos = out_width*u32((f32(y1)/scale)) + u32(f32(x1)/scale);
-        internals_img1[img1_width*y1+x1] = data_img1;
         result_matches[out_pos] = best_match;
-        result_corr[img1_width*y1+x1] = best_corr;
+        result_corr[out_pos] = best_corr;
     }
 }
 
