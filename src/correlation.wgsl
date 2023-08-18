@@ -21,6 +21,7 @@ struct Parameters
 };
 
 var<push_constant> parameters: Parameters;
+// Array of image data: [img1, img2]
 @group(0) @binding(0) var<storage> images: array<f32>;
 // For searchdata: contains [min_corridor, stdev, _] for image1
 // For cross_correlate: contains [avg, stdev, corr] for image1
@@ -29,7 +30,8 @@ var<push_constant> parameters: Parameters;
 @group(0) @binding(2) var<storage, read_write> internals_img2: array<vec2<f32>>;
 // Contains [min, max, neighbor_count] for the corridor range
 @group(0) @binding(3) var<storage, read_write> internals_int: array<vec3<i32>>;
-@group(0) @binding(4) var<storage, read_write> result: array<vec2<i32>>;
+@group(0) @binding(4) var<storage, read_write> result_matches: array<vec2<i32>>;
+@group(0) @binding(5) var<storage, read_write> result_corr: array<f32>;
 
 @compute @workgroup_size(16, 16, 1)
 fn init_out_data(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -40,7 +42,8 @@ fn init_out_data(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let out_height = parameters.out_height;
 
     if x < out_width && y < out_height {
-        result[out_width*y+x] = vec2(-1, -1);
+        result_matches[out_width*y+x] = vec2(-1, -1);
+        result_corr[out_width*y+x] = -1.0;
     }
 }
 
@@ -194,7 +197,7 @@ fn prepare_searchdata(@builtin(global_invocation_id) global_id: vec3<u32>) {
             continue;
         }
 
-        let coord2 = vec2<f32>(result[u32(y_out)*out_width + u32(x_out)]) * scale;
+        let coord2 = vec2<f32>(result_matches[u32(y_out)*out_width + u32(x_out)]) * scale;
         if coord2.x<0.0 || coord2.y<0.0 {
             continue;
         }
@@ -345,7 +348,8 @@ fn cross_correlate(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let out_pos = out_width*u32((f32(y1)/scale)) + u32(f32(x1)/scale);
         data_img1[2] = best_corr;
         internals_img1[img1_width*y1+x1] = data_img1;
-        result[out_pos] = best_match;
+        result_matches[out_pos] = best_match;
+        result_corr[img1_width*y1+x1] = best_corr;
     }
 }
 

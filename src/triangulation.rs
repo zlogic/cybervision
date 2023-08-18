@@ -11,16 +11,17 @@ use rayon::prelude::*;
 
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
 const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 2.0;
-const EXTEND_TRACKS_SEARCH_RADIUS: usize = 1;
+const EXTEND_TRACKS_SEARCH_RADIUS: usize = 3;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
+const POSE_ESTIMATION_MIN_CORRELATION: f32 = 0.9;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 100_000;
 // TODO: this should be proportional to image size
-const RANSAC_INLIERS_T: f64 = 15.0;
-const RANSAC_T: f64 = 50.0;
+const RANSAC_INLIERS_T: f64 = 1.0;
+const RANSAC_T: f64 = 5.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 100_000;
-const RANSAC_CHECK_INTERVAL: usize = 100;
+const RANSAC_CHECK_INTERVAL: usize = 1000;
 
 #[derive(Clone, Copy)]
 pub struct Point {
@@ -42,6 +43,7 @@ impl Point {
 pub type Surface = Vec<Point>;
 
 type Match = (u32, u32);
+type CorrelatedPoints = DMatrix<Option<(u32, u32, f32)>>;
 
 pub trait ProgressListener
 where
@@ -104,7 +106,7 @@ impl Triangulation {
 
     pub fn triangulate<PL: ProgressListener>(
         &mut self,
-        correlated_points: &DMatrix<Option<Match>>,
+        correlated_points: &CorrelatedPoints,
         fundamental_matrix: &Matrix3<f64>,
         progress_listener: Option<&PL>,
     ) -> Result<(), TriangulationError> {
@@ -144,7 +146,7 @@ struct AffineTriangulation {
 impl AffineTriangulation {
     fn triangulate(
         &mut self,
-        correlated_points: &DMatrix<Option<Match>>,
+        correlated_points: &CorrelatedPoints,
     ) -> Result<(), TriangulationError> {
         if !self.surface.is_empty() {
             return Err(TriangulationError::new(
@@ -163,7 +165,8 @@ impl AffineTriangulation {
                     .iter()
                     .enumerate()
                     .filter_map(|(row, matched_point)| {
-                        AffineTriangulation::triangulate_point((row, col), matched_point, index)
+                        let point2 = matched_point.map(|p| (p.0, p.1));
+                        AffineTriangulation::triangulate_point((row, col), &point2, index)
                     })
                     .collect::<Vec<_>>()
             })
@@ -358,7 +361,7 @@ struct PerspectiveTriangulation {
 impl PerspectiveTriangulation {
     fn triangulate<PL: ProgressListener>(
         &mut self,
-        correlated_points: &DMatrix<Option<Match>>,
+        correlated_points: &CorrelatedPoints,
         fundamental_matrix: &Matrix3<f64>,
         progress_listener: Option<&PL>,
     ) -> Result<(), TriangulationError> {
@@ -405,7 +408,12 @@ impl PerspectiveTriangulation {
                     ))
                 }
             };
-            let camera2 = match self.recover_relative_pose(&k2, &k2_inv, progress_listener) {
+            let camera2 = match self.recover_relative_pose(
+                correlated_points,
+                &k2,
+                &k2_inv,
+                progress_listener,
+            ) {
                 Some(camera2) => camera2,
                 None => return Err(TriangulationError::new("Unable to find projection matrix")),
             };
@@ -508,7 +516,7 @@ impl PerspectiveTriangulation {
         fundamental_matrix: &Matrix3<f64>,
         k1: &Matrix3<f64>,
         k2: &Matrix3<f64>,
-        correlated_points: &DMatrix<Option<Match>>,
+        correlated_points: &CorrelatedPoints,
     ) -> Option<Matrix3x4<f64>> {
         // Create essential matrix and camera matrices.
         let essential_matrix = k2.tr_mul(fundamental_matrix) * k1;
@@ -584,6 +592,7 @@ impl PerspectiveTriangulation {
 
     fn recover_relative_pose<PL: ProgressListener>(
         &self,
+        correlated_points: &CorrelatedPoints,
         k: &Matrix3<f64>,
         k_inv: &Matrix3<f64>,
         progress_listener: Option<&PL>,
@@ -595,7 +604,14 @@ impl PerspectiveTriangulation {
         let unlinked_tracks = self
             .tracks
             .iter()
-            .filter(|track| track.range().len() == 2 && track.range().end == track_len)
+            .filter(|track| {
+                track.range().len() == 2
+                    && track.range().end == track_len
+                    && track
+                        .last()
+                        .and_then(|m| correlated_points[(m.0 as usize, m.1 as usize)])
+                        .is_some_and(|m| m.2 > POSE_ESTIMATION_MIN_CORRELATION)
+            })
             .map(|track| track.to_owned())
             .collect::<Vec<_>>();
 
@@ -608,6 +624,10 @@ impl PerspectiveTriangulation {
                     && track.range().end == track_len
                     && track.get(view_i).is_some()
                     && track.point3d.is_some()
+                    && track
+                        .last()
+                        .and_then(|m| correlated_points[(m.0 as usize, m.1 as usize)])
+                        .is_some_and(|m| m.2 > POSE_ESTIMATION_MIN_CORRELATION)
             })
             .map(|track| track.to_owned())
             .collect::<Vec<_>>();
@@ -878,7 +898,7 @@ impl PerspectiveTriangulation {
             .reduce(|acc, val| acc.max(val))
     }
 
-    fn extend_tracks(&mut self, correlated_points: &DMatrix<Option<Match>>, index: usize) {
+    fn extend_tracks(&mut self, correlated_points: &CorrelatedPoints, index: usize) {
         let mut remaining_points = correlated_points.clone();
         self.tracks.iter_mut().for_each(|track| {
             let last_pos = track.last().and_then(|last| {
@@ -910,7 +930,8 @@ impl PerspectiveTriangulation {
             });
 
             if let Some(last_pos) = last_pos {
-                track.add(index + 1, last_pos);
+                let track_point = (last_pos.0, last_pos.1);
+                track.add(index + 1, track_point);
                 remaining_points[(last_pos.0 as usize, last_pos.1 as usize)] = None;
             };
         });
@@ -923,11 +944,9 @@ impl PerspectiveTriangulation {
                     .iter()
                     .enumerate()
                     .filter_map(|(row, m)| {
-                        if m.is_none() {
-                            return None;
-                        }
+                        let track_point2 = m.map(|m| (m.0, m.1))?;
                         let mut track = Track::new(index, (row as u32, col as u32));
-                        track.add(index + 1, (*m)?);
+                        track.add(index + 1, track_point2);
 
                         Some(track)
                     })

@@ -8,7 +8,7 @@ const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
 const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
 
 const THRESHOLD_AFFINE: f32 = 0.6;
-const THRESHOLD_PERSPECTIVE: f32 = 0.7;
+const THRESHOLD_PERSPECTIVE: f32 = 0.6;
 const MIN_STDEV_AFFINE: f32 = 1.0;
 const MIN_STDEV_PERSPECTIVE: f32 = 3.0;
 const CORRIDOR_SIZE_AFFINE: usize = 2;
@@ -24,7 +24,7 @@ const CORRIDOR_EXTEND_RANGE_PERSPECTIVE: f64 = 1.0;
 const CORRIDOR_MIN_RANGE: f64 = 2.5;
 const CROSS_CHECK_SEARCH_AREA: usize = 2;
 
-type Match = (u32, u32);
+type Match = (u32, u32, f32);
 
 #[derive(Debug)]
 pub struct PointData<const KPC: usize> {
@@ -77,7 +77,7 @@ struct EpipolarLine {
 }
 
 struct BestMatch {
-    pos: Option<Match>,
+    pos: Option<(u32, u32)>,
     corr: Option<f32>,
 }
 
@@ -188,26 +188,29 @@ impl PointCorrelations {
         img2: DMatrix<u8>,
         scale: f32,
         progress_listener: Option<&PL>,
-    ) {
-        self.correlate_images_step(
-            &img1,
-            &img2,
-            scale,
-            progress_listener,
-            CorrelationDirection::Forward,
-        );
+    ) -> Result<(), Box<dyn error::Error>> {
+        // Start with reverse direction - so that the last correlation values will be from the forward direction.
         self.correlate_images_step(
             &img2,
             &img1,
             scale,
             progress_listener,
             CorrelationDirection::Reverse,
-        );
+        )?;
+        self.correlate_images_step(
+            &img1,
+            &img2,
+            scale,
+            progress_listener,
+            CorrelationDirection::Forward,
+        )?;
 
         self.cross_check_filter(scale, CorrelationDirection::Forward);
         self.cross_check_filter(scale, CorrelationDirection::Reverse);
 
         self.first_pass = false;
+
+        Ok(())
     }
 
     fn correlate_images_step<PL: ProgressListener>(
@@ -217,13 +220,13 @@ impl PointCorrelations {
         scale: f32,
         progress_listener: Option<&PL>,
         dir: CorrelationDirection,
-    ) {
+    ) -> Result<(), Box<dyn error::Error>> {
         if let Some(gpu_context) = &mut self.gpu_context {
             let dir = match dir {
                 CorrelationDirection::Forward => gpu::CorrelationDirection::Forward,
                 CorrelationDirection::Reverse => gpu::CorrelationDirection::Reverse,
             };
-            gpu_context.correlate_images(
+            return gpu_context.correlate_images(
                 img1,
                 img2,
                 scale,
@@ -231,7 +234,6 @@ impl PointCorrelations {
                 progress_listener,
                 dir,
             );
-            return;
         };
         let img2_data = compute_image_point_data(img2);
         let mut out_data: DMatrix<Option<Match>> =
@@ -270,8 +272,8 @@ impl PointCorrelations {
                 if let Some(pl) = progress_listener {
                     let value = counter.fetch_add(1, Ordering::Relaxed) as f32 / out_data_cols;
                     let value = match dir {
-                        CorrelationDirection::Forward => value / 2.0,
-                        CorrelationDirection::Reverse => 0.5 + value / 2.0,
+                        CorrelationDirection::Forward => 0.5 + value / 2.0,
+                        CorrelationDirection::Reverse => value / 2.0,
                     };
                     pl.report_status(value);
                 }
@@ -299,6 +301,8 @@ impl PointCorrelations {
                 correlated_points[(out_row, out_col)] = point;
             }
         }
+
+        Ok(())
     }
 
     fn correlate_point(
@@ -364,7 +368,9 @@ impl PointCorrelations {
                 corridor_range.clone(),
             );
         }
-        *out_point = best_match.pos
+        *out_point = best_match
+            .pos
+            .and_then(|m| best_match.corr.map(|corr| (m.0, m.1, corr)))
     }
 
     fn get_epipolar_line(
@@ -575,7 +581,7 @@ impl PointCorrelations {
         search_area: usize,
         row: usize,
         col: usize,
-        m: (u32, u32),
+        m: Match,
     ) -> bool {
         let min_row = (m.0 as usize)
             .saturating_sub(search_area)
@@ -726,7 +732,7 @@ pub fn compute_point_data<const KS: usize, const KPC: usize>(
 }
 
 mod gpu {
-    const MAX_BINDINGS: u32 = 5;
+    const MAX_BINDINGS: u32 = 6;
 
     use std::{borrow::Cow, collections::HashMap, error, fmt};
 
@@ -785,6 +791,7 @@ mod gpu {
         buffer_internal_img2: wgpu::Buffer,
         buffer_internal_int: wgpu::Buffer,
         buffer_out: wgpu::Buffer,
+        buffer_out_corr: wgpu::Buffer,
         buffer_out_reverse: wgpu::Buffer,
 
         pipeline_configs: HashMap<String, ComputePipelineConfig>,
@@ -906,6 +913,12 @@ mod gpu {
                 false,
                 false,
             );
+            let buffer_out_corr = init_buffer(
+                &device,
+                img1_pixels * 1 * std::mem::size_of::<f32>(),
+                false,
+                false,
+            );
             let buffer_out_reverse = init_buffer(
                 &device,
                 img2_pixels * 2 * std::mem::size_of::<i32>(),
@@ -932,6 +945,7 @@ mod gpu {
                 buffer_internal_img2,
                 buffer_internal_int,
                 buffer_out,
+                buffer_out_corr,
                 buffer_out_reverse,
                 pipeline_configs: HashMap::new(),
             };
@@ -950,7 +964,7 @@ mod gpu {
             first_pass: bool,
             progress_listener: Option<&PL>,
             dir: CorrelationDirection,
-        ) {
+        ) -> Result<(), Box<dyn error::Error>> {
             let max_width = img1.ncols().max(img2.ncols());
             let max_height = img1.nrows().max(img2.nrows());
             let max_shape = (max_height, max_width);
@@ -963,8 +977,8 @@ mod gpu {
             let mut progressbar_completed_percentage = 0.02;
             let send_progress = |value| {
                 let value = match dir {
-                    CorrelationDirection::Forward => value / 2.0,
-                    CorrelationDirection::Reverse => 0.5 + value / 2.0,
+                    CorrelationDirection::Forward => 0.5 + value * 0.98 / 2.0,
+                    CorrelationDirection::Reverse => value * 0.98 / 2.0,
                 };
                 if let Some(pl) = progress_listener {
                     pl.report_status(value);
@@ -1067,6 +1081,8 @@ mod gpu {
                     send_progress(percent_complete);
                 }
             }
+
+            Ok(())
         }
 
         pub fn cross_check_filter(&mut self, scale: f32, dir: CorrelationDirection) {
@@ -1189,7 +1205,14 @@ mod gpu {
                 usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
+            let out_corr_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: self.buffer_out_corr.size(),
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
             let out_buffer_slice = out_buffer.slice(..);
+            let out_corr_buffer_slice = out_corr_buffer.slice(..);
             {
                 let mut encoder = self
                     .device
@@ -1201,31 +1224,51 @@ mod gpu {
                     0,
                     self.buffer_out.size(),
                 );
+                encoder.copy_buffer_to_buffer(
+                    &self.buffer_out_corr,
+                    0,
+                    &out_corr_buffer,
+                    0,
+                    self.buffer_out_corr.size(),
+                );
                 self.queue.submit(Some(encoder.finish()));
-                let (sender, receiver) = mpsc::channel();
-                out_buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
+                let (sender_out, receiver_out) = mpsc::channel();
+                out_buffer_slice
+                    .map_async(wgpu::MapMode::Read, move |v| sender_out.send(v).unwrap());
+                let (sender_out_corr, receiver_out_corr) = mpsc::channel();
+                out_corr_buffer_slice.map_async(wgpu::MapMode::Read, move |v| {
+                    sender_out_corr.send(v).unwrap()
+                });
                 self.device.poll(wgpu::Maintain::Wait);
 
-                if let Err(err) = receiver.recv() {
+                if let Err(err) = receiver_out.recv() {
+                    return Err(err.into());
+                }
+                if let Err(err) = receiver_out_corr.recv() {
                     return Err(err.into());
                 }
             }
 
             let out_buffer_slice_mapped = out_buffer_slice.get_mapped_range();
+            let out_corr_buffer_slice_mapped = out_corr_buffer_slice.get_mapped_range();
             let out_data: &[i32] = bytemuck::cast_slice(&out_buffer_slice_mapped);
+            let out_corr_data: &[f32] = bytemuck::cast_slice(&out_buffer_slice_mapped);
             for col in 0..out_image.ncols() {
                 for row in 0..out_image.nrows() {
                     let pos = 2 * (row * out_image.ncols() + col);
                     let point_match = (out_data[pos], out_data[pos + 1]);
+                    let corr = out_corr_data[row * out_image.ncols() + col];
                     out_image[(row, col)] = if point_match.0 > 0 && point_match.1 > 0 {
-                        Some((point_match.1 as u32, point_match.0 as u32))
+                        Some((point_match.1 as u32, point_match.0 as u32, corr))
                     } else {
                         None
                     };
                 }
             }
             drop(out_buffer_slice_mapped);
+            drop(out_corr_buffer_slice_mapped);
             out_buffer.unmap();
+            out_corr_buffer.unmap();
             Ok(out_image)
         }
 
@@ -1297,6 +1340,18 @@ mod gpu {
                                     ty: wgpu::BufferBindingType::Storage { read_only: false },
                                     has_dynamic_offset: false,
                                     min_binding_size: wgpu::BufferSize::new(buffer_out.size()),
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 5,
+                                visibility: wgpu::ShaderStages::COMPUTE,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                    has_dynamic_offset: false,
+                                    min_binding_size: wgpu::BufferSize::new(
+                                        self.buffer_out_corr.size(),
+                                    ),
                                 },
                                 count: None,
                             },
@@ -1376,6 +1431,10 @@ mod gpu {
                         wgpu::BindGroupEntry {
                             binding: 4,
                             resource: buffer_out.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 5,
+                            resource: self.buffer_out_corr.as_entire_binding(),
                         },
                     ],
                 });

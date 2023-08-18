@@ -257,7 +257,7 @@ pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
     Ok(())
 }
 
-type CorrelatedPoints = DMatrix<Option<(u32, u32)>>;
+type CorrelatedPoints = DMatrix<Option<(u32, u32, f32)>>;
 
 impl ImageReconstruction {
     fn reconstruct(
@@ -509,7 +509,7 @@ impl ImageReconstruction {
                 scale,
             };
 
-            point_correlations.correlate_images(img1, img2, scale, Some(&pb));
+            point_correlations.correlate_images(img1, img2, scale, Some(&pb))?;
             total_percent_complete += scale * scale / total_percent;
         }
         pb.finish_and_clear();
@@ -528,7 +528,7 @@ impl ImageReconstruction {
     fn triangulate_surface(
         &mut self,
         f: Matrix3<f64>,
-        correlated_points: DMatrix<Option<(u32, u32)>>,
+        correlated_points: CorrelatedPoints,
     ) -> Result<(), triangulation::TriangulationError> {
         let start_time = SystemTime::now();
 
