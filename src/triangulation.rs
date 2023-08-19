@@ -603,7 +603,7 @@ impl PerspectiveTriangulation {
 
         let unlinked_tracks = self
             .tracks
-            .iter()
+            .par_iter()
             .filter(|track| {
                 track.range().len() == 2
                     && track.range().end == track_len
@@ -617,7 +617,7 @@ impl PerspectiveTriangulation {
 
         let linked_tracks = self
             .tracks
-            .iter()
+            .par_iter()
             .filter(|track| {
                 let view_i = self.image_shapes.len() - 1;
                 track.range().len() > linked_track_len
@@ -943,6 +943,7 @@ impl PerspectiveTriangulation {
         let mut new_tracks = remaining_points
             .column_iter()
             .enumerate()
+            .par_bridge()
             .flat_map(|(col, start_col)| {
                 start_col
                     .iter()
