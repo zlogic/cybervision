@@ -336,9 +336,16 @@ impl Camera {
         }
     }
 
+    #[inline]
+    fn point_depth(&self, point3d: &Vector3<f64>) -> f64 {
+        // This is how OpenMVG does it, works great!
+        (self.r_matrix * (point3d + self.r_matrix.tr_mul(&self.t))).z
+    }
+
+    #[inline]
     fn point_in_front(&self, point3d: &Vector3<f64>) -> bool {
         // This is how OpenMVG does it, works great!
-        (self.r_matrix * (point3d + self.r_matrix.tr_mul(&self.t))).z > 0.0
+        self.point_depth(point3d) > 0.0
     }
 
     fn projection(&self) -> Matrix3x4<f64> {
@@ -638,7 +645,11 @@ impl PerspectiveTriangulation {
 
         let ransac_outer = RANSAC_K / RANSAC_CHECK_INTERVAL;
 
-        let mut result = None;
+        let mut best_result = (
+            Camera::from_matrix(k, &Matrix3::identity(), &Vector3::zeros()),
+            0,
+            f64::MAX,
+        );
         let counter = AtomicUsize::new(0);
         let reduce_best_result = |(c1, count1, error1), (c2, count2, error2)| {
             if count1 > count2 || (count1 == count2 && error1 < error2) {
@@ -649,7 +660,7 @@ impl PerspectiveTriangulation {
         };
 
         for _ in 0..ransac_outer {
-            let (camera, count, _error) = (0..RANSAC_CHECK_INTERVAL)
+            let (camera, count, error) = (0..RANSAC_CHECK_INTERVAL)
                 .par_bridge()
                 .filter_map(|_| {
                     if let Some(pl) = progress_listener {
@@ -700,26 +711,20 @@ impl PerspectiveTriangulation {
                         })
                         .reduce(reduce_best_result)
                 })
-                .reduce(
-                    || {
-                        (
-                            Camera::from_matrix(k, &Matrix3::identity(), &Vector3::zeros()),
-                            0,
-                            f64::MAX,
-                        )
-                    },
-                    reduce_best_result,
-                );
+                .reduce(|| best_result.clone(), reduce_best_result);
 
-            if count >= RANSAC_D {
-                result = Some(camera)
-            }
+            best_result = (camera, count, error);
             if count >= RANSAC_D_EARLY_EXIT {
                 break;
             }
         }
 
-        result
+        let count = best_result.1;
+        if count > RANSAC_D {
+            Some(best_result.0)
+        } else {
+            None
+        }
     }
 
     fn recover_pose_from_points(
@@ -1112,7 +1117,7 @@ fn solve_quartic(factors: [f64; 5]) -> [f64; 4] {
 }
 
 fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut [(f64, f64)]) {
-    const MAX_ITER: usize = 3;
+    const MAX_ITER: usize = 5;
     for _ in 0..MAX_ITER {
         let mut stable = true;
 
