@@ -1590,7 +1590,9 @@ impl BundleAdjustment<'_> {
                 .sum::<f64>();
             let rho = (residual_norm_squared - new_residual_norm_squared) / rho_denominator;
 
+            drop(delta);
             if rho > 0.0 {
+                drop(current_points3d);
                 let converged = residual_norm_squared.sqrt() - new_residual_norm_squared.sqrt()
                     < BundleAdjustment::RESIDUAL_REDUCTION_EPSILON * residual_norm_squared.sqrt();
 
