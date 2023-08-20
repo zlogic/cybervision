@@ -150,8 +150,6 @@ struct Mesh {
     points: triangulation::Surface,
     polygons: Vec<Polygon>,
     camera_ranges: Vec<CameraGrid>,
-    used_points: Vec<u64>,
-    used_points_count: usize,
 }
 
 impl Mesh {
@@ -160,13 +158,10 @@ impl Mesh {
         interpolation: InterpolationMode,
         progress_listener: Option<&PL>,
     ) -> Result<Mesh, Box<dyn error::Error>> {
-        let used_points_count = surface.tracks_len();
         let mut surface = Mesh {
             points: surface,
             polygons: vec![],
             camera_ranges: vec![],
-            used_points: vec![],
-            used_points_count,
         };
 
         if surface.points.cameras_len() == 0 {
@@ -176,7 +171,6 @@ impl Mesh {
                 surface.process_camera(camera_i, interpolation, progress_listener)?;
             }
         }
-        surface.discard_unused_points(interpolation)?;
 
         Ok(surface)
     }
@@ -390,87 +384,17 @@ impl Mesh {
         Ok(())
     }
 
-    #[inline]
-    fn point_visible(&self, point_i: usize) -> bool {
-        if self.used_points.is_empty() {
-            return true;
-        }
-        let visible_block = self.used_points[point_i / 64];
-        let visible_masked = (visible_block >> (point_i % 64)) & 0x01;
-        visible_masked == 0x01
-    }
-
-    fn discard_unused_points(
-        &mut self,
-        interpolation: InterpolationMode,
-    ) -> Result<(), Box<dyn error::Error>> {
-        if interpolation != InterpolationMode::Delaunay {
-            self.used_points = vec![];
-            return Ok(());
-        }
-
-        let mut visibility = Vec::new();
-        visibility.resize(self.points.tracks_len() / (64 / 8) + 1, 0u64);
-        let mut point_seen = |i: usize| {
-            let block = i / 64;
-            let bit = i % 64;
-            visibility[block] |= 1 << bit;
-        };
-
-        self.polygons.iter().for_each(|polygon| {
-            point_seen(polygon.vertices[0]);
-            point_seen(polygon.vertices[1]);
-            point_seen(polygon.vertices[2]);
-        });
-        self.used_points = visibility;
-
-        let mut point_index = 0usize;
-        let mut point_labels = Vec::new();
-        point_labels.resize(self.points.tracks_len(), None);
-        for i in 0..self.points.tracks_len() {
-            if self.point_visible(i) {
-                point_labels[i] = Some(point_index);
-                point_index += 1;
-            }
-        }
-        self.used_points_count = point_index;
-
-        let remap_polygon = |polygon: &Polygon| {
-            let p0 = point_labels[polygon.vertices[0]]?;
-            let p1 = point_labels[polygon.vertices[1]]?;
-            let p2 = point_labels[polygon.vertices[2]]?;
-            Some([p0, p1, p2])
-        };
-        let all_found = self.polygons.iter_mut().all(|polygon| {
-            if let Some(new_points) = remap_polygon(polygon) {
-                polygon.vertices = new_points;
-                true
-            } else {
-                false
-            }
-        });
-
-        if all_found {
-            Ok(())
-        } else {
-            Err(OutputError::new("Failed to remap polygon points").into())
-        }
-    }
-
     fn output<PL: ProgressListener>(
         &self,
         mut writer: Box<dyn MeshWriter>,
         progress_listener: Option<&PL>,
     ) -> Result<(), Box<dyn error::Error>> {
-        writer.output_header(self.used_points_count, self.polygons.len())?;
+        writer.output_header(self.points.tracks_len(), self.polygons.len())?;
         let nvertices = self.points.tracks_len() as f32;
         self.points
             .iter_tracks()
             .enumerate()
             .try_for_each(|(i, v)| {
-                if !self.point_visible(i) {
-                    return Ok(());
-                }
                 if let Some(pl) = progress_listener {
                     pl.report_status(0.90 + 0.02 * (i as f32 / nvertices));
                 }
@@ -480,9 +404,6 @@ impl Mesh {
             .iter_tracks()
             .enumerate()
             .try_for_each(|(i, v)| {
-                if !self.point_visible(i) {
-                    return Ok(());
-                }
                 if let Some(pl) = progress_listener {
                     pl.report_status(0.92 + 0.02 * (i as f32 / nvertices));
                 }
