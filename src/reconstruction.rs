@@ -233,9 +233,9 @@ pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
         focal_length,
     };
 
-    if args.img_src.len() > 2 && interpolation_mode != output::InterpolationMode::None {
+    if args.img_src.len() > 2 && vertex_mode == output::VertexMode::Texture {
         return Err(ReconstructionError::new(
-            "Interpolation should be none when reconstructing from more than 2 images",
+            "Texture coordinates are not supported for more than 2 images",
         )
         .into());
     }

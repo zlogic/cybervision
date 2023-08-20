@@ -10,37 +10,43 @@ use rand::{rngs::SmallRng, SeedableRng};
 use rayon::prelude::*;
 
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
-const OUTLIER_FILTER_STDEV_THRESHOLD: f64 = 2.0;
-const EXTEND_TRACKS_SEARCH_RADIUS: usize = 3;
+const EXTEND_TRACKS_SEARCH_RADIUS: usize = 7;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const POSE_ESTIMATION_MIN_CORRELATION: f32 = 0.8;
 const RANSAC_N: usize = 3;
-const RANSAC_K: usize = 100_000;
+const RANSAC_K: usize = 10_000;
 // TODO: this should be proportional to image size
-const RANSAC_INLIERS_T: f64 = 15.0;
-const RANSAC_T: f64 = 25.0;
+const RANSAC_INLIERS_T: f64 = 25.0;
+const RANSAC_T: f64 = 50.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 1000;
+const HISTOGRAM_FILTER_BINS: usize = 1000;
+const HISTOGRAM_FILTER_DISCARD_PERCENTILE: f64 = 0.025;
 
-#[derive(Clone, Copy)]
-pub struct Point {
-    pub original: (usize, usize),
-    pub reconstructed: Vector3<f64>,
-    pub index: usize,
+pub struct Surface {
+    tracks: Vec<Track>,
+    cameras: Vec<Vector3<f64>>,
 }
 
-impl Point {
-    fn new(original: (usize, usize), reconstructed: Vector3<f64>, index: usize) -> Point {
-        Point {
-            original,
-            reconstructed,
-            index,
+impl Surface {
+    pub fn iter_tracks(&self) -> std::slice::Iter<Track> {
+        self.tracks.iter()
+    }
+    pub fn tracks_len(&self) -> usize {
+        self.tracks.len()
+    }
+    pub fn camera_center(&self, i: usize) -> Option<Vector3<f64>> {
+        if i < self.cameras.len() {
+            Some(self.cameras[i])
+        } else {
+            None
         }
     }
+    pub fn cameras_len(&self) -> usize {
+        self.cameras.len()
+    }
 }
-
-pub type Surface = Vec<Point>;
 
 type Match = (u32, u32);
 type CorrelatedPoints = DMatrix<Option<(u32, u32, f32)>>;
@@ -69,14 +75,12 @@ impl Triangulation {
         scale: (f64, f64, f64),
         bundle_adjustment: bool,
     ) -> Triangulation {
+        let surface = Surface {
+            tracks: vec![],
+            cameras: vec![],
+        };
         let (affine, perspective) = match projection {
-            ProjectionMode::Affine => (
-                Some(AffineTriangulation {
-                    surface: vec![],
-                    scale,
-                }),
-                None,
-            ),
+            ProjectionMode::Affine => (Some(AffineTriangulation { surface, scale }), None),
             ProjectionMode::Perspective => (
                 None,
                 Some(PerspectiveTriangulation {
@@ -148,13 +152,11 @@ impl AffineTriangulation {
         &mut self,
         correlated_points: &CorrelatedPoints,
     ) -> Result<(), TriangulationError> {
-        if !self.surface.is_empty() {
+        if !self.surface.tracks.is_empty() {
             return Err(TriangulationError::new(
                 "Triangulation of multiple affine image is not supported",
             ));
         }
-
-        let index = 0;
 
         let points3d = correlated_points
             .column_iter()
@@ -166,13 +168,13 @@ impl AffineTriangulation {
                     .enumerate()
                     .filter_map(|(row, matched_point)| {
                         let point2 = matched_point.map(|p| (p.0, p.1));
-                        AffineTriangulation::triangulate_point((row, col), &point2, index)
+                        AffineTriangulation::triangulate_point((row, col), &point2)
                     })
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
 
-        self.surface = points3d;
+        self.surface.tracks = points3d;
 
         Ok(())
     }
@@ -183,35 +185,52 @@ impl AffineTriangulation {
     }
 
     #[inline]
-    fn triangulate_point(p1: (usize, usize), p2: &Option<Match>, index: usize) -> Option<Point> {
+    fn triangulate_point(p1: (usize, usize), p2: &Option<Match>) -> Option<Track> {
         if let Some(p2) = p2 {
             let dx = p1.1 as f64 - p2.1 as f64;
             let dy = p1.0 as f64 - p2.0 as f64;
             let distance = (dx * dx + dy * dy).sqrt();
             let point3d = Vector3::new(p1.1 as f64, p1.0 as f64, distance);
 
-            return Some(Point::new((p1.1, p1.0), point3d, index));
+            let track = Track {
+                start_index: 0,
+                points: vec![(p1.0 as u32, p1.1 as u32), (p2.0, p2.1)],
+                point3d: Some(point3d),
+            };
+
+            Some(track)
+        } else {
+            None
         }
-        None
     }
 
     fn scale_points(&self) -> Surface {
         let scale = &self.scale;
 
         let depth_scale = scale.2 * ((scale.0 + scale.1) / 2.0);
-        self.surface
+        let scaled_tracks = self
+            .surface
+            .tracks
             .iter()
-            .map(|point| {
-                let mut point = *point;
-                point.reconstructed.z *= depth_scale;
-                point
+            .filter_map(|track| {
+                let mut track = track.to_owned();
+                if let Some(point) = &mut track.point3d {
+                    (*point).z *= depth_scale;
+                    Some(track)
+                } else {
+                    None
+                }
             })
-            .collect()
+            .collect::<Vec<_>>();
+        Surface {
+            cameras: self.surface.cameras.clone(),
+            tracks: scaled_tracks,
+        }
     }
 }
 
 #[derive(Clone, Debug)]
-struct Track {
+pub struct Track {
     start_index: usize,
     points: Vec<Match>,
     point3d: Option<Vector3<f64>>,
@@ -226,6 +245,7 @@ impl Track {
         }
     }
 
+    #[inline]
     fn add(&mut self, index: usize, point: Match) -> bool {
         if index == self.start_index + self.points.len() {
             self.points.push(point);
@@ -235,12 +255,14 @@ impl Track {
         }
     }
 
-    fn range(&self) -> Range<usize> {
+    #[inline]
+    pub fn range(&self) -> Range<usize> {
         // TODO: convert this into an iterator?
         self.start_index..self.start_index + self.points.len()
     }
 
-    fn get(&self, i: usize) -> Option<Match> {
+    #[inline]
+    pub fn get(&self, i: usize) -> Option<Match> {
         if i < self.start_index || i >= self.start_index + self.points.len() {
             None
         } else {
@@ -248,12 +270,14 @@ impl Track {
         }
     }
 
-    fn first(&self) -> Option<&Match> {
-        self.points.first()
-    }
-
+    #[inline]
     fn last(&self) -> Option<&Match> {
         self.points.last()
+    }
+
+    #[inline]
+    pub fn get_point3d(&self) -> Option<Vector3<f64>> {
+        self.point3d
     }
 }
 
@@ -453,23 +477,25 @@ impl PerspectiveTriangulation {
         }
         self.filter_outliers();
 
-        let surface = self
+        let surface_cameras = self
+            .cameras
+            .iter()
+            .map(|camera| camera.r_matrix.tr_mul(&-camera.t))
+            .collect::<Vec<_>>();
+        let surface_tracks = self
             .tracks
             .iter()
             .par_bridge()
-            .flat_map(|track| {
-                let index = track.range().start;
-                let point2d = track.first()?;
-                let point2d = (point2d.1 as usize, point2d.0 as usize);
-
-                let point3d = track.point3d?;
-
-                let point = Point::new(point2d, point3d, index);
-                Some(point)
-            })
+            .map(|track| track.to_owned())
             .collect::<Vec<_>>();
 
-        Ok(self.scale_points(surface))
+        let mut surface = Surface {
+            cameras: surface_cameras,
+            tracks: surface_tracks,
+        };
+
+        self.scale_points(&mut surface.tracks.as_mut_slice());
+        Ok(surface)
     }
 
     #[inline]
@@ -1010,68 +1036,92 @@ impl PerspectiveTriangulation {
     }
 
     fn filter_outliers(&mut self) {
-        // TODO: replace this with something better?
-        let (sum_coords, npoints) = self
-            .tracks
-            .par_iter()
-            .flat_map(|track| {
-                let point3d = track.point3d?;
-                Some((point3d, 1))
-            })
-            .reduce(
-                || (Vector3::zeros(), 0),
-                |acc, (point3d, npoints)| (acc.0 + point3d, acc.1 + npoints),
-            );
-        if npoints == 0 {
-            return;
-        }
-        let center_mass = sum_coords.unscale(npoints as f64);
-        let stdev = self
-            .tracks
-            .par_iter()
-            .flat_map(|track| {
-                let point3d = &track.point3d?;
-                let delta = point3d - center_mass;
-                let stdev = Vector3::new(delta.x * delta.x, delta.y * delta.y, delta.z * delta.z);
-                Some(stdev)
-            })
-            .reduce(|| (Vector3::zeros()), |acc, stdev| (acc + stdev));
-        let stdev = stdev / npoints as f64;
-        let inlier_range = stdev * OUTLIER_FILTER_STDEV_THRESHOLD;
+        let min_track_length = if self.cameras.len() > 2 { 3 } else { 2 };
+        for img_i in 0..self.cameras.len() {
+            let camera = &self.cameras[img_i];
 
-        self.tracks.par_iter_mut().for_each(|track| {
-            let point3d = if let Some(point3d) = &track.point3d {
+            let (min_value, max_value) = self
+                .tracks
+                .par_iter()
+                .filter_map(|track| {
+                    let depth = camera.point_depth(&(track.point3d?)) as f64;
+                    Some((depth, depth))
+                })
+                .reduce(
+                    || (f64::MAX, f64::MIN),
+                    |(a_min, a_max), (b_min, b_max)| (a_min.min(b_min), a_max.max(b_max)),
+                );
+            let value_range = max_value - min_value;
+            let mut histogram_sum = 0usize;
+            let mut histogram = [0usize; HISTOGRAM_FILTER_BINS];
+
+            self.tracks.iter().for_each(|track| {
+                let point3d = if let Some(point3d) = &track.point3d {
+                    point3d
+                } else {
+                    return;
+                };
+                let depth = camera.point_depth(point3d);
+                let pos =
+                    ((depth - min_value) * HISTOGRAM_FILTER_BINS as f64 / value_range).round();
+                let pos = (pos as usize).clamp(0, HISTOGRAM_FILTER_BINS - 1);
+                histogram[pos] += 1;
+                histogram_sum += 1;
+            });
+
+            let mut current_histogram_sum = 0usize;
+            let mut min_depth = min_value;
+            for (i, bin) in histogram.iter().enumerate() {
+                current_histogram_sum += bin;
+                if (current_histogram_sum as f64 / histogram_sum as f64)
+                    > HISTOGRAM_FILTER_DISCARD_PERCENTILE
+                {
+                    break;
+                }
+                min_depth = min_value + (i as f64 / HISTOGRAM_FILTER_BINS as f64) * value_range;
+            }
+            let mut current_histogram_sum = 0usize;
+            let mut max_depth = max_value;
+            for (i, bin) in histogram.iter().enumerate().rev() {
+                current_histogram_sum += bin;
+                if (current_histogram_sum as f64 / histogram_sum as f64)
+                    > HISTOGRAM_FILTER_DISCARD_PERCENTILE
+                {
+                    break;
+                }
+                max_depth = min_value + (i as f64 / HISTOGRAM_FILTER_BINS as f64) * value_range;
+            }
+
+            self.tracks.par_iter_mut().for_each(|track| {
+                let depth = if let Some(point3d) = &track.point3d {
+                    camera.point_depth(point3d)
+                } else {
+                    return;
+                };
+                if depth < min_depth || depth > max_depth {
+                    (*track).point3d = None;
+                }
+            });
+            self.tracks.retain(|track| {
+                track.point3d.is_some() && track.range().count() >= min_track_length
+            });
+            self.tracks.shrink_to_fit();
+        }
+    }
+
+    fn scale_points(&self, tracks: &mut [Track]) {
+        let scale = &self.scale;
+
+        tracks.iter_mut().for_each(|track| {
+            let point3d = if let Some(point3d) = &mut track.point3d {
                 point3d
             } else {
                 return;
             };
-            let fits = (point3d - center_mass)
-                .iter()
-                .enumerate()
-                .all(|(i, val)| val.abs() < inlier_range[i]);
-            if !fits {
-                track.point3d = None;
-            }
-        });
-        self.tracks.retain(|track| track.point3d.is_some());
-        self.tracks.shrink_to_fit();
-    }
-
-    fn scale_points(&self, points3d: Surface) -> Surface {
-        let scale = &self.scale;
-
-        points3d
-            .iter()
-            .map(|point| {
-                let mut point = *point;
-                let point3d = &mut point.reconstructed;
-                point3d.x = scale.0 * point3d.x;
-                point3d.y = scale.1 * point3d.y;
-                point3d.z = scale.2 * point3d.z;
-
-                point
-            })
-            .collect()
+            point3d.x = scale.0 * point3d.x;
+            point3d.y = scale.1 * point3d.y;
+            point3d.z = scale.2 * point3d.z;
+        })
     }
 }
 

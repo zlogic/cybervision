@@ -1,15 +1,18 @@
+use core::fmt;
 use std::{
     error,
     fs::File,
     io::{BufWriter, Write},
     path::Path,
+    sync::atomic::AtomicUsize,
+    sync::atomic::Ordering as AtomicOrdering,
 };
 
 use image::{RgbImage, Rgba, RgbaImage};
-use spade::{
-    handles::{FaceHandle, InnerTag},
-    DelaunayTriangulation, HasPosition, Point2, Triangulation,
-};
+use nalgebra::{DMatrix, Vector3};
+use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
+
+use rayon::prelude::*;
 
 use crate::triangulation;
 
@@ -33,83 +36,244 @@ where
     fn report_status(&self, pos: f32);
 }
 
-type TriangulatedSurfaceFace<'a> = FaceHandle<'a, InnerTag, triangulation::Point, (), (), ()>;
+#[derive(Debug)]
+struct Point {
+    track: triangulation::Track,
+    track_i: usize,
+    camera_i: usize,
+}
+
+#[derive(Debug)]
+struct Polygon {
+    vertices: [usize; 3],
+    points: [Vector3<f64>; 3],
+}
+
+impl Polygon {
+    fn new(v0: &Point, v1: &Point, v2: &Point) -> Option<Polygon> {
+        let vertices = [v0.track_i, v1.track_i, v2.track_i];
+        let points = [
+            v0.track.get_point3d()?,
+            v1.track.get_point3d()?,
+            v2.track.get_point3d()?,
+        ];
+        Some(Polygon { vertices, points })
+    }
+
+    #[inline]
+    fn intersects_line(&self, origin: &Vector3<f64>, destination: &Vector3<f64>) -> bool {
+        let direction = destination - origin;
+        // Möller–Trumbore intersection algorithm
+        let edge_1 = self.points[1] - self.points[0];
+        let edge_2 = self.points[2] - self.points[0];
+        let h = direction.cross(&edge_2);
+        let a = edge_1.dot(&h);
+        if a.abs() < f64::EPSILON {
+            return false;
+        }
+
+        let f = 1.0 / a;
+        let s = origin - self.points[0];
+        let u = f * s.dot(&h);
+
+        if u < 0.0 || u > 1.0 {
+            return false;
+        }
+
+        let q = s.cross(&edge_1);
+        let v = f * direction.dot(&q);
+
+        if v < 0.0 || u + v > 1.0 {
+            return false;
+        }
+
+        let t = f * edge_2.dot(&q);
+
+        t > f64::EPSILON && t < 1.0 - f64::EPSILON
+    }
+}
+
+struct Mesh {
+    points: triangulation::Surface,
+    polygons: Vec<Polygon>,
+}
+
+impl Mesh {
+    fn create<PL: ProgressListener>(
+        surface: triangulation::Surface,
+        interpolation: InterpolationMode,
+        progress_listener: Option<&PL>,
+    ) -> Result<Mesh, Box<dyn error::Error>> {
+        let mut surface = Mesh {
+            points: surface,
+            polygons: vec![],
+        };
+
+        if surface.points.cameras_len() == 0 {
+            surface.process_camera(0, interpolation, progress_listener)?;
+        } else {
+            for camera_i in 0..surface.points.cameras_len() {
+                surface.process_camera(camera_i, interpolation, progress_listener)?;
+            }
+        }
+
+        Ok(surface)
+    }
+
+    fn process_camera<PL: ProgressListener>(
+        &mut self,
+        camera_i: usize,
+        interpolation: InterpolationMode,
+        progress_listener: Option<&PL>,
+    ) -> Result<(), Box<dyn error::Error>> {
+        if interpolation != InterpolationMode::Delaunay {
+            return Ok(());
+        }
+        let camera_points = self
+            .points
+            .iter_tracks()
+            .enumerate()
+            .par_bridge()
+            .filter_map(|(track_i, track)| {
+                if track.get(camera_i).is_some() {
+                    Some(Point {
+                        track: track.clone(),
+                        track_i,
+                        camera_i,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let check_intersections = self.points.camera_center(camera_i).is_some();
+
+        let triangulated_surface = DelaunayTriangulation::<Point>::bulk_load(camera_points)?;
+
+        let cameras_len = self.points.cameras_len();
+        let (percent_complete, percent_multiplier) = if cameras_len > 0 {
+            (
+                camera_i as f32 / cameras_len as f32,
+                1.0 / cameras_len as f32,
+            )
+        } else {
+            (0.0, 1.0)
+        };
+        let counter = AtomicUsize::new(0);
+
+        let polygons_count = triangulated_surface.num_inner_faces();
+        let mut new_polygons = triangulated_surface
+            .inner_faces()
+            .par_bridge()
+            .filter_map(|f| {
+                if let Some(pl) = progress_listener {
+                    let value = percent_complete
+                        + percent_multiplier * counter.fetch_add(1, AtomicOrdering::Relaxed) as f32
+                            / polygons_count as f32;
+                    pl.report_status(0.2 * value);
+                }
+                let vertices = f.vertices();
+                let v0 = vertices[0].data();
+                let v1 = vertices[1].data();
+                let v2 = vertices[2].data();
+                let polygon = Polygon::new(v0, v1, v2)?;
+                if !check_intersections {
+                    return Some(polygon);
+                }
+
+                // TODO 0.17 Use a grid (or polar) index to accelerate lookup times.
+                let mut no_intersections = true;
+                for camera_j in 0..cameras_len {
+                    if camera_i == camera_j {
+                        continue;
+                    }
+                    if !no_intersections {
+                        break;
+                    }
+                    let camera_j_center = self.points.camera_center(camera_j)?;
+                    no_intersections = no_intersections
+                        && self.points.iter_tracks().all(|track| {
+                            if track.get(camera_j).is_some() {
+                                let point3d = if let Some(point3d) = track.get_point3d() {
+                                    point3d
+                                } else {
+                                    return true;
+                                };
+                                !polygon.intersects_line(&camera_j_center, &point3d)
+                            } else {
+                                true
+                            }
+                        });
+                }
+
+                if no_intersections {
+                    Some(polygon)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        drop(triangulated_surface);
+        self.polygons.append(&mut new_polygons);
+
+        Ok(())
+    }
+
+    fn output<PL: ProgressListener>(
+        &self,
+        mut writer: Box<dyn MeshWriter>,
+        progress_listener: Option<&PL>,
+    ) -> Result<(), Box<dyn error::Error>> {
+        writer.output_header(self.points.tracks_len(), self.polygons.len())?;
+        let nvertices = self.points.tracks_len() as f32;
+        self.points
+            .iter_tracks()
+            .enumerate()
+            .try_for_each(|(i, v)| {
+                if let Some(pl) = progress_listener {
+                    pl.report_status(0.2 + 0.2 * (i as f32 / nvertices));
+                }
+                writer.output_vertex(v)
+            })?;
+        self.points
+            .iter_tracks()
+            .enumerate()
+            .try_for_each(|(i, v)| {
+                if let Some(pl) = progress_listener {
+                    pl.report_status(0.4 + 0.2 * (i as f32 / nvertices));
+                }
+                writer.output_vertex_uv(v)
+            })?;
+        let nfaces = self.polygons.len() as f32;
+        self.polygons.iter().enumerate().try_for_each(|(i, f)| {
+            if let Some(pl) = progress_listener {
+                pl.report_status(0.6 + 0.3 * (i as f32 / nfaces));
+            }
+            writer.output_face(f)
+        })?;
+        writer.complete()
+    }
+}
 
 pub fn output<PL: ProgressListener>(
-    points: triangulation::Surface,
+    surface: triangulation::Surface,
     images: Vec<RgbImage>,
     path: &str,
     interpolation: InterpolationMode,
     vertex_mode: VertexMode,
     progress_listener: Option<&PL>,
 ) -> Result<(), Box<dyn error::Error>> {
-    let mut writer: Box<dyn MeshWriter> = if path.to_lowercase().ends_with(".obj") {
+    let writer: Box<dyn MeshWriter> = if path.to_lowercase().ends_with(".obj") {
         Box::new(ObjWriter::new(path, images, vertex_mode)?)
     } else if path.to_lowercase().ends_with(".ply") {
         Box::new(PlyWriter::new(path, images, vertex_mode)?)
     } else {
-        Box::new(ImageWriter::new(path, images, &points)?)
+        Box::new(ImageWriter::new(path, images, &surface)?)
     };
 
-    if interpolation == InterpolationMode::Delaunay {
-        let triangulated_surface: DelaunayTriangulation<triangulation::Point> =
-            Triangulation::bulk_load(points)?;
-
-        if let Some(pl) = progress_listener {
-            pl.report_status(0.2);
-        }
-
-        writer.output_header(
-            triangulated_surface.num_vertices(),
-            triangulated_surface.num_inner_faces(),
-        )?;
-        let nvertices = triangulated_surface.num_vertices() as f32;
-        triangulated_surface
-            .vertices()
-            .enumerate()
-            .try_for_each(|(i, v)| {
-                if let Some(pl) = progress_listener {
-                    pl.report_status(0.2 + 0.2 * (i as f32 / nvertices));
-                }
-                writer.output_vertex(v.data())
-            })?;
-        triangulated_surface
-            .vertices()
-            .enumerate()
-            .try_for_each(|(i, v)| {
-                if let Some(pl) = progress_listener {
-                    pl.report_status(0.4 + 0.2 * (i as f32 / nvertices));
-                }
-                writer.output_vertex_uv(v.data())
-            })?;
-        let nfaces = triangulated_surface.num_inner_faces() as f32;
-        triangulated_surface
-            .inner_faces()
-            .enumerate()
-            .try_for_each(|(i, f)| {
-                if let Some(pl) = progress_listener {
-                    pl.report_status(0.6 + 0.3 * (i as f32 / nfaces));
-                }
-                writer.output_face(f)
-            })?;
-        return writer.complete();
-    }
-
-    let npoints = points.len() as f32;
-    writer.output_header(points.len(), 0)?;
-    points.iter().enumerate().try_for_each(|(i, p)| {
-        if let Some(pl) = progress_listener {
-            pl.report_status(0.2 + 0.2 * (i as f32 / npoints));
-        }
-        writer.output_vertex(p)
-    })?;
-    points.iter().enumerate().try_for_each(|(i, p)| {
-        if let Some(pl) = progress_listener {
-            pl.report_status(0.4 + 0.2 * (i as f32 / npoints));
-        }
-        writer.output_vertex_uv(p)
-    })?;
-    return writer.complete();
+    let mesh = Mesh::create(surface, interpolation, progress_listener)?;
+    mesh.output(writer, progress_listener)
 }
 
 trait MeshWriter {
@@ -118,17 +282,17 @@ trait MeshWriter {
     }
     fn output_vertex(
         &mut self,
-        _point: &triangulation::Point,
+        _point: &triangulation::Track,
     ) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
     fn output_vertex_uv(
         &mut self,
-        _point: &triangulation::Point,
+        _point: &triangulation::Track,
     ) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
-    fn output_face(&mut self, _f: TriangulatedSurfaceFace) -> Result<(), Box<dyn error::Error>> {
+    fn output_face(&mut self, _p: &Polygon) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
     fn complete(&mut self) -> Result<(), Box<dyn error::Error>>;
@@ -196,18 +360,28 @@ impl MeshWriter for PlyWriter {
         writeln!(w, "end_header")
     }
 
-    fn output_vertex(&mut self, p: &triangulation::Point) -> Result<(), Box<dyn error::Error>> {
-        let img = &self.images[p.index];
+    fn output_vertex(&mut self, track: &triangulation::Track) -> Result<(), Box<dyn error::Error>> {
         let color = match self.vertex_mode {
             VertexMode::Plain | VertexMode::Texture => None,
-            VertexMode::Color => img
-                .get_pixel_checked(p.original.0 as u32, p.original.1 as u32)
-                .map(|pixel| pixel.0),
+            VertexMode::Color => {
+                let first_image = track.range().start;
+                if let Some(point2d) = track.get(first_image) {
+                    let img = &self.images[first_image];
+                    img.get_pixel_checked(point2d.1 as u32, point2d.0 as u32)
+                        .map(|pixel| pixel.0)
+                } else {
+                    return Err(OutputError::new("Track has no image").into());
+                }
+            }
         };
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
 
-        let p = p.reconstructed;
+        let p = if let Some(point3d) = track.get_point3d() {
+            point3d
+        } else {
+            return Err(OutputError::new("Point has no 3D coordinates").into());
+        };
         let (x, y, z) = (p.x, -p.y, p.z);
         w.write_all(&x.to_be_bytes())?;
         w.write_all(&y.to_be_bytes())?;
@@ -218,8 +392,8 @@ impl MeshWriter for PlyWriter {
         Ok(())
     }
 
-    fn output_face(&mut self, f: TriangulatedSurfaceFace) -> Result<(), Box<dyn error::Error>> {
-        let indices = f.vertices().map(|v| v.index());
+    fn output_face(&mut self, polygon: &Polygon) -> Result<(), Box<dyn error::Error>> {
+        let indices = polygon.vertices;
 
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
@@ -320,19 +494,29 @@ impl MeshWriter for ObjWriter {
         Ok(())
     }
 
-    fn output_vertex(&mut self, p: &triangulation::Point) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex(&mut self, track: &triangulation::Track) -> Result<(), Box<dyn error::Error>> {
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
-        let img = &self.images[p.index];
 
         let color = match self.vertex_mode {
             VertexMode::Plain | VertexMode::Texture => None,
-            VertexMode::Color => img
-                .get_pixel_checked(p.original.0 as u32, p.original.1 as u32)
-                .map(|pixel| pixel.0),
+            VertexMode::Color => {
+                let first_image = track.range().start;
+                if let Some(point2d) = track.get(first_image) {
+                    let img = &self.images[first_image];
+                    img.get_pixel_checked(point2d.1 as u32, point2d.0 as u32)
+                        .map(|pixel| pixel.0)
+                } else {
+                    return Err(OutputError::new("Track has no image").into());
+                }
+            }
         };
 
-        let p = p.reconstructed;
+        let p = if let Some(point3d) = track.get_point3d() {
+            point3d
+        } else {
+            return Err(OutputError::new("Point has no 3D coordinates").into());
+        };
         if let Some(color) = color {
             writeln!(
                 w,
@@ -351,26 +535,34 @@ impl MeshWriter for ObjWriter {
         Ok(())
     }
 
-    fn output_vertex_uv(&mut self, p: &triangulation::Point) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex_uv(
+        &mut self,
+        track: &triangulation::Track,
+    ) -> Result<(), Box<dyn error::Error>> {
         self.check_flush_buffer()?;
-        let img = &self.images[p.index];
         match self.vertex_mode {
             VertexMode::Plain | VertexMode::Color => {}
             VertexMode::Texture => {
                 let w = &mut self.buffer;
-                writeln!(
-                    w,
-                    "vt {} {}",
-                    p.original.0 as f64 / img.width() as f64,
-                    1.0f64 - p.original.1 as f64 / img.height() as f64,
-                )?;
+                let first_image = track.range().start;
+                if let Some(point2d) = track.get(first_image) {
+                    let img = &self.images[first_image];
+                    writeln!(
+                        w,
+                        "vt {} {}",
+                        point2d.1 as f64 / img.width() as f64,
+                        1.0f64 - point2d.0 as f64 / img.height() as f64,
+                    )?;
+                } else {
+                    return Err(OutputError::new("Track has no image").into());
+                }
             }
         }
         Ok(())
     }
 
-    fn output_face(&mut self, f: TriangulatedSurfaceFace) -> Result<(), Box<dyn error::Error>> {
-        let indices = f.vertices().map(|v| v.index());
+    fn output_face(&mut self, polygon: &Polygon) -> Result<(), Box<dyn error::Error>> {
+        let indices = polygon.vertices;
 
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
@@ -413,89 +605,150 @@ impl MeshWriter for ObjWriter {
 }
 
 struct ImageWriter {
-    output_image: RgbaImage,
+    output_map: DMatrix<Option<f64>>,
+    point_projections: Vec<Option<(u32, u32)>>,
     path: String,
-    min_depth: f64,
-    max_depth: f64,
+    img1_width: u32,
+    img1_height: u32,
 }
 
 impl ImageWriter {
     fn new(
         path: &str,
         images: Vec<RgbImage>,
-        points: &triangulation::Surface,
+        surface: &triangulation::Surface,
     ) -> Result<ImageWriter, std::io::Error> {
-        let (min_depth, max_depth) = points.iter().fold((f64::MAX, f64::MIN), |acc, p| {
-            let z = p.reconstructed.z;
-            (acc.0.min(z), acc.1.max(z))
-        });
+        let point_projections = surface
+            .iter_tracks()
+            .map(|track| track.get(0))
+            .collect::<Vec<_>>();
         let img1 = &images[0];
+        let output_map = DMatrix::from_element(img1.height() as usize, img1.width() as usize, None);
         Ok(ImageWriter {
-            output_image: RgbaImage::from_pixel(
-                img1.width(),
-                img1.height(),
-                Rgba::from([0, 0, 0, 0]),
-            ),
+            output_map,
+            point_projections,
             path: path.to_owned(),
-            min_depth,
-            max_depth,
+            img1_width: img1.width(),
+            img1_height: img1.height(),
         })
+    }
+
+    #[inline]
+    fn barycentric_interpolation(&self, polygon: &Polygon, pos: (usize, usize)) -> Option<f64> {
+        let v0 = self.point_projections[polygon.vertices[0]]?;
+        let v1 = self.point_projections[polygon.vertices[1]]?;
+        let v2 = self.point_projections[polygon.vertices[2]]?;
+
+        let (row0, row1, row2) = (v0.0 as f64, v1.0 as f64, v2.0 as f64);
+        let (col0, col1, col2) = (v0.1 as f64, v1.1 as f64, v2.1 as f64);
+        let (row, col) = (pos.0 as f64, pos.1 as f64);
+        let det = (row1 - row2) * (col0 - col2) + (col2 - col1) * (row0 - row2);
+        if det.abs() < f64::EPSILON {
+            return None;
+        }
+        let lambda0 = ((row1 - row2) * (col - col2) + (col2 - col1) * (row - row2)) / det;
+        let lambda1 = ((row2 - row0) * (col - col2) + (col0 - col2) * (row - row2)) / det;
+        let lambda2 = 1.0 - lambda0 - lambda1;
+
+        if lambda0 < -f64::EPSILON
+            || lambda1 < -f64::EPSILON
+            || lambda2 < -f64::EPSILON
+            || lambda0 > 1.0 + f64::EPSILON
+            || lambda1 > 1.0 + f64::EPSILON
+            || lambda2 > 1.0 + f64::EPSILON
+        {
+            return None;
+        }
+
+        let value = polygon.points[0].z * lambda0
+            + polygon.points[1].z * lambda1
+            + polygon.points[2].z * lambda2;
+
+        Some(value)
     }
 }
 
 impl MeshWriter for ImageWriter {
-    fn output_vertex(&mut self, p: &triangulation::Point) -> Result<(), Box<dyn error::Error>> {
-        let (x, y) = (p.original.0 as u32, p.original.1 as u32);
-        let value = (p.reconstructed.z - self.min_depth) / (self.max_depth - self.min_depth);
-        self.output_image.put_pixel(x, y, map_depth(value));
+    fn output_vertex(&mut self, track: &triangulation::Track) -> Result<(), Box<dyn error::Error>> {
+        // TODO: project all polygons into first image
+        let point2d = if let Some(point2d) = track.get(0) {
+            point2d
+        } else {
+            return Err(OutputError::new("Track is absent from first image").into());
+        };
+        let point3d = if let Some(point3d) = track.get_point3d() {
+            point3d
+        } else {
+            return Err(OutputError::new("Point has no 3D coordinates").into());
+        };
+        let (row, col) = (point2d.0 as usize, point2d.1 as usize);
+        if row < self.output_map.nrows() && col < self.output_map.ncols() {
+            self.output_map[(row, col)] = Some(point3d.z);
+        }
         Ok(())
     }
 
-    fn output_face(&mut self, f: TriangulatedSurfaceFace) -> Result<(), Box<dyn error::Error>> {
-        let vertices = f.vertices();
-        let (min_x, max_x) = vertices
-            .iter()
-            .fold((self.output_image.width(), 0), |acc, f| {
-                let point = f.data().original;
-                (acc.0.min(point.0 as u32), acc.1.max(point.0 as u32))
-            });
-        let (min_y, max_y) = vertices
-            .iter()
-            .fold((self.output_image.height(), 0), |acc, f| {
-                let point = f.data().original;
-                (acc.0.min(point.1 as u32), acc.1.max(point.1 as u32))
-            });
+    fn output_face(&mut self, polygon: &Polygon) -> Result<(), Box<dyn error::Error>> {
+        let vertices = polygon.vertices;
+        let (min_row, max_row, min_col, max_col) = vertices.iter().fold(
+            (self.output_map.nrows(), 0, self.output_map.ncols(), 0),
+            |acc, v| {
+                let (row, col) = if let Some(point) = self.point_projections[*v] {
+                    (point.0 as usize, point.1 as usize)
+                } else {
+                    return acc;
+                };
+                (
+                    acc.0.min(row),
+                    acc.1.max(row),
+                    acc.2.min(col),
+                    acc.3.max(col),
+                )
+            },
+        );
 
-        for x in min_x..=max_x {
-            for y in min_y..=max_y {
-                if self.output_image.get_pixel(x, y).0[3] != 0 {
+        for row in min_row..=max_row {
+            for col in min_col..=max_col {
+                if self.output_map[(row, col)].is_some() {
                     continue;
                 }
-                let lambda = f.barycentric_interpolation(Point2 {
-                    x: x as f64,
-                    y: y as f64,
-                });
-                if lambda
-                    .iter()
-                    .any(|lambda| *lambda > 1.0 + f64::EPSILON || *lambda < 0.0 - f64::EPSILON)
+                let value = if let Some(value) = self.barycentric_interpolation(polygon, (row, col))
                 {
+                    value
+                } else {
                     continue;
-                }
-                let value: f64 = vertices
-                    .iter()
-                    .zip(lambda)
-                    .map(|(vertex, lambda)| vertex.data().reconstructed.z * lambda)
-                    .sum();
+                };
 
-                let value = (value - self.min_depth) / (self.max_depth - self.min_depth);
-                self.output_image.put_pixel(x, y, map_depth(value));
+                if row < self.output_map.nrows() && col < self.output_map.ncols() {
+                    self.output_map[(row, col)] = Some(value);
+                }
             }
         }
         Ok(())
     }
 
     fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
-        self.output_image.save(&self.path)?;
+        let (min_depth, max_depth) = self.output_map.iter().fold((f64::MAX, f64::MIN), |acc, v| {
+            if let Some(v) = v {
+                (acc.0.min(*v), acc.1.max(*v))
+            } else {
+                acc
+            }
+        });
+        let mut output_image =
+            RgbaImage::from_pixel(self.img1_width, self.img1_height, Rgba::from([0, 0, 0, 0]));
+        output_image
+            .enumerate_pixels_mut()
+            .par_bridge()
+            .for_each(|(x, y, value)| {
+                let depth = if let Some(depth) = self.output_map[(y as usize, x as usize)] {
+                    depth
+                } else {
+                    return;
+                };
+                *value = map_depth((depth - min_depth) / (max_depth - min_depth))
+            });
+        output_image.save(&self.path)?;
         Ok(())
     }
 }
@@ -585,10 +838,33 @@ fn map_color(colormap: &[u8; 256], value: f64) -> u8 {
     (c2 * ratio + c1 * (1.0 - ratio)).round() as u8
 }
 
-impl HasPosition for triangulation::Point {
+impl HasPosition for Point {
     fn position(&self) -> Point2<f64> {
-        Point2::new(self.original.0 as f64, self.original.1 as f64)
+        if let Some(point2d) = self.track.get(self.camera_i) {
+            Point2::new(point2d.1 as f64, point2d.0 as f64)
+        } else {
+            Point2::new(f64::NAN, f64::NAN)
+        }
     }
 
     type Scalar = f64;
+}
+
+#[derive(Debug)]
+pub struct OutputError {
+    msg: &'static str,
+}
+
+impl OutputError {
+    fn new(msg: &'static str) -> OutputError {
+        OutputError { msg }
+    }
+}
+
+impl std::error::Error for OutputError {}
+
+impl fmt::Display for OutputError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.msg)
+    }
 }
