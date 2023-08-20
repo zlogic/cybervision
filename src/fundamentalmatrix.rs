@@ -325,7 +325,6 @@ impl FundamentalMatrix {
         coeffs[2] = d[1][1][0] + d[0][1][1] + d[1][0][1] - 3.0 * d[1][1][1];
         coeffs[3] = d[1][1][1];
 
-        // TODO 0.17 remove this external dependency.
         let roots = find_roots_cubic(coeffs[0], coeffs[1], coeffs[2], coeffs[3]);
         let roots = match roots {
             roots::Roots::No(r) => r.to_vec(),
