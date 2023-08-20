@@ -26,23 +26,42 @@ const HISTOGRAM_FILTER_DISCARD_PERCENTILE: f64 = 0.025;
 
 pub struct Surface {
     tracks: Vec<Track>,
-    cameras: Vec<Vector3<f64>>,
+    cameras: Vec<Camera>,
+    projections: Vec<Matrix3x4<f64>>,
 }
 
 impl Surface {
     pub fn iter_tracks(&self) -> std::slice::Iter<Track> {
         self.tracks.iter()
     }
+
     pub fn tracks_len(&self) -> usize {
         self.tracks.len()
     }
-    pub fn camera_center(&self, i: usize) -> Option<Vector3<f64>> {
-        if i < self.cameras.len() {
-            Some(self.cameras[i])
-        } else {
-            None
-        }
+
+    #[inline]
+    pub fn project_point(&self, camera_i: usize, track_i: usize) -> Option<Vector2<f64>> {
+        let track = &self.tracks[track_i];
+        let projection = &self.projections[camera_i];
+        let point4d = track.point3d?.insert_row(3, 1.0);
+        let projected_point = projection * point4d;
+        let projected_point = projected_point.remove_row(2).unscale(projected_point.z);
+        Some(projected_point)
     }
+
+    #[inline]
+    pub fn point_depth(&self, camera_i: usize, track_i: usize) -> Option<f64> {
+        let track = &self.tracks[track_i];
+        if self.cameras.is_empty() {
+            return Some(track.point3d?.z);
+        }
+        let camera = &self.cameras[camera_i];
+        if track.get(camera_i).is_none() {
+            return None;
+        }
+        Some(camera.point_depth(&track.point3d?))
+    }
+
     pub fn cameras_len(&self) -> usize {
         self.cameras.len()
     }
@@ -78,6 +97,7 @@ impl Triangulation {
         let surface = Surface {
             tracks: vec![],
             cameras: vec![],
+            projections: vec![],
         };
         let (affine, perspective) = match projection {
             ProjectionMode::Affine => (Some(AffineTriangulation { surface, scale }), None),
@@ -222,9 +242,11 @@ impl AffineTriangulation {
                 }
             })
             .collect::<Vec<_>>();
+
         Surface {
-            cameras: self.surface.cameras.clone(),
             tracks: scaled_tracks,
+            cameras: self.surface.cameras.clone(),
+            projections: self.surface.projections.clone(),
         }
     }
 }
@@ -368,7 +390,6 @@ impl Camera {
 
     #[inline]
     fn point_in_front(&self, point3d: &Vector3<f64>) -> bool {
-        // This is how OpenMVG does it, works great!
         self.point_depth(point3d) > 0.0
     }
 
@@ -477,10 +498,10 @@ impl PerspectiveTriangulation {
         }
         self.filter_outliers();
 
-        let surface_cameras = self
+        let surface_projections = self
             .cameras
             .iter()
-            .map(|camera| camera.r_matrix.tr_mul(&-camera.t))
+            .map(|camera| camera.projection())
             .collect::<Vec<_>>();
         let surface_tracks = self
             .tracks
@@ -490,8 +511,9 @@ impl PerspectiveTriangulation {
             .collect::<Vec<_>>();
 
         let mut surface = Surface {
-            cameras: surface_cameras,
             tracks: surface_tracks,
+            cameras: self.cameras.clone(),
+            projections: surface_projections,
         };
 
         self.scale_points(&mut surface.tracks.as_mut_slice());

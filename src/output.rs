@@ -16,6 +16,8 @@ use rayon::prelude::*;
 
 use crate::triangulation;
 
+const PROJECTIONS_INDEX_GRID_SIZE: usize = 1000;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum InterpolationMode {
     Delaunay,
@@ -43,59 +45,113 @@ struct Point {
     camera_i: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 struct Polygon {
     vertices: [usize; 3],
-    points: [Vector3<f64>; 3],
 }
 
 impl Polygon {
-    fn new(v0: &Point, v1: &Point, v2: &Point) -> Option<Polygon> {
+    fn new(v0: &Point, v1: &Point, v2: &Point) -> Polygon {
         let vertices = [v0.track_i, v1.track_i, v2.track_i];
-        let points = [
-            v0.track.get_point3d()?,
-            v1.track.get_point3d()?,
-            v2.track.get_point3d()?,
-        ];
-        Some(Polygon { vertices, points })
+        Polygon { vertices }
+    }
+}
+
+struct CameraGrid {
+    camera_i: usize,
+    min_row: f64,
+    max_row: f64,
+    min_col: f64,
+    max_col: f64,
+    grid: DMatrix<Vec<Vector3<f64>>>,
+    grid_step: f64,
+}
+
+impl CameraGrid {
+    fn new(camera_i: usize) -> CameraGrid {
+        CameraGrid {
+            camera_i,
+            min_row: f64::MAX,
+            max_row: f64::MIN,
+            min_col: f64::MAX,
+            max_col: f64::MIN,
+            grid: DMatrix::from_element(0, 0, vec![]),
+            grid_step: 0.0,
+        }
     }
 
-    #[inline]
-    fn intersects_line(&self, origin: &Vector3<f64>, destination: &Vector3<f64>) -> bool {
-        let direction = destination - origin;
-        // Möller–Trumbore intersection algorithm
-        let edge_1 = self.points[1] - self.points[0];
-        let edge_2 = self.points[2] - self.points[0];
-        let h = direction.cross(&edge_2);
-        let a = edge_1.dot(&h);
-        if a.abs() < f64::EPSILON {
-            return false;
+    fn from_point(camera_i: usize, point: (f64, f64)) -> CameraGrid {
+        CameraGrid {
+            camera_i,
+            min_row: point.0,
+            max_row: point.0,
+            min_col: point.1,
+            max_col: point.1,
+            grid: DMatrix::from_element(0, 0, vec![]),
+            grid_step: 0.0,
         }
+    }
 
-        let f = 1.0 / a;
-        let s = origin - self.points[0];
-        let u = f * s.dot(&h);
-
-        if u < 0.0 || u > 1.0 {
-            return false;
+    fn merge(&self, other: &CameraGrid) -> CameraGrid {
+        CameraGrid {
+            camera_i: self.camera_i,
+            min_row: self.min_row.min(other.min_row),
+            max_row: self.max_row.max(other.max_row),
+            min_col: self.min_col.min(other.min_col),
+            max_col: self.max_col.max(other.max_col),
+            grid: DMatrix::from_element(0, 0, vec![]),
+            grid_step: 0.0,
         }
+    }
 
-        let q = s.cross(&edge_1);
-        let v = f * direction.dot(&q);
+    fn get_step(&self) -> f64 {
+        (self.max_row - self.min_row).min(self.max_col - self.min_col)
+            / PROJECTIONS_INDEX_GRID_SIZE as f64
+    }
 
-        if v < 0.0 || u + v > 1.0 {
-            return false;
-        }
+    fn index_projections(&mut self, points: &triangulation::Surface) {
+        let grid_step = self.get_step();
+        let nrows = ((self.max_row - self.min_row) / grid_step).ceil() as usize;
+        let ncols = ((self.max_col - self.min_col) / grid_step).ceil() as usize;
+        let mut index = DMatrix::<Vec<Vector3<f64>>>::from_element(nrows, ncols, vec![]);
+        // TODO 0.17 Parallelize this
+        points
+            .iter_tracks()
+            .enumerate()
+            .for_each(|(track_i, _track)| {
+                let point = if let Some(point) = points.project_point(self.camera_i, track_i) {
+                    point
+                } else {
+                    return;
+                };
+                let point_depth =
+                    if let Some(point_depth) = points.point_depth(self.camera_i, track_i) {
+                        point_depth
+                    } else {
+                        return;
+                    };
+                let row =
+                    (((point.y - self.min_row) / grid_step).floor() as usize).clamp(0, nrows - 1);
+                let col =
+                    (((point.x - self.min_col) / grid_step).floor() as usize).clamp(0, ncols - 1);
+                let point_in_camera = Vector3::new(point.x, point.y, point_depth);
+                index[(row, col)].push(point_in_camera);
+            });
 
-        let t = f * edge_2.dot(&q);
+        self.grid_step = grid_step;
+        self.grid = index;
+    }
 
-        t > f64::EPSILON && t < 1.0 - f64::EPSILON
+    fn clear_grid(&mut self) {
+        self.grid = DMatrix::from_element(0, 0, vec![]);
+        self.grid_step = 0.0;
     }
 }
 
 struct Mesh {
     points: triangulation::Surface,
     polygons: Vec<Polygon>,
+    camera_ranges: Vec<CameraGrid>,
 }
 
 impl Mesh {
@@ -107,6 +163,7 @@ impl Mesh {
         let mut surface = Mesh {
             points: surface,
             polygons: vec![],
+            camera_ranges: vec![],
         };
 
         if surface.points.cameras_len() == 0 {
@@ -120,6 +177,105 @@ impl Mesh {
         Ok(surface)
     }
 
+    fn camera_ranges(&self) -> Vec<CameraGrid> {
+        (0..self.points.cameras_len())
+            .map(|camera_i| {
+                self.points
+                    .iter_tracks()
+                    .enumerate()
+                    .par_bridge()
+                    .flat_map(|(track_i, _track)| {
+                        let point = self.points.project_point(camera_i, track_i)?;
+                        Some(CameraGrid::from_point(camera_i, (point.y, point.x)))
+                    })
+                    .reduce(|| CameraGrid::new(camera_i), |a, b| a.merge(&b))
+            })
+            .collect::<Vec<_>>()
+    }
+
+    #[inline]
+    fn polygon_obstructs(&self, camera_i: usize, grid: &CameraGrid, polygon: &Polygon) -> bool {
+        let project_polygon_point = |i: usize| {
+            let point = self.points.project_point(camera_i, polygon.vertices[i])?;
+            Some((point.y, point.x))
+        };
+        let polygon_projection = || {
+            Some([
+                project_polygon_point(0)?,
+                project_polygon_point(1)?,
+                project_polygon_point(2)?,
+            ])
+        };
+        let polygon_projection = if let Some(projection) = polygon_projection() {
+            projection
+        } else {
+            return false;
+        };
+        let get_polygon_depth = |i: usize| self.points.point_depth(camera_i, polygon.vertices[i]);
+        let polygon_depths = || {
+            Some([
+                get_polygon_depth(0)?,
+                get_polygon_depth(1)?,
+                get_polygon_depth(2)?,
+            ])
+        };
+        let polygon_depths = if let Some(depths) = polygon_depths() {
+            depths
+        } else {
+            return false;
+        };
+
+        let (min_row, max_row, min_col, max_col) = polygon_projection
+            .iter()
+            .map(|point| (point.0, point.1))
+            .fold((f64::MAX, f64::MIN, f64::MAX, f64::MIN), |acc, v| {
+                (
+                    acc.0.min(v.0),
+                    acc.1.max(v.0),
+                    acc.2.min(v.1),
+                    acc.3.max(v.1),
+                )
+            });
+
+        let min_row = (((min_row - grid.min_row) / grid.grid_step).floor() as usize)
+            .saturating_sub(1)
+            .clamp(0, grid.grid.nrows());
+        let max_row = (((max_row - grid.min_row) / grid.grid_step).ceil() as usize)
+            .saturating_add(1)
+            .clamp(0, grid.grid.nrows());
+        let min_col = (((min_col - grid.min_col) / grid.grid_step).floor() as usize)
+            .saturating_sub(1)
+            .clamp(0, grid.grid.ncols());
+        let max_col = (((max_col - grid.min_col) / grid.grid_step).ceil() as usize)
+            .saturating_add(1)
+            .clamp(0, grid.grid.ncols());
+
+        for row in min_row..max_row {
+            for col in min_col..max_col {
+                let points = &grid.grid[(row, col)];
+                let obstruction = points.iter().any(|point| {
+                    let point2d = (point.y, point.x);
+                    let barycentric_coordinates =
+                        barycentric_interpolation(&polygon_projection, &point2d);
+                    if let Some(lambda) = barycentric_coordinates {
+                        let polygon_depth = lambda[0] * polygon_depths[0]
+                            + lambda[1] * polygon_depths[1]
+                            + lambda[2] * polygon_depths[2];
+                        polygon_depth < point.z
+                    } else {
+                        false
+                    }
+                });
+
+                if obstruction {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
     fn process_camera<PL: ProgressListener>(
         &mut self,
         camera_i: usize,
@@ -129,6 +285,7 @@ impl Mesh {
         if interpolation != InterpolationMode::Delaunay {
             return Ok(());
         }
+
         let camera_points = self
             .points
             .iter_tracks()
@@ -146,8 +303,9 @@ impl Mesh {
                 }
             })
             .collect::<Vec<_>>();
-
-        let check_intersections = self.points.camera_center(camera_i).is_some();
+        if self.camera_ranges.is_empty() {
+            self.camera_ranges = self.camera_ranges();
+        }
 
         let triangulated_surface = DelaunayTriangulation::<Point>::bulk_load(camera_points)?;
 
@@ -160,61 +318,75 @@ impl Mesh {
         } else {
             (0.0, 1.0)
         };
-        let counter = AtomicUsize::new(0);
 
-        let polygons_count = triangulated_surface.num_inner_faces();
+        let percent_complete = percent_complete + percent_multiplier * 0.2;
+        if let Some(pl) = progress_listener {
+            pl.report_status(0.9 * percent_complete);
+        }
+
         let mut new_polygons = triangulated_surface
             .inner_faces()
             .par_bridge()
-            .filter_map(|f| {
-                if let Some(pl) = progress_listener {
-                    let value = percent_complete
-                        + percent_multiplier * counter.fetch_add(1, AtomicOrdering::Relaxed) as f32
-                            / polygons_count as f32;
-                    pl.report_status(0.2 * value);
-                }
+            .map(|f| {
                 let vertices = f.vertices();
                 let v0 = vertices[0].data();
                 let v1 = vertices[1].data();
                 let v2 = vertices[2].data();
-                let polygon = Polygon::new(v0, v1, v2)?;
-                if !check_intersections {
-                    return Some(polygon);
-                }
-
-                // TODO 0.17 Use a grid (or polar) index to accelerate lookup times.
-                let mut no_intersections = true;
-                for camera_j in 0..cameras_len {
-                    if camera_i == camera_j {
-                        continue;
-                    }
-                    if !no_intersections {
-                        break;
-                    }
-                    let camera_j_center = self.points.camera_center(camera_j)?;
-                    no_intersections = no_intersections
-                        && self.points.iter_tracks().all(|track| {
-                            if track.get(camera_j).is_some() {
-                                let point3d = if let Some(point3d) = track.get_point3d() {
-                                    point3d
-                                } else {
-                                    return true;
-                                };
-                                !polygon.intersects_line(&camera_j_center, &point3d)
-                            } else {
-                                true
-                            }
-                        });
-                }
-
-                if no_intersections {
-                    Some(polygon)
-                } else {
-                    None
-                }
+                Polygon::new(v0, v1, v2)
             })
             .collect::<Vec<_>>();
         drop(triangulated_surface);
+
+        if self.points.cameras_len() > 0 {
+            let mut processed_cameras = 0usize;
+            for camera_j in 0..cameras_len {
+                if camera_i == camera_j {
+                    continue;
+                }
+
+                let percent_multiplier =
+                    percent_multiplier / (self.points.cameras_len() - 1) as f32;
+                let percent_complete =
+                    percent_complete + percent_multiplier * processed_cameras as f32;
+
+                self.camera_ranges[camera_j].index_projections(&self.points);
+                let camera_range = &self.camera_ranges[camera_j];
+
+                let percent_complete = percent_complete + percent_multiplier * 0.4;
+                let percent_multiplier = percent_multiplier * 0.6;
+                if let Some(pl) = progress_listener {
+                    pl.report_status(0.9 * percent_complete);
+                }
+
+                let polygons_count = new_polygons.len();
+                let counter = AtomicUsize::new(0);
+                new_polygons = new_polygons
+                    .par_iter()
+                    .filter_map(|polygon| {
+                        if let Some(pl) = progress_listener {
+                            let value = percent_complete
+                                + percent_multiplier
+                                    * (counter.fetch_add(1, AtomicOrdering::Relaxed) as f32
+                                        / polygons_count as f32);
+                            pl.report_status(0.9 * value);
+                        }
+                        let polygon = polygon.to_owned();
+
+                        // Discard polygons that obstruct points.
+                        // TODO: cut holes in the polygon?
+                        if self.polygon_obstructs(camera_i, camera_range, &polygon) {
+                            None
+                        } else {
+                            Some(polygon)
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                self.camera_ranges[camera_j].clear_grid();
+                processed_cameras += 1;
+            }
+        }
+
         self.polygons.append(&mut new_polygons);
 
         Ok(())
@@ -232,7 +404,7 @@ impl Mesh {
             .enumerate()
             .try_for_each(|(i, v)| {
                 if let Some(pl) = progress_listener {
-                    pl.report_status(0.2 + 0.2 * (i as f32 / nvertices));
+                    pl.report_status(0.90 + 0.02 * (i as f32 / nvertices));
                 }
                 writer.output_vertex(v)
             })?;
@@ -241,14 +413,14 @@ impl Mesh {
             .enumerate()
             .try_for_each(|(i, v)| {
                 if let Some(pl) = progress_listener {
-                    pl.report_status(0.4 + 0.2 * (i as f32 / nvertices));
+                    pl.report_status(0.92 + 0.02 * (i as f32 / nvertices));
                 }
                 writer.output_vertex_uv(v)
             })?;
         let nfaces = self.polygons.len() as f32;
         self.polygons.iter().enumerate().try_for_each(|(i, f)| {
             if let Some(pl) = progress_listener {
-                pl.report_status(0.6 + 0.3 * (i as f32 / nfaces));
+                pl.report_status(0.94 + 0.06 * (i as f32 / nfaces));
             }
             writer.output_face(f)
         })?;
@@ -606,7 +778,7 @@ impl MeshWriter for ObjWriter {
 
 struct ImageWriter {
     output_map: DMatrix<Option<f64>>,
-    point_projections: Vec<Option<(u32, u32)>>,
+    point_projections: Vec<Option<(u32, u32, f64)>>,
     path: String,
     img1_width: u32,
     img1_height: u32,
@@ -620,7 +792,12 @@ impl ImageWriter {
     ) -> Result<ImageWriter, std::io::Error> {
         let point_projections = surface
             .iter_tracks()
-            .map(|track| track.get(0))
+            .enumerate()
+            .map(|(track_i, track)| {
+                let point = track.get(0)?;
+                let point_depth = surface.point_depth(0, track_i)?;
+                Some((point.0, point.1, point_depth))
+            })
             .collect::<Vec<_>>();
         let img1 = &images[0];
         let output_map = DMatrix::from_element(img1.height() as usize, img1.width() as usize, None);
@@ -635,34 +812,24 @@ impl ImageWriter {
 
     #[inline]
     fn barycentric_interpolation(&self, polygon: &Polygon, pos: (usize, usize)) -> Option<f64> {
-        let v0 = self.point_projections[polygon.vertices[0]]?;
-        let v1 = self.point_projections[polygon.vertices[1]]?;
-        let v2 = self.point_projections[polygon.vertices[2]]?;
+        let convert_projection = |i: usize| {
+            self.point_projections[polygon.vertices[i]]
+                .map(|(row, col, _depth)| (row as f64, col as f64))
+        };
 
-        let (row0, row1, row2) = (v0.0 as f64, v1.0 as f64, v2.0 as f64);
-        let (col0, col1, col2) = (v0.1 as f64, v1.1 as f64, v2.1 as f64);
-        let (row, col) = (pos.0 as f64, pos.1 as f64);
-        let det = (row1 - row2) * (col0 - col2) + (col2 - col1) * (row0 - row2);
-        if det.abs() < f64::EPSILON {
-            return None;
-        }
-        let lambda0 = ((row1 - row2) * (col - col2) + (col2 - col1) * (row - row2)) / det;
-        let lambda1 = ((row2 - row0) * (col - col2) + (col0 - col2) * (row - row2)) / det;
-        let lambda2 = 1.0 - lambda0 - lambda1;
+        let convert_depth =
+            |i: usize| self.point_projections[polygon.vertices[i]].map(|(_row, _col, depth)| depth);
+        let polygon_projection = [
+            convert_projection(0)?,
+            convert_projection(1)?,
+            convert_projection(2)?,
+        ];
+        let polygon_depths = [convert_depth(0)?, convert_depth(1)?, convert_depth(2)?];
 
-        if lambda0 < -f64::EPSILON
-            || lambda1 < -f64::EPSILON
-            || lambda2 < -f64::EPSILON
-            || lambda0 > 1.0 + f64::EPSILON
-            || lambda1 > 1.0 + f64::EPSILON
-            || lambda2 > 1.0 + f64::EPSILON
-        {
-            return None;
-        }
-
-        let value = polygon.points[0].z * lambda0
-            + polygon.points[1].z * lambda1
-            + polygon.points[2].z * lambda2;
+        let lambda = barycentric_interpolation(&polygon_projection, &(pos.0 as f64, pos.1 as f64))?;
+        let value = lambda[0] * polygon_depths[0]
+            + lambda[1] * polygon_depths[1]
+            + lambda[2] * polygon_depths[2];
 
         Some(value)
     }
@@ -751,6 +918,35 @@ impl MeshWriter for ImageWriter {
         output_image.save(&self.path)?;
         Ok(())
     }
+}
+
+#[inline]
+fn barycentric_interpolation(projections: &[(f64, f64); 3], pos: &(f64, f64)) -> Option<[f64; 3]> {
+    let v0 = projections[0];
+    let v1 = projections[1];
+    let v2 = projections[2];
+
+    let (row0, row1, row2) = (v0.0, v1.0, v2.0);
+    let (col0, col1, col2) = (v0.1, v1.1, v2.1);
+    let (row, col) = (pos.0, pos.1);
+    let det = (row1 - row2) * (col0 - col2) + (col2 - col1) * (row0 - row2);
+    if det.abs() < f64::EPSILON {
+        return None;
+    }
+    let lambda0 = ((row1 - row2) * (col - col2) + (col2 - col1) * (row - row2)) / det;
+    let lambda1 = ((row2 - row0) * (col - col2) + (col0 - col2) * (row - row2)) / det;
+    let lambda2 = 1.0 - lambda0 - lambda1;
+
+    if lambda0 < -f64::EPSILON
+        || lambda1 < -f64::EPSILON
+        || lambda2 < -f64::EPSILON
+        || lambda0 > 1.0 + f64::EPSILON
+        || lambda1 > 1.0 + f64::EPSILON
+        || lambda2 > 1.0 + f64::EPSILON
+    {
+        return None;
+    }
+    Some([lambda0, lambda1, lambda2])
 }
 
 #[inline]
