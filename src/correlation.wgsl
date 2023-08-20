@@ -52,12 +52,17 @@ fn prepare_initialdata_searchdata(@builtin(global_invocation_id) global_id: vec3
     let x = global_id.x;
     let y = global_id.y;
 
+    let out_width = parameters.out_width;
+    let out_height = parameters.out_height;
     let img1_width = parameters.img1_width;
     let img1_height = parameters.img1_height;
 
     if x < img1_width && y < img1_height {
         internals_img1[img1_width*y+x] = vec2(0.0, 0.0);
         internals_int[img1_width*y+x] = vec3(-1, -1, 0);
+    }
+    if x < out_width && y < out_height {
+        result_corr[out_width*y+x] = -1.0;
     }
 }
 

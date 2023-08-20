@@ -1,6 +1,7 @@
 use nalgebra::{DMatrix, Matrix3, Vector3};
-use rayon::prelude::*;
 use std::{cell::RefCell, error, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering};
+
+use rayon::prelude::*;
 
 const SCALE_MIN_SIZE: usize = 64;
 const KERNEL_SIZE: usize = 5;
@@ -295,14 +296,6 @@ impl PointCorrelations {
                 let out_row = (row as f32 / scale) as usize;
                 let out_col = (col as f32 / scale) as usize;
                 let out_point = &mut correlated_points[(out_row, out_col)];
-                let point_corr = if let Some(point) = point {
-                    point.2
-                } else {
-                    continue;
-                };
-                if out_point.map_or(false, |out_point| out_point.2 < point_corr) {
-                    continue;
-                }
                 *out_point = point;
             }
         }
@@ -746,6 +739,8 @@ mod gpu {
     use pollster::FutureExt;
     use std::sync::mpsc;
 
+    use rayon::prelude::*;
+
     use super::{
         CORRIDOR_MIN_RANGE, CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE,
         CORRIDOR_SEGMENT_LENGTH_LOWPOWER, CROSS_CHECK_SEARCH_AREA, KERNEL_SIZE, NEIGHBOR_DISTANCE,
@@ -782,6 +777,8 @@ mod gpu {
         img1_shape: (usize, usize),
         img2_shape: (usize, usize),
 
+        correlation_values: DMatrix<Option<f32>>,
+
         corridor_segment_length: usize,
         search_area_segment_length: usize,
         corridor_size: usize,
@@ -798,7 +795,6 @@ mod gpu {
         buffer_out: wgpu::Buffer,
         buffer_out_reverse: wgpu::Buffer,
         buffer_out_corr: wgpu::Buffer,
-        buffer_reverse_corr: wgpu::Buffer,
 
         pipeline_configs: HashMap<String, ComputePipelineConfig>,
     }
@@ -830,6 +826,7 @@ mod gpu {
 
             let img1_pixels = img1_dimensions.0 * img1_dimensions.1;
             let img2_pixels = img2_dimensions.0 * img2_dimensions.1;
+            let max_pixels = img1_pixels.max(img2_pixels);
 
             // Init adapter.
             let instance = wgpu::Instance::default();
@@ -865,7 +862,7 @@ mod gpu {
             limits.max_bindings_per_bind_group = MAX_BINDINGS;
             limits.max_storage_buffers_per_shader_stage = MAX_BINDINGS;
             // Ensure there's enough memory for the largest buffer.
-            let max_buffer_size = (img1_pixels * 3 + img2_pixels * 2) * std::mem::size_of::<f32>();
+            let max_buffer_size = max_pixels * 4 * std::mem::size_of::<i32>();
             limits.max_storage_buffer_binding_size = max_buffer_size as u32;
             limits.max_buffer_size = max_buffer_size as u64;
             limits.max_push_constant_size = std::mem::size_of::<ShaderParams>() as u32;
@@ -909,13 +906,13 @@ mod gpu {
             );
             let buffer_internal_int = init_buffer(
                 &device,
-                img1_pixels * 4 * std::mem::size_of::<i32>(),
+                max_pixels * 4 * std::mem::size_of::<i32>(),
                 true,
                 false,
             );
             let buffer_out = init_buffer(
                 &device,
-                img1_pixels * 2 * std::mem::size_of::<i32>(),
+                max_pixels * 2 * std::mem::size_of::<i32>(),
                 false,
                 false,
             );
@@ -927,16 +924,12 @@ mod gpu {
             );
             let buffer_out_corr = init_buffer(
                 &device,
-                img1_pixels * std::mem::size_of::<f32>(),
+                max_pixels * std::mem::size_of::<f32>(),
                 false,
                 false,
             );
-            let buffer_reverse_corr = init_buffer(
-                &device,
-                img2_pixels * std::mem::size_of::<f32>(),
-                false,
-                false,
-            );
+
+            let correlation_values = DMatrix::from_element(img1_shape.0, img1_shape.1, None);
 
             let result = GpuContext {
                 min_stdev,
@@ -946,6 +939,7 @@ mod gpu {
                 fundamental_matrix,
                 img1_shape,
                 img2_shape,
+                correlation_values,
                 corridor_segment_length,
                 search_area_segment_length,
                 device_name,
@@ -959,7 +953,6 @@ mod gpu {
                 buffer_out,
                 buffer_out_reverse,
                 buffer_out_corr,
-                buffer_reverse_corr,
                 pipeline_configs: HashMap::new(),
             };
             Ok(result)
@@ -991,7 +984,7 @@ mod gpu {
             let send_progress = |value| {
                 let value = match dir {
                     CorrelationDirection::Forward => value * 0.98 / 2.0,
-                    CorrelationDirection::Reverse => 0.5 + value * 0.98 / 2.0,
+                    CorrelationDirection::Reverse => 0.51 + value * 0.98 / 2.0,
                 };
                 if let Some(pl) = progress_listener {
                     pl.report_status(value);
@@ -1024,7 +1017,7 @@ mod gpu {
             if first_pass {
                 self.run_shader(out_shape, &dir, "init_out_data", params);
             } else {
-                self.run_shader(max_shape, &dir, "prepare_initialdata_searchdata", params);
+                self.run_shader(out_shape, &dir, "prepare_initialdata_searchdata", params);
                 progressbar_completed_percentage = 0.02;
                 send_progress(progressbar_completed_percentage);
 
@@ -1095,7 +1088,7 @@ mod gpu {
                 }
             }
 
-            Ok(())
+            self.save_corr(&dir)
         }
 
         pub fn cross_check_filter(&mut self, scale: f32, dir: CorrelationDirection) {
@@ -1201,6 +1194,60 @@ mod gpu {
             );
         }
 
+        fn save_corr(&mut self, dir: &CorrelationDirection) -> Result<(), Box<dyn error::Error>> {
+            if !matches!(dir, CorrelationDirection::Forward) {
+                return Ok(());
+            }
+            let out_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: self.buffer_out_corr.size(),
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let out_buffer_slice = out_buffer.slice(..);
+            {
+                let mut encoder = self
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                encoder.copy_buffer_to_buffer(
+                    &self.buffer_out_corr,
+                    0,
+                    &out_buffer,
+                    0,
+                    self.buffer_out_corr.size(),
+                );
+                self.queue.submit(Some(encoder.finish()));
+                let (sender, receiver) = mpsc::channel();
+                out_buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
+                self.device.poll(wgpu::Maintain::Wait);
+
+                if let Err(err) = receiver.recv() {
+                    return Err(err.into());
+                }
+            }
+
+            let out_buffer_slice_mapped = out_buffer_slice.get_mapped_range();
+            let out_data: &[f32] = bytemuck::cast_slice(&out_buffer_slice_mapped);
+
+            let ncols = self.correlation_values.ncols();
+            self.correlation_values
+                .column_iter_mut()
+                .enumerate()
+                .par_bridge()
+                .for_each(|(col, mut out_col)| {
+                    out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
+                        let corr = out_data[row * ncols + col];
+                        if corr > self.correlation_threshold {
+                            *out_point = Some(corr);
+                        }
+                    })
+                });
+            drop(out_buffer_slice_mapped);
+            out_buffer.unmap();
+
+            Ok(())
+        }
+
         pub fn complete_process(
             &mut self,
         ) -> Result<DMatrix<Option<super::Match>>, Box<dyn error::Error>> {
@@ -1209,7 +1256,7 @@ mod gpu {
             self.buffer_internal_img2.destroy();
             self.buffer_internal_int.destroy();
             self.buffer_out_reverse.destroy();
-            self.buffer_reverse_corr.destroy();
+            self.buffer_out_corr.destroy();
 
             let mut out_image = DMatrix::from_element(self.img1_shape.0, self.img1_shape.1, None);
 
@@ -1219,14 +1266,7 @@ mod gpu {
                 usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
-            let out_corr_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: None,
-                size: self.buffer_out_corr.size(),
-                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
             let out_buffer_slice = out_buffer.slice(..);
-            let out_corr_buffer_slice = out_corr_buffer.slice(..);
             {
                 let mut encoder = self
                     .device
@@ -1238,51 +1278,40 @@ mod gpu {
                     0,
                     self.buffer_out.size(),
                 );
-                encoder.copy_buffer_to_buffer(
-                    &self.buffer_out_corr,
-                    0,
-                    &out_corr_buffer,
-                    0,
-                    self.buffer_out_corr.size(),
-                );
                 self.queue.submit(Some(encoder.finish()));
-                let (sender_out, receiver_out) = mpsc::channel();
-                out_buffer_slice
-                    .map_async(wgpu::MapMode::Read, move |v| sender_out.send(v).unwrap());
-                let (sender_out_corr, receiver_out_corr) = mpsc::channel();
-                out_corr_buffer_slice.map_async(wgpu::MapMode::Read, move |v| {
-                    sender_out_corr.send(v).unwrap()
-                });
+                let (sender, receiver) = mpsc::channel();
+                out_buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
                 self.device.poll(wgpu::Maintain::Wait);
 
-                if let Err(err) = receiver_out.recv() {
-                    return Err(err.into());
-                }
-                if let Err(err) = receiver_out_corr.recv() {
+                if let Err(err) = receiver.recv() {
                     return Err(err.into());
                 }
             }
 
             let out_buffer_slice_mapped = out_buffer_slice.get_mapped_range();
-            let out_corr_buffer_slice_mapped = out_corr_buffer_slice.get_mapped_range();
             let out_data: &[i32] = bytemuck::cast_slice(&out_buffer_slice_mapped);
-            let out_corr_data: &[f32] = bytemuck::cast_slice(&out_corr_buffer_slice_mapped);
-            for col in 0..out_image.ncols() {
-                for row in 0..out_image.nrows() {
-                    let pos = 2 * (row * out_image.ncols() + col);
-                    let point_match = (out_data[pos], out_data[pos + 1]);
-                    let corr = out_corr_data[row * out_image.ncols() + col];
-                    out_image[(row, col)] = if point_match.0 > 0 && point_match.1 > 0 {
-                        Some((point_match.1 as u32, point_match.0 as u32, corr))
-                    } else {
-                        None
-                    };
-                }
-            }
+            let ncols = out_image.ncols();
+            out_image
+                .column_iter_mut()
+                .enumerate()
+                .par_bridge()
+                .for_each(|(col, mut out_col)| {
+                    out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
+                        let pos = 2 * (row * ncols + col);
+                        let point_match = (out_data[pos], out_data[pos + 1]);
+                        if let Some(corr) = self.correlation_values[(row, col)] {
+                            *out_point = if point_match.0 > 0 && point_match.1 > 0 {
+                                Some((point_match.1 as u32, point_match.0 as u32, corr))
+                            } else {
+                                None
+                            };
+                        } else {
+                            *out_point = None;
+                        };
+                    })
+                });
             drop(out_buffer_slice_mapped);
-            drop(out_corr_buffer_slice_mapped);
             out_buffer.unmap();
-            out_corr_buffer.unmap();
             Ok(out_image)
         }
 
@@ -1291,17 +1320,9 @@ mod gpu {
             entry_point: &str,
             dir: &CorrelationDirection,
         ) -> ComputePipelineConfig {
-            let (buffer_out, buffer_out_reverse, buffer_out_corr) = match dir {
-                CorrelationDirection::Forward => (
-                    &self.buffer_out,
-                    &self.buffer_out_reverse,
-                    &self.buffer_out_corr,
-                ),
-                CorrelationDirection::Reverse => (
-                    &self.buffer_out_reverse,
-                    &self.buffer_out,
-                    &self.buffer_reverse_corr,
-                ),
+            let (buffer_out, buffer_out_reverse) = match dir {
+                CorrelationDirection::Forward => (&self.buffer_out, &self.buffer_out_reverse),
+                CorrelationDirection::Reverse => (&self.buffer_out_reverse, &self.buffer_out),
             };
 
             let correlation_layout =
@@ -1371,7 +1392,9 @@ mod gpu {
                                 ty: wgpu::BindingType::Buffer {
                                     ty: wgpu::BufferBindingType::Storage { read_only: false },
                                     has_dynamic_offset: false,
-                                    min_binding_size: wgpu::BufferSize::new(buffer_out_corr.size()),
+                                    min_binding_size: wgpu::BufferSize::new(
+                                        self.buffer_out_corr.size(),
+                                    ),
                                 },
                                 count: None,
                             },
@@ -1454,7 +1477,7 @@ mod gpu {
                         },
                         wgpu::BindGroupEntry {
                             binding: 5,
-                            resource: buffer_out_corr.as_entire_binding(),
+                            resource: self.buffer_out_corr.as_entire_binding(),
                         },
                     ],
                 });
