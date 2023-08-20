@@ -337,7 +337,7 @@ impl Mesh {
                 }
 
                 let percent_multiplier =
-                    percent_multiplier / (self.points.cameras_len() - 1) as f32;
+                    0.8 * percent_multiplier / (self.points.cameras_len() - 1) as f32;
                 let percent_complete =
                     percent_complete + percent_multiplier * processed_cameras as f32;
 
