@@ -112,39 +112,32 @@ impl CameraGrid {
         let grid_step = self.get_step();
         let nrows = ((self.max_row - self.min_row) / grid_step).ceil() as usize;
         let ncols = ((self.max_col - self.min_col) / grid_step).ceil() as usize;
-        self.grid_step = grid_step;
-        self.grid = points
+        let mut index = DMatrix::<Vec<Vector3<f64>>>::from_element(nrows, ncols, vec![]);
+        points
             .iter_tracks()
             .enumerate()
-            .par_bridge()
-            .filter_map(|(track_i, _track)| {
-                let point = points.project_point(self.camera_i, track_i)?;
-                let point_depth = points.point_depth(self.camera_i, track_i)?;
+            .for_each(|(track_i, _track)| {
+                let point = if let Some(point) = points.project_point(self.camera_i, track_i) {
+                    point
+                } else {
+                    return;
+                };
+                let point_depth =
+                    if let Some(point_depth) = points.point_depth(self.camera_i, track_i) {
+                        point_depth
+                    } else {
+                        return;
+                    };
                 let row =
                     (((point.y - self.min_row) / grid_step).floor() as usize).clamp(0, nrows - 1);
                 let col =
                     (((point.x - self.min_col) / grid_step).floor() as usize).clamp(0, ncols - 1);
                 let point_in_camera = Vector3::new(point.x, point.y, point_depth);
-                Some(((row, col), point_in_camera))
-            })
-            .fold(
-                || DMatrix::<Vec<Vector3<f64>>>::from_element(nrows, ncols, vec![]),
-                |mut acc, (pos, point_in_camera)| {
-                    acc[pos].push(point_in_camera);
-                    acc
-                },
-            )
-            .reduce(
-                || DMatrix::<Vec<Vector3<f64>>>::from_element(nrows, ncols, vec![]),
-                |mut a, mut b| {
-                    for col in 0..ncols {
-                        for row in 0..nrows {
-                            a[(row, col)].append(&mut b[(row, col)])
-                        }
-                    }
-                    a
-                },
-            );
+                index[(row, col)].push(point_in_camera);
+            });
+
+        self.grid_step = grid_step;
+        self.grid = index;
     }
 
     fn clear_grid(&mut self) {
