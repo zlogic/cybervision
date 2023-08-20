@@ -40,9 +40,8 @@ where
 
 #[derive(Debug)]
 struct Point {
-    track: triangulation::Track,
+    point: Point2<f64>,
     track_i: usize,
-    camera_i: usize,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -297,16 +296,10 @@ impl Mesh {
             .iter_tracks()
             .enumerate()
             .par_bridge()
-            .filter_map(|(track_i, track)| {
-                if track.get(camera_i).is_some() {
-                    Some(Point {
-                        track: track.clone(),
-                        track_i,
-                        camera_i,
-                    })
-                } else {
-                    None
-                }
+            .filter_map(|(track_i, _track)| {
+                let projection = self.points.project_point(camera_i, track_i)?;
+                let point = Point2::new(projection.x, projection.y);
+                Some(Point { track_i, point })
             })
             .collect::<Vec<_>>();
         if self.camera_ranges.is_empty() {
@@ -1042,11 +1035,7 @@ fn map_color(colormap: &[u8; 256], value: f64) -> u8 {
 
 impl HasPosition for Point {
     fn position(&self) -> Point2<f64> {
-        if let Some(point2d) = self.track.get(self.camera_i) {
-            Point2::new(point2d.1 as f64, point2d.0 as f64)
-        } else {
-            Point2::new(f64::NAN, f64::NAN)
-        }
+        self.point
     }
 
     type Scalar = f64;
