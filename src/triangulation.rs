@@ -42,6 +42,10 @@ impl Surface {
     #[inline]
     pub fn project_point(&self, camera_i: usize, track_i: usize) -> Option<Vector2<f64>> {
         let track = &self.tracks[track_i];
+        if self.cameras.is_empty() {
+            let point = track.get(camera_i)?;
+            return Some(Vector2::new(point.1 as f64, point.0 as f64));
+        }
         let projection = &self.projections[camera_i];
         let point4d = track.point3d?.insert_row(3, 1.0);
         let projected_point = projection * point4d;
