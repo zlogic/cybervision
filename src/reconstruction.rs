@@ -6,7 +6,7 @@ use crate::orb;
 use crate::output;
 use crate::pointmatching;
 use crate::triangulation;
-use crate::Cli;
+use crate::Args;
 
 use image::{imageops::FilterType, GenericImageView, GrayImage, RgbImage};
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
@@ -186,7 +186,7 @@ struct ImageReconstruction {
     focal_length: Option<u32>,
 }
 
-pub fn reconstruct(args: &Cli) -> Result<(), Box<dyn error::Error>> {
+pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
     let start_time = SystemTime::now();
 
     let projection_mode = match args.projection {

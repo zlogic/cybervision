@@ -25,10 +25,14 @@ Download a release distribution from [releases](/zlogic/cybervision/releases).
 Run cybervision:
 
 ```shell
-cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] [--projection=<parallel|perspective>] [--mesh=<plain|vertex-colors|texture-coordinates>] [--no-bundle-adjustment] <img1> <img2> <output>
+cybervision [--scale=<scale>] [--focal-length=<focal-length>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] [--projection=<parallel|perspective>] [--mesh=<plain|vertex-colors|texture-coordinates>] [--no-bundle-adjustment] <img1> <img2> [<imgn>] <output>
 ```
 
 `--scale=<scale>` is an optional argument to specify a depth scale, for example `--scale=-10.0`.
+
+`--focal-length=<focal-length>` is an optional argument to specify a custom focal length for images with perspective projection, for example, `--focal-length=26`;
+this should be the image's focal length in 35mm equivalent.
+If not specified, EXIF metadata will be used.
 
 `--mode=<cpu|gpu|gpu-low-power>` is an optional argument to specify a depth scale, for example `--mode=cpu` or `--mode=gpu`
  Results might be slightly different between modes because the implementation is not completely identical.
@@ -47,6 +51,7 @@ cybervision [--scale=<scale>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay
 Adding this flag can significantly reduce processing time, at the cost of producing incorrect data.
 
 `<img1>` and `<img2>` are input filenames for image 1 and 2; supported formats are `jpg`, `tif` and `png`.
+Although experimental, it's also possible to specify more than one image when using perspective projection.
 
 `<output>` is the output filename:
 * If the filename ends with `.obj`, this will save a 3D [Wavefront OBJ file](https://en.wikipedia.org/wiki/Wavefront_.obj_file).

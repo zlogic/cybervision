@@ -10,7 +10,6 @@ rust-version = "1.71"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.3", default_features = false, features = ["std", "derive", "help", "usage", "suggestions"] }
 image = { version = "0.24", default_features = false, features = ["png", "jpeg", "tiff", "jpeg_rayon"] }
 indicatif = { version = "0.17", default_features = false }
 rayon = "*"
