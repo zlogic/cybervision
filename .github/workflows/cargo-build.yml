@@ -127,7 +127,9 @@ jobs:
       run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
 
     - name: Build
-      run: cargo build --target=${{ matrix.arch }}-pc-windows-msvc --release
+      run: |
+        $Env:RUSTFLAGS = "-C target-feature=+crt-static"
+        cargo build --target=${{ matrix.arch }}-pc-windows-msvc --release
 
     - name: Package application
       run: Compress-Archive -Path .\target\${{ matrix.arch }}-pc-windows-msvc\release\cybervision.exe -DestinationPath cybervision-${{ runner.os }}-${{ matrix.arch }}.zip
