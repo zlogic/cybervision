@@ -531,7 +531,7 @@ impl MeshWriter for PlyWriter {
                 let first_image = track.range().start;
                 if let Some(point2d) = track.get(first_image) {
                     let img = &self.images[first_image];
-                    img.get_pixel_checked(point2d.1 as u32, point2d.0 as u32)
+                    img.get_pixel_checked(point2d.1, point2d.0)
                         .map(|pixel| pixel.0)
                 } else {
                     return Err(OutputError::new("Track has no image").into());
@@ -668,7 +668,7 @@ impl MeshWriter for ObjWriter {
                 let first_image = track.range().start;
                 if let Some(point2d) = track.get(first_image) {
                     let img = &self.images[first_image];
-                    img.get_pixel_checked(point2d.1 as u32, point2d.0 as u32)
+                    img.get_pixel_checked(point2d.1, point2d.0)
                         .map(|pixel| pixel.0)
                 } else {
                     return Err(OutputError::new("Track has no image").into());

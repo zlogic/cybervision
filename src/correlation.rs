@@ -91,14 +91,15 @@ struct CorrelationStep<'a> {
     img2_data: ImagePointData,
 }
 
-impl PointCorrelations {
-    pub fn new(
-        img1_dimensions: (u32, u32),
-        img2_dimensions: (u32, u32),
-        fundamental_matrix: Matrix3<f64>,
-        projection_mode: ProjectionMode,
-        hardware_mode: HardwareMode,
-    ) -> PointCorrelations {
+struct CorrelationParameters {
+    min_stdev: f32,
+    corridor_size: usize,
+    correlation_threshold: f32,
+    corridor_extend_range: f64,
+}
+
+impl CorrelationParameters {
+    fn for_projection(projection_mode: &ProjectionMode) -> CorrelationParameters {
         let (min_stdev, correlation_threshold, corridor_size, corridor_extend_range) =
             match projection_mode {
                 ProjectionMode::Affine => (
@@ -114,6 +115,23 @@ impl PointCorrelations {
                     CORRIDOR_EXTEND_RANGE_PERSPECTIVE,
                 ),
             };
+        CorrelationParameters {
+            min_stdev,
+            corridor_size,
+            correlation_threshold,
+            corridor_extend_range,
+        }
+    }
+}
+
+impl PointCorrelations {
+    pub fn new(
+        img1_dimensions: (u32, u32),
+        img2_dimensions: (u32, u32),
+        fundamental_matrix: Matrix3<f64>,
+        projection_mode: ProjectionMode,
+        hardware_mode: HardwareMode,
+    ) -> PointCorrelations {
         let selected_hardware;
         let gpu_context = if matches!(hardware_mode, HardwareMode::Gpu | HardwareMode::GpuLowPower)
         {
@@ -121,10 +139,7 @@ impl PointCorrelations {
             match gpu::GpuContext::new(
                 (img1_dimensions.0 as usize, img1_dimensions.1 as usize),
                 (img2_dimensions.0 as usize, img2_dimensions.1 as usize),
-                min_stdev,
-                correlation_threshold,
-                corridor_size,
-                corridor_extend_range,
+                &projection_mode,
                 fundamental_matrix,
                 low_power,
             ) {
@@ -153,14 +168,16 @@ impl PointCorrelations {
                 DMatrix::from_element(img2_dimensions.1 as usize, img2_dimensions.0 as usize, None),
             ),
         };
+
+        let params = CorrelationParameters::for_projection(&projection_mode);
         PointCorrelations {
             correlated_points,
             correlated_points_reverse,
             first_pass: true,
-            min_stdev,
-            corridor_size,
-            correlation_threshold,
-            corridor_extend_range,
+            min_stdev: params.min_stdev,
+            corridor_size: params.corridor_size,
+            correlation_threshold: params.correlation_threshold,
+            corridor_extend_range: params.corridor_extend_range,
             fundamental_matrix,
             gpu_context,
             selected_hardware,
@@ -742,8 +759,9 @@ mod gpu {
     use rayon::prelude::*;
 
     use super::{
-        CORRIDOR_MIN_RANGE, CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE,
-        CORRIDOR_SEGMENT_LENGTH_LOWPOWER, CROSS_CHECK_SEARCH_AREA, KERNEL_SIZE, NEIGHBOR_DISTANCE,
+        CorrelationParameters, ProjectionMode, CORRIDOR_MIN_RANGE,
+        CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE, CORRIDOR_SEGMENT_LENGTH_LOWPOWER,
+        CROSS_CHECK_SEARCH_AREA, KERNEL_SIZE, NEIGHBOR_DISTANCE,
         SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE, SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER,
     };
 
@@ -814,10 +832,7 @@ mod gpu {
         pub fn new(
             img1_dimensions: (usize, usize),
             img2_dimensions: (usize, usize),
-            min_stdev: f32,
-            correlation_threshold: f32,
-            corridor_size: usize,
-            corridor_extend_range: f64,
+            projection_mode: &ProjectionMode,
             fundamental_matrix: Matrix3<f64>,
             low_power: bool,
         ) -> Result<GpuContext, Box<dyn error::Error>> {
@@ -931,11 +946,12 @@ mod gpu {
 
             let correlation_values = DMatrix::from_element(img1_shape.0, img1_shape.1, None);
 
+            let params = CorrelationParameters::for_projection(projection_mode);
             let result = GpuContext {
-                min_stdev,
-                correlation_threshold,
-                corridor_size,
-                corridor_extend_range,
+                min_stdev: params.min_stdev,
+                correlation_threshold: params.correlation_threshold,
+                corridor_size: params.corridor_size,
+                corridor_extend_range: params.corridor_extend_range,
                 fundamental_matrix,
                 img1_shape,
                 img2_shape,

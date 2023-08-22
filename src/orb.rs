@@ -66,7 +66,7 @@ pub fn extract_points<PL: ProgressListener>(
             }
             Some((
                 *point,
-                harris_response(&img, &harris_gaussian_kernel, *point)?,
+                harris_response(img, &harris_gaussian_kernel, *point)?,
             ))
         })
         .collect::<Vec<_>>();
@@ -78,7 +78,7 @@ pub fn extract_points<PL: ProgressListener>(
         .map(|(keypoint, _)| *keypoint)
         .collect();
 
-    extract_brief_descriptors(&img, keypoints, progress_listener)
+    extract_brief_descriptors(img, keypoints, progress_listener)
 }
 
 fn find_fast_keypoints<PL: ProgressListener>(
@@ -98,7 +98,7 @@ fn find_fast_keypoints<PL: ProgressListener>(
             }
             let kp: Vec<(usize, usize)> = (FAST_KERNEL_SIZE..(img.nrows() - FAST_KERNEL_SIZE))
                 .filter_map(
-                    |row| match is_keypoint(&img, FAST_THRESHOLD.into(), row, col) {
+                    |row| match is_keypoint(img, FAST_THRESHOLD.into(), row, col) {
                         true => Some((row, col)),
                         false => None,
                     },
@@ -123,7 +123,7 @@ fn find_fast_keypoints<PL: ProgressListener>(
             let mut threshold_max = std::u8::MAX as i16;
             let mut threshold = (threshold_max + threshold_min) / 2;
             while threshold_max > threshold_min + 1 {
-                if is_keypoint(&img, threshold, p.0, p.1) {
+                if is_keypoint(img, threshold, p.0, p.1) {
                     threshold_min = threshold;
                 } else {
                     threshold_max = threshold;
@@ -388,7 +388,7 @@ fn extract_brief_descriptors<PL: ProgressListener>(
             let angle = get_brief_orientation(&img, *coords)?;
             let angle_sin = angle.sin();
             let angle_cos = angle.cos();
-            let mut orb_descriptor = [0 as u32; 8];
+            let mut orb_descriptor = [0_u32; 8];
             for i in 0..ORB_MATCH_PATTERN.len() {
                 let offset1 = ORB_MATCH_PATTERN[i].0;
                 let offset2 = ORB_MATCH_PATTERN[i].1;
@@ -401,12 +401,12 @@ fn extract_brief_descriptors<PL: ProgressListener>(
                     (offset2.1 as f64 * angle_sin + offset2.0 as f64 * angle_cos).round() as isize,
                 );
                 let p1_coords = (
-                    coords.0.saturating_add_signed(offset1.0 as isize),
-                    coords.1.saturating_add_signed(offset1.1 as isize),
+                    coords.0.saturating_add_signed(offset1.0),
+                    coords.1.saturating_add_signed(offset1.1),
                 );
                 let p2_coords = (
-                    coords.0.saturating_add_signed(offset2.0 as isize),
-                    coords.1.saturating_add_signed(offset2.1 as isize),
+                    coords.0.saturating_add_signed(offset2.0),
+                    coords.1.saturating_add_signed(offset2.1),
                 );
                 if p1_coords.0 == 0
                     || p2_coords.0 == 0
@@ -421,7 +421,7 @@ fn extract_brief_descriptors<PL: ProgressListener>(
                 let p2 = img[p2_coords]?;
                 let dst_block = &mut orb_descriptor[i / 32];
                 let tau = if p1 < p2 { 1 } else { 0 };
-                *dst_block = *dst_block | (tau << (i % 32));
+                *dst_block |= tau << (i % 32);
             }
             Some((*coords, orb_descriptor))
         })

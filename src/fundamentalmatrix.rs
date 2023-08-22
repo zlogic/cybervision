@@ -61,7 +61,7 @@ pub struct FundamentalMatrix {
 impl FundamentalMatrix {
     pub fn new<PL: ProgressListener>(
         projection: ProjectionMode,
-        point_matches: &Vec<Match>,
+        point_matches: &[Match],
         progress_listener: Option<&PL>,
     ) -> Result<FundamentalMatrix, RansacError> {
         let ransac_k = match projection {
@@ -101,7 +101,7 @@ impl FundamentalMatrix {
 
     fn find_ransac<PL: ProgressListener>(
         &self,
-        point_matches: &Vec<Match>,
+        point_matches: &[Match],
         progress_listener: Option<&PL>,
     ) -> Result<RansacIterationResult, RansacError> {
         if point_matches.len() < RANSAC_D + self.ransac_n {
@@ -151,7 +151,7 @@ impl FundamentalMatrix {
     }
 
     #[inline]
-    fn choose_inliers(&self, point_matches: &Vec<Match>) -> Vec<Match> {
+    fn choose_inliers(&self, point_matches: &[Match]) -> Vec<Match> {
         let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
         let mut inliers: Vec<Match> = vec![];
 
@@ -174,7 +174,7 @@ impl FundamentalMatrix {
         inliers
     }
 
-    fn ransac_iteration(&self, point_matches: &Vec<Match>) -> Vec<RansacIterationResult> {
+    fn ransac_iteration(&self, point_matches: &[Match]) -> Vec<RansacIterationResult> {
         let inliers = self.choose_inliers(point_matches);
         if inliers.len() < self.ransac_n {
             return vec![];
@@ -192,8 +192,8 @@ impl FundamentalMatrix {
     fn validate_f(
         &self,
         f: Matrix3<f64>,
-        inliers: &Vec<Match>,
-        point_matches: &Vec<Match>,
+        inliers: &[Match],
+        point_matches: &[Match],
     ) -> Option<RansacIterationResult> {
         if !f.iter().all(|v| v.is_finite()) {
             return None;
@@ -203,20 +203,15 @@ impl FundamentalMatrix {
         } else {
             f
         };
-        let inliers_pass = inliers
-            .into_iter()
-            .all(|m| self.fits_model(&f, &m).is_some());
+        let inliers_pass = inliers.iter().all(|m| self.fits_model(&f, m).is_some());
         if !inliers_pass {
             return None;
         }
         let all_inliers: (usize, f64) = point_matches
             .iter()
             .filter_map(|point_match| {
-                if let Some(match_error) = self.fits_model(&f, point_match) {
-                    Some((1, match_error))
-                } else {
-                    None
-                }
+                self.fits_model(&f, point_match)
+                    .map(|match_error| (1, match_error))
             })
             .fold((0, 0.0), |acc, err| (acc.0 + err.0, acc.1 + err.1));
 
@@ -263,7 +258,7 @@ impl FundamentalMatrix {
     }
 
     #[inline]
-    fn calculate_model_perspective(inliers: &Vec<Match>) -> Vec<Matrix3<f64>> {
+    fn calculate_model_perspective(inliers: &[Match]) -> Vec<Matrix3<f64>> {
         let mut a = SMatrix::<f64, RANSAC_N_PERSPECTIVE, 9>::zeros();
         let mut x1 = SMatrix::<f64, 3, RANSAC_N_PERSPECTIVE>::zeros();
         let mut x2 = SMatrix::<f64, 3, RANSAC_N_PERSPECTIVE>::zeros();
@@ -365,11 +360,11 @@ impl FundamentalMatrix {
             .collect::<Vec<_>>()
     }
 
-    fn optimize_perspective_f(f: &Matrix3<f64>, inliers: &Vec<Match>) -> Option<Matrix3<f64>> {
+    fn optimize_perspective_f(f: &Matrix3<f64>, inliers: &[Match]) -> Option<Matrix3<f64>> {
         const JACOBIAN_H: f64 = 0.001;
-        let f_params = FundamentalMatrix::params_from_perspective_f(&f);
+        let f_params = FundamentalMatrix::params_from_perspective_f(f);
         let f_residuals = |p: &OVector<f64, U7>| {
-            let f = FundamentalMatrix::f_from_perspective_params(&p);
+            let f = FundamentalMatrix::f_from_perspective_params(p);
             let mut residuals = SVector::<f64, 7>::zeros();
             for i in 0..RANSAC_N_PERSPECTIVE {
                 residuals[i] = FundamentalMatrix::reprojection_error(&f, &inliers[i]);
@@ -382,10 +377,10 @@ impl FundamentalMatrix {
                 let f_plus;
                 let f_minus;
                 {
-                    let mut p_plus = p.clone();
+                    let mut p_plus = *p;
                     p_plus[i] += JACOBIAN_H;
                     f_plus = FundamentalMatrix::f_from_perspective_params(&p_plus);
-                    let mut p_minus = p.clone();
+                    let mut p_minus = *p;
                     p_minus[i] -= JACOBIAN_H;
                     f_minus = FundamentalMatrix::f_from_perspective_params(&p_minus);
                 }
@@ -499,7 +494,7 @@ where
         mu = TAU
             * (0..jt_j.nrows())
                 .map(|i| jt_j[(i, i)])
-                .max_by(|a, b| a.total_cmp(&b))
+                .max_by(|a, b| a.total_cmp(b))
                 .unwrap_or(1.0);
     }
     let mut nu = 2.0;

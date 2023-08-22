@@ -27,8 +27,8 @@ where
 
 impl KeypointMatching {
     pub fn new<PL: ProgressListener>(
-        points1: &Vec<Keypoint>,
-        points2: &Vec<Keypoint>,
+        points1: &[Keypoint],
+        points2: &[Keypoint],
         projection_mode: ProjectionMode,
         progress_listener: Option<&PL>,
     ) -> KeypointMatching {
@@ -42,8 +42,8 @@ impl KeypointMatching {
     }
 
     fn match_points<PL: ProgressListener>(
-        points1: &Vec<Keypoint>,
-        points2: &Vec<Keypoint>,
+        points1: &[Keypoint],
+        points2: &[Keypoint],
         threshold: u32,
         progress_listener: Option<&PL>,
     ) -> Vec<(Point, Point)> {

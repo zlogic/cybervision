@@ -60,9 +60,7 @@ impl Surface {
             return Some(track.point3d?.z);
         }
         let camera = &self.cameras[camera_i];
-        if track.get(camera_i).is_none() {
-            return None;
-        }
+        track.get(camera_i)?;
         Some(camera.point_depth(&track.point3d?))
     }
 
@@ -239,7 +237,7 @@ impl AffineTriangulation {
             .filter_map(|track| {
                 let mut track = track.to_owned();
                 if let Some(point) = &mut track.point3d {
-                    (*point).z *= depth_scale;
+                    point.z *= depth_scale;
                     Some(track)
                 } else {
                     None
@@ -520,7 +518,7 @@ impl PerspectiveTriangulation {
             projections: surface_projections,
         };
 
-        self.scale_points(&mut surface.tracks.as_mut_slice());
+        self.scale_points(surface.tracks.as_mut_slice());
         Ok(surface)
     }
 
@@ -606,7 +604,7 @@ impl PerspectiveTriangulation {
                 p2.fixed_view_mut::<3, 3>(0, 0).copy_from(&r);
                 p2.column_mut(3).copy_from(&t);
                 let p2_calibrated = k2 * p2;
-                let camera2 = Camera::from_matrix(&k2, &r, &t);
+                let camera2 = Camera::from_matrix(k2, &r, &t);
                 let points_count: usize = correlated_points
                     .column_iter()
                     .enumerate()
@@ -619,7 +617,7 @@ impl PerspectiveTriangulation {
                                 let point1 = (*row as u32, col as u32);
                                 let point2 = correlated_points[(*row, col)];
                                 let point2 = if let Some(point2) = point2 {
-                                    (point2.0 as u32, point2.1 as u32)
+                                    (point2.0, point2.1)
                                 } else {
                                     return false;
                                 };
@@ -1070,7 +1068,7 @@ impl PerspectiveTriangulation {
                 .tracks
                 .par_iter()
                 .filter_map(|track| {
-                    let depth = camera.point_depth(&(track.point3d?)) as f64;
+                    let depth = camera.point_depth(&(track.point3d?));
                     Some((depth, depth))
                 })
                 .reduce(
@@ -1125,7 +1123,7 @@ impl PerspectiveTriangulation {
                     return;
                 };
                 if depth < min_depth || depth > max_depth {
-                    (*track).point3d = None;
+                    track.point3d = None;
                 }
             });
             self.tracks.retain(|track| {
@@ -1144,9 +1142,9 @@ impl PerspectiveTriangulation {
             } else {
                 return;
             };
-            point3d.x = scale.0 * point3d.x;
-            point3d.y = scale.1 * point3d.y;
-            point3d.z = scale.2 * point3d.z;
+            point3d.x *= scale.0;
+            point3d.y *= scale.1;
+            point3d.z *= scale.2;
         })
     }
 }
@@ -1248,7 +1246,7 @@ impl BundleAdjustment<'_> {
     const RESIDUAL_REDUCTION_EPSILON: f64 = 0.0;
     const PARALLEL_CHUNK_SIZE: usize = 10000;
 
-    fn new<'a>(cameras: Vec<Camera>, tracks: &'a mut [Track]) -> BundleAdjustment<'a> {
+    fn new(cameras: Vec<Camera>, tracks: &mut [Track]) -> BundleAdjustment<'_> {
         // For now, identity covariance is acceptable.
         let covariance = 1.0;
         let projections = cameras.iter().map(|camera| camera.projection()).collect();
@@ -1373,9 +1371,7 @@ impl BundleAdjustment<'_> {
                 .take(PARALLEL_CHUNK_SIZE)
                 .par_bridge()
                 .flat_map(|(track_i, track)| {
-                    if track.point3d.is_none() {
-                        return None;
-                    }
+                    track.point3d?;
                     let track_residuals = self
                         .cameras
                         .iter()
@@ -1565,7 +1561,7 @@ impl BundleAdjustment<'_> {
 
             tracks_delta_b.iter().for_each(|(track_i, delta_b_i)| {
                 let mut delta_b = delta_b.fixed_rows_mut::<3>(track_i * 3);
-                delta_b.copy_from(&delta_b_i);
+                delta_b.copy_from(delta_b_i);
             });
         }
 
