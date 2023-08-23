@@ -14,7 +14,7 @@ const EXTEND_TRACKS_SEARCH_RADIUS: usize = 7;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const POSE_ESTIMATION_MIN_CORRELATION: f32 = 0.8;
 const RANSAC_N: usize = 3;
-const RANSAC_K: usize = 10_000;
+const RANSAC_K: usize = 100_000;
 // TODO: this should be proportional to image size
 const RANSAC_INLIERS_T: f64 = 25.0;
 const RANSAC_T: f64 = 50.0;
