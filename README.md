@@ -9,14 +9,14 @@ Cybervision is a 3D reconstruction software for Scanning Electron Microscope ima
 The tool needs two images of an object taken from slighly different angles.
 Cybervision can match those images and use the parallax effect to determine the object's 3D shape.
 
-**⚠️ Warning** Cybervision works best with high-contrast images with parallel (affine) projection.
-Regular photos with perspective projection can be reconstructed as well, but this is a secondary use case.
+**⚠️  Experimental support for SFM** Cybervision has experimental support for SFM (structure from motion).
+Multiple photos of the same object can be combined to create a mesh; however this can take a considerably longer time, and often produce weird loking results.
 
 More information is available in the [Wiki](https://github.com/zlogic/cybervision/wiki).
 
-<img src="https://raw.githubusercontent.com/wiki/zlogic/cybervision/Explanation/03_mesh_small.png"/>
+![Example parallel projection](https://raw.githubusercontent.com/wiki/zlogic/cybervision/Explanation/03_mesh_small.png)
 
-<img src="https://raw.githubusercontent.com/wiki/zlogic/cybervision/Examples/Photos/photo4-small.jpg"/>
+![Example perspective projection](https://raw.githubusercontent.com/wiki/zlogic/cybervision/Examples/Photos/photo5.mov)
 
 ## How to use it
 
