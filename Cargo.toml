@@ -1,11 +1,11 @@
 [package]
 name = "cybervision"
-version = "0.17.0"
+version = "0.18.0"
 edition = "2021"
 authors = ["Dmitry Zolotukhin <zlogic@gmail.com>"]
 repository = "https://github.com/zlogic/cybervision"
 license = "Apache-2.0"
-rust-version = "1.71"
+rust-version = "1.74"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -15,8 +15,8 @@ indicatif = { version = "0.17", default_features = false }
 rayon = "*"
 rand = { version = "0.8", default_features = false, features = ["std", "std_rng", "small_rng"] }
 nalgebra = { version = "0.32", features = ["rayon"] }
-spade = { version = "2.2", default_features = false }
-wgpu = { version = "0.17", default-features = false, features = ["wgsl"] }
+spade = { version = "2.5", default_features = false, features = ["std"] }
+wgpu = { version = "0.18", default-features = false, features = ["wgsl"] }
 pollster = { version = "0.3", default-features = false }
 bytemuck = { version = "*", features = ["derive"] }
 roots = { version = "0.0.8", default-features = false }

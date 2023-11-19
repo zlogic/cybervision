@@ -1163,8 +1163,10 @@ mod gpu {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
             {
                 let workgroup_size = ((shape.1 + 15) / 16, ((shape.0 + 15) / 16));
-                let mut cpass =
-                    encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+                let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: None,
+                    timestamp_writes: None,
+                });
                 cpass.set_pipeline(&pipeline_config.pipeline);
                 cpass.set_push_constants(0, bytemuck::cast_slice(&[shader_params]));
                 cpass.set_bind_group(0, &pipeline_config.cross_correlation_bind_group, &[]);
