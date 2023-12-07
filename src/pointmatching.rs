@@ -6,7 +6,6 @@ type Keypoint = (Point, [u32; 8]);
 
 const THRESHOLD_AFFINE: u32 = 32;
 const THRESHOLD_PERSPECTIVE: u32 = 48;
-const MAX_MATCHES: usize = 5_000;
 
 #[derive(Debug, Clone, Copy)]
 pub enum ProjectionMode {
@@ -74,10 +73,6 @@ impl KeypointMatching {
             .collect::<Vec<_>>();
         point_matches.sort_by(|(_, distance1), (_, distance2)| distance1.cmp(distance2));
 
-        point_matches
-            .iter()
-            .take(MAX_MATCHES)
-            .map(|(p, _)| *p)
-            .collect()
+        point_matches.iter().map(|(p, _)| *p).collect()
     }
 }

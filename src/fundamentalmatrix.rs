@@ -1,7 +1,7 @@
 use nalgebra::allocator::Allocator;
 use nalgebra::{
-    DefaultAllocator, Dim, DimMin, DimMinimum, Matrix3, OMatrix, OVector, SMatrix, SVector,
-    Vector3, U7,
+    DVector, DefaultAllocator, Dim, DimMin, DimMinimum, Dyn, Matrix, Matrix3, OMatrix, OVector,
+    SMatrix, SVector, VecStorage, Vector3, U7,
 };
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use rayon::prelude::*;
@@ -9,14 +9,14 @@ use roots::find_roots_cubic;
 use std::cmp::Ordering;
 use std::{fmt, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
 
+const TOP_INLIERS: usize = 5_000;
 const MIN_INLIER_DISTANCE: usize = 10;
 const RANSAC_K_AFFINE: usize = 1_000_000;
-const RANSAC_K_PERSPECTIVE: usize = 10_000_000;
+const RANSAC_K_PERSPECTIVE: usize = 1_000_000;
 const RANSAC_N_AFFINE: usize = 4;
 const RANSAC_N_PERSPECTIVE: usize = 7;
 const RANSAC_T_AFFINE: f64 = 0.1;
-// TODO: This might need to be adjusted based on the image size.
-const RANSAC_T_PERSPECTIVE: f64 = 0.5;
+const RANSAC_T_PERSPECTIVE: f64 = 1.0 / 1000.0;
 const RANSAC_D: usize = 10;
 const RANSAC_D_EARLY_EXIT_AFFINE: usize = 1000;
 const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 10_000;
@@ -61,6 +61,7 @@ pub struct FundamentalMatrix {
 impl FundamentalMatrix {
     pub fn new<PL: ProgressListener>(
         projection: ProjectionMode,
+        max_dimension: f64,
         point_matches: &[Match],
         progress_listener: Option<&PL>,
     ) -> Result<FundamentalMatrix, RansacError> {
@@ -74,7 +75,7 @@ impl FundamentalMatrix {
         };
         let ransac_t = match projection {
             ProjectionMode::Affine => RANSAC_T_AFFINE,
-            ProjectionMode::Perspective => RANSAC_T_PERSPECTIVE,
+            ProjectionMode::Perspective => RANSAC_T_PERSPECTIVE * max_dimension,
         };
         let ransac_d_early_exit = match projection {
             ProjectionMode::Affine => RANSAC_D_EARLY_EXIT_AFFINE,
@@ -140,7 +141,7 @@ impl FundamentalMatrix {
             }
         }
         match best_result {
-            Some(res) => Ok(res),
+            Some(res) => Ok(self.optimize_result(res, point_matches)),
             None => Err(RansacError::new("No reliable matches found")),
         }
     }
@@ -155,8 +156,10 @@ impl FundamentalMatrix {
         let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
         let mut inliers: Vec<Match> = vec![];
 
+        let inliers_limit = point_matches.len().min(TOP_INLIERS);
+
         while inliers.len() < self.ransac_n {
-            let next_index = rng.gen_range(0..point_matches.len());
+            let next_index = rng.gen_range(0..inliers_limit);
             let next_match = point_matches[next_index];
             let close_to_existing = inliers.iter().any(|check_match| {
                 FundamentalMatrix::dist(next_match.0 .0, check_match.0 .0) < MIN_INLIER_DISTANCE
@@ -226,6 +229,27 @@ impl FundamentalMatrix {
             matches_count,
             best_error: inliers_error,
         })
+    }
+
+    fn optimize_result(
+        &self,
+        res: RansacIterationResult,
+        point_matches: &[Match],
+    ) -> RansacIterationResult {
+        if self.projection == ProjectionMode::Affine {
+            return res;
+        }
+
+        let inliers = point_matches
+            .iter()
+            .filter_map(|point_match| self.fits_model(&res.f, point_match).map(|_| *point_match))
+            .collect::<Vec<_>>();
+
+        let optimal_f =
+            FundamentalMatrix::optimize_perspective_f(&res.f, inliers.as_slice()).unwrap_or(res.f);
+        let mut best_result = res;
+        best_result.f = optimal_f;
+        best_result
     }
 
     #[inline]
@@ -365,14 +389,15 @@ impl FundamentalMatrix {
         let f_params = FundamentalMatrix::params_from_perspective_f(f);
         let f_residuals = |p: &OVector<f64, U7>| {
             let f = FundamentalMatrix::f_from_perspective_params(p);
-            let mut residuals = SVector::<f64, 7>::zeros();
-            for i in 0..RANSAC_N_PERSPECTIVE {
+            let mut residuals = DVector::<f64>::zeros(inliers.len());
+            for i in 0..inliers.len() {
                 residuals[i] = FundamentalMatrix::reprojection_error(&f, &inliers[i]);
             }
             residuals
         };
         let f_jacobian = |p: &OVector<f64, U7>| {
-            let mut jacobian = SMatrix::<f64, 7, 7>::zeros();
+            let mut jacobian =
+                Matrix::<f64, Dyn, U7, VecStorage<f64, Dyn, U7>>::zeros(inliers.len());
             for i in 0..7 {
                 let f_plus;
                 let f_minus;
@@ -384,7 +409,7 @@ impl FundamentalMatrix {
                     p_minus[i] -= JACOBIAN_H;
                     f_minus = FundamentalMatrix::f_from_perspective_params(&p_minus);
                 }
-                for j in 0..RANSAC_N_PERSPECTIVE {
+                for j in 0..inliers.len() {
                     let err = (FundamentalMatrix::reprojection_error(&f_plus, &inliers[j])
                         - FundamentalMatrix::reprojection_error(&f_minus, &inliers[j]))
                         / (2.0 * JACOBIAN_H);

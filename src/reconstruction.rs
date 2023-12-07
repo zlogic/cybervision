@@ -301,7 +301,11 @@ impl ImageReconstruction {
 
         let point_matches = self.match_keypoints(&img1, &img2);
 
-        let fm = match self.find_fundamental_matrix(point_matches) {
+        let fm = match self.find_fundamental_matrix(
+            img1.img.dimensions(),
+            img2.img.dimensions(),
+            point_matches,
+        ) {
             Ok(f) => f,
             Err(err) => {
                 eprintln!("Failed to complete RANSAC task: {}", err);
@@ -441,12 +445,25 @@ impl ImageReconstruction {
 
     fn find_fundamental_matrix(
         &self,
+        img1_dimensions: (u32, u32),
+        img2_dimensions: (u32, u32),
         point_matches: Vec<((usize, usize), (usize, usize))>,
     ) -> Result<FundamentalMatrix, fundamentalmatrix::RansacError> {
         let start_time = SystemTime::now();
         let pb = new_progress_bar(true);
 
-        let result = FundamentalMatrix::new(self.projection_mode, &point_matches, Some(&pb));
+        let max_dimension = img1_dimensions
+            .0
+            .max(img1_dimensions.1)
+            .max(img2_dimensions.0)
+            .max(img2_dimensions.1) as f64;
+
+        let result = FundamentalMatrix::new(
+            self.projection_mode,
+            max_dimension,
+            &point_matches,
+            Some(&pb),
+        );
         pb.finish_and_clear();
 
         if let Ok(t) = start_time.elapsed() {
