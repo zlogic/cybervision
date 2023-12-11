@@ -21,8 +21,7 @@ const RANSAC_T: f64 = 50.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 1000;
-const HISTOGRAM_FILTER_BINS: usize = 1000;
-const HISTOGRAM_FILTER_DISCARD_PERCENTILE: f64 = 0.025;
+const MIN_ANGLE_BETWEEN_RAYS: f64 = (2.0 / 180.0) * std::f64::consts::PI;
 
 pub struct Surface {
     tracks: Vec<Track>,
@@ -495,10 +494,10 @@ impl PerspectiveTriangulation {
         &mut self,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
+        self.filter_outliers();
         if self.bundle_adjustment {
             self.bundle_adjustment(progress_listener)?;
         }
-        self.filter_outliers();
 
         let surface_projections = self
             .cameras
@@ -1061,76 +1060,43 @@ impl PerspectiveTriangulation {
 
     fn filter_outliers(&mut self) {
         let min_track_length = if self.cameras.len() > 2 { 3 } else { 2 };
-        for img_i in 0..self.cameras.len() {
-            let camera = &self.cameras[img_i];
-
-            let (min_value, max_value) = self
-                .tracks
-                .par_iter()
-                .filter_map(|track| {
-                    let depth = camera.point_depth(&(track.point3d?));
-                    Some((depth, depth))
+        // For an angle to be larger than a threshold, its cosine needs to be smaller than the
+        // threshold.
+        let angle_cos_threshold = MIN_ANGLE_BETWEEN_RAYS.cos();
+        let camera_centers = self
+            .cameras
+            .iter()
+            .map(|camera| -camera.r_matrix.tr_mul(&camera.t))
+            .collect::<Vec<_>>();
+        self.tracks.par_iter_mut().for_each(|track| {
+            let rays = track
+                .range()
+                .filter_map(|camera_i| {
+                    let point3d = track.point3d?;
+                    let ray = point3d - camera_centers[camera_i];
+                    if ray.norm() < f64::EPSILON {
+                        return None;
+                    }
+                    Some(ray.normalize())
                 })
-                .reduce(
-                    || (f64::MAX, f64::MIN),
-                    |(a_min, a_max), (b_min, b_max)| (a_min.min(b_min), a_max.max(b_max)),
-                );
-            let value_range = max_value - min_value;
-            let mut histogram_sum = 0usize;
-            let mut histogram = [0usize; HISTOGRAM_FILTER_BINS];
+                .collect::<Vec<_>>();
 
-            self.tracks.iter().for_each(|track| {
-                let point3d = if let Some(point3d) = &track.point3d {
-                    point3d
-                } else {
-                    return;
-                };
-                let depth = camera.point_depth(point3d);
-                let pos =
-                    ((depth - min_value) * HISTOGRAM_FILTER_BINS as f64 / value_range).round();
-                let pos = (pos as usize).clamp(0, HISTOGRAM_FILTER_BINS - 1);
-                histogram[pos] += 1;
-                histogram_sum += 1;
-            });
-
-            let mut current_histogram_sum = 0usize;
-            let mut min_depth = min_value;
-            for (i, bin) in histogram.iter().enumerate() {
-                current_histogram_sum += bin;
-                if (current_histogram_sum as f64 / histogram_sum as f64)
-                    > HISTOGRAM_FILTER_DISCARD_PERCENTILE
-                {
-                    break;
+            let mut min_angle_cos = f64::MAX;
+            for r_i in 0..rays.len() {
+                let ray_i = rays[r_i];
+                for ray_j in rays.iter().skip(r_i + 1) {
+                    let angle = ray_i.dot(ray_j).abs();
+                    min_angle_cos = min_angle_cos.min(angle);
                 }
-                min_depth = min_value + (i as f64 / HISTOGRAM_FILTER_BINS as f64) * value_range;
-            }
-            let mut current_histogram_sum = 0usize;
-            let mut max_depth = max_value;
-            for (i, bin) in histogram.iter().enumerate().rev() {
-                current_histogram_sum += bin;
-                if (current_histogram_sum as f64 / histogram_sum as f64)
-                    > HISTOGRAM_FILTER_DISCARD_PERCENTILE
-                {
-                    break;
-                }
-                max_depth = min_value + (i as f64 / HISTOGRAM_FILTER_BINS as f64) * value_range;
             }
 
-            self.tracks.par_iter_mut().for_each(|track| {
-                let depth = if let Some(point3d) = &track.point3d {
-                    camera.point_depth(point3d)
-                } else {
-                    return;
-                };
-                if depth < min_depth || depth > max_depth {
-                    track.point3d = None;
-                }
-            });
-            self.tracks.retain(|track| {
-                track.point3d.is_some() && track.range().count() >= min_track_length
-            });
-            self.tracks.shrink_to_fit();
-        }
+            if min_angle_cos > angle_cos_threshold {
+                track.point3d = None;
+            }
+        });
+        self.tracks
+            .retain(|track| track.point3d.is_some() && track.range().count() >= min_track_length);
+        self.tracks.shrink_to_fit();
     }
 
     fn scale_points(&self, tracks: &mut [Track]) {
