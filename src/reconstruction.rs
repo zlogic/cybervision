@@ -184,6 +184,7 @@ struct ImageReconstruction {
     vertex_mode: output::VertexMode,
     triangulation: triangulation::Triangulation,
     focal_length: Option<u32>,
+    img_filenames: Vec<String>,
 }
 
 pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
@@ -221,8 +222,13 @@ pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
         crate::ProjectionMode::Perspective => triangulation::ProjectionMode::Perspective,
     };
     let bundle_adjustment = !args.no_bundle_adjustment;
-    let triangulation =
-        triangulation::Triangulation::new(triangulation_projection, out_scale, bundle_adjustment);
+    let triangulation = triangulation::Triangulation::new(
+        args.img_src.len(),
+        triangulation_projection,
+        out_scale,
+        bundle_adjustment,
+    );
+    let img_filenames = args.img_src.to_owned();
 
     let mut reconstruction_task = ImageReconstruction {
         hardware_mode,
@@ -231,6 +237,7 @@ pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
         vertex_mode,
         triangulation,
         focal_length,
+        img_filenames,
     };
 
     if args.img_src.len() > 2 && vertex_mode == output::VertexMode::Texture {
@@ -240,10 +247,28 @@ pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
         .into());
     }
 
-    for i in 0..args.img_src.len() - 1 {
-        let img1_filename = &args.img_src[i];
-        let img2_filename = &args.img_src[i + 1];
-        reconstruction_task.reconstruct(img1_filename, img2_filename)?;
+    let images_count = reconstruction_task.img_filenames.len();
+    for img_i in 0..images_count - 1 {
+        let img1_filename = reconstruction_task.img_filenames[img_i].to_owned();
+        for img_j in img_i + 1..images_count {
+            let img2_filename = reconstruction_task.img_filenames[img_j].to_owned();
+            match reconstruction_task.reconstruct(img_i, img_j) {
+                Ok(_) => {}
+                Err(err) => {
+                    eprintln!(
+                        "Failed to match images {} and {} ({})",
+                        img1_filename, img2_filename, err
+                    );
+                }
+            }
+        }
+    }
+
+    match reconstruction_task.recover_poses() {
+        Ok(_) => {}
+        Err(err) => {
+            eprintln!("Failed to recover image poses: {}", err)
+        }
     }
 
     let surface = reconstruction_task.complete_triangulation()?;
@@ -262,9 +287,11 @@ type CorrelatedPoints = DMatrix<Option<(u32, u32, f32)>>;
 impl ImageReconstruction {
     fn reconstruct(
         &mut self,
-        img1_filename: &str,
-        img2_filename: &str,
+        img1_index: usize,
+        img2_index: usize,
     ) -> Result<(), Box<dyn error::Error>> {
+        let img1_filename = &self.img_filenames[img1_index];
+        let img2_filename = &self.img_filenames[img2_index];
         println!("Processing images {} and {}", img1_filename, img2_filename);
         let img1 = SourceImage::load(img1_filename)?;
         let img2 = SourceImage::load(img2_filename)?;
@@ -299,6 +326,17 @@ impl ImageReconstruction {
             println!("Relative tilt angle is {}", tilt_angle);
         }
 
+        self.triangulation.set_image_data(
+            img1_index,
+            &img1.calibration_matrix(self.focal_length),
+            (img1.img.height() as usize, img1.img.width() as usize),
+        );
+        self.triangulation.set_image_data(
+            img2_index,
+            &img2.calibration_matrix(self.focal_length),
+            (img2.img.height() as usize, img2.img.width() as usize),
+        );
+
         let point_matches = self.match_keypoints(&img1, &img2);
 
         let fm = match self.find_fundamental_matrix(
@@ -322,14 +360,10 @@ impl ImageReconstruction {
             }
         };
 
-        self.triangulation.push_calibration(
-            &img1.calibration_matrix(self.focal_length),
-            &img2.calibration_matrix(self.focal_length),
-        );
-        match self.triangulate_surface(fm.f, correlated_points) {
+        match self.triangulate_surface(img1_index, img2_index, fm.f, correlated_points) {
             Ok(()) => Ok(()),
             Err(err) => {
-                eprintln!("Failed to triangulate surface: {}", err);
+                eprintln!("Failed to add image pair: {}", err);
                 Err(err.into())
             }
         }
@@ -542,24 +576,52 @@ impl ImageReconstruction {
         Ok(point_correlations.correlated_points)
     }
 
+    fn recover_poses(&mut self) -> Result<(), triangulation::TriangulationError> {
+        loop {
+            let start_time = SystemTime::now();
+            let pb = new_progress_bar(true);
+            let result = self.triangulation.recover_next_camera(Some(&pb));
+            pb.finish_and_clear();
+
+            match result {
+                Ok(Some(image)) => {
+                    println!("Recovered pose for image {}", self.img_filenames[image])
+                }
+                Ok(None) => break,
+                Err(err) => {
+                    eprintln!("Failed to recover pose for next image");
+                    return Err(err);
+                }
+            }
+
+            if let Ok(t) = start_time.elapsed() {
+                println!("Recovered pose in {:.3} seconds", t.as_secs_f32());
+            }
+        }
+
+        Ok(())
+    }
     fn triangulate_surface(
         &mut self,
+        img1_index: usize,
+        img2_index: usize,
         f: Matrix3<f64>,
         correlated_points: CorrelatedPoints,
     ) -> Result<(), triangulation::TriangulationError> {
         let start_time = SystemTime::now();
 
         let pb = new_progress_bar(true);
-        let result = self
-            .triangulation
-            .triangulate(&correlated_points, &f, Some(&pb));
+        let result = self.triangulation.triangulate(
+            img1_index,
+            img2_index,
+            &correlated_points,
+            &f,
+            Some(&pb),
+        );
         pb.finish_and_clear();
 
         if let Ok(t) = start_time.elapsed() {
-            println!(
-                "Completed point triangulation in {:.3} seconds",
-                t.as_secs_f32()
-            );
+            println!("Added image pair in {:.3} seconds", t.as_secs_f32());
         }
 
         result

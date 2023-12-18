@@ -528,9 +528,13 @@ impl MeshWriter for PlyWriter {
         let color = match self.vertex_mode {
             VertexMode::Plain | VertexMode::Texture => None,
             VertexMode::Color => {
-                let first_image = track.range().start;
-                if let Some(point2d) = track.get(first_image) {
-                    let img = &self.images[first_image];
+                if let Some((image_i, point2d)) = track
+                    .points()
+                    .iter()
+                    .enumerate()
+                    .find_map(|(i, p)| Some((i, (*p)?)))
+                {
+                    let img = &self.images[image_i];
                     img.get_pixel_checked(point2d.1, point2d.0)
                         .map(|pixel| pixel.0)
                 } else {
@@ -665,9 +669,13 @@ impl MeshWriter for ObjWriter {
         let color = match self.vertex_mode {
             VertexMode::Plain | VertexMode::Texture => None,
             VertexMode::Color => {
-                let first_image = track.range().start;
-                if let Some(point2d) = track.get(first_image) {
-                    let img = &self.images[first_image];
+                if let Some((image_i, point2d)) = track
+                    .points()
+                    .iter()
+                    .enumerate()
+                    .find_map(|(i, p)| Some((i, (*p)?)))
+                {
+                    let img = &self.images[image_i];
                     img.get_pixel_checked(point2d.1, point2d.0)
                         .map(|pixel| pixel.0)
                 } else {
@@ -708,9 +716,13 @@ impl MeshWriter for ObjWriter {
             VertexMode::Plain | VertexMode::Color => {}
             VertexMode::Texture => {
                 let w = &mut self.buffer;
-                let first_image = track.range().start;
-                if let Some(point2d) = track.get(first_image) {
-                    let img = &self.images[first_image];
+                if let Some((image_i, point2d)) = track
+                    .points()
+                    .iter()
+                    .enumerate()
+                    .find_map(|(i, p)| Some((i, (*p)?)))
+                {
+                    let img = &self.images[image_i];
                     writeln!(
                         w,
                         "vt {} {}",

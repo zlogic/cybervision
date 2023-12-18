@@ -1,4 +1,4 @@
-use std::{fmt, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
+use std::{fmt, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
 
 use nalgebra::{
     DMatrix, Matrix2x3, Matrix2x6, Matrix3, Matrix3x4, Matrix3x6, Matrix6, MatrixXx1, MatrixXx4,
@@ -11,8 +11,9 @@ use rayon::prelude::*;
 
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
 const EXTEND_TRACKS_SEARCH_RADIUS: usize = 7;
+const MERGE_TRACKS_MAX_DISTANCE: usize = 100;
+const MERGE_TRACKS_SEARCH_RADIUS: usize = 7;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
-const POSE_ESTIMATION_MIN_CORRELATION: f32 = 0.8;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 100_000;
 // TODO: this should be proportional to image size
@@ -91,6 +92,7 @@ pub struct Triangulation {
 
 impl Triangulation {
     pub fn new(
+        images_count: usize,
         projection: ProjectionMode,
         scale: (f64, f64, f64),
         bundle_adjustment: bool,
@@ -105,11 +107,15 @@ impl Triangulation {
             ProjectionMode::Perspective => (
                 None,
                 Some(PerspectiveTriangulation {
-                    calibration: vec![],
-                    projections: vec![],
-                    cameras: vec![],
+                    images_count,
+                    calibration: vec![None; images_count],
+                    projections: vec![None; images_count],
+                    cameras: vec![None; images_count],
                     tracks: vec![],
-                    image_shapes: vec![],
+                    image_shapes: vec![None; images_count],
+                    initial_fundamental_matrix: None,
+                    initial_images: (0, 1),
+                    remaining_images: (0..images_count).collect(),
                     scale,
                     bundle_adjustment,
                 }),
@@ -122,15 +128,21 @@ impl Triangulation {
         }
     }
 
-    pub fn push_calibration(&mut self, k1: &Matrix3<f64>, k2: &Matrix3<f64>) {
-        // TODO: refactor this to be a bit safer (provide image metadata along with the triangulation call).
+    pub fn set_image_data(
+        &mut self,
+        image_index: usize,
+        k: &Matrix3<f64>,
+        image_shape: (usize, usize),
+    ) {
         if let Some(perspective) = &mut self.perspective {
-            perspective.push_calibration(k1, k2)
+            perspective.set_image_data(image_index, k, image_shape)
         }
     }
 
     pub fn triangulate<PL: ProgressListener>(
         &mut self,
+        image1_index: usize,
+        image2_index: usize,
         correlated_points: &CorrelatedPoints,
         fundamental_matrix: &Matrix3<f64>,
         progress_listener: Option<&PL>,
@@ -138,7 +150,26 @@ impl Triangulation {
         if let Some(affine) = &mut self.affine {
             affine.triangulate(correlated_points)
         } else if let Some(perspective) = &mut self.perspective {
-            perspective.triangulate(correlated_points, fundamental_matrix, progress_listener)
+            perspective.add_image_pair(
+                image1_index,
+                image2_index,
+                correlated_points,
+                fundamental_matrix,
+                progress_listener,
+            )
+        } else {
+            Err(TriangulationError::new("Triangulation not initialized"))
+        }
+    }
+
+    pub fn recover_next_camera<PL: ProgressListener>(
+        &mut self,
+        progress_listener: Option<&PL>,
+    ) -> Result<Option<usize>, TriangulationError> {
+        if self.affine.is_some() {
+            Ok(None)
+        } else if let Some(perspective) = &mut self.perspective {
+            perspective.recover_next_camera(progress_listener)
         } else {
             Err(TriangulationError::new("Triangulation not initialized"))
         }
@@ -212,10 +243,12 @@ impl AffineTriangulation {
             let dy = p1.0 as f64 - p2.0 as f64;
             let distance = (dx * dx + dy * dy).sqrt();
             let point3d = Vector3::new(p1.1 as f64, p1.0 as f64, distance);
+            let point1 = (p1.0 as u32, p1.1 as u32);
+            let point2 = (p2.0, p2.1);
 
             let track = Track {
-                start_index: 0,
-                points: vec![(p1.0 as u32, p1.1 as u32), (p2.0, p2.1)],
+                valid: true,
+                points: vec![Some(point1), Some(point2)],
                 point3d: Some(point3d),
             };
 
@@ -254,48 +287,75 @@ impl AffineTriangulation {
 
 #[derive(Clone, Debug)]
 pub struct Track {
-    start_index: usize,
-    points: Vec<Match>,
+    points: Vec<Option<Match>>,
+    valid: bool,
     point3d: Option<Vector3<f64>>,
 }
 
 impl Track {
-    fn new(start_index: usize, point: Match) -> Track {
+    fn new(images_count: usize) -> Track {
         Track {
-            start_index,
-            points: vec![point],
+            points: vec![None; images_count],
+            valid: true,
             point3d: None,
         }
     }
 
-    #[inline]
-    fn add(&mut self, index: usize, point: Match) -> bool {
-        if index == self.start_index + self.points.len() {
-            self.points.push(point);
-            true
-        } else {
-            false
+    fn can_merge(&self, other: &Track) -> bool {
+        for i in 0..self.points.len() {
+            let p1 = if let Some(point) = self.points[i] {
+                point
+            } else {
+                continue;
+            };
+
+            let p2 = if let Some(point) = other.points[i] {
+                point
+            } else {
+                continue;
+            };
+            let drow = p1.0.max(p2.0) as usize - p1.0.min(p2.0) as usize;
+            let dcol = p1.1.max(p2.1) as usize - p1.1.min(p2.1) as usize;
+            let distance = drow * drow + dcol * dcol;
+            if distance > MERGE_TRACKS_MAX_DISTANCE {
+                return false;
+            }
         }
+        true
+    }
+
+    fn add(&mut self, index: usize, point: Match) {
+        if self.points[index].is_some() {
+            return;
+        };
+        self.points[index] = Some(point);
+    }
+
+    fn remove_projections(&mut self, remap_projections: &[Option<usize>]) {
+        let mut remaining_images_count = 0;
+        for (i, remap_projection) in remap_projections.iter().enumerate() {
+            if let Some(new_index) = remap_projection {
+                self.points[*new_index] = self.points[i];
+                remaining_images_count += 1;
+            }
+        }
+        self.points.truncate(remaining_images_count);
     }
 
     #[inline]
-    pub fn range(&self) -> Range<usize> {
-        // TODO: convert this into an iterator?
-        self.start_index..self.start_index + self.points.len()
+    pub fn is_valid(&self) -> bool {
+        // TODO: remove the valid field?
+        self.valid
     }
 
     #[inline]
     pub fn get(&self, i: usize) -> Option<Match> {
-        if i < self.start_index || i >= self.start_index + self.points.len() {
-            None
-        } else {
-            Some(self.points[i - self.start_index])
-        }
+        self.points[i]
     }
 
     #[inline]
-    fn last(&self) -> Option<&Match> {
-        self.points.last()
+    pub fn points(&self) -> &[Option<Match>] {
+        self.points.as_slice()
     }
 
     #[inline]
@@ -402,39 +462,102 @@ impl Camera {
 }
 
 struct PerspectiveTriangulation {
-    calibration: Vec<Matrix3<f64>>,
-    projections: Vec<Matrix3x4<f64>>,
-    cameras: Vec<Camera>,
+    images_count: usize,
+    calibration: Vec<Option<Matrix3<f64>>>,
+    projections: Vec<Option<Matrix3x4<f64>>>,
+    cameras: Vec<Option<Camera>>,
     tracks: Vec<Track>,
-    image_shapes: Vec<(usize, usize)>,
+    image_shapes: Vec<Option<(usize, usize)>>,
+    initial_fundamental_matrix: Option<Matrix3<f64>>,
+    initial_images: (usize, usize),
+    remaining_images: Vec<usize>,
     scale: (f64, f64, f64),
     bundle_adjustment: bool,
 }
 
 impl PerspectiveTriangulation {
-    fn triangulate<PL: ProgressListener>(
+    fn add_image_pair<PL: ProgressListener>(
         &mut self,
+        image1_index: usize,
+        image2_index: usize,
         correlated_points: &CorrelatedPoints,
         fundamental_matrix: &Matrix3<f64>,
         progress_listener: Option<&PL>,
     ) -> Result<(), TriangulationError> {
-        let index = self.projections.len().saturating_sub(1);
-        self.extend_tracks(correlated_points, index);
+        self.extend_tracks(
+            image1_index,
+            image2_index,
+            correlated_points,
+            progress_listener,
+        );
 
-        if self.projections.is_empty() {
-            let (k1, k2) = if self.calibration.len() == 2 {
-                (self.calibration[0], self.calibration[1])
+        if image1_index == 0 && image2_index == 1 {
+            // TODO: compare variety between fundamental matrix on record, and the current image pair.
+            // Choose the fundamental matrix that would provide the best initial image pose.
+            self.initial_images = (0, 1);
+            self.initial_fundamental_matrix = Some(fundamental_matrix.to_owned());
+        }
+
+        Ok(())
+    }
+
+    fn set_image_data(&mut self, img_index: usize, k: &Matrix3<f64>, image_shape: (usize, usize)) {
+        self.calibration[img_index] = Some(k.to_owned());
+        self.image_shapes[img_index] = Some(image_shape);
+    }
+
+    fn recover_next_camera<PL: ProgressListener>(
+        &mut self,
+        progress_listener: Option<&PL>,
+    ) -> Result<Option<usize>, TriangulationError> {
+        let initial_images = self.initial_images;
+        if self
+            .remaining_images
+            .iter()
+            .any(|i| *i == initial_images.0 || *i == initial_images.1)
+        {
+            // Get the relative pose for the initial image pair.
+            let initial_images = self.initial_images;
+            let k1 = if let Some(calibration) = self.calibration[initial_images.0] {
+                calibration
             } else {
                 return Err(TriangulationError::new("Missing calibration matrix"));
             };
+            let k2 = if let Some(calibration) = self.calibration[initial_images.1] {
+                calibration
+            } else {
+                return Err(TriangulationError::new("Missing calibration matrix"));
+            };
+            let fundamental_matrix =
+                if let Some(fundamental_matrix) = self.initial_fundamental_matrix {
+                    fundamental_matrix
+                } else {
+                    return Err(TriangulationError::new("Missing fundamental matrix"));
+                };
             let p1 = k1 * Matrix3x4::identity();
             let camera1 = Camera::from_matrix(&k1, &Matrix3::identity(), &Vector3::zeros());
-            self.projections.push(p1);
+            self.projections[initial_images.0] = Some(p1);
+            self.cameras[initial_images.0] = Some(camera1);
+            let tracks = self
+                .tracks
+                .par_iter()
+                .filter_map(|track| {
+                    if !track.is_valid() {
+                        return None;
+                    }
+                    let point1 = track.get(initial_images.0)?;
+                    let point2 = track.get(initial_images.1)?;
+                    let mut short_track = Track::new(2);
+                    short_track.add(0, point1);
+                    short_track.add(1, point2);
+                    Some(short_track)
+                })
+                .collect::<Vec<_>>();
             let p2 = match PerspectiveTriangulation::find_projection_matrix(
-                fundamental_matrix,
+                &fundamental_matrix,
                 &k1,
                 &k2,
-                correlated_points,
+                tracks.as_slice(),
             ) {
                 Some(p2) => p2,
                 None => return Err(TriangulationError::new("Unable to find projection matrix")),
@@ -444,65 +567,132 @@ impl PerspectiveTriangulation {
             let camera2 = Camera::from_matrix(&k2, &camera2_r.into(), &camera2_t.into());
 
             let p2 = k2 * p2;
-            self.projections.push(p2);
-            self.cameras = vec![camera1.clone(), camera2];
+            self.projections[initial_images.1] = Some(p2);
+            self.cameras[initial_images.1] = Some(camera2);
             self.triangulate_tracks();
-        } else {
-            let k2 = if self.calibration.len() == self.projections.len() + 1 {
-                self.calibration[self.projections.len()]
-            } else {
-                return Err(TriangulationError::new("Missing calibration matrix"));
-            };
-            let k2_inv = match k2.pseudo_inverse(f64::EPSILON) {
-                Ok(k_inverse) => k_inverse,
-                Err(_) => {
-                    return Err(TriangulationError::new(
-                        "Unable to invert calibration matrix",
-                    ))
+            self.remaining_images
+                .retain(|i| *i != initial_images.0 && *i != initial_images.1);
+
+            return Ok(Some(initial_images.1));
+        }
+
+        // Find image with the most matches with current 3D points.
+        let known_cameras = self
+            .cameras
+            .iter()
+            .enumerate()
+            .filter_map(|(camera_i, camera)| {
+                if camera.is_some() {
+                    Some(camera_i)
+                } else {
+                    None
                 }
-            };
-            let camera2 = match self.recover_relative_pose(
-                correlated_points,
-                &k2,
-                &k2_inv,
-                progress_listener,
-            ) {
-                Some(camera2) => camera2,
-                None => return Err(TriangulationError::new("Unable to find projection matrix")),
-            };
-            self.cameras.push(camera2);
-            self.projections = self
-                .cameras
-                .iter()
-                .map(|camera| camera.projection())
-                .collect();
+            })
+            .collect::<Vec<_>>();
+        let matches_count = self
+            .tracks
+            .par_iter()
+            .flat_map(|track| {
+                let reachable = track.get_point3d().is_some();
+                let unknown = known_cameras
+                    .iter()
+                    .any(|camera_i| self.cameras[*camera_i].is_none());
+                let mut count_projections = vec![0usize; self.images_count];
+                if unknown && reachable {
+                    known_cameras.iter().for_each(|camera_i| {
+                        if track.get(*camera_i).is_some() {
+                            count_projections[*camera_i] = 1
+                        }
+                    });
+                }
+                Some(count_projections)
+            })
+            .reduce(
+                || vec![0usize; self.images_count],
+                |mut a, b| {
+                    for i in 0..self.images_count {
+                        a[i] += b[i];
+                    }
+                    a
+                },
+            );
+        let best_candidate = self
+            .remaining_images
+            .iter()
+            .max_by_key(|i| matches_count[**i]);
+        let best_candidate = if let Some(best_candidate) = best_candidate {
+            best_candidate.to_owned()
+        } else {
+            return Ok(None);
+        };
+        self.remaining_images.retain(|i| *i != best_candidate);
 
-            self.triangulate_tracks();
-        }
+        self.merge_tracks(best_candidate, progress_listener);
 
-        Ok(())
-    }
+        let k2 = if let Some(calibration) = self.calibration[best_candidate] {
+            calibration
+        } else {
+            return Err(TriangulationError::new("Missing calibration matrix"));
+        };
+        let k2_inv = match k2.pseudo_inverse(f64::EPSILON) {
+            Ok(k_inverse) => k_inverse,
+            Err(_) => {
+                return Err(TriangulationError::new(
+                    "Unable to invert calibration matrix",
+                ))
+            }
+        };
+        let camera2 = match self.recover_pose(best_candidate, &k2, &k2_inv, progress_listener) {
+            Some(camera2) => camera2,
+            None => return Err(TriangulationError::new("Unable to find projection matrix")),
+        };
+        let projection2 = camera2.projection();
+        self.cameras[best_candidate] = Some(camera2);
+        self.projections[best_candidate] = Some(projection2);
 
-    fn push_calibration(&mut self, k1: &Matrix3<f64>, k2: &Matrix3<f64>) {
-        if self.calibration.is_empty() {
-            self.calibration.push(k1.to_owned());
-        }
-        self.calibration.push(k2.to_owned());
+        self.triangulate_tracks();
+        Ok(Some(best_candidate))
     }
 
     fn triangulate_all<PL: ProgressListener>(
         &mut self,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
-        self.filter_outliers();
+        self.prune_projections();
+
+        // At this point, all cameras and projections should be valid.
+        let cameras = self
+            .cameras
+            .iter()
+            .map(|camera| {
+                if let Some(camera) = camera {
+                    camera.to_owned()
+                } else {
+                    Camera {
+                        k: Matrix3::from_element(f64::NAN),
+                        r: Vector3::from_element(f64::NAN),
+                        r_matrix: Matrix3::from_element(f64::NAN),
+                        t: Vector3::from_element(f64::NAN),
+                    }
+                }
+            })
+            .collect::<Vec<_>>();
+
+        self.filter_outliers(cameras.as_slice());
         if self.bundle_adjustment {
-            self.bundle_adjustment(progress_listener)?;
+            self.bundle_adjustment(cameras.as_slice(), progress_listener)?;
         }
 
         let surface_projections = self
             .cameras
             .iter()
-            .map(|camera| camera.projection())
+            .map(|camera| {
+                if let Some(camera) = camera {
+                    camera.projection()
+                } else {
+                    Matrix3x4::from_element(f64::NAN)
+                }
+            })
             .collect::<Vec<_>>();
         let surface_tracks = self
             .tracks
@@ -513,7 +703,7 @@ impl PerspectiveTriangulation {
 
         let mut surface = Surface {
             tracks: surface_tracks,
-            cameras: self.cameras.clone(),
+            cameras,
             projections: surface_projections,
         };
 
@@ -522,17 +712,18 @@ impl PerspectiveTriangulation {
     }
 
     #[inline]
-    fn triangulate_track(track: &Track, projections: &[Matrix3x4<f64>]) -> Option<Vector4<f64>> {
-        let points_projection = track
-            .range()
-            .flat_map(|i| {
-                if i < projections.len() {
-                    let point = track.get(i)?;
-                    let point = (point.1 as f64, point.0 as f64);
-                    Some((point, projections[i]))
-                } else {
-                    None
-                }
+    fn triangulate_track(
+        track: &Track,
+        projections: &[Option<Matrix3x4<f64>>],
+    ) -> Option<Vector4<f64>> {
+        let points_projection = projections
+            .iter()
+            .enumerate()
+            .flat_map(|(i, projection)| {
+                let projection = (*projection)?;
+                let point = track.get(i)?;
+                let point = (point.1 as f64, point.0 as f64);
+                Some((point, projection))
             })
             .collect::<Vec<_>>();
 
@@ -565,14 +756,39 @@ impl PerspectiveTriangulation {
             track.point3d = PerspectiveTriangulation::triangulate_track(track, &self.projections)
                 .map(|point4d| point4d.remove_row(3).unscale(point4d.w));
         });
-        self.prune_tracks();
+    }
+
+    fn prune_projections(&mut self) {
+        let mut remap_projections = vec![None; self.images_count];
+        let mut projection_index = 0;
+        for (i, remap_projection) in remap_projections.iter_mut().enumerate() {
+            *remap_projection = if self.projections[i].is_some() {
+                let remap_index = projection_index;
+                projection_index += 1;
+                Some(remap_index)
+            } else {
+                None
+            };
+        }
+        for (i, remap_projection) in remap_projections.iter().enumerate() {
+            if let Some(new_index) = remap_projection {
+                self.cameras[*new_index] = self.cameras[i].to_owned();
+                self.projections[*new_index] = self.projections[i];
+            }
+        }
+        self.projections.truncate(projection_index);
+        self.cameras.truncate(projection_index);
+        self.tracks
+            .iter_mut()
+            .par_bridge()
+            .for_each(|track| track.remove_projections(remap_projections.as_slice()));
     }
 
     fn find_projection_matrix(
         fundamental_matrix: &Matrix3<f64>,
         k1: &Matrix3<f64>,
         k2: &Matrix3<f64>,
-        correlated_points: &CorrelatedPoints,
+        tracks: &[Track],
     ) -> Option<Matrix3x4<f64>> {
         // Create essential matrix and camera matrices.
         let essential_matrix = k2.tr_mul(fundamental_matrix) * k1;
@@ -604,91 +820,61 @@ impl PerspectiveTriangulation {
                 p2.column_mut(3).copy_from(&t);
                 let p2_calibrated = k2 * p2;
                 let camera2 = Camera::from_matrix(k2, &r, &t);
-                let points_count: usize = correlated_points
-                    .column_iter()
-                    .enumerate()
-                    .par_bridge()
-                    .map(move |(col, out_col)| {
-                        out_col
-                            .iter()
-                            .enumerate()
-                            .filter(|(row, _)| {
-                                let point1 = (*row as u32, col as u32);
-                                let point2 = correlated_points[(*row, col)];
-                                let point2 = if let Some(point2) = point2 {
-                                    (point2.0, point2.1)
-                                } else {
-                                    return false;
-                                };
-                                let track = Track {
-                                    start_index: 0,
-                                    points: vec![point1, point2],
-                                    point3d: None,
-                                };
-                                let point4d = PerspectiveTriangulation::triangulate_track(
-                                    &track,
-                                    &[p1, p2_calibrated],
-                                );
-                                let point4d = if let Some(point4d) = point4d {
-                                    point4d
-                                } else {
-                                    return false;
-                                };
-                                let point3d = point4d.remove_row(3).unscale(point4d.w);
-                                point3d.z > 0.0 && camera2.point_in_front(&point3d)
-                            })
-                            .count()
+                let points_count: usize = tracks
+                    .par_iter()
+                    .filter(|track| {
+                        let point4d = PerspectiveTriangulation::triangulate_track(
+                            track,
+                            &[Some(p1), Some(p2_calibrated)],
+                        );
+                        let point4d = if let Some(point4d) = point4d {
+                            point4d
+                        } else {
+                            return false;
+                        };
+                        let point3d = point4d.remove_row(3).unscale(point4d.w);
+                        point3d.z > 0.0 && camera2.point_in_front(&point3d)
                     })
-                    .sum();
+                    .count();
                 (p2, points_count)
             })
             .max_by(|r1, r2| r1.1.cmp(&r2.1))
             .map(|(p2, _)| p2)
     }
 
-    fn recover_relative_pose<PL: ProgressListener>(
+    fn recover_pose<PL: ProgressListener>(
         &self,
-        correlated_points: &CorrelatedPoints,
+        image_index: usize,
         k: &Matrix3<f64>,
         k_inv: &Matrix3<f64>,
         progress_listener: Option<&PL>,
     ) -> Option<Camera> {
-        let track_len = self.projections.len() + 1;
-        let linked_track_len = if self.projections.len() > 1 { 2 } else { 1 };
         // Gaku Nakano, "A Simple Direct Solution to the Perspective-Three-Point Problem," BMVC2019
 
-        let unlinked_tracks = self
-            .tracks
-            .par_iter()
-            .filter(|track| {
-                track.range().len() == 2
-                    && track.range().end == track_len
-                    && track
-                        .last()
-                        .and_then(|m| correlated_points[(m.0 as usize, m.1 as usize)])
-                        .is_some_and(|m| m.2 > POSE_ESTIMATION_MIN_CORRELATION)
+        let inlier_projections = vec![image_index];
+        let validate_projections = self
+            .projections
+            .iter()
+            .enumerate()
+            .filter_map(|(i, projection)| {
+                if projection.is_some() || i == image_index {
+                    Some(i)
+                } else {
+                    None
+                }
             })
-            .map(|track| track.to_owned())
             .collect::<Vec<_>>();
 
         let linked_tracks = self
             .tracks
             .par_iter()
             .filter(|track| {
-                let view_i = self.image_shapes.len() - 1;
-                track.range().len() > linked_track_len
-                    && track.range().end == track_len
-                    && track.get(view_i).is_some()
-                    && track.point3d.is_some()
-                    && track
-                        .last()
-                        .and_then(|m| correlated_points[(m.0 as usize, m.1 as usize)])
-                        .is_some_and(|m| m.2 > POSE_ESTIMATION_MIN_CORRELATION)
+                track.is_valid() && track.get(image_index).is_some() && track.point3d.is_some()
             })
             .map(|track| track.to_owned())
             .collect::<Vec<_>>();
 
-        if linked_tracks.len() < RANSAC_N || unlinked_tracks.len() < RANSAC_D {
+        if linked_tracks.len() < RANSAC_N {
             return None;
         }
 
@@ -715,7 +901,7 @@ impl PerspectiveTriangulation {
                     if let Some(pl) = progress_listener {
                         let value =
                             counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / RANSAC_K as f32;
-                        pl.report_status(value);
+                        pl.report_status(0.02 + 0.98 * value);
                     }
                     let rng = &mut SmallRng::from_rng(rand::thread_rng()).ok()?;
 
@@ -732,33 +918,38 @@ impl PerspectiveTriangulation {
                         .map(|track| (*track).to_owned())
                         .collect::<Vec<_>>();
 
-                    PerspectiveTriangulation::recover_pose_from_points(k_inv, inliers.as_slice())
-                        .into_iter()
-                        .filter_map(|(r, t)| {
-                            let camera = Camera::from_matrix(k, &r, &t);
-                            let projection = camera.projection();
+                    PerspectiveTriangulation::recover_pose_from_points(
+                        image_index,
+                        k_inv,
+                        inliers.as_slice(),
+                    )
+                    .into_iter()
+                    .filter_map(|(r, t)| {
+                        let camera = Camera::from_matrix(k, &r, &t);
+                        let projection = camera.projection();
 
-                            let mut projections = self.projections.clone();
-                            projections.push(projection);
+                        let mut projections = self.projections.clone();
+                        projections[image_index] = Some(projection);
 
-                            let (count, _) = PerspectiveTriangulation::tracks_reprojection_error(
-                                &inliers_tracks,
-                                &projections,
-                                true,
-                            );
-                            if count != RANSAC_N {
-                                return None;
-                            }
+                        let (count, _) = PerspectiveTriangulation::tracks_reprojection_error(
+                            &inliers_tracks,
+                            &projections,
+                            inlier_projections.as_slice(),
+                            true,
+                        );
+                        if count != RANSAC_N {
+                            return None;
+                        }
 
-                            let (count, error) =
-                                PerspectiveTriangulation::tracks_reprojection_error(
-                                    &unlinked_tracks,
-                                    &projections,
-                                    false,
-                                );
-                            Some((camera, count, error / (count as f64)))
-                        })
-                        .reduce(reduce_best_result)
+                        let (count, error) = PerspectiveTriangulation::tracks_reprojection_error(
+                            &linked_tracks,
+                            &projections,
+                            validate_projections.as_slice(),
+                            false,
+                        );
+                        Some((camera, count, error / (count as f64)))
+                    })
+                    .reduce(reduce_best_result)
                 })
                 .reduce(|| best_result.clone(), reduce_best_result);
 
@@ -777,13 +968,14 @@ impl PerspectiveTriangulation {
     }
 
     fn recover_pose_from_points(
+        image_index: usize,
         k_inv: &Matrix3<f64>,
         inliers: &[&Track],
     ) -> Vec<(Matrix3<f64>, Vector3<f64>)> {
         let mut inliers = inliers
             .iter()
             .filter_map(|track| {
-                let p2 = track.last()?;
+                let p2 = track.get(image_index)?;
                 let p2 = (k_inv * Vector3::new(p2.1 as f64, p2.0 as f64, 1.0)).normalize();
                 let point3d = track.point3d?;
 
@@ -911,22 +1103,20 @@ impl PerspectiveTriangulation {
 
     fn tracks_reprojection_error(
         tracks: &[Track],
-        projections: &[Matrix3x4<f64>],
+        projections: &[Option<Matrix3x4<f64>>],
+        include_projections: &[usize],
         inliers: bool,
     ) -> (usize, f64) {
         let threshold = if inliers { RANSAC_INLIERS_T } else { RANSAC_T };
-        // For inliers, check reprojection error only in the last images.
-        // For normal points, ignore the first images.
-        let skip: usize = if inliers || projections.len() <= 2 {
-            projections.len() - 1
-        } else {
-            2
-        };
         tracks
             .iter()
             .filter_map(|track| {
-                PerspectiveTriangulation::point_reprojection_error(track, projections, skip)
-                    .filter(|error| *error < threshold)
+                PerspectiveTriangulation::point_reprojection_error(
+                    track,
+                    projections,
+                    include_projections,
+                )
+                .filter(|error| *error < threshold)
             })
             .fold((0, 0.0f64), |(count, error), match_error| {
                 (count + 1, error.max(match_error))
@@ -936,17 +1126,16 @@ impl PerspectiveTriangulation {
     #[inline]
     fn point_reprojection_error(
         track: &Track,
-        projections: &[Matrix3x4<f64>],
-        skip: usize,
+        projections: &[Option<Matrix3x4<f64>>],
+        include_projections: &[usize],
     ) -> Option<f64> {
         let point4d = PerspectiveTriangulation::triangulate_track(track, projections)?;
-        projections
+        include_projections
             .iter()
-            .enumerate()
-            .skip(skip)
-            .filter_map(|(i, p)| {
-                let original = track.get(i)?;
-                let mut projected = p * point4d;
+            .filter_map(|i| {
+                let projection = (projections[*i])?;
+                let original = track.get(*i)?;
+                let mut projected = projection * point4d;
                 projected.unscale_mut(projected.z);
                 let dx = projected.x - original.1 as f64;
                 let dy = projected.y - original.0 as f64;
@@ -956,56 +1145,80 @@ impl PerspectiveTriangulation {
             .reduce(|acc, val| acc.max(val))
     }
 
-    fn extend_tracks(&mut self, correlated_points: &CorrelatedPoints, index: usize) {
+    fn extend_tracks<PL: ProgressListener>(
+        &mut self,
+        image1_index: usize,
+        image2_index: usize,
+        correlated_points: &CorrelatedPoints,
+        progress_listener: Option<&PL>,
+    ) {
         let mut remaining_points = correlated_points.clone();
+        let counter = AtomicUsize::new(0);
+        let total_iterations = self.tracks.len();
+
         self.tracks.iter_mut().for_each(|track| {
-            let last_pos = track.last().and_then(|last| {
-                let row_start = (last.0 as usize).saturating_sub(EXTEND_TRACKS_SEARCH_RADIUS);
-                let col_start = (last.1 as usize).saturating_sub(EXTEND_TRACKS_SEARCH_RADIUS);
-                let row_end =
-                    (last.0 as usize + EXTEND_TRACKS_SEARCH_RADIUS).min(correlated_points.nrows());
-                let col_end =
-                    (last.1 as usize + EXTEND_TRACKS_SEARCH_RADIUS).min(correlated_points.ncols());
-                let mut min_distance = None;
-                let mut best_match = None;
-                for row in row_start..row_end {
-                    for col in col_start..col_end {
-                        let next_point = if let Some(point) = correlated_points[(row, col)] {
-                            point
-                        } else {
-                            continue;
-                        };
-                        let drow = row.max(last.0 as usize) - row.min(last.0 as usize);
-                        let dcol = col.max(last.1 as usize) - col.min(last.1 as usize);
-                        let distance = drow * drow + dcol * dcol;
-                        if min_distance.map_or(true, |min_distance| distance < min_distance) {
-                            min_distance = Some(distance);
-                            best_match = Some(next_point);
-                        }
+            if let Some(pl) = progress_listener {
+                let value =
+                    counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / total_iterations as f32;
+                pl.report_status(value * 0.98);
+            }
+            let point1 = if let Some(point) = track.get(image1_index) {
+                point
+            } else {
+                return;
+            };
+            let row_start = (point1.0 as usize).saturating_sub(EXTEND_TRACKS_SEARCH_RADIUS);
+            let col_start = (point1.1 as usize).saturating_sub(EXTEND_TRACKS_SEARCH_RADIUS);
+            let row_end =
+                (point1.0 as usize + EXTEND_TRACKS_SEARCH_RADIUS).min(correlated_points.nrows());
+            let col_end =
+                (point1.1 as usize + EXTEND_TRACKS_SEARCH_RADIUS).min(correlated_points.ncols());
+            let mut min_distance = None;
+            let mut best_match = None;
+            for row in row_start..row_end {
+                for col in col_start..col_end {
+                    let next_point = if let Some(point) = correlated_points[(row, col)] {
+                        point
+                    } else {
+                        continue;
+                    };
+                    let drow = row.max(point1.0 as usize) - row.min(point1.0 as usize);
+                    let dcol = col.max(point1.1 as usize) - col.min(point1.1 as usize);
+                    let distance = drow * drow + dcol * dcol;
+                    if min_distance.map_or(true, |min_distance| distance < min_distance) {
+                        min_distance = Some(distance);
+                        best_match = Some(next_point);
                     }
                 }
-                best_match
-            });
+            }
 
-            if let Some(last_pos) = last_pos {
-                let track_point = (last_pos.0, last_pos.1);
-                track.add(index + 1, track_point);
-                remaining_points[(last_pos.0 as usize, last_pos.1 as usize)] = None;
+            if let Some(best_match) = best_match {
+                let track_point = (best_match.0, best_match.1);
+                track.add(image2_index, track_point);
+                remaining_points[(best_match.0 as usize, best_match.1 as usize)] = None;
             };
         });
 
+        let counter = AtomicUsize::new(0);
+        let total_iterations = remaining_points.ncols();
         let mut new_tracks = remaining_points
             .column_iter()
             .enumerate()
             .par_bridge()
             .flat_map(|(col, start_col)| {
+                if let Some(pl) = progress_listener {
+                    let value = counter.fetch_add(1, AtomicOrdering::Relaxed) as f32
+                        / total_iterations as f32;
+                    pl.report_status(0.98 + value * 0.02);
+                }
                 start_col
                     .iter()
                     .enumerate()
                     .filter_map(|(row, m)| {
                         let track_point2 = m.map(|m| (m.0, m.1))?;
-                        let mut track = Track::new(index, (row as u32, col as u32));
-                        track.add(index + 1, track_point2);
+                        let mut track = Track::new(self.images_count);
+                        track.add(image1_index, (row as u32, col as u32));
+                        track.add(image2_index, track_point2);
 
                         Some(track)
                     })
@@ -1014,64 +1227,135 @@ impl PerspectiveTriangulation {
             .collect::<Vec<_>>();
 
         self.tracks.append(&mut new_tracks);
-
-        if self.image_shapes.is_empty() {
-            // Assume first image has the same shape as the second one
-            self.image_shapes.push(correlated_points.shape());
-        }
-        self.image_shapes.push(correlated_points.shape());
     }
 
-    fn prune_tracks(&mut self) {
-        for img_i in 0..self.cameras.len() {
-            let camera = &self.cameras[img_i];
-
-            // Clear points which are in the back of the camers.
-            self.tracks.par_iter_mut().for_each(|track| {
-                let point3d = if let Some(point3d) = track.point3d {
-                    point3d
-                } else {
-                    return;
-                };
-                if !camera.point_in_front(&point3d) {
-                    track.point3d = None;
+    fn merge_tracks<PL: ProgressListener>(
+        &mut self,
+        image_i: usize,
+        progress_listener: Option<&PL>,
+    ) {
+        let shape = if let Some(shape) = self.image_shapes[image_i] {
+            shape
+        } else {
+            return;
+        };
+        let tracks_count = self.tracks.len();
+        let mut tracks_index = DMatrix::<Option<usize>>::from_element(shape.0, shape.1, None);
+        for track_i in 0..self.tracks.len() {
+            let point = if let Some(point) = self.tracks[track_i].get(image_i) {
+                point
+            } else {
+                continue;
+            };
+            if let Some(pl) = progress_listener {
+                let value = track_i as f32 / tracks_count as f32;
+                pl.report_status(value * 0.02);
+            }
+            let row_start = (point.0 as usize).saturating_sub(MERGE_TRACKS_SEARCH_RADIUS);
+            let col_start = (point.1 as usize).saturating_sub(MERGE_TRACKS_SEARCH_RADIUS);
+            let row_end = (point.0 as usize + MERGE_TRACKS_SEARCH_RADIUS).min(tracks_index.nrows());
+            let col_end = (point.1 as usize + MERGE_TRACKS_SEARCH_RADIUS).min(tracks_index.ncols());
+            let mut min_distance = None;
+            let mut best_match = None;
+            for row in row_start..row_end {
+                for col in col_start..col_end {
+                    let potential_match = if let Some(track_j) = tracks_index[(row, col)] {
+                        track_j
+                    } else {
+                        continue;
+                    };
+                    if potential_match == track_i
+                        || !self.tracks[track_i].can_merge(&self.tracks[potential_match])
+                    {
+                        continue;
+                    }
+                    let drow = row.max(point.0 as usize) - row.min(point.0 as usize);
+                    let dcol = col.max(point.1 as usize) - col.min(point.1 as usize);
+                    let distance = drow * drow + dcol * dcol;
+                    if min_distance.map_or(true, |min_distance| distance < min_distance) {
+                        min_distance = Some(distance);
+                        best_match = Some(potential_match);
+                    }
                 }
-            });
-
-            // Remove tracks which have ended and have an invalid configuration.
-            self.tracks
-                .retain(|track| track.range().end >= self.cameras.len() || track.point3d.is_some());
-            self.tracks.shrink_to_fit();
+            }
+            if let Some(best_match) = best_match {
+                let src_track = self.tracks[track_i].to_owned();
+                let dst_track = &mut self.tracks[best_match];
+                for (i, point) in src_track.points().iter().enumerate() {
+                    if let Some(point) = point {
+                        dst_track.add(i, *point);
+                    }
+                }
+                self.tracks[track_i].points.clear();
+            } else {
+                tracks_index[(point.0 as usize, point.1 as usize)] = Some(track_i);
+            }
         }
+        self.tracks.retain(|track| !track.points.is_empty());
     }
 
     fn bundle_adjustment<PL: ProgressListener>(
         &mut self,
+        cameras: &[Camera],
         progress_listener: Option<&PL>,
     ) -> Result<(), TriangulationError> {
         // Only send tracks/points that could be triangulated.
         self.tracks.retain(|track| track.point3d.is_some());
         self.tracks.shrink_to_fit();
-        let mut ba = BundleAdjustment::new(self.cameras.clone(), self.tracks.as_mut_slice());
-        self.cameras = ba.optimize(progress_listener)?;
+        let mut ba = BundleAdjustment::new(cameras, self.tracks.as_mut_slice());
+        let refined_cameras = ba.optimize(progress_listener)?;
+        self.cameras = refined_cameras
+            .iter()
+            .map(|camera| Some(camera.to_owned()))
+            .collect::<Vec<_>>();
 
         Ok(())
     }
 
-    fn filter_outliers(&mut self) {
+    fn filter_outliers(&mut self, cameras: &[Camera]) {
         let min_track_length = if self.cameras.len() > 2 { 3 } else { 2 };
         // For an angle to be larger than a threshold, its cosine needs to be smaller than the
         // threshold.
         let angle_cos_threshold = MIN_ANGLE_BETWEEN_RAYS.cos();
-        let camera_centers = self
-            .cameras
+        let camera_centers = cameras
             .iter()
             .map(|camera| -camera.r_matrix.tr_mul(&camera.t))
             .collect::<Vec<_>>();
         self.tracks.par_iter_mut().for_each(|track| {
+            let point3d = if let Some(point3d) = track.point3d {
+                point3d
+            } else {
+                return;
+            };
+            if !track.is_valid() {
+                track.point3d = None;
+                return;
+            }
+            if track.points.iter().filter(|p| p.is_some()).count() < min_track_length {
+                track.point3d = None;
+                return;
+            }
+            // Clear points which are in the back of the camers.
+            if track
+                .points()
+                .iter()
+                .enumerate()
+                .any(|(camera_i, point2d)| {
+                    point2d.is_some() && !cameras[camera_i].point_in_front(&point3d)
+                })
+            {
+                track.point3d = None;
+                return;
+            }
+            // Clear points where the maximum angle between rays is too low.
             let rays = track
-                .range()
-                .filter_map(|camera_i| {
+                .points()
+                .iter()
+                .enumerate()
+                .filter_map(|(camera_i, point2d)| {
+                    if point2d.is_none() {
+                        return None;
+                    };
                     let point3d = track.point3d?;
                     let ray = point3d - camera_centers[camera_i];
                     if ray.norm() < f64::EPSILON {
@@ -1094,8 +1378,7 @@ impl PerspectiveTriangulation {
                 track.point3d = None;
             }
         });
-        self.tracks
-            .retain(|track| track.point3d.is_some() && track.range().count() >= min_track_length);
+        self.tracks.retain(|track| track.point3d.is_some());
         self.tracks.shrink_to_fit();
     }
 
@@ -1212,9 +1495,10 @@ impl BundleAdjustment<'_> {
     const RESIDUAL_REDUCTION_EPSILON: f64 = 0.0;
     const PARALLEL_CHUNK_SIZE: usize = 10000;
 
-    fn new(cameras: Vec<Camera>, tracks: &mut [Track]) -> BundleAdjustment<'_> {
+    fn new<'a>(cameras: &[Camera], tracks: &'a mut [Track]) -> BundleAdjustment<'a> {
         // For now, identity covariance is acceptable.
         let covariance = 1.0;
+        let cameras = cameras.to_vec();
         let projections = cameras.iter().map(|camera| camera.projection()).collect();
         BundleAdjustment {
             cameras,
@@ -1573,7 +1857,7 @@ impl BundleAdjustment<'_> {
         let mut jt_residual = self.calculate_jt_residual();
 
         if jt_residual.max().abs() <= BundleAdjustment::GRADIENT_EPSILON {
-            return Ok(self.cameras.clone());
+            return Ok(self.cameras.to_vec());
         }
 
         self.mu = BundleAdjustment::INITIAL_MU;
@@ -1670,7 +1954,7 @@ impl BundleAdjustment<'_> {
             ));
         }
 
-        Ok(self.cameras.clone())
+        Ok(self.cameras.to_vec())
     }
 }
 
