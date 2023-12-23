@@ -22,7 +22,9 @@ const RANSAC_T: f64 = 50.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 1000;
+// Lower this value to get more points (especially on far distance).
 const MIN_ANGLE_BETWEEN_RAYS: f64 = (2.0 / 180.0) * std::f64::consts::PI;
+const MAX_ANGLE_BETWEEN_RAYS_COS: f64 = 0.01;
 
 pub struct Surface {
     tracks: Vec<Track>,
@@ -113,8 +115,9 @@ impl Triangulation {
                     cameras: vec![None; images_count],
                     tracks: vec![],
                     image_shapes: vec![None; images_count],
-                    initial_fundamental_matrix: None,
-                    initial_images: (0, 1),
+                    best_initial_p2: None,
+                    best_initial_score: None,
+                    best_initial_pair: None,
                     remaining_images: (0..images_count).collect(),
                     scale,
                     bundle_adjustment,
@@ -370,6 +373,7 @@ struct Camera {
     r: Vector3<f64>,
     r_matrix: Matrix3<f64>,
     t: Vector3<f64>,
+    center: Vector3<f64>,
 }
 
 impl Camera {
@@ -417,11 +421,13 @@ impl Camera {
         };
 
         let r_matrix = Camera::matrix_r(&r);
+        let center = Camera::center(&r_matrix, t);
         Camera {
             k: k.to_owned(),
             r,
             r_matrix,
             t: t.to_owned(),
+            center,
         }
     }
 
@@ -429,6 +435,7 @@ impl Camera {
         self.r += delta_r;
         self.t += delta_t;
         self.r_matrix = Camera::matrix_r(&self.r);
+        self.center = Camera::center(&self.r_matrix, &self.t)
     }
 
     fn matrix_r(r: &Vector3<f64>) -> Matrix3<f64> {
@@ -441,6 +448,10 @@ impl Camera {
                 + (1.0 - theta.cos()) * u * u.transpose()
                 + u.cross_matrix() * theta.sin()
         }
+    }
+
+    fn center(r_matrix: &Matrix3<f64>, t: &Vector3<f64>) -> Vector3<f64> {
+        -r_matrix.tr_mul(t)
     }
 
     #[inline]
@@ -468,8 +479,9 @@ struct PerspectiveTriangulation {
     cameras: Vec<Option<Camera>>,
     tracks: Vec<Track>,
     image_shapes: Vec<Option<(usize, usize)>>,
-    initial_fundamental_matrix: Option<Matrix3<f64>>,
-    initial_images: (usize, usize),
+    best_initial_p2: Option<Matrix3x4<f64>>,
+    best_initial_score: Option<f64>,
+    best_initial_pair: Option<(usize, usize)>,
     remaining_images: Vec<usize>,
     scale: (f64, f64, f64),
     bundle_adjustment: bool,
@@ -491,11 +503,49 @@ impl PerspectiveTriangulation {
             progress_listener,
         );
 
-        if image1_index == 0 && image2_index == 1 {
-            // TODO: compare variety between fundamental matrix on record, and the current image pair.
-            // Choose the fundamental matrix that would provide the best initial image pose.
-            self.initial_images = (0, 1);
-            self.initial_fundamental_matrix = Some(fundamental_matrix.to_owned());
+        // Get the relative pose for the image pair.
+        let k1 = if let Some(calibration) = self.calibration[image1_index] {
+            calibration
+        } else {
+            return Err(TriangulationError::new("Missing calibration matrix"));
+        };
+        let k2 = if let Some(calibration) = self.calibration[image2_index] {
+            calibration
+        } else {
+            return Err(TriangulationError::new("Missing calibration matrix"));
+        };
+        let short_tracks = self
+            .tracks
+            .par_iter()
+            .filter_map(|track| {
+                if !track.is_valid() {
+                    return None;
+                }
+                let point1 = track.get(image1_index)?;
+                let point2 = track.get(image2_index)?;
+                let mut short_track = Track::new(2);
+                short_track.add(0, point1);
+                short_track.add(1, point2);
+                Some(short_track)
+            })
+            .collect::<Vec<_>>();
+        let (p2, score) = match PerspectiveTriangulation::find_projection_matrix(
+            fundamental_matrix,
+            &k1,
+            &k2,
+            short_tracks.as_slice(),
+        ) {
+            Some(res) => res,
+            None => return Err(TriangulationError::new("Unable to find projection matrix")),
+        };
+
+        if self
+            .best_initial_score
+            .map_or(true, |current_score| score > current_score)
+        {
+            self.best_initial_p2 = Some(p2);
+            self.best_initial_pair = Some((image1_index, image2_index));
+            self.best_initial_score = Some(score);
         }
 
         Ok(())
@@ -510,14 +560,8 @@ impl PerspectiveTriangulation {
         &mut self,
         progress_listener: Option<&PL>,
     ) -> Result<Option<usize>, TriangulationError> {
-        let initial_images = self.initial_images;
-        if self
-            .remaining_images
-            .iter()
-            .any(|i| *i == initial_images.0 || *i == initial_images.1)
-        {
-            // Get the relative pose for the initial image pair.
-            let initial_images = self.initial_images;
+        if let Some(initial_images) = self.best_initial_pair {
+            // Use projection matrix and camera configurations from the best initial pair..
             let k1 = if let Some(calibration) = self.calibration[initial_images.0] {
                 calibration
             } else {
@@ -528,39 +572,16 @@ impl PerspectiveTriangulation {
             } else {
                 return Err(TriangulationError::new("Missing calibration matrix"));
             };
-            let fundamental_matrix =
-                if let Some(fundamental_matrix) = self.initial_fundamental_matrix {
-                    fundamental_matrix
-                } else {
-                    return Err(TriangulationError::new("Missing fundamental matrix"));
-                };
             let p1 = k1 * Matrix3x4::identity();
             let camera1 = Camera::from_matrix(&k1, &Matrix3::identity(), &Vector3::zeros());
             self.projections[initial_images.0] = Some(p1);
             self.cameras[initial_images.0] = Some(camera1);
-            let tracks = self
-                .tracks
-                .par_iter()
-                .filter_map(|track| {
-                    if !track.is_valid() {
-                        return None;
-                    }
-                    let point1 = track.get(initial_images.0)?;
-                    let point2 = track.get(initial_images.1)?;
-                    let mut short_track = Track::new(2);
-                    short_track.add(0, point1);
-                    short_track.add(1, point2);
-                    Some(short_track)
-                })
-                .collect::<Vec<_>>();
-            let p2 = match PerspectiveTriangulation::find_projection_matrix(
-                &fundamental_matrix,
-                &k1,
-                &k2,
-                tracks.as_slice(),
-            ) {
-                Some(p2) => p2,
-                None => return Err(TriangulationError::new("Unable to find projection matrix")),
+            let p2 = if let Some(p2) = self.best_initial_p2 {
+                p2
+            } else {
+                return Err(TriangulationError::new(
+                    "Missing projection matrix for initial image pair",
+                ));
             };
             let camera2_r = p2.fixed_view::<3, 3>(0, 0);
             let camera2_t = p2.column(3);
@@ -572,6 +593,8 @@ impl PerspectiveTriangulation {
             self.triangulate_tracks();
             self.remaining_images
                 .retain(|i| *i != initial_images.0 && *i != initial_images.1);
+
+            self.best_initial_pair = None;
 
             return Ok(Some(initial_images.1));
         }
@@ -673,6 +696,7 @@ impl PerspectiveTriangulation {
                         r: Vector3::from_element(f64::NAN),
                         r_matrix: Matrix3::from_element(f64::NAN),
                         t: Vector3::from_element(f64::NAN),
+                        center: Vector3::from_element(f64::NAN),
                     }
                 }
             })
@@ -789,7 +813,7 @@ impl PerspectiveTriangulation {
         k1: &Matrix3<f64>,
         k2: &Matrix3<f64>,
         tracks: &[Track],
-    ) -> Option<Matrix3x4<f64>> {
+    ) -> Option<(Matrix3x4<f64>, f64)> {
         // Create essential matrix and camera matrices.
         let essential_matrix = k2.tr_mul(fundamental_matrix) * k1;
         let svd = essential_matrix.svd(true, true);
@@ -812,7 +836,7 @@ impl PerspectiveTriangulation {
         // Solve cheirality and find the matrix that the most points in front of the image.
         let combinations: [(Matrix3<f64>, Vector3<f64>); 4] =
             [(r1, u3.into()), (r1, -u3), (r2, u3.into()), (r2, -u3)];
-        combinations
+        let (p2, camera2) = combinations
             .into_iter()
             .map(|(r, t)| {
                 let mut p2 = Matrix3x4::zeros();
@@ -820,13 +844,12 @@ impl PerspectiveTriangulation {
                 p2.column_mut(3).copy_from(&t);
                 let p2_calibrated = k2 * p2;
                 let camera2 = Camera::from_matrix(k2, &r, &t);
+                let projections = &[Some(p1), Some(p2_calibrated)];
                 let points_count: usize = tracks
                     .par_iter()
                     .filter(|track| {
-                        let point4d = PerspectiveTriangulation::triangulate_track(
-                            track,
-                            &[Some(p1), Some(p2_calibrated)],
-                        );
+                        let point4d =
+                            PerspectiveTriangulation::triangulate_track(track, projections);
                         let point4d = if let Some(point4d) = point4d {
                             point4d
                         } else {
@@ -836,10 +859,72 @@ impl PerspectiveTriangulation {
                         point3d.z > 0.0 && camera2.point_in_front(&point3d)
                     })
                     .count();
-                (p2, points_count)
+                (p2, camera2, points_count)
             })
-            .max_by(|r1, r2| r1.1.cmp(&r2.1))
-            .map(|(p2, _)| p2)
+            .max_by(|r1, r2| r1.2.cmp(&r2.2))
+            .map(|(p2, camera2, _)| (p2, camera2))?;
+
+        // Calculate score - to find the best initial image pair.
+        let min_angle_cos_threshold = MIN_ANGLE_BETWEEN_RAYS.cos();
+        let camera1 = Camera::from_matrix(k1, &Matrix3::identity(), &Vector3::zeros());
+        let cameras = &[camera1, camera2];
+        let p2_calibrated = k2 * p2;
+        let projections = &[Some(p1), Some(p2_calibrated)];
+        let score: f64 = tracks
+            .par_iter()
+            .flat_map(|track| {
+                let point4d = PerspectiveTriangulation::triangulate_track(track, projections)?;
+                let point3d = point4d.remove_row(3).unscale(point4d.w);
+                let mut track = track.to_owned();
+                track.point3d = Some(point3d);
+                let min_angle_cos = PerspectiveTriangulation::min_ray_angle_cos(cameras, &track)?;
+                if min_angle_cos < min_angle_cos_threshold
+                    && min_angle_cos > MAX_ANGLE_BETWEEN_RAYS_COS
+                {
+                    Some(1.0 / min_angle_cos)
+                } else {
+                    None
+                }
+            })
+            .sum();
+        Some((p2, score))
+    }
+
+    fn min_ray_angle_cos(cameras: &[Camera], track: &Track) -> Option<f64> {
+        let rays = track
+            .points()
+            .iter()
+            .enumerate()
+            .filter_map(|(camera_i, point2d)| {
+                if point2d.is_none() {
+                    return None;
+                };
+                let camera_center = cameras[camera_i].center;
+                let point3d = track.point3d?;
+                let ray = point3d - camera_center;
+                if ray.norm() < f64::EPSILON {
+                    return None;
+                }
+                Some(ray.normalize())
+            })
+            .collect::<Vec<_>>();
+
+        // This fuction returns the minimum cosine between angle rays.
+        // Cosine values decrease when the angle increases (cos(0)==1).
+        // So to get the maximum angle, the minimum cosine should be used.
+        let mut min_angle_cos: Option<f64> = None;
+        for r_i in 0..rays.len() {
+            let ray_i = rays[r_i];
+            for ray_j in rays.iter().skip(r_i + 1) {
+                let angle = ray_i.dot(ray_j).abs();
+                min_angle_cos = if let Some(min_angle_cos) = min_angle_cos {
+                    Some(min_angle_cos.min(angle))
+                } else {
+                    Some(angle)
+                }
+            }
+        }
+        min_angle_cos
     }
 
     fn recover_pose<PL: ProgressListener>(
@@ -1317,10 +1402,6 @@ impl PerspectiveTriangulation {
         // For an angle to be larger than a threshold, its cosine needs to be smaller than the
         // threshold.
         let angle_cos_threshold = MIN_ANGLE_BETWEEN_RAYS.cos();
-        let camera_centers = cameras
-            .iter()
-            .map(|camera| -camera.r_matrix.tr_mul(&camera.t))
-            .collect::<Vec<_>>();
         self.tracks.par_iter_mut().for_each(|track| {
             let point3d = if let Some(point3d) = track.point3d {
                 point3d
@@ -1348,33 +1429,12 @@ impl PerspectiveTriangulation {
                 return;
             }
             // Clear points where the maximum angle between rays is too low.
-            let rays = track
-                .points()
-                .iter()
-                .enumerate()
-                .filter_map(|(camera_i, point2d)| {
-                    if point2d.is_none() {
-                        return None;
-                    };
-                    let point3d = track.point3d?;
-                    let ray = point3d - camera_centers[camera_i];
-                    if ray.norm() < f64::EPSILON {
-                        return None;
-                    }
-                    Some(ray.normalize())
-                })
-                .collect::<Vec<_>>();
-
-            let mut min_angle_cos = f64::MAX;
-            for r_i in 0..rays.len() {
-                let ray_i = rays[r_i];
-                for ray_j in rays.iter().skip(r_i + 1) {
-                    let angle = ray_i.dot(ray_j).abs();
-                    min_angle_cos = min_angle_cos.min(angle);
+            if let Some(min_angle_cos) = PerspectiveTriangulation::min_ray_angle_cos(cameras, track)
+            {
+                if min_angle_cos > angle_cos_threshold {
+                    track.point3d = None;
                 }
-            }
-
-            if min_angle_cos > angle_cos_threshold {
+            } else {
                 track.point3d = None;
             }
         });
