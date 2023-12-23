@@ -24,7 +24,6 @@ const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 1000;
 // Lower this value to get more points (especially on far distance).
 const MIN_ANGLE_BETWEEN_RAYS: f64 = (2.0 / 180.0) * std::f64::consts::PI;
-const MAX_ANGLE_BETWEEN_RAYS_COS: f64 = 0.01;
 
 pub struct Surface {
     tracks: Vec<Track>,
@@ -836,7 +835,7 @@ impl PerspectiveTriangulation {
         // Solve cheirality and find the matrix that the most points in front of the image.
         let combinations: [(Matrix3<f64>, Vector3<f64>); 4] =
             [(r1, u3.into()), (r1, -u3), (r2, u3.into()), (r2, -u3)];
-        let (p2, camera2) = combinations
+        let (p2, count) = combinations
             .into_iter()
             .map(|(r, t)| {
                 let mut p2 = Matrix3x4::zeros();
@@ -859,35 +858,10 @@ impl PerspectiveTriangulation {
                         point3d.z > 0.0 && camera2.point_in_front(&point3d)
                     })
                     .count();
-                (p2, camera2, points_count)
+                (p2, points_count)
             })
-            .max_by(|r1, r2| r1.2.cmp(&r2.2))
-            .map(|(p2, camera2, _)| (p2, camera2))?;
-
-        // Calculate score - to find the best initial image pair.
-        let min_angle_cos_threshold = MIN_ANGLE_BETWEEN_RAYS.cos();
-        let camera1 = Camera::from_matrix(k1, &Matrix3::identity(), &Vector3::zeros());
-        let cameras = &[camera1, camera2];
-        let p2_calibrated = k2 * p2;
-        let projections = &[Some(p1), Some(p2_calibrated)];
-        let score: f64 = tracks
-            .par_iter()
-            .flat_map(|track| {
-                let point4d = PerspectiveTriangulation::triangulate_track(track, projections)?;
-                let point3d = point4d.remove_row(3).unscale(point4d.w);
-                let mut track = track.to_owned();
-                track.point3d = Some(point3d);
-                let min_angle_cos = PerspectiveTriangulation::min_ray_angle_cos(cameras, &track)?;
-                if min_angle_cos < min_angle_cos_threshold
-                    && min_angle_cos > MAX_ANGLE_BETWEEN_RAYS_COS
-                {
-                    Some(1.0 / min_angle_cos)
-                } else {
-                    None
-                }
-            })
-            .sum();
-        Some((p2, score))
+            .max_by(|r1, r2| r1.1.cmp(&r2.1))?;
+        Some((p2, count as f64))
     }
 
     fn min_ray_angle_cos(cameras: &[Camera], track: &Track) -> Option<f64> {
