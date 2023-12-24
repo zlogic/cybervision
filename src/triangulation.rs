@@ -1372,7 +1372,6 @@ impl PerspectiveTriangulation {
     }
 
     fn filter_outliers(&mut self, cameras: &[Camera]) {
-        let min_track_length = if self.cameras.len() > 2 { 3 } else { 2 };
         // For an angle to be larger than a threshold, its cosine needs to be smaller than the
         // threshold.
         let angle_cos_threshold = MIN_ANGLE_BETWEEN_RAYS.cos();
@@ -1383,10 +1382,6 @@ impl PerspectiveTriangulation {
                 return;
             };
             if !track.is_valid() {
-                track.point3d = None;
-                return;
-            }
-            if track.points.iter().filter(|p| p.is_some()).count() < min_track_length {
                 track.point3d = None;
                 return;
             }
