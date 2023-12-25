@@ -9,7 +9,7 @@ use std::{
 };
 
 use image::{RgbImage, Rgba, RgbaImage};
-use nalgebra::{DMatrix, Vector3};
+use nalgebra::DMatrix;
 use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 
 use rayon::prelude::*;
@@ -62,7 +62,7 @@ struct CameraGrid {
     max_row: f64,
     min_col: f64,
     max_col: f64,
-    grid: DMatrix<Vec<Vector3<f64>>>,
+    grid: DMatrix<Vec<usize>>,
     grid_step: f64,
 }
 
@@ -112,28 +112,29 @@ impl CameraGrid {
         let grid_step = self.get_step();
         let nrows = ((self.max_row - self.min_row) / grid_step).ceil() as usize;
         let ncols = ((self.max_col - self.min_col) / grid_step).ceil() as usize;
-        let mut index = DMatrix::<Vec<Vector3<f64>>>::from_element(nrows, ncols, vec![]);
+        let mut index = DMatrix::<Vec<usize>>::from_element(nrows, ncols, vec![]);
         points
             .iter_tracks()
             .enumerate()
-            .for_each(|(track_i, _track)| {
-                let point = if let Some(point) = points.project_point(self.camera_i, track_i) {
-                    point
+            .for_each(|(track_i, track)| {
+                let point3d = if let Some(point3d) = track.get_point3d() {
+                    point3d
                 } else {
                     return;
                 };
-                let point_depth =
-                    if let Some(point_depth) = points.point_depth(self.camera_i, track_i) {
-                        point_depth
-                    } else {
-                        return;
-                    };
-                let row =
-                    (((point.y - self.min_row) / grid_step).floor() as usize).clamp(0, nrows - 1);
-                let col =
-                    (((point.x - self.min_col) / grid_step).floor() as usize).clamp(0, ncols - 1);
-                let point_in_camera = Vector3::new(point.x, point.y, point_depth);
-                index[(row, col)].push(point_in_camera);
+                let point3d_in_camera = points.point_in_camera(self.camera_i, &point3d);
+                let row = point3d_in_camera.y / point3d_in_camera.z;
+                let col = point3d_in_camera.x / point3d_in_camera.z;
+                if row < self.min_row
+                    || col < self.min_col
+                    || row > self.max_row
+                    || col > self.max_col
+                {
+                    return;
+                }
+                let row = (((row - self.min_row) / grid_step).floor() as usize).clamp(0, nrows - 1);
+                let col = (((col - self.min_col) / grid_step).floor() as usize).clamp(0, ncols - 1);
+                index[(row, col)].push(track_i);
             });
 
         self.grid_step = grid_step;
@@ -180,11 +181,22 @@ impl Mesh {
             .map(|camera_i| {
                 self.points
                     .iter_tracks()
-                    .enumerate()
                     .par_bridge()
-                    .flat_map(|(track_i, _track)| {
-                        let point = self.points.project_point(camera_i, track_i)?;
-                        Some(CameraGrid::from_point(camera_i, (point.y, point.x)))
+                    .flat_map(|track| {
+                        // Do not include invisible points to extend index range.
+                        track.get(camera_i)?;
+                        let point3d = track.get_point3d()?;
+                        let point3d_in_camera = self.points.point_in_camera(camera_i, &point3d);
+                        if point3d_in_camera.z <= f64::EPSILON {
+                            return None;
+                        }
+                        Some(CameraGrid::from_point(
+                            camera_i,
+                            (
+                                point3d_in_camera.y / point3d_in_camera.z,
+                                point3d_in_camera.x / point3d_in_camera.z,
+                            ),
+                        ))
                     })
                     .reduce(|| CameraGrid::new(camera_i), |a, b| a.merge(&b))
             })
@@ -193,39 +205,29 @@ impl Mesh {
 
     #[inline]
     fn polygon_obstructs(&self, camera_i: usize, grid: &CameraGrid, polygon: &Polygon) -> bool {
-        let project_polygon_point = |i: usize| {
-            let point = self.points.project_point(camera_i, polygon.vertices[i])?;
-            Some((point.y, point.x))
-        };
-        let polygon_projection = || {
-            Some([
-                project_polygon_point(0)?,
-                project_polygon_point(1)?,
-                project_polygon_point(2)?,
-            ])
-        };
-        let polygon_projection = if let Some(projection) = polygon_projection() {
-            projection
+        let point0 = if let Some(point) = self.points.get_point(polygon.vertices[0]) {
+            point
         } else {
             return false;
         };
-        let get_polygon_depth = |i: usize| self.points.point_depth(camera_i, polygon.vertices[i]);
-        let polygon_depths = || {
-            Some([
-                get_polygon_depth(0)?,
-                get_polygon_depth(1)?,
-                get_polygon_depth(2)?,
-            ])
-        };
-        let polygon_depths = if let Some(depths) = polygon_depths() {
-            depths
+        let point1 = if let Some(point) = self.points.get_point(polygon.vertices[1]) {
+            point
         } else {
             return false;
         };
-
-        let (min_row, max_row, min_col, max_col) = polygon_projection
+        let point2 = if let Some(point) = self.points.get_point(polygon.vertices[2]) {
+            point
+        } else {
+            return false;
+        };
+        let (min_row, max_row, min_col, max_col) = [point0, point1, point2]
             .iter()
-            .map(|point| (point.0, point.1))
+            .map(|point| {
+                let point3d_in_camera = self.points.point_in_camera(camera_i, point);
+                let col = point3d_in_camera.y / point3d_in_camera.z;
+                let row = point3d_in_camera.x / point3d_in_camera.z;
+                (row, col)
+            })
             .fold((f64::MAX, f64::MIN, f64::MAX, f64::MIN), |acc, v| {
                 (
                     acc.0.min(v.0),
@@ -248,21 +250,41 @@ impl Mesh {
             .saturating_add(1)
             .clamp(0, grid.grid.ncols());
 
+        // Möller–Trumbore intersection algorithm.
+        let edge1 = point1 - point0;
+        let edge2 = point2 - point0;
+        let camera_center = self.points.camera_center(camera_i);
         for row in min_row..max_row {
             for col in min_col..max_col {
-                let points = &grid.grid[(row, col)];
-                let obstruction = points.iter().any(|point| {
-                    let point2d = (point.y, point.x);
-                    let barycentric_coordinates =
-                        barycentric_interpolation(&polygon_projection, &point2d);
-                    if let Some(lambda) = barycentric_coordinates {
-                        let polygon_depth = lambda[0] * polygon_depths[0]
-                            + lambda[1] * polygon_depths[1]
-                            + lambda[2] * polygon_depths[2];
-                        polygon_depth < point.z
+                let tracks = &grid.grid[(row, col)];
+                let obstruction = tracks.iter().any(|track_i| {
+                    let point3d = if let Some(point3d) = self.points.get_point(*track_i) {
+                        point3d
                     } else {
-                        false
+                        return false;
+                    };
+                    if point3d == point0 || point3d == point1 || point3d == point2 {
+                        return false;
                     }
+                    let ray_vector = point3d - camera_center;
+                    let ray_cross_e2 = ray_vector.cross(&edge2);
+                    let det = edge1.dot(&ray_cross_e2);
+                    if det.abs() < f64::EPSILON {
+                        return false;
+                    }
+                    let inv_det = 1.0 / det;
+                    let s = camera_center - point0;
+                    let u = inv_det * s.dot(&ray_cross_e2);
+                    if !(0.0..=1.0).contains(&u) {
+                        return false;
+                    }
+                    let s_cross_e1 = s.cross(&edge1);
+                    let v = inv_det * ray_vector.dot(&s_cross_e1);
+                    if v < 0.0 || u + v > 1.0 {
+                        return false;
+                    }
+                    let t = inv_det * edge2.dot(&s_cross_e1);
+                    t > 1.0
                 });
 
                 if obstruction {
@@ -289,9 +311,9 @@ impl Mesh {
             .iter_tracks()
             .enumerate()
             .par_bridge()
-            .filter_map(|(track_i, _track)| {
-                let projection = self.points.project_point(camera_i, track_i)?;
-                let point = Point2::new(projection.x, projection.y);
+            .filter_map(|(track_i, track)| {
+                let projection = track.get(camera_i)?;
+                let point = Point2::new(projection.1 as f64, projection.0 as f64);
                 Some(Point { track_i, point })
             })
             .collect::<Vec<_>>();
@@ -422,6 +444,7 @@ impl Mesh {
 
 pub fn output<PL: ProgressListener>(
     surface: triangulation::Surface,
+    out_scale: (f64, f64, f64),
     images: Vec<RgbImage>,
     path: &str,
     interpolation: InterpolationMode,
@@ -429,9 +452,9 @@ pub fn output<PL: ProgressListener>(
     progress_listener: Option<&PL>,
 ) -> Result<(), Box<dyn error::Error>> {
     let writer: Box<dyn MeshWriter> = if path.to_lowercase().ends_with(".obj") {
-        Box::new(ObjWriter::new(path, images, vertex_mode)?)
+        Box::new(ObjWriter::new(path, images, vertex_mode, out_scale)?)
     } else if path.to_lowercase().ends_with(".ply") {
-        Box::new(PlyWriter::new(path, images, vertex_mode)?)
+        Box::new(PlyWriter::new(path, images, vertex_mode, out_scale)?)
     } else {
         Box::new(ImageWriter::new(path, images, &surface)?)
     };
@@ -468,6 +491,7 @@ struct PlyWriter {
     writer: BufWriter<File>,
     buffer: Vec<u8>,
     vertex_mode: VertexMode,
+    out_scale: (f64, f64, f64),
     images: Vec<RgbImage>,
 }
 
@@ -476,6 +500,7 @@ impl PlyWriter {
         path: &str,
         images: Vec<RgbImage>,
         vertex_mode: VertexMode,
+        out_scale: (f64, f64, f64),
     ) -> Result<PlyWriter, Box<dyn error::Error>> {
         let writer = BufWriter::new(File::create(path)?);
         let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
@@ -484,6 +509,7 @@ impl PlyWriter {
             writer,
             buffer,
             vertex_mode,
+            out_scale,
             images,
         })
     }
@@ -550,7 +576,11 @@ impl MeshWriter for PlyWriter {
         } else {
             return Err(OutputError::new("Point has no 3D coordinates").into());
         };
-        let (x, y, z) = (p.x, -p.y, p.z);
+        let (x, y, z) = (
+            p.x * self.out_scale.0,
+            -p.y * self.out_scale.1,
+            p.z * self.out_scale.2,
+        );
         w.write_all(&x.to_be_bytes())?;
         w.write_all(&y.to_be_bytes())?;
         w.write_all(&z.to_be_bytes())?;
@@ -586,6 +616,7 @@ struct ObjWriter {
     writer: BufWriter<File>,
     buffer: Vec<u8>,
     vertex_mode: VertexMode,
+    out_scale: (f64, f64, f64),
     images: Vec<RgbImage>,
     path: String,
 }
@@ -595,6 +626,7 @@ impl ObjWriter {
         path: &str,
         images: Vec<RgbImage>,
         vertex_mode: VertexMode,
+        out_scale: (f64, f64, f64),
     ) -> Result<ObjWriter, Box<dyn error::Error>> {
         let writer = BufWriter::new(File::create(path)?);
         let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
@@ -602,6 +634,7 @@ impl ObjWriter {
             writer,
             buffer,
             vertex_mode,
+            out_scale,
             images,
             path: path.to_string(),
         })
@@ -689,19 +722,24 @@ impl MeshWriter for ObjWriter {
         } else {
             return Err(OutputError::new("Point has no 3D coordinates").into());
         };
+        let (x, y, z) = (
+            p.x * self.out_scale.0,
+            -p.y * self.out_scale.1,
+            p.z * self.out_scale.2,
+        );
         if let Some(color) = color {
             writeln!(
                 w,
                 "v {} {} {} {} {} {}",
-                p.x,
-                -p.y,
-                p.z,
+                x,
+                y,
+                z,
                 color[0] as f64 / 255.0,
                 color[1] as f64 / 255.0,
                 color[2] as f64 / 255.0,
             )?
         } else {
-            writeln!(w, "v {} {} {}", p.x, -p.y, p.z)?
+            writeln!(w, "v {} {} {}", x, y, z)?
         }
 
         Ok(())

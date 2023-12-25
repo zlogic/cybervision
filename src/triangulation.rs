@@ -41,17 +41,13 @@ impl Surface {
     }
 
     #[inline]
-    pub fn project_point(&self, camera_i: usize, track_i: usize) -> Option<Vector2<f64>> {
-        let track = &self.tracks[track_i];
-        if self.cameras.is_empty() {
-            let point = track.get(camera_i)?;
-            return Some(Vector2::new(point.1 as f64, point.0 as f64));
-        }
-        let projection = &self.projections[camera_i];
-        let point4d = track.point3d?.insert_row(3, 1.0);
-        let projected_point = projection * point4d;
-        let projected_point = projected_point.remove_row(2).unscale(projected_point.z);
-        Some(projected_point)
+    pub fn get_point(&self, track_i: usize) -> Option<Vector3<f64>> {
+        self.tracks[track_i].point3d
+    }
+
+    #[inline]
+    pub fn camera_center(&self, camera_i: usize) -> Vector3<f64> {
+        self.cameras[camera_i].center
     }
 
     #[inline]
@@ -63,6 +59,12 @@ impl Surface {
         let camera = &self.cameras[camera_i];
         track.get(camera_i)?;
         Some(camera.point_depth(&track.point3d?))
+    }
+
+    #[inline]
+    pub fn point_in_camera(&self, camera_i: usize, point3d: &Vector3<f64>) -> Vector3<f64> {
+        let camera = &self.cameras[camera_i];
+        camera.r_matrix * (point3d + camera.r_matrix.tr_mul(&camera.t))
     }
 
     pub fn cameras_len(&self) -> usize {
@@ -95,7 +97,6 @@ impl Triangulation {
     pub fn new(
         images_count: usize,
         projection: ProjectionMode,
-        scale: (f64, f64, f64),
         bundle_adjustment: bool,
     ) -> Triangulation {
         let surface = Surface {
@@ -104,7 +105,7 @@ impl Triangulation {
             projections: vec![],
         };
         let (affine, perspective) = match projection {
-            ProjectionMode::Affine => (Some(AffineTriangulation { surface, scale }), None),
+            ProjectionMode::Affine => (Some(AffineTriangulation { surface }), None),
             ProjectionMode::Perspective => (
                 None,
                 Some(PerspectiveTriangulation {
@@ -118,7 +119,6 @@ impl Triangulation {
                     best_initial_score: None,
                     best_initial_pair: None,
                     remaining_images: (0..images_count).collect(),
-                    scale,
                     bundle_adjustment,
                 }),
             ),
@@ -198,7 +198,6 @@ impl Triangulation {
 
 struct AffineTriangulation {
     surface: Surface,
-    scale: (f64, f64, f64),
 }
 
 impl AffineTriangulation {
@@ -235,7 +234,12 @@ impl AffineTriangulation {
 
     fn triangulate_all(&self) -> Result<Surface, TriangulationError> {
         // TODO: drop unused items?
-        Ok(self.scale_points())
+        let surface = Surface {
+            tracks: self.surface.tracks.clone(),
+            cameras: self.surface.cameras.clone(),
+            projections: self.surface.projections.clone(),
+        };
+        Ok(surface)
     }
 
     #[inline]
@@ -257,32 +261,6 @@ impl AffineTriangulation {
             Some(track)
         } else {
             None
-        }
-    }
-
-    fn scale_points(&self) -> Surface {
-        let scale = &self.scale;
-
-        let depth_scale = scale.2 * ((scale.0 + scale.1) / 2.0);
-        let scaled_tracks = self
-            .surface
-            .tracks
-            .iter()
-            .filter_map(|track| {
-                let mut track = track.to_owned();
-                if let Some(point) = &mut track.point3d {
-                    point.z *= depth_scale;
-                    Some(track)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-
-        Surface {
-            tracks: scaled_tracks,
-            cameras: self.surface.cameras.clone(),
-            projections: self.surface.projections.clone(),
         }
     }
 }
@@ -482,7 +460,6 @@ struct PerspectiveTriangulation {
     best_initial_score: Option<f64>,
     best_initial_pair: Option<(usize, usize)>,
     remaining_images: Vec<usize>,
-    scale: (f64, f64, f64),
     bundle_adjustment: bool,
 }
 
@@ -724,13 +701,12 @@ impl PerspectiveTriangulation {
             .map(|track| track.to_owned())
             .collect::<Vec<_>>();
 
-        let mut surface = Surface {
+        let surface = Surface {
             tracks: surface_tracks,
             cameras,
             projections: surface_projections,
         };
 
-        self.scale_points(surface.tracks.as_mut_slice());
         Ok(surface)
     }
 
@@ -1409,21 +1385,6 @@ impl PerspectiveTriangulation {
         });
         self.tracks.retain(|track| track.point3d.is_some());
         self.tracks.shrink_to_fit();
-    }
-
-    fn scale_points(&self, tracks: &mut [Track]) {
-        let scale = &self.scale;
-
-        tracks.iter_mut().for_each(|track| {
-            let point3d = if let Some(point3d) = &mut track.point3d {
-                point3d
-            } else {
-                return;
-            };
-            point3d.x *= scale.0;
-            point3d.y *= scale.1;
-            point3d.z *= scale.2;
-        })
     }
 }
 

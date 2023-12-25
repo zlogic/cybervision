@@ -215,6 +215,14 @@ pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
     // Most 3D viewers don't display coordinates below 0, reset to default 1.0 - instead of image metadata
     //let out_scale = img1.scale;
     let out_scale = (1.0, 1.0, args.scale as f64);
+    let out_scale = match args.projection {
+        crate::ProjectionMode::Parallel => (
+            out_scale.0,
+            out_scale.1,
+            out_scale.2 * ((out_scale.0 + out_scale.1) / 2.0),
+        ),
+        crate::ProjectionMode::Perspective => out_scale,
+    };
     let focal_length = args.focal_length;
 
     let triangulation_projection = match args.projection {
@@ -225,7 +233,6 @@ pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
     let triangulation = triangulation::Triangulation::new(
         args.img_src.len(),
         triangulation_projection,
-        out_scale,
         bundle_adjustment,
     );
     let img_filenames = args.img_src.to_owned();
@@ -273,7 +280,7 @@ pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
 
     let surface = reconstruction_task.complete_triangulation()?;
     let img_filenames = &args.img_src[0..args.img_src.len() - 1];
-    reconstruction_task.output_surface(surface, img_filenames, &args.img_out)?;
+    reconstruction_task.output_surface(surface, out_scale, img_filenames, &args.img_out)?;
 
     if let Ok(t) = start_time.elapsed() {
         println!("Completed reconstruction in {:.3} seconds", t.as_secs_f32());
@@ -650,6 +657,7 @@ impl ImageReconstruction {
     fn output_surface(
         &mut self,
         surface: triangulation::Surface,
+        out_scale: (f64, f64, f64),
         texture_filenames: &[String],
         output_filename: &str,
     ) -> Result<(), Box<dyn error::Error>> {
@@ -662,6 +670,7 @@ impl ImageReconstruction {
 
         let result = output::output(
             surface,
+            out_scale,
             images,
             output_filename,
             self.interpolation_mode,
