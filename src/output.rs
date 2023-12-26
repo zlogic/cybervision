@@ -10,7 +10,7 @@ use std::{
 };
 
 use image::{RgbImage, Rgba, RgbaImage};
-use nalgebra::DMatrix;
+use nalgebra::{DMatrix, Vector3};
 use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 
 use rayon::prelude::*;
@@ -203,6 +203,7 @@ struct Mesh {
     polygons: Vec<Polygon>,
     camera_ranges: Vec<CameraGrid>,
     polygon_index: PolygonIndex,
+    point_normals: Vec<Vector3<f64>>,
 }
 
 impl Mesh {
@@ -211,11 +212,13 @@ impl Mesh {
         interpolation: InterpolationMode,
         progress_listener: Option<&PL>,
     ) -> Result<Mesh, Box<dyn error::Error>> {
+        let point_normals = vec![Vector3::zeros(); surface.tracks_len()];
         let mut surface = Mesh {
             points: surface,
             polygons: vec![],
             camera_ranges: vec![],
             polygon_index: PolygonIndex::new(),
+            point_normals,
         };
 
         if surface.points.cameras_len() == 0 {
@@ -260,19 +263,20 @@ impl Mesh {
     }
 
     #[inline]
+    fn get_polygon_points(
+        &self,
+        polygon: &Polygon,
+    ) -> Option<(Vector3<f64>, Vector3<f64>, Vector3<f64>)> {
+        let point0 = self.points.get_point(polygon.vertices[0])?;
+        let point1 = self.points.get_point(polygon.vertices[1])?;
+        let point2 = self.points.get_point(polygon.vertices[2])?;
+        Some((point0, point1, point2))
+    }
+
+    #[inline]
     fn polygon_obstructs(&self, camera_i: usize, grid: &CameraGrid, polygon: &Polygon) -> bool {
-        let point0 = if let Some(point) = self.points.get_point(polygon.vertices[0]) {
-            point
-        } else {
-            return false;
-        };
-        let point1 = if let Some(point) = self.points.get_point(polygon.vertices[1]) {
-            point
-        } else {
-            return false;
-        };
-        let point2 = if let Some(point) = self.points.get_point(polygon.vertices[2]) {
-            point
+        let (point0, point1, point2) = if let Some(points) = self.get_polygon_points(polygon) {
+            points
         } else {
             return false;
         };
@@ -350,6 +354,28 @@ impl Mesh {
         }
 
         false
+    }
+
+    fn polygon_normal(&self, polygon: &Polygon) -> Vector3<f64> {
+        let (point0, point1, point2) = if let Some(points) = self.get_polygon_points(polygon) {
+            points
+        } else {
+            return Vector3::zeros();
+        };
+        let edge_01 = point1 - point0;
+        let edge_12 = point2 - point1;
+        let edge_20 = point0 - point2;
+        // Exclude the shortest edge.
+        let dist_01 = edge_01.norm();
+        let dist_12 = edge_12.norm();
+        let dist_20 = edge_20.norm();
+        if dist_01 < dist_12 && dist_01 < dist_20 {
+            edge_12.cross(&edge_20)
+        } else if dist_12 < dist_20 && dist_12 < dist_01 {
+            edge_20.cross(&edge_01)
+        } else {
+            edge_01.cross(&edge_12)
+        }
     }
 
     fn process_camera<PL: ProgressListener>(
@@ -461,8 +487,13 @@ impl Mesh {
         }
 
         new_polygons.iter().for_each(|polygon| {
-            if !self.polygon_index.add(polygon) {
-                self.polygons.push(*polygon)
+            if self.polygon_index.add(polygon) {
+                return;
+            }
+            let polygon_normal = self.polygon_normal(polygon);
+            self.polygons.push(*polygon);
+            for point_i in polygon.vertices {
+                self.point_normals[point_i] += polygon_normal;
             }
         });
 
@@ -483,21 +514,31 @@ impl Mesh {
                 if let Some(pl) = progress_listener {
                     pl.report_status(0.90 + 0.02 * (i as f32 / nvertices));
                 }
-                writer.output_vertex(v)
+                let normal = self.point_normals[i].normalize();
+                writer.output_vertex(v, &normal)
+            })?;
+        self.point_normals
+            .iter()
+            .enumerate()
+            .try_for_each(|(i, normal)| {
+                if let Some(pl) = progress_listener {
+                    pl.report_status(0.92 + 0.02 * (i as f32 / nvertices));
+                }
+                writer.output_vertex_normal(&normal.normalize())
             })?;
         self.points
             .iter_tracks()
             .enumerate()
             .try_for_each(|(i, v)| {
                 if let Some(pl) = progress_listener {
-                    pl.report_status(0.92 + 0.02 * (i as f32 / nvertices));
+                    pl.report_status(0.94 + 0.02 * (i as f32 / nvertices));
                 }
                 writer.output_vertex_uv(v)
             })?;
         let nfaces = self.polygons.len() as f32;
         self.polygons.iter().enumerate().try_for_each(|(i, f)| {
             if let Some(pl) = progress_listener {
-                pl.report_status(0.94 + 0.06 * (i as f32 / nfaces));
+                pl.report_status(0.96 + 0.04 * (i as f32 / nfaces));
             }
             writer.output_face(f)
         })?;
@@ -514,10 +555,23 @@ pub fn output<PL: ProgressListener>(
     vertex_mode: VertexMode,
     progress_listener: Option<&PL>,
 ) -> Result<(), Box<dyn error::Error>> {
+    let output_normals = interpolation != InterpolationMode::None;
     let writer: Box<dyn MeshWriter> = if path.to_lowercase().ends_with(".obj") {
-        Box::new(ObjWriter::new(path, images, vertex_mode, out_scale)?)
+        Box::new(ObjWriter::new(
+            path,
+            images,
+            output_normals,
+            vertex_mode,
+            out_scale,
+        )?)
     } else if path.to_lowercase().ends_with(".ply") {
-        Box::new(PlyWriter::new(path, images, vertex_mode, out_scale)?)
+        Box::new(PlyWriter::new(
+            path,
+            images,
+            output_normals,
+            vertex_mode,
+            out_scale,
+        )?)
     } else {
         Box::new(ImageWriter::new(path, images, &surface)?)
     };
@@ -530,21 +584,33 @@ trait MeshWriter {
     fn output_header(&mut self, _nvertices: usize, _nfaces: usize) -> Result<(), std::io::Error> {
         Ok(())
     }
+
     fn output_vertex(
         &mut self,
         _point: &triangulation::Track,
+        _normal: &Vector3<f64>,
     ) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
+
+    fn output_vertex_normal(
+        &mut self,
+        _normal: &Vector3<f64>,
+    ) -> Result<(), Box<dyn error::Error>> {
+        Ok(())
+    }
+
     fn output_vertex_uv(
         &mut self,
         _point: &triangulation::Track,
     ) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
+
     fn output_face(&mut self, _p: &Polygon) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
+
     fn complete(&mut self) -> Result<(), Box<dyn error::Error>>;
 }
 
@@ -553,6 +619,7 @@ const WRITE_BUFFER_SIZE: usize = 1024 * 1024;
 struct PlyWriter {
     writer: BufWriter<File>,
     buffer: Vec<u8>,
+    output_normals: bool,
     vertex_mode: VertexMode,
     out_scale: (f64, f64, f64),
     images: Vec<RgbImage>,
@@ -562,6 +629,7 @@ impl PlyWriter {
     fn new(
         path: &str,
         images: Vec<RgbImage>,
+        output_normals: bool,
         vertex_mode: VertexMode,
         out_scale: (f64, f64, f64),
     ) -> Result<PlyWriter, Box<dyn error::Error>> {
@@ -571,11 +639,13 @@ impl PlyWriter {
         Ok(PlyWriter {
             writer,
             buffer,
+            output_normals,
             vertex_mode,
             out_scale,
             images,
         })
     }
+
     fn check_flush_buffer(&mut self) -> Result<(), std::io::Error> {
         let buffer = &mut self.buffer;
         let w = &mut self.writer;
@@ -598,6 +668,11 @@ impl MeshWriter for PlyWriter {
         writeln!(w, "property double x")?;
         writeln!(w, "property double y")?;
         writeln!(w, "property double z")?;
+        if self.output_normals {
+            writeln!(w, "property double nx")?;
+            writeln!(w, "property double ny")?;
+            writeln!(w, "property double nz")?;
+        }
 
         match self.vertex_mode {
             VertexMode::Plain => {}
@@ -613,7 +688,11 @@ impl MeshWriter for PlyWriter {
         writeln!(w, "end_header")
     }
 
-    fn output_vertex(&mut self, track: &triangulation::Track) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex(
+        &mut self,
+        track: &triangulation::Track,
+        normal: &Vector3<f64>,
+    ) -> Result<(), Box<dyn error::Error>> {
         let color = match self.vertex_mode {
             VertexMode::Plain | VertexMode::Texture => None,
             VertexMode::Color => {
@@ -647,6 +726,14 @@ impl MeshWriter for PlyWriter {
         w.write_all(&x.to_be_bytes())?;
         w.write_all(&y.to_be_bytes())?;
         w.write_all(&z.to_be_bytes())?;
+        if self.output_normals {
+            let nx = normal.x;
+            let ny = normal.y;
+            let nz = normal.z;
+            w.write_all(&nx.to_be_bytes())?;
+            w.write_all(&ny.to_be_bytes())?;
+            w.write_all(&nz.to_be_bytes())?;
+        }
         if let Some(color) = color {
             w.write_all(&color)?;
         }
@@ -678,6 +765,7 @@ impl MeshWriter for PlyWriter {
 struct ObjWriter {
     writer: BufWriter<File>,
     buffer: Vec<u8>,
+    output_normals: bool,
     vertex_mode: VertexMode,
     out_scale: (f64, f64, f64),
     images: Vec<RgbImage>,
@@ -688,6 +776,7 @@ impl ObjWriter {
     fn new(
         path: &str,
         images: Vec<RgbImage>,
+        output_normals: bool,
         vertex_mode: VertexMode,
         out_scale: (f64, f64, f64),
     ) -> Result<ObjWriter, Box<dyn error::Error>> {
@@ -696,12 +785,14 @@ impl ObjWriter {
         Ok(ObjWriter {
             writer,
             buffer,
+            output_normals,
             vertex_mode,
             out_scale,
             images,
             path: path.to_string(),
         })
     }
+
     fn check_flush_buffer(&mut self) -> Result<(), std::io::Error> {
         let buffer = &mut self.buffer;
         let w = &mut self.writer;
@@ -711,11 +802,13 @@ impl ObjWriter {
         }
         Ok(())
     }
+
     fn get_output_filename(&self) -> Option<String> {
         Path::new(&self.path)
             .file_name()
             .and_then(|n| n.to_str().map(|n| n.to_string()))
     }
+
     fn write_material(&mut self) -> Result<(), Box<dyn error::Error>> {
         let texture_filename = match self.vertex_mode {
             VertexMode::Plain | VertexMode::Color => return Ok(()),
@@ -758,7 +851,11 @@ impl MeshWriter for ObjWriter {
         Ok(())
     }
 
-    fn output_vertex(&mut self, track: &triangulation::Track) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex(
+        &mut self,
+        track: &triangulation::Track,
+        _normal: &Vector3<f64>,
+    ) -> Result<(), Box<dyn error::Error>> {
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
 
@@ -790,19 +887,27 @@ impl MeshWriter for ObjWriter {
             -p.y * self.out_scale.1,
             p.z * self.out_scale.2,
         );
+        write!(w, "v {} {} {}", x, y, z)?;
         if let Some(color) = color {
-            writeln!(
+            write!(
                 w,
-                "v {} {} {} {} {} {}",
-                x,
-                y,
-                z,
+                "{} {} {}",
                 color[0] as f64 / 255.0,
                 color[1] as f64 / 255.0,
                 color[2] as f64 / 255.0,
             )?
-        } else {
-            writeln!(w, "v {} {} {}", x, y, z)?
+        }
+        write!(w, "\n")?;
+
+        Ok(())
+    }
+
+    fn output_vertex_normal(&mut self, normal: &Vector3<f64>) -> Result<(), Box<dyn error::Error>> {
+        self.check_flush_buffer()?;
+        let w = &mut self.buffer;
+
+        if self.output_normals {
+            writeln!(w, "vn {} {} {}", normal.x, normal.y, normal.z)?;
         }
 
         Ok(())
@@ -843,31 +948,27 @@ impl MeshWriter for ObjWriter {
 
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
-        match self.vertex_mode {
-            VertexMode::Plain | VertexMode::Color => {
-                writeln!(
-                    w,
-                    "f {} {} {}",
-                    indices[2] + 1,
-                    indices[1] + 1,
-                    indices[0] + 1
-                )?;
-            }
-            VertexMode::Texture => {
-                let w = &mut self.buffer;
-
-                writeln!(
-                    w,
-                    "f {}/{} {}/{} {}/{}",
-                    indices[2] + 1,
-                    indices[2] + 1,
-                    indices[1] + 1,
-                    indices[1] + 1,
-                    indices[0] + 1,
-                    indices[0] + 1,
-                )?;
+        write!(w, "f")?;
+        for i in [2, 1, 0] {
+            let index = indices[i] + 1;
+            match self.vertex_mode {
+                VertexMode::Plain | VertexMode::Color => {
+                    if self.output_normals {
+                        write!(w, " {}//{}", index, index)?;
+                    } else {
+                        write!(w, " {}", index)?;
+                    }
+                }
+                VertexMode::Texture => {
+                    if self.output_normals {
+                        write!(w, " {}/{}/{}", index, index, index)?;
+                    } else {
+                        write!(w, " {}/{}", index, index)?;
+                    }
+                }
             }
         }
+        write!(w, "\n")?;
         Ok(())
     }
 
@@ -941,7 +1042,11 @@ impl ImageWriter {
 }
 
 impl MeshWriter for ImageWriter {
-    fn output_vertex(&mut self, track: &triangulation::Track) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex(
+        &mut self,
+        track: &triangulation::Track,
+        _normal: &Vector3<f64>,
+    ) -> Result<(), Box<dyn error::Error>> {
         // TODO: project all polygons into first image
         let point2d = if let Some(point2d) = track.get(0) {
             point2d
