@@ -1,5 +1,6 @@
 use core::fmt;
 use std::{
+    collections::HashMap,
     error,
     fs::File,
     io::{BufWriter, Write},
@@ -147,10 +148,61 @@ impl CameraGrid {
     }
 }
 
+struct PolygonIndex {
+    index: HashMap<usize, Vec<[usize; 2]>>,
+}
+
+impl PolygonIndex {
+    fn new() -> PolygonIndex {
+        PolygonIndex {
+            index: HashMap::new(),
+        }
+    }
+
+    #[inline]
+    fn entry(&self, polygon: &Polygon) -> (usize, [usize; 2]) {
+        let v = &polygon.vertices;
+        if v[0] < v[1] && v[0] < v[2] {
+            (v[0], [v[1], v[2]])
+        } else if v[1] < v[0] && v[1] < v[2] {
+            (v[1], [v[2], v[0]])
+        } else {
+            (v[2], [v[0], v[1]])
+        }
+    }
+
+    fn contains(&self, polygon: &Polygon) -> bool {
+        let (i, remain) = self.entry(polygon);
+        self.index.get(&i).map_or(false, |polygons| {
+            polygons
+                .iter()
+                .any(|polygon| polygon[0] == remain[0] && polygon[1] == remain[1])
+        })
+    }
+
+    fn add(&mut self, polygon: &Polygon) -> bool {
+        let (i, remain) = self.entry(polygon);
+        let mut found = false;
+        self.index
+            .entry(i)
+            .and_modify(|polygons| {
+                found = polygons
+                    .iter()
+                    .any(|polygon| polygon[0] == remain[0] && polygon[1] == remain[1]);
+                if !found {
+                    polygons.push(remain)
+                }
+            })
+            .or_insert(vec![remain]);
+        found
+    }
+}
+
 struct Mesh {
     points: triangulation::Surface,
     polygons: Vec<Polygon>,
     camera_ranges: Vec<CameraGrid>,
+    polygon_index: PolygonIndex,
 }
 
 impl Mesh {
@@ -163,6 +215,7 @@ impl Mesh {
             points: surface,
             polygons: vec![],
             camera_ranges: vec![],
+            polygon_index: PolygonIndex::new(),
         };
 
         if surface.points.cameras_len() == 0 {
@@ -172,6 +225,9 @@ impl Mesh {
                 surface.process_camera(camera_i, interpolation, progress_listener)?;
             }
         }
+
+        surface.camera_ranges = vec![];
+        surface.polygon_index = PolygonIndex::new();
 
         Ok(surface)
     }
@@ -384,6 +440,9 @@ impl Mesh {
                                         / polygons_count as f32);
                             pl.report_status(0.9 * value);
                         }
+                        if self.polygon_index.contains(polygon) {
+                            return None;
+                        }
                         let polygon = polygon.to_owned();
 
                         // Discard polygons that obstruct points.
@@ -401,7 +460,11 @@ impl Mesh {
             }
         }
 
-        self.polygons.append(&mut new_polygons);
+        new_polygons.iter().for_each(|polygon| {
+            if !self.polygon_index.add(polygon) {
+                self.polygons.push(*polygon)
+            }
+        });
 
         Ok(())
     }
