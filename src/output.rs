@@ -819,11 +819,11 @@ impl ObjWriter {
 
         let image_filename = texture_filename + ".png";
         writeln!(w, "newmtl Textured")?;
-        writeln!(w, "Ka 1.0 1.0 1.0")?;
-        writeln!(w, "Kd 1.0 1.0 1.0")?;
-        writeln!(w, "Ks 0.0 0.0 0.0")?;
-        writeln!(w, "illum 1")?;
-        writeln!(w, "Ns 0.000000")?;
+        writeln!(w, "Ka 0.2 0.2 0.2")?;
+        writeln!(w, "Kd 0.8 0.8 0.8")?;
+        writeln!(w, "Ks 1.0 1.0 1.0")?;
+        writeln!(w, "illum 2")?;
+        writeln!(w, "Ns 0.000500")?;
         writeln!(w, "map_Ka {}", image_filename)?;
         writeln!(w, "map_Kd {}", image_filename)?;
 
