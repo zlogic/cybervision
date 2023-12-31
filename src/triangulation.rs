@@ -46,6 +46,11 @@ impl Surface {
     }
 
     #[inline]
+    pub fn get_camera_points(&self, track_i: usize) -> &[Option<Match>] {
+        self.tracks[track_i].points.as_slice()
+    }
+
+    #[inline]
     pub fn camera_center(&self, camera_i: usize) -> Vector3<f64> {
         self.cameras[camera_i].center
     }
@@ -119,6 +124,7 @@ impl Triangulation {
                     best_initial_score: None,
                     best_initial_pair: None,
                     remaining_images: (0..images_count).collect(),
+                    retained_images: vec![],
                     bundle_adjustment,
                 }),
             ),
@@ -190,6 +196,16 @@ impl Triangulation {
         }
     }
 
+    pub fn retained_images(&self) -> Result<Vec<usize>, TriangulationError> {
+        if let Some(affine) = &self.affine {
+            Ok(affine.retained_images())
+        } else if let Some(perspective) = &self.perspective {
+            Ok(perspective.retained_images())
+        } else {
+            Err(TriangulationError::new("Triangulation not initialized"))
+        }
+    }
+
     pub fn complete(&mut self) {
         self.affine = None;
         self.perspective = None;
@@ -240,6 +256,15 @@ impl AffineTriangulation {
             projections: self.surface.projections.clone(),
         };
         Ok(surface)
+    }
+
+    pub fn retained_images(&self) -> Vec<usize> {
+        self.surface
+            .cameras
+            .iter()
+            .enumerate()
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>()
     }
 
     #[inline]
@@ -460,6 +485,7 @@ struct PerspectiveTriangulation {
     best_initial_score: Option<f64>,
     best_initial_pair: Option<(usize, usize)>,
     remaining_images: Vec<usize>,
+    retained_images: Vec<usize>,
     bundle_adjustment: bool,
 }
 
@@ -657,6 +683,12 @@ impl PerspectiveTriangulation {
         &mut self,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
+        self.retained_images = self
+            .cameras
+            .iter()
+            .enumerate()
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
         self.prune_projections();
 
         // At this point, all cameras and projections should be valid.
@@ -708,6 +740,10 @@ impl PerspectiveTriangulation {
         };
 
         Ok(surface)
+    }
+
+    pub fn retained_images(&self) -> Vec<usize> {
+        self.retained_images.to_owned()
     }
 
     #[inline]

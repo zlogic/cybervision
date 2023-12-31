@@ -12,11 +12,11 @@ use image::{imageops::FilterType, GenericImageView, GrayImage, RgbImage};
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use nalgebra::{DMatrix, Matrix3};
 use std::error;
+use std::fmt::Write;
 use std::fs::File;
 use std::io::BufReader;
 use std::str::FromStr;
 use std::time::SystemTime;
-use std::{fmt, fmt::Write};
 
 const TIFFTAG_META_PHENOM: exif::Tag = exif::Tag(exif::Context::Tiff, 34683);
 const TIFFTAG_META_QUANTA: exif::Tag = exif::Tag(exif::Context::Tiff, 34682);
@@ -247,13 +247,6 @@ pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
         img_filenames,
     };
 
-    if args.img_src.len() > 2 && vertex_mode == output::VertexMode::Texture {
-        return Err(ReconstructionError::new(
-            "Texture coordinates are not supported for more than 2 images",
-        )
-        .into());
-    }
-
     let images_count = reconstruction_task.img_filenames.len();
     for img_i in 0..images_count - 1 {
         let img1_filename = reconstruction_task.img_filenames[img_i].to_owned();
@@ -279,8 +272,13 @@ pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
     }
 
     let surface = reconstruction_task.complete_triangulation()?;
-    let img_filenames = &args.img_src[0..args.img_src.len() - 1];
-    reconstruction_task.output_surface(surface, out_scale, img_filenames, &args.img_out)?;
+    let img_filenames = reconstruction_task.img_filenames.to_owned();
+    reconstruction_task.output_surface(
+        surface,
+        out_scale,
+        img_filenames.as_slice(),
+        &args.img_out,
+    )?;
 
     if let Ok(t) = start_time.elapsed() {
         println!("Completed reconstruction in {:.3} seconds", t.as_secs_f32());
@@ -596,8 +594,7 @@ impl ImageReconstruction {
                 }
                 Ok(None) => break,
                 Err(err) => {
-                    eprintln!("Failed to recover pose for next image");
-                    return Err(err);
+                    eprintln!("Failed to recover pose for next image: {}", err);
                 }
             }
 
@@ -640,9 +637,17 @@ impl ImageReconstruction {
         let pb = new_progress_bar(false);
 
         let surface = self.triangulation.triangulate_all(Some(&pb))?;
+        let retained_images = self
+            .triangulation
+            .retained_images()?
+            .iter()
+            .map(|src_img_i| self.img_filenames[*src_img_i].to_owned())
+            .collect::<Vec<_>>();
         self.triangulation.complete();
 
         pb.finish_and_clear();
+
+        self.img_filenames = retained_images;
 
         if let Ok(t) = start_time.elapsed() {
             println!(
@@ -758,24 +763,5 @@ impl triangulation::ProgressListener for ProgressBar {
 impl output::ProgressListener for ProgressBar {
     fn report_status(&self, pos: f32) {
         self.set_position((pos * 10000.0) as u64);
-    }
-}
-
-#[derive(Debug)]
-struct ReconstructionError {
-    msg: &'static str,
-}
-
-impl ReconstructionError {
-    fn new(msg: &'static str) -> ReconstructionError {
-        ReconstructionError { msg }
-    }
-}
-
-impl std::error::Error for ReconstructionError {}
-
-impl fmt::Display for ReconstructionError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.msg)
     }
 }

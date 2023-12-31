@@ -47,13 +47,13 @@ struct Point {
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 struct Polygon {
+    camera_i: usize,
     vertices: [usize; 3],
 }
 
 impl Polygon {
-    fn new(v0: &Point, v1: &Point, v2: &Point) -> Polygon {
-        let vertices = [v0.track_i, v1.track_i, v2.track_i];
-        Polygon { vertices }
+    fn new(camera_i: usize, vertices: [usize; 3]) -> Polygon {
+        Polygon { camera_i, vertices }
     }
 }
 
@@ -425,10 +425,10 @@ impl Mesh {
             .par_bridge()
             .map(|f| {
                 let vertices = f.vertices();
-                let v0 = vertices[0].data();
-                let v1 = vertices[1].data();
-                let v2 = vertices[2].data();
-                Polygon::new(v0, v1, v2)
+                let v0 = vertices[0].data().track_i;
+                let v1 = vertices[1].data().track_i;
+                let v2 = vertices[2].data().track_i;
+                Polygon::new(camera_i, [v0, v1, v2])
             })
             .collect::<Vec<_>>();
         drop(triangulated_surface);
@@ -500,6 +500,42 @@ impl Mesh {
         Ok(())
     }
 
+    fn index_uv_coordinates(&self) -> DMatrix<Option<usize>> {
+        let max_point = |acc: (usize, usize), point2d: (usize, usize)| {
+            (acc.0.max(point2d.0), acc.1.max(point2d.1))
+        };
+        let max_coords = self
+            .points
+            .iter_tracks()
+            .par_bridge()
+            .filter_map(|track| {
+                track
+                    .points()
+                    .iter()
+                    .filter_map(|point2d| Some(((*point2d)?.0 as usize, (*point2d)?.1 as usize)))
+                    .reduce(max_point)
+            })
+            .reduce(|| (0, 0), max_point);
+        let mut uv_index = DMatrix::<Option<usize>>::from_element(max_coords.0, max_coords.1, None);
+        self.points.iter_tracks().for_each(|track| {
+            track.points().iter().for_each(|point2d| {
+                if let Some(point2d) = point2d {
+                    uv_index[(point2d.0 as usize, point2d.1 as usize)] = Some(0)
+                }
+            })
+        });
+        let mut uv_map_index = 0;
+        uv_index.column_iter_mut().for_each(|mut col| {
+            col.iter_mut().for_each(|uv| {
+                if uv.is_some() {
+                    *uv = Some(uv_map_index);
+                    uv_map_index += 1;
+                }
+            })
+        });
+        uv_index
+    }
+
     fn output<PL: ProgressListener>(
         &self,
         mut writer: Box<dyn MeshWriter>,
@@ -540,7 +576,12 @@ impl Mesh {
             if let Some(pl) = progress_listener {
                 pl.report_status(0.96 + 0.04 * (i as f32 / nfaces));
             }
-            writer.output_face(f)
+
+            let point0 = self.points.get_camera_points(f.vertices[0]);
+            let point1 = self.points.get_camera_points(f.vertices[1]);
+            let point2 = self.points.get_camera_points(f.vertices[2]);
+            let polygon_tracks = [point0, point1, point2];
+            writer.output_face(f, polygon_tracks)
         })?;
         writer.complete()
     }
@@ -580,6 +621,8 @@ pub fn output<PL: ProgressListener>(
     mesh.output(writer, progress_listener)
 }
 
+type Track = [Option<(u32, u32)>];
+
 trait MeshWriter {
     fn output_header(&mut self, _nvertices: usize, _nfaces: usize) -> Result<(), std::io::Error> {
         Ok(())
@@ -607,7 +650,11 @@ trait MeshWriter {
         Ok(())
     }
 
-    fn output_face(&mut self, _p: &Polygon) -> Result<(), Box<dyn error::Error>> {
+    fn output_face(
+        &mut self,
+        _p: &Polygon,
+        _tracks: [&Track; 3],
+    ) -> Result<(), Box<dyn error::Error>> {
         Ok(())
     }
 
@@ -706,7 +753,7 @@ impl MeshWriter for PlyWriter {
                     img.get_pixel_checked(point2d.1, point2d.0)
                         .map(|pixel| pixel.0)
                 } else {
-                    return Err(OutputError::new("Track has no image").into());
+                    return Err(OutputError::new("Track has no images").into());
                 }
             }
         };
@@ -740,7 +787,11 @@ impl MeshWriter for PlyWriter {
         Ok(())
     }
 
-    fn output_face(&mut self, polygon: &Polygon) -> Result<(), Box<dyn error::Error>> {
+    fn output_face(
+        &mut self,
+        polygon: &Polygon,
+        _tracks: [&Track; 3],
+    ) -> Result<(), Box<dyn error::Error>> {
         let indices = polygon.vertices;
 
         self.check_flush_buffer()?;
@@ -763,7 +814,9 @@ impl MeshWriter for PlyWriter {
 }
 
 struct ObjWriter {
+    uv_index: Vec<usize>,
     writer: BufWriter<File>,
+    current_image: Option<usize>,
     buffer: Vec<u8>,
     output_normals: bool,
     vertex_mode: VertexMode,
@@ -783,7 +836,9 @@ impl ObjWriter {
         let writer = BufWriter::new(File::create(path)?);
         let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
         Ok(ObjWriter {
+            uv_index: vec![0],
             writer,
+            current_image: None,
             buffer,
             output_normals,
             vertex_mode,
@@ -805,31 +860,58 @@ impl ObjWriter {
 
     fn get_output_filename(&self) -> Option<String> {
         Path::new(&self.path)
-            .file_name()
+            .file_stem()
             .and_then(|n| n.to_str().map(|n| n.to_string()))
     }
 
-    fn write_material(&mut self) -> Result<(), Box<dyn error::Error>> {
-        let texture_filename = match self.vertex_mode {
+    fn get_uv_index(&self, camera_i: usize, point_i: usize, track: &Track) -> usize {
+        let camera_offset = self.uv_index[point_i];
+        camera_offset
+            + track
+                .iter()
+                .take(camera_i)
+                .filter(|point2d| point2d.is_some())
+                .count()
+    }
+
+    fn switch_material(&mut self, img_i: usize) -> Result<(), std::io::Error> {
+        self.check_flush_buffer()?;
+        let w = &mut self.buffer;
+
+        match self.vertex_mode {
+            VertexMode::Plain | VertexMode::Color => {}
+            VertexMode::Texture => {
+                writeln!(w, "usemtl Textured{}", img_i)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn write_materials(&mut self) -> Result<(), Box<dyn error::Error>> {
+        let out_filename = match self.vertex_mode {
             VertexMode::Plain | VertexMode::Color => return Ok(()),
             VertexMode::Texture => self.get_output_filename().unwrap(),
         };
 
-        let mut w = BufWriter::new(File::create(self.path.to_string() + ".mtl")?);
+        let destination_path = Path::new(&self.path).parent().unwrap();
+        let mut w = BufWriter::new(File::create(
+            destination_path.join(format!("{}.mtl", out_filename)),
+        )?);
 
-        let image_filename = texture_filename + ".png";
-        writeln!(w, "newmtl Textured")?;
-        writeln!(w, "Ka 0.2 0.2 0.2")?;
-        writeln!(w, "Kd 0.8 0.8 0.8")?;
-        writeln!(w, "Ks 1.0 1.0 1.0")?;
-        writeln!(w, "illum 2")?;
-        writeln!(w, "Ns 0.000500")?;
-        writeln!(w, "map_Ka {}", image_filename)?;
-        writeln!(w, "map_Kd {}", image_filename)?;
+        for (img_i, img) in self.images.iter().enumerate() {
+            let image_filename = format!("{}-{}.png", out_filename, img_i);
 
-        // TODO: support multiple textures
-        let img1 = &self.images[0];
-        img1.save(self.path.to_string() + ".png")?;
+            writeln!(w, "newmtl Textured{}", img_i)?;
+            writeln!(w, "Ka 0.2 0.2 0.2")?;
+            writeln!(w, "Kd 0.8 0.8 0.8")?;
+            writeln!(w, "Ks 1.0 1.0 1.0")?;
+            writeln!(w, "illum 2")?;
+            writeln!(w, "Ns 0.000500")?;
+            writeln!(w, "map_Ka {}", image_filename)?;
+            writeln!(w, "map_Kd {}", image_filename)?;
+
+            img.save(destination_path.join(image_filename))?;
+        }
 
         Ok(())
     }
@@ -838,14 +920,13 @@ impl ObjWriter {
 impl MeshWriter for ObjWriter {
     fn output_header(&mut self, _nvertices: usize, _nfaces: usize) -> Result<(), std::io::Error> {
         self.check_flush_buffer()?;
-        let material_filename = self.get_output_filename().unwrap();
+        let out_filename = self.get_output_filename().unwrap();
         let w = &mut self.buffer;
 
         match self.vertex_mode {
             VertexMode::Plain | VertexMode::Color => {}
             VertexMode::Texture => {
-                writeln!(w, "mtllib {}", material_filename + ".mtl")?;
-                writeln!(w, "usemtl Textured")?;
+                writeln!(w, "mtllib {}.mtl", out_filename)?;
             }
         }
         Ok(())
@@ -872,7 +953,7 @@ impl MeshWriter for ObjWriter {
                     img.get_pixel_checked(point2d.1, point2d.0)
                         .map(|pixel| pixel.0)
                 } else {
-                    return Err(OutputError::new("Track has no image").into());
+                    return Err(OutputError::new("Track has no images").into());
                 }
             }
         };
@@ -897,7 +978,7 @@ impl MeshWriter for ObjWriter {
                 color[2] as f64 / 255.0,
             )?
         }
-        write!(w, "\n")?;
+        writeln!(w)?;
 
         Ok(())
     }
@@ -922,53 +1003,70 @@ impl MeshWriter for ObjWriter {
             VertexMode::Plain | VertexMode::Color => {}
             VertexMode::Texture => {
                 let w = &mut self.buffer;
-                if let Some((image_i, point2d)) = track
-                    .points()
-                    .iter()
-                    .enumerate()
-                    .find_map(|(i, p)| Some((i, (*p)?)))
-                {
+                let mut projections_count = 0;
+                for (image_i, p) in track.points().iter().enumerate() {
+                    let point2d = if let Some(point2d) = p {
+                        point2d
+                    } else {
+                        continue;
+                    };
                     let img = &self.images[image_i];
+                    projections_count += 1;
                     writeln!(
                         w,
                         "vt {} {}",
                         point2d.1 as f64 / img.width() as f64,
                         1.0f64 - point2d.0 as f64 / img.height() as f64,
-                    )?;
-                } else {
-                    return Err(OutputError::new("Track has no image").into());
+                    )?
                 }
+                if projections_count == 0 {
+                    return Err(OutputError::new("Track has no images").into());
+                }
+                // Tracks are output in an ordered way, so uv_index will use the same ordering as tracks.
+                let last_index = self.uv_index.last().map_or(0, |last_index| *last_index);
+                self.uv_index.push(last_index + projections_count);
             }
         }
         Ok(())
     }
 
-    fn output_face(&mut self, polygon: &Polygon) -> Result<(), Box<dyn error::Error>> {
+    fn output_face(
+        &mut self,
+        polygon: &Polygon,
+        tracks: [&Track; 3],
+    ) -> Result<(), Box<dyn error::Error>> {
         let indices = polygon.vertices;
 
+        // Polygons are sorted by their image IDs, so if the index is increased, this is a new image.
+        if Some(polygon.camera_i) != self.current_image {
+            self.switch_material(polygon.camera_i)?;
+            self.current_image = Some(polygon.camera_i);
+        }
+
         self.check_flush_buffer()?;
-        let w = &mut self.buffer;
-        write!(w, "f")?;
+        write!(self.buffer, "f")?;
         for i in [2, 1, 0] {
             let index = indices[i] + 1;
             match self.vertex_mode {
                 VertexMode::Plain | VertexMode::Color => {
                     if self.output_normals {
-                        write!(w, " {}//{}", index, index)?;
+                        write!(self.buffer, " {}//{}", index, index)?;
                     } else {
-                        write!(w, " {}", index)?;
+                        write!(self.buffer, " {}", index)?;
                     }
                 }
                 VertexMode::Texture => {
+                    let uv_index =
+                        self.get_uv_index(polygon.camera_i, polygon.vertices[i], tracks[i]) + 1;
                     if self.output_normals {
-                        write!(w, " {}/{}/{}", index, index, index)?;
+                        write!(self.buffer, " {}/{}/{}", index, uv_index, index)?;
                     } else {
-                        write!(w, " {}/{}", index, index)?;
+                        write!(self.buffer, " {}/{}", index, uv_index)?;
                     }
                 }
             }
         }
-        write!(w, "\n")?;
+        writeln!(self.buffer)?;
         Ok(())
     }
 
@@ -977,7 +1075,7 @@ impl MeshWriter for ObjWriter {
         let w = &mut self.writer;
         w.write_all(buffer)?;
         buffer.clear();
-        self.write_material()?;
+        self.write_materials()?;
         Ok(())
     }
 }
@@ -1065,7 +1163,11 @@ impl MeshWriter for ImageWriter {
         Ok(())
     }
 
-    fn output_face(&mut self, polygon: &Polygon) -> Result<(), Box<dyn error::Error>> {
+    fn output_face(
+        &mut self,
+        polygon: &Polygon,
+        _tracks: [&Track; 3],
+    ) -> Result<(), Box<dyn error::Error>> {
         let vertices = polygon.vertices;
         let (min_row, max_row, min_col, max_col) = vertices.iter().fold(
             (self.output_map.nrows(), 0, self.output_map.ncols(), 0),
