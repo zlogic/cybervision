@@ -602,34 +602,26 @@ impl PerspectiveTriangulation {
         }
 
         // Find image with the most matches with current 3D points.
-        let known_cameras = self
-            .cameras
-            .iter()
-            .enumerate()
-            .filter_map(|(camera_i, camera)| {
-                if camera.is_some() {
-                    Some(camera_i)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
         let matches_count = self
             .tracks
             .par_iter()
             .flat_map(|track| {
-                let reachable = track.get_point3d().is_some();
-                let unknown = known_cameras
-                    .iter()
-                    .any(|camera_i| self.cameras[*camera_i].is_none());
-                let mut count_projections = vec![0usize; self.images_count];
-                if unknown && reachable {
-                    known_cameras.iter().for_each(|camera_i| {
-                        if track.get(*camera_i).is_some() {
-                            count_projections[*camera_i] = 1
-                        }
-                    });
+                if track.get_point3d().is_none() {
+                    return None;
                 }
+                let mut count_projections = vec![0usize; self.images_count];
+                let unknown_cameras = self
+                    .remaining_images
+                    .iter()
+                    .any(|camera_i| track.get(*camera_i).is_some());
+                if !unknown_cameras {
+                    return None;
+                }
+                self.remaining_images.iter().for_each(|camera_i| {
+                    if track.get(*camera_i).is_some() {
+                        count_projections[*camera_i] = 1
+                    }
+                });
                 Some(count_projections)
             })
             .reduce(
