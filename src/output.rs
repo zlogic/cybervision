@@ -500,42 +500,6 @@ impl Mesh {
         Ok(())
     }
 
-    fn index_uv_coordinates(&self) -> DMatrix<Option<usize>> {
-        let max_point = |acc: (usize, usize), point2d: (usize, usize)| {
-            (acc.0.max(point2d.0), acc.1.max(point2d.1))
-        };
-        let max_coords = self
-            .points
-            .iter_tracks()
-            .par_bridge()
-            .filter_map(|track| {
-                track
-                    .points()
-                    .iter()
-                    .filter_map(|point2d| Some(((*point2d)?.0 as usize, (*point2d)?.1 as usize)))
-                    .reduce(max_point)
-            })
-            .reduce(|| (0, 0), max_point);
-        let mut uv_index = DMatrix::<Option<usize>>::from_element(max_coords.0, max_coords.1, None);
-        self.points.iter_tracks().for_each(|track| {
-            track.points().iter().for_each(|point2d| {
-                if let Some(point2d) = point2d {
-                    uv_index[(point2d.0 as usize, point2d.1 as usize)] = Some(0)
-                }
-            })
-        });
-        let mut uv_map_index = 0;
-        uv_index.column_iter_mut().for_each(|mut col| {
-            col.iter_mut().for_each(|uv| {
-                if uv.is_some() {
-                    *uv = Some(uv_map_index);
-                    uv_map_index += 1;
-                }
-            })
-        });
-        uv_index
-    }
-
     fn output<PL: ProgressListener>(
         &self,
         mut writer: Box<dyn MeshWriter>,
@@ -909,6 +873,7 @@ impl ObjWriter {
             writeln!(w, "Ns 0.000500")?;
             writeln!(w, "map_Ka {}", image_filename)?;
             writeln!(w, "map_Kd {}", image_filename)?;
+            writeln!(w)?;
 
             img.save(destination_path.join(image_filename))?;
         }
