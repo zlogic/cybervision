@@ -385,7 +385,6 @@ impl FundamentalMatrix {
     }
 
     fn optimize_perspective_f(f: &Matrix3<f64>, inliers: &[Match]) -> Option<Matrix3<f64>> {
-        const JACOBIAN_H: f64 = 0.001;
         let f_params = FundamentalMatrix::params_from_perspective_f(f);
         let f_residuals = |p: &OVector<f64, U7>| {
             let f = FundamentalMatrix::f_from_perspective_params(p);
@@ -398,23 +397,12 @@ impl FundamentalMatrix {
         let f_jacobian = |p: &OVector<f64, U7>| {
             let mut jacobian =
                 Matrix::<f64, Dyn, U7, VecStorage<f64, Dyn, U7>>::zeros(inliers.len());
-            for i in 0..7 {
-                let f_plus;
-                let f_minus;
-                {
-                    let mut p_plus = *p;
-                    p_plus[i] += JACOBIAN_H;
-                    f_plus = FundamentalMatrix::f_from_perspective_params(&p_plus);
-                    let mut p_minus = *p;
-                    p_minus[i] -= JACOBIAN_H;
-                    f_minus = FundamentalMatrix::f_from_perspective_params(&p_minus);
-                }
-                for j in 0..inliers.len() {
-                    let err = (FundamentalMatrix::reprojection_error(&f_plus, &inliers[j])
-                        - FundamentalMatrix::reprojection_error(&f_minus, &inliers[j]))
-                        / (2.0 * JACOBIAN_H);
-                    jacobian[(j, i)] = err;
-                }
+            let f = FundamentalMatrix::f_from_perspective_params(p);
+            for (inlier_i, inlier) in inliers.iter().enumerate() {
+                let inlier_jacobian = FundamentalMatrix::f_jacobian(&f, inlier);
+                jacobian
+                    .row_mut(inlier_i)
+                    .copy_from(&inlier_jacobian.transpose());
             }
             jacobian
         };
@@ -456,6 +444,7 @@ impl FundamentalMatrix {
 
         Matrix3::new(p[0], p[1], p[2], p[3], p[4], p[5], p[6], x, 1.0)
     }
+
     #[inline]
     fn fits_model(&self, f: &Matrix3<f64>, m: &Match) -> Option<f64> {
         let err = FundamentalMatrix::reprojection_error(f, m);
@@ -476,6 +465,47 @@ impl FundamentalMatrix {
         let denominator =
             f_p1[0] * f_p1[0] + f_p1[1] * f_p1[1] + ft_p2[0] * ft_p2[0] + ft_p2[1] * ft_p2[1];
         nominator / denominator
+    }
+
+    fn f_jacobian(f: &Matrix3<f64>, m: &Match) -> OVector<f64, U7> {
+        let mut result = OVector::<f64, U7>::zeros();
+        for i in 0..7 {
+            let row = i / 3;
+            let col = i % 3;
+            let p1 = Vector3::new(m.0 .0 as f64, m.0 .1 as f64, 1.0);
+            let p2 = Vector3::new(m.1 .0 as f64, m.1 .1 as f64, 1.0);
+            // Return a residual for reprojection error.
+            // Using a symbolic formula (not finite differences/central difference).
+            // Nominator:
+            // d/dx (p2'*F*p1) = d/dx (x2*Fi1+y2*Fi2+Fi3)*[x1 y1 1] =
+            // d/dx {p2'*F*p1} (Fij = 1 for matching row/col, Fij=0 otherwise) +
+            // {p2'*F*p1} (Fij = 0 for matching row/column, original Fij otherwise)
+            // d/dx (ax+b)^2 = 2a*(ax+b)
+            // Full equation:
+            // d/dx (ax+b)^2/((cx)^2+d) = (2a*(ax+b)*(cx*cx+d)-(2c*cx)*(ax+b)^2)/((cx)^2+d)^2 =
+            // d/dx 2*(ax+b)*(acx*cx+ad-acx*cx-bc*cx)/((cx)^2+d)^2 =
+            // d/dx 2*(ax+b)*(ad-bc*cx)/((cx)^2+d)^2
+            let mut f_mask = Matrix3::from_element(0.0);
+            f_mask[(row, col)] = 1.0;
+            let nominator_diff_a = p2.tr_mul(&f_mask) * p1;
+            let f_p1 = f * p1;
+            let ft_p2 = f.tr_mul(&p2);
+            let denominator_diff_c = f_p1[0] + f_p1[1] + ft_p2[0] + ft_p2[1];
+            let mut f_mask = f.to_owned();
+            f_mask[(row, col)] = 0.0;
+            let nominator_const_b = p2.tr_mul(&f_mask) * p1;
+            let f_p1 = f * p1;
+            let ft_p2 = f.tr_mul(&p2);
+            let denominator_diff_d = f_p1[0] + f_p1[1] + ft_p2[0] + ft_p2[1];
+            let x = f[(row, col)];
+            let jacobian_i = 2.0
+                * (nominator_diff_a * x + nominator_const_b)
+                * (nominator_diff_a * denominator_diff_d
+                    - nominator_const_b * denominator_diff_c * denominator_diff_c * x)
+                / (denominator_diff_c * denominator_diff_c * x * x + denominator_diff_d);
+            result[i] = jacobian_i[0]
+        }
+        result
     }
 }
 
