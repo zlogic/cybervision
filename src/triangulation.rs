@@ -278,7 +278,6 @@ impl AffineTriangulation {
             let point2 = (p2.0, p2.1);
 
             let track = Track {
-                valid: true,
                 points: vec![Some(point1), Some(point2)],
                 point3d: Some(point3d),
             };
@@ -293,7 +292,6 @@ impl AffineTriangulation {
 #[derive(Clone, Debug)]
 pub struct Track {
     points: Vec<Option<Match>>,
-    valid: bool,
     point3d: Option<Vector3<f64>>,
 }
 
@@ -301,7 +299,6 @@ impl Track {
     fn new(images_count: usize) -> Track {
         Track {
             points: vec![None; images_count],
-            valid: true,
             point3d: None,
         }
     }
@@ -345,12 +342,6 @@ impl Track {
             }
         }
         self.points.truncate(remaining_images_count);
-    }
-
-    #[inline]
-    pub fn is_valid(&self) -> bool {
-        // TODO: remove the valid field?
-        self.valid
     }
 
     #[inline]
@@ -520,9 +511,6 @@ impl PerspectiveTriangulation {
             .tracks
             .par_iter()
             .filter_map(|track| {
-                if !track.is_valid() {
-                    return None;
-                }
                 let point1 = track.get(image1_index)?;
                 let point2 = track.get(image2_index)?;
                 let mut short_track = Track::new(2);
@@ -931,9 +919,7 @@ impl PerspectiveTriangulation {
         let linked_tracks = self
             .tracks
             .par_iter()
-            .filter(|track| {
-                track.is_valid() && track.get(image_index).is_some() && track.point3d.is_some()
-            })
+            .filter(|track| track.get(image_index).is_some() && track.point3d.is_some())
             .map(|track| track.to_owned())
             .collect::<Vec<_>>();
 
@@ -1385,10 +1371,6 @@ impl PerspectiveTriangulation {
             } else {
                 return;
             };
-            if !track.is_valid() {
-                track.point3d = None;
-                return;
-            }
             // Clear points which are in the back of the camers.
             if track
                 .points()
