@@ -667,7 +667,7 @@ impl PerspectiveTriangulation {
             .cameras
             .iter()
             .enumerate()
-            .map(|(index, _)| index)
+            .filter_map(|(index, camera)| if camera.is_some() { Some(index) } else { None })
             .collect::<Vec<_>>();
         self.prune_projections();
 
