@@ -1,13 +1,16 @@
 use nalgebra::allocator::Allocator;
 use nalgebra::{
-    DVector, DefaultAllocator, Dim, DimMin, DimMinimum, Dyn, Matrix, Matrix3, OMatrix, OVector,
-    SMatrix, SVector, VecStorage, Vector3, U7,
+    ArrayStorage, DVector, DefaultAllocator, Dim, DimMin, DimMinimum, Dyn, Matrix, Matrix3,
+    OMatrix, OVector, SMatrix, SVector, VecStorage, Vector3, U1, U7,
 };
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use rayon::prelude::*;
 use roots::find_roots_cubic;
 use std::cmp::Ordering;
 use std::{fmt, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
+
+type MatrixXx7<T> = Matrix<T, Dyn, U7, VecStorage<T, Dyn, U7>>;
+type Vector7<T> = Matrix<T, U7, U1, ArrayStorage<T, 7, 1>>;
 
 const TOP_INLIERS: usize = 5_000;
 const MIN_INLIER_DISTANCE: usize = 10;
@@ -386,7 +389,7 @@ impl FundamentalMatrix {
 
     fn optimize_perspective_f(f: &Matrix3<f64>, inliers: &[Match]) -> Option<Matrix3<f64>> {
         let f_params = FundamentalMatrix::params_from_perspective_f(f);
-        let f_residuals = |p: &OVector<f64, U7>| {
+        let f_residuals = |p: &Vector7<f64>| {
             let f = FundamentalMatrix::f_from_perspective_params(p);
             let mut residuals = DVector::<f64>::zeros(inliers.len());
             for i in 0..inliers.len() {
@@ -394,9 +397,8 @@ impl FundamentalMatrix {
             }
             residuals
         };
-        let f_jacobian = |p: &OVector<f64, U7>| {
-            let mut jacobian =
-                Matrix::<f64, Dyn, U7, VecStorage<f64, Dyn, U7>>::zeros(inliers.len());
+        let f_jacobian = |p: &Vector7<f64>| {
+            let mut jacobian = MatrixXx7::zeros(inliers.len());
             let f = FundamentalMatrix::f_from_perspective_params(p);
             for (inlier_i, inlier) in inliers.iter().enumerate() {
                 let inlier_jacobian = FundamentalMatrix::f_jacobian(&f, inlier);
@@ -467,8 +469,8 @@ impl FundamentalMatrix {
         nominator / denominator
     }
 
-    fn f_jacobian(f: &Matrix3<f64>, m: &Match) -> OVector<f64, U7> {
-        let mut result = OVector::<f64, U7>::zeros();
+    fn f_jacobian(f: &Matrix3<f64>, m: &Match) -> Vector7<f64> {
+        let mut result = Vector7::<f64>::zeros();
         for i in 0..7 {
             let row = i / 3;
             let col = i % 3;
