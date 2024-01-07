@@ -5,8 +5,7 @@ use nalgebra::{
     Vector2, Vector3, Vector4,
 };
 
-use rand::seq::SliceRandom;
-use rand::{rngs::SmallRng, SeedableRng};
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 use rayon::prelude::*;
 
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
@@ -17,6 +16,7 @@ const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 100_000;
 // TODO: this should be proportional to image size
+const MIN_INLIER_DISTANCE: usize = 200;
 const RANSAC_INLIERS_T: f64 = 25.0;
 const RANSAC_T: f64 = 50.0;
 const RANSAC_D: usize = 100;
@@ -594,9 +594,7 @@ impl PerspectiveTriangulation {
             .tracks
             .par_iter()
             .flat_map(|track| {
-                if track.get_point3d().is_none() {
-                    return None;
-                }
+                track.get_point3d()?;
                 let mut count_projections = vec![0usize; self.images_count];
                 let unknown_cameras = self
                     .remaining_images
@@ -952,20 +950,11 @@ impl PerspectiveTriangulation {
                             counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / RANSAC_K as f32;
                         pl.report_status(0.02 + 0.98 * value);
                     }
-                    let rng = &mut SmallRng::from_rng(rand::thread_rng()).ok()?;
 
-                    // Select points
-                    let inliers = linked_tracks
-                        .choose_multiple(rng, RANSAC_N)
-                        .collect::<Vec<_>>();
-                    if inliers.len() != RANSAC_N {
-                        return None;
-                    }
-
-                    let inliers_tracks = inliers
-                        .iter()
-                        .map(|track| (*track).to_owned())
-                        .collect::<Vec<_>>();
+                    let inliers = PerspectiveTriangulation::choose_inliers(
+                        linked_tracks.as_slice(),
+                        image_index,
+                    );
 
                     PerspectiveTriangulation::recover_pose_from_points(
                         image_index,
@@ -981,7 +970,7 @@ impl PerspectiveTriangulation {
                         projections[image_index] = Some(projection);
 
                         let (count, _) = PerspectiveTriangulation::tracks_reprojection_error(
-                            &inliers_tracks,
+                            inliers.as_slice(),
                             &projections,
                             inlier_projections.as_slice(),
                             true,
@@ -1019,7 +1008,7 @@ impl PerspectiveTriangulation {
     fn recover_pose_from_points(
         image_index: usize,
         k_inv: &Matrix3<f64>,
-        inliers: &[&Track],
+        inliers: &[Track],
     ) -> Vec<(Matrix3<f64>, Vector3<f64>)> {
         let mut inliers = inliers
             .iter()
@@ -1148,6 +1137,34 @@ impl PerspectiveTriangulation {
                 Some((r, t))
             })
             .collect()
+    }
+
+    fn choose_inliers(linked_tracks: &[Track], image_index: usize) -> Vec<Track> {
+        let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
+        let mut inliers: Vec<Track> = Vec::with_capacity(RANSAC_N);
+        while inliers.len() < RANSAC_N {
+            let next_index = rng.gen_range(0..linked_tracks.len());
+            let next_match = &linked_tracks[next_index];
+            let (row1, col1) = if let Some(point2d) = next_match.get(image_index) {
+                point2d
+            } else {
+                continue;
+            };
+            let close_to_existing = inliers.iter().any(|check_match| {
+                let (row2, col2) = if let Some(point2d) = check_match.get(image_index) {
+                    point2d
+                } else {
+                    return false;
+                };
+                let dx = row1.max(row2).saturating_sub(row1.min(row2)) as usize;
+                let dy = col1.max(col2).saturating_sub(col1.min(col2)) as usize;
+                (dx * dx + dy * dy) < MIN_INLIER_DISTANCE
+            });
+            if !close_to_existing {
+                inliers.push(next_match.to_owned());
+            }
+        }
+        inliers
     }
 
     fn tracks_reprojection_error(
