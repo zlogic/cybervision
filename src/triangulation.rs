@@ -1,29 +1,26 @@
 use std::{fmt, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
 
 use nalgebra::{
-    DMatrix, Dyn, Matrix, Matrix2x3, Matrix2x6, Matrix3, Matrix3x4, Matrix3x6, Matrix3xX, Matrix4,
-    Matrix6, Matrix6x1, MatrixXx1, MatrixXx4, MatrixXx6, VecStorage, Vector2, Vector3, Vector4,
-    U12, U9,
+    DMatrix, Matrix2x3, Matrix2x6, Matrix3, Matrix3x4, Matrix3x6, Matrix6, MatrixXx1, MatrixXx4,
+    Vector2, Vector3, Vector4,
 };
 
 use rand::seq::SliceRandom;
 use rand::{rngs::SmallRng, SeedableRng};
 use rayon::prelude::*;
 
-type MatrixXx9<T> = Matrix<T, Dyn, U9, VecStorage<T, Dyn, U9>>;
-type MatrixXx12<T> = Matrix<T, Dyn, U12, VecStorage<T, Dyn, U12>>;
-
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
 const EXTEND_TRACKS_SEARCH_RADIUS: usize = 7;
 const MERGE_TRACKS_MAX_DISTANCE: usize = 100;
 const MERGE_TRACKS_SEARCH_RADIUS: usize = 7;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
-const RANSAC_N: usize = 25;
-const RANSAC_K: usize = 10_000;
+const RANSAC_N: usize = 3;
+const RANSAC_K: usize = 100_000;
 // TODO: this should be proportional to image size
-const RANSAC_T: f64 = 25.0;
+const RANSAC_INLIERS_T: f64 = 25.0;
+const RANSAC_T: f64 = 50.0;
 const RANSAC_D: usize = 100;
-const RANSAC_D_EARLY_EXIT: usize = 1_000;
+const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 1000;
 // Lower this value to get more points (especially on far distance).
 const MIN_ANGLE_BETWEEN_RAYS: f64 = (2.0 / 180.0) * std::f64::consts::PI;
@@ -446,38 +443,6 @@ impl Camera {
         }
     }
 
-    fn derivative(&self, point3d: &Vector3<f64>) -> Matrix3x6<f64> {
-        let mut d_translation_camerapose = Matrix3x6::zeros();
-        // Derivative of rotation matrix, using formula from
-        // "A compact formula for the derivative of a 3-D rotation in exponential coordinates" by Guillermo Gallego, Anthony Yezzi
-        let u = &self.r;
-        let u_skewsymmetric = u.cross_matrix();
-        if u.norm() > f64::EPSILON {
-            for i in 0..3 {
-                let mut e_i = Vector3::zeros();
-                e_i[i] = 1.0;
-                let d_r_i = (u[i] * u_skewsymmetric
-                    + u.cross(&((Matrix3::identity() - self.r_matrix) * e_i))
-                        .cross_matrix())
-                    * self.r_matrix
-                    / u.norm_squared();
-
-                d_translation_camerapose
-                    .column_mut(i)
-                    .copy_from(&(d_r_i * point3d));
-            }
-        } else {
-            // When near zero, derivative of R is equal to u_skewsymmetric.
-            d_translation_camerapose
-                .fixed_view_mut::<3, 3>(0, 0)
-                .copy_from(&-u_skewsymmetric);
-        }
-        d_translation_camerapose
-            .fixed_view_mut::<3, 3>(0, 3)
-            .copy_from(&Matrix3::identity());
-        d_translation_camerapose
-    }
-
     fn center(r_matrix: &Matrix3<f64>, t: &Vector3<f64>) -> Vector3<f64> {
         -r_matrix.tr_mul(t)
     }
@@ -629,7 +594,9 @@ impl PerspectiveTriangulation {
             .tracks
             .par_iter()
             .flat_map(|track| {
-                track.get_point3d()?;
+                if track.get_point3d().is_none() {
+                    return None;
+                }
                 let mut count_projections = vec![0usize; self.images_count];
                 let unknown_cameras = self
                     .remaining_images
@@ -672,7 +639,18 @@ impl PerspectiveTriangulation {
         } else {
             return Err(TriangulationError::new("Missing calibration matrix"));
         };
-        let camera2 = self.recover_pose(best_candidate, &k2, progress_listener)?;
+        let k2_inv = match k2.pseudo_inverse(f64::EPSILON) {
+            Ok(k_inverse) => k_inverse,
+            Err(_) => {
+                return Err(TriangulationError::new(
+                    "Unable to invert calibration matrix",
+                ))
+            }
+        };
+        let camera2 = match self.recover_pose(best_candidate, &k2, &k2_inv, progress_listener) {
+            Some(camera2) => camera2,
+            None => return Err(TriangulationError::new("Unable to find projection matrix")),
+        };
         let projection2 = camera2.projection();
         self.cameras[best_candidate] = Some(camera2);
         self.projections[best_candidate] = Some(projection2);
@@ -919,30 +897,12 @@ impl PerspectiveTriangulation {
         &self,
         image_index: usize,
         k: &Matrix3<f64>,
+        k_inv: &Matrix3<f64>,
         progress_listener: Option<&PL>,
-    ) -> Result<Camera, TriangulationError> {
-        let linked_tracks = self
-            .tracks
-            .par_iter()
-            .flat_map(|track| {
-                if track.point3d.is_some() && track.get(image_index).is_some() {
-                    Some(track.to_owned())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-        let reconstruction_tracks = linked_tracks
-            .par_iter()
-            .filter_map(|track| {
-                let point2d = track.get(image_index)?;
-                let point3d = track.point3d?;
-                Some((point2d, point3d))
-            })
-            .collect::<Vec<_>>();
-        if reconstruction_tracks.len() < RANSAC_D {
-            return Err(TriangulationError::new("Not enough tracks to recover pose"));
-        };
+    ) -> Option<Camera> {
+        // Gaku Nakano, "A Simple Direct Solution to the Perspective-Three-Point Problem," BMVC2019
+
+        let inlier_projections = vec![image_index];
         let validate_projections = self
             .projections
             .iter()
@@ -955,6 +915,17 @@ impl PerspectiveTriangulation {
                 }
             })
             .collect::<Vec<_>>();
+
+        let linked_tracks = self
+            .tracks
+            .par_iter()
+            .filter(|track| track.get(image_index).is_some() && track.point3d.is_some())
+            .map(|track| track.to_owned())
+            .collect::<Vec<_>>();
+
+        if linked_tracks.len() < RANSAC_N {
+            return None;
+        }
 
         let ransac_outer = RANSAC_K / RANSAC_CHECK_INTERVAL;
 
@@ -979,32 +950,55 @@ impl PerspectiveTriangulation {
                     if let Some(pl) = progress_listener {
                         let value =
                             counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / RANSAC_K as f32;
-                        pl.report_status(value);
+                        pl.report_status(0.02 + 0.98 * value);
                     }
                     let rng = &mut SmallRng::from_rng(rand::thread_rng()).ok()?;
 
                     // Select points
-                    let inliers = reconstruction_tracks
+                    let inliers = linked_tracks
                         .choose_multiple(rng, RANSAC_N)
-                        .map(|track| track.to_owned())
                         .collect::<Vec<_>>();
                     if inliers.len() != RANSAC_N {
                         return None;
                     }
 
-                    let camera = PoseRecovery::new(inliers, k).recover_pose().ok()?;
+                    let inliers_tracks = inliers
+                        .iter()
+                        .map(|track| (*track).to_owned())
+                        .collect::<Vec<_>>();
 
-                    let projection = camera.projection();
+                    PerspectiveTriangulation::recover_pose_from_points(
+                        image_index,
+                        k_inv,
+                        inliers.as_slice(),
+                    )
+                    .into_iter()
+                    .filter_map(|(r, t)| {
+                        let camera = Camera::from_matrix(k, &r, &t);
+                        let projection = camera.projection();
 
-                    let mut projections = self.projections.clone();
-                    projections[image_index] = Some(projection);
+                        let mut projections = self.projections.clone();
+                        projections[image_index] = Some(projection);
 
-                    let (count, error) = PerspectiveTriangulation::tracks_reprojection_error(
-                        &linked_tracks,
-                        &projections,
-                        &validate_projections,
-                    );
-                    Some((camera, count, error / (count as f64)))
+                        let (count, _) = PerspectiveTriangulation::tracks_reprojection_error(
+                            &inliers_tracks,
+                            &projections,
+                            inlier_projections.as_slice(),
+                            true,
+                        );
+                        if count != RANSAC_N {
+                            return None;
+                        }
+
+                        let (count, error) = PerspectiveTriangulation::tracks_reprojection_error(
+                            &linked_tracks,
+                            &projections,
+                            validate_projections.as_slice(),
+                            false,
+                        );
+                        Some((camera, count, error / (count as f64)))
+                    })
+                    .reduce(reduce_best_result)
                 })
                 .reduce(|| best_result.clone(), reduce_best_result);
 
@@ -1015,20 +1009,154 @@ impl PerspectiveTriangulation {
         }
 
         let count = best_result.1;
-        if count >= RANSAC_D {
-            Ok(best_result.0)
+        if count > RANSAC_D {
+            Some(best_result.0)
         } else {
-            Err(TriangulationError::new(
-                "Reprojection error above threshold",
-            ))
+            None
         }
+    }
+
+    fn recover_pose_from_points(
+        image_index: usize,
+        k_inv: &Matrix3<f64>,
+        inliers: &[&Track],
+    ) -> Vec<(Matrix3<f64>, Vector3<f64>)> {
+        let mut inliers = inliers
+            .iter()
+            .filter_map(|track| {
+                let p2 = track.get(image_index)?;
+                let p2 = (k_inv * Vector3::new(p2.1 as f64, p2.0 as f64, 1.0)).normalize();
+                let point3d = track.point3d?;
+
+                Some((p2, point3d))
+            })
+            .collect::<Vec<_>>();
+
+        {
+            // Rearrange inliers so that 0-1 has the largest distance
+            let dist_01 = inliers[0].1.metric_distance(&inliers[1].1);
+            let dist_12 = inliers[1].1.metric_distance(&inliers[2].1);
+            let dist_02 = inliers[0].1.metric_distance(&inliers[2].1);
+            if dist_12 > dist_01 && dist_12 > dist_02 {
+                inliers.rotate_left(1)
+            } else if dist_02 > dist_01 && dist_02 > dist_12 {
+                inliers.swap(1, 2);
+            }
+        }
+
+        let x10 = inliers[1].1 - inliers[0].1;
+        let x20 = inliers[2].1 - inliers[0].1;
+        let nx = x10.normalize();
+        let nz = nx.cross(&x20).normalize();
+        let ny = nz.cross(&nx).normalize();
+        let mut n = Matrix3::zeros();
+        n.column_mut(0).copy_from(&nx);
+        n.column_mut(1).copy_from(&ny);
+        n.column_mut(2).copy_from(&nz);
+
+        let a = nx.tr_mul(&x10)[0];
+        let b = nx.tr_mul(&x20)[0];
+        let c = ny.tr_mul(&x20)[0];
+
+        let m01 = inliers[0].0.tr_mul(&inliers[1].0)[0];
+        let m02 = inliers[0].0.tr_mul(&inliers[2].0)[0];
+        let m12 = inliers[1].0.tr_mul(&inliers[2].0)[0];
+
+        let p = b / a;
+        let q = (b * b + c * c) / (a * a);
+
+        let f = [p, -m12, 0.0, -m01 * (2.0 * p - 1.0), m02, p - 1.0];
+        let g = [q, 0.0, -1.0, -2.0 * m01 * q, 2.0 * m02, q - 1.0];
+
+        let h = [
+            -f[0] * f[0] + g[0] * f[1] * f[1],
+            f[1] * f[1] * g[3] - 2.0 * f[0] * f[3] - 2.0 * f[0] * f[1] * f[4]
+                + 2.0 * f[1] * f[4] * g[0],
+            f[4] * f[4] * g[0] - 2.0 * f[0] * f[4] * f[4] - 2.0 * f[0] * f[5] + f[1] * f[1] * g[5]
+                - f[3] * f[3]
+                - 2.0 * f[1] * f[3] * f[4]
+                + 2.0 * f[1] * f[4] * g[3],
+            f[4] * f[4] * g[3]
+                - 2.0 * f[3] * f[4] * f[4]
+                - 2.0 * f[3] * f[5]
+                - 2.0 * f[1] * f[4] * f[5]
+                + 2.0 * f[1] * f[4] * g[5],
+            -2.0 * f[4] * f[4] * f[5] + g[5] * f[4] * f[4] - f[5] * f[5],
+        ];
+
+        let mut xy = solve_quartic(h)
+            .into_iter()
+            .filter_map(|x| {
+                if !x.is_finite() {
+                    return None;
+                }
+                let y = -((f[0] * x + f[3]) * x + f[5]) / (f[4] + f[1] * x);
+                Some((x, y))
+            })
+            .collect::<Vec<_>>();
+
+        polish_roots(f, g, &mut xy);
+
+        let a_vector = Matrix3::new(
+            -inliers[0].0.x,
+            -inliers[0].0.y,
+            -inliers[0].0.z,
+            inliers[1].0.x,
+            inliers[1].0.y,
+            inliers[1].0.z,
+            0.0,
+            0.0,
+            0.0,
+        )
+        .transpose();
+        let b_vector = Matrix3::new(
+            -inliers[0].0.x,
+            -inliers[0].0.y,
+            -inliers[0].0.z,
+            0.0,
+            0.0,
+            0.0,
+            inliers[2].0.x,
+            inliers[2].0.y,
+            inliers[2].0.z,
+        )
+        .transpose();
+        let c_vector = b_vector - p * a_vector;
+
+        xy.iter()
+            .flat_map(|xy| {
+                let lambda = Vector3::new(1.0, xy.0, xy.1);
+                let s = (a_vector * lambda).norm() / a;
+                let d = lambda / s;
+                let r1 = (a_vector * d) / a;
+                let r2 = (c_vector * d) / c;
+                let r3 = r1.cross(&r2);
+                let mut rc = Matrix3::zeros();
+                rc.column_mut(0).copy_from(&r1);
+                rc.column_mut(1).copy_from(&r2);
+                rc.column_mut(2).copy_from(&r3);
+
+                let tc = d[0] * inliers[0].0;
+                let r = rc * n.transpose();
+                let t = tc - rc * n.transpose() * inliers[0].1;
+
+                if !r.norm().is_finite() || !t.norm().is_finite() {
+                    // Sometimes the estimated pose contains NaNs, and cause SVD to enter an infinite loop
+                    return None;
+                }
+
+                Some((r, t))
+            })
+            .collect()
     }
 
     fn tracks_reprojection_error(
         tracks: &[Track],
         projections: &[Option<Matrix3x4<f64>>],
         include_projections: &[usize],
+        inliers: bool,
     ) -> (usize, f64) {
+        let threshold = if inliers { RANSAC_INLIERS_T } else { RANSAC_T };
         tracks
             .iter()
             .filter_map(|track| {
@@ -1037,7 +1165,7 @@ impl PerspectiveTriangulation {
                     projections,
                     include_projections,
                 )
-                .filter(|error| *error <= RANSAC_T)
+                .filter(|error| *error < threshold)
             })
             .fold((0, 0.0f64), |(count, error), match_error| {
                 (count + 1, error.max(match_error))
@@ -1270,376 +1398,83 @@ impl PerspectiveTriangulation {
     }
 }
 
-struct PoseRecovery {
-    tracks: Vec<(Match, Vector3<f64>)>,
-    bearing_vectors: Vec<Vector3<f64>>,
-    nullspace: Vec<Option<(Vector3<f64>, Vector3<f64>)>>,
-    k: Matrix3<f64>,
+fn solve_quartic(factors: [f64; 5]) -> [f64; 4] {
+    let a = factors[0];
+    let b = factors[1];
+    let c = factors[2];
+    let d = factors[3];
+    let e = factors[4];
+
+    let a_pw2 = a * a;
+    let b_pw2 = b * b;
+    let a_pw3 = a_pw2 * a;
+    let b_pw3 = b_pw2 * b;
+    let a_pw4 = a_pw3 * a;
+    let b_pw4 = b_pw3 * b;
+
+    let alpha = -3.0 * b_pw2 / (8.0 * a_pw2) + c / a;
+    let beta = b_pw3 / (8.0 * a_pw3) - b * c / (2.0 * a_pw2) + d / a;
+    let gamma =
+        -3.0 * b_pw4 / (256.0 * a_pw4) + b_pw2 * c / (16.0 * a_pw3) - b * d / (4.0 * a_pw2) + e / a;
+
+    let alpha_pw2 = alpha * alpha;
+    let alpha_pw3 = alpha_pw2 * alpha;
+
+    let p = -alpha_pw2 / 12.0 - gamma;
+    let q = -alpha_pw3 / 108.0 + alpha * gamma / 3.0 - beta * beta / 8.0;
+    let r = -q / 2.0 + (q * q / 4.0 + p * p * p / 27.0).sqrt();
+    let u = r.powf(1.0 / 3.0);
+
+    let y = if u.abs() < f64::EPSILON {
+        -5.0 * alpha / 6.0 - q.powf(1.0 / 3.0)
+    } else {
+        -5.0 * alpha / 6.0 - p / (3.0 * u) + u
+    };
+    let w = (alpha + 2.0 * y).sqrt();
+    [
+        -b / (4.0 * a) + 0.5 * (w + (-(3.0 * alpha + 2.0 * y + 2.0 * beta / w)).sqrt()),
+        -b / (4.0 * a) + 0.5 * (w - (-(3.0 * alpha + 2.0 * y + 2.0 * beta / w)).sqrt()),
+        -b / (4.0 * a) + 0.5 * (-w + (-(3.0 * alpha + 2.0 * y - 2.0 * beta / w)).sqrt()),
+        -b / (4.0 * a) + 0.5 * (-w - (-(3.0 * alpha + 2.0 * y - 2.0 * beta / w)).sqrt()),
+    ]
 }
 
-// Steffen Urban, MLPnP - A Real-Time Maximum Likelihood Solution to the Perspective-n-Point Problem
-impl PoseRecovery {
-    fn new(linked_tracks: Vec<(Match, Vector3<f64>)>, k: &Matrix3<f64>) -> PoseRecovery {
-        let bearing_vectors = linked_tracks
-            .par_iter()
-            .map(|track| {
-                let point2d = track.0;
-                let x = point2d.1 as f64 - k[(0, 2)];
-                let y = point2d.0 as f64 - k[(1, 2)];
-                // Assuming that the focal length is identical for k[(0,0)] and k[(1,1)]
-                let z = k[(0, 0)];
-                Vector3::new(x, y, z).normalize()
-            })
-            .collect::<Vec<_>>();
-        let nullspace = bearing_vectors
-            .par_iter()
-            .map(|v| {
-                // Use a simple "perpendicular to vector" formula to find null space for v.
-                // nalgebra computes a "thin" SVD and u/v_t are not square; this solution is a lot simpler.
-                let max_i = v
-                    .row_iter()
-                    .enumerate()
-                    .max_by(|(_, val1), (_, val2)| val1[0].abs().total_cmp(&val2[0].abs()))?
-                    .0;
-                let sum_other: f64 = v
-                    .row_iter()
-                    .enumerate()
-                    .map(|(i, val)| if i == max_i { 0.0 } else { val[0] })
-                    .sum();
-                let r = Vector3::from_fn(|i, _| if i == max_i { -sum_other / v[i] } else { 1.0 })
-                    .normalize();
-                let s = v.cross(&r).normalize();
-                Some((r, s))
-            })
-            .collect::<Vec<_>>();
-        PoseRecovery {
-            tracks: linked_tracks,
-            bearing_vectors,
-            nullspace,
-            k: k.to_owned(),
+fn polish_roots(f: [f64; 6], g: [f64; 6], xy: &mut [(f64, f64)]) {
+    const MAX_ITER: usize = 5;
+    for _ in 0..MAX_ITER {
+        let mut stable = true;
+
+        for (x_target, y_target) in xy.iter_mut() {
+            let x = *x_target;
+            let y = *y_target;
+            let x2 = x * x;
+            let y2 = y * y;
+            let x_y = x * y;
+
+            let fv = f[0] * x2 + f[1] * x_y + f[3] * x + f[4] * y + f[5];
+            let gv = g[0] * x2 - y2 + g[3] * x + g[4] * y + g[5];
+
+            if fv.abs() < f64::EPSILON && gv.abs() < f64::EPSILON {
+                continue;
+            }
+            stable = false;
+
+            let dfdx = 2.0 * f[0] * x + f[1] * y + f[3];
+            let dfdy = f[1] * x + f[4];
+            let dgdx = 2.0 * g[0] * x + g[3];
+            let dgdy = -2.0 * y + g[4];
+
+            let inv_det_j = 1.0 / (dfdx * dgdy - dfdy * dgdx);
+
+            let dx = (dgdy * fv - dfdy * gv) * inv_det_j;
+            let dy = (-dgdx * fv + dfdx * gv) * inv_det_j;
+
+            *x_target -= dx;
+            *y_target -= dy;
         }
-    }
-
-    pub fn recover_pose(&self) -> Result<Camera, TriangulationError> {
-        let initial_pose = self.recover_initial_pose()?;
-        let r = Matrix3::from(initial_pose.fixed_view::<3, 3>(0, 0));
-        let t = Vector3::from(initial_pose.fixed_view::<3, 1>(0, 3));
-        let camera = Camera::from_matrix(&self.k, &r, &t);
-        self.refine_pose(camera)
-    }
-
-    fn recover_initial_pose(&self) -> Result<Matrix4<f64>, TriangulationError> {
-        let s = {
-            let mut points3d = Matrix3xX::<f64>::zeros(self.tracks.len());
-            self.tracks.iter().enumerate().for_each(|(i, track)| {
-                points3d.column_mut(i).copy_from(&track.1);
-            });
-            points3d.to_owned() * points3d.transpose()
-        };
-        let planar = s.rank(f64::EPSILON) <= 2;
-
-        let combinations = if planar {
-            self.solve_planar(s)
-        } else {
-            self.solve_regular()
-        };
-
-        let best_match = combinations?
-            .into_iter()
-            .map(|matrix_t| {
-                // The original implementation only checked the first 6 points.
-                // TODO: use another metric, like reprojection error?
-                let error: f64 = self
-                    .tracks
-                    .par_iter()
-                    .enumerate()
-                    .map(|(track_i, track)| {
-                        let point4d = track.1.insert_row(3, 1.0);
-                        let result = matrix_t * point4d;
-                        let result = result.remove_row(3).normalize();
-                        1.0 - result.dot(&self.bearing_vectors[track_i])
-                    })
-                    .sum();
-                (error, matrix_t)
-            })
-            .min_by(|r1, r2| r1.0.total_cmp(&r2.0));
-
-        let best_matrix = if let Some(best_match) = best_match {
-            best_match.1
-        } else {
-            return Err(TriangulationError::new(
-                "Nullspace svd doesn't have left singular vectors",
-            ));
-        };
-        Ok(best_matrix)
-    }
-
-    fn solve_planar(&self, s: Matrix3<f64>) -> Result<Vec<Matrix4<f64>>, TriangulationError> {
-        let eigen_rotation = {
-            // nalgebra can only find eigenvalues (lambda in A*x = lambda*x).
-            let eigenvalues = if let Some(eigenvalues) = s.eigenvalues() {
-                eigenvalues
-            } else {
-                return Err(TriangulationError::new("Failed to find eigenvalues"));
-            };
-
-            // Eigenvalues can be found through (A-labmda*I)x = 0
-            // (nullspace of A-labmda*I)
-            // In a QR decomposition, columns (r+1...) of Q form the nullspace (r is the rank).
-            // In SVD, columns (r+1...) of U form the nullspace (r is the rank).
-            // Any eigenvalue can have an infinite number of eigenvectors, use the smallest one.
-            let mut eigenvectors = Matrix3::zeros();
-            for i in 0..3 {
-                let nspace = s - eigenvalues[i] * Matrix3::identity();
-
-                let svd = nspace.svd(true, false);
-                if let Some(svd_u) = svd.u {
-                    let eigenvector = svd_u.column(2);
-                    eigenvectors.column_mut(i).copy_from(&eigenvector);
-                } else {
-                    return Err(TriangulationError::new(
-                        "Nullspace svd doesn't have left singular vectors",
-                    ));
-                };
-            }
-            eigenvectors
-        };
-        let points3d_framed = self
-            .tracks
-            .iter()
-            .map(|track| (track.0, eigen_rotation.tr_mul(&track.1)))
-            .collect::<Vec<_>>();
-        // TODO: test if this really works?
-        let mut matrix_a = MatrixXx9::<f64>::zeros(self.tracks.len());
-        matrix_a
-            .row_iter_mut()
-            .enumerate()
-            .for_each(|(row_i, mut row)| {
-                let src_i = row_i / 2;
-                let nullspace = if let Some(nullspace) = self.nullspace[src_i] {
-                    nullspace
-                } else {
-                    return;
-                };
-                let nullspace = if row_i % 2 == 0 {
-                    nullspace.0
-                } else {
-                    nullspace.1
-                };
-                let point3d = points3d_framed[src_i].1;
-                row[0] = nullspace[0] * point3d[1];
-                row[1] = nullspace[0] * point3d[2];
-                row[2] = nullspace[1] * point3d[1];
-                row[3] = nullspace[1] * point3d[2];
-                row[4] = nullspace[2] * point3d[1];
-                row[5] = nullspace[2] * point3d[2];
-                row[6] = nullspace[0];
-                row[7] = nullspace[1];
-                row[8] = nullspace[2];
-            });
-        let v1 = {
-            let at_a = matrix_a.tr_mul(&matrix_a);
-            let v_t = if let Some(v_t) = at_a.svd(false, true).v_t {
-                v_t
-            } else {
-                return Err(TriangulationError::new(
-                    "Planar matrix A doesn't have right singular values",
-                ));
-            };
-            v_t.row(8).transpose()
-        };
-        let (matrix_p, scale) = {
-            let mut matrix_p = Matrix3::<f64>::zeros();
-            let p_col1 = v1.fixed_rows::<3>(0);
-            let p_col2 = v1.fixed_rows::<3>(3);
-            let scale = (p_col1.norm() * p_col2.norm()).abs().sqrt();
-            let p_col0 = &matrix_p.column(1).cross(&matrix_p.column(2));
-
-            matrix_p.column_mut(0).copy_from(p_col0);
-            matrix_p.column_mut(1).copy_from(&p_col1);
-            matrix_p.column_mut(2).copy_from(&p_col2);
-            (matrix_p.transpose(), scale)
-        };
-        let r = {
-            let p_svd = matrix_p.svd(true, true);
-            let u = if let Some(u) = p_svd.u {
-                u
-            } else {
-                return Err(TriangulationError::new(
-                    "Planar matrix P doesn't have left singular values",
-                ));
-            };
-            let v_t = if let Some(v_t) = p_svd.v_t {
-                v_t
-            } else {
-                return Err(TriangulationError::new(
-                    "Planar matrix P doesn't have v_t singular values",
-                ));
-            };
-            u * v_t
-        };
-        let r = if r.determinant() < 0.0 { -r } else { r };
-        let r = eigen_rotation * r;
-        let r = -r.transpose();
-        let t = v1.fixed_rows::<3>(6).unscale(scale);
-
-        let r1 = r;
-        let mut r2 = r;
-        r2.column_mut(0).scale_mut(-1.0);
-        r2.column_mut(1).scale_mut(-1.0);
-
-        let result = [(r1, t), (r1, -t), (r2, t), (r2, -t)]
-            .iter()
-            .map(|(r, t)| {
-                let mut result = Matrix4::identity();
-                result.fixed_view_mut::<3, 3>(0, 0).copy_from(r);
-                result.fixed_view_mut::<3, 1>(0, 3).copy_from(t);
-                result
-            })
-            .collect::<Vec<_>>();
-        Ok(result)
-    }
-
-    fn solve_regular(&self) -> Result<Vec<Matrix4<f64>>, TriangulationError> {
-        let mut matrix_a = MatrixXx12::zeros(self.tracks.len());
-        matrix_a
-            .row_iter_mut()
-            .enumerate()
-            .for_each(|(row_i, mut row)| {
-                let src_i = row_i / 2;
-                let nullspace = if let Some(nullspace) = self.nullspace[src_i] {
-                    nullspace
-                } else {
-                    return;
-                };
-                let nullspace = if row_i % 2 == 0 {
-                    nullspace.0
-                } else {
-                    nullspace.1
-                };
-                let point3d = self.tracks[src_i].1;
-                row[0] = nullspace[0] * point3d[0];
-                row[1] = nullspace[0] * point3d[1];
-                row[2] = nullspace[0] * point3d[2];
-                row[3] = nullspace[1] * point3d[0];
-                row[4] = nullspace[1] * point3d[1];
-                row[5] = nullspace[1] * point3d[2];
-                row[6] = nullspace[2] * point3d[0];
-                row[7] = nullspace[2] * point3d[1];
-                row[8] = nullspace[2] * point3d[2];
-                row[9] = nullspace[0];
-                row[10] = nullspace[1];
-                row[11] = nullspace[2];
-            });
-        let v1 = {
-            let at_a = matrix_a.tr_mul(&matrix_a);
-            let v_t = if let Some(v_t) = at_a.svd(false, true).v_t {
-                v_t
-            } else {
-                return Err(TriangulationError::new(
-                    "Regular matrix A doesn't have right singular values",
-                ));
-            };
-            v_t.row(11).transpose()
-        };
-        let (matrix_p, scale) = {
-            let mut matrix_p = Matrix3::<f64>::zeros();
-            let p_col0 = v1.fixed_rows::<3>(0);
-            let p_col1 = v1.fixed_rows::<3>(3);
-            let p_col2 = v1.fixed_rows::<3>(6);
-            let scale = (p_col0.norm() * p_col1.norm() * p_col2.norm()).abs().cbrt();
-
-            matrix_p.column_mut(0).copy_from(&p_col0);
-            matrix_p.column_mut(1).copy_from(&p_col1);
-            matrix_p.column_mut(2).copy_from(&p_col2);
-            (matrix_p.transpose(), scale)
-        };
-        let r = {
-            let p_svd = matrix_p.svd(true, true);
-            let u = if let Some(u) = p_svd.u {
-                u
-            } else {
-                return Err(TriangulationError::new(
-                    "Regular matrix P doesn't have left singular values",
-                ));
-            };
-            let v_t = if let Some(v_t) = p_svd.v_t {
-                v_t
-            } else {
-                return Err(TriangulationError::new(
-                    "Regular matrix P doesn't have v_t singular values",
-                ));
-            };
-            u * v_t
-        };
-        let r = if r.determinant() < 0.0 { -r } else { r };
-        let t = r * (v1.fixed_rows::<3>(9).unscale(scale));
-        let result = [(r, t), (r, -t)]
-            .iter()
-            .filter_map(|(r, t)| {
-                let mut result = Matrix4::identity();
-                result.fixed_view_mut::<3, 3>(0, 0).copy_from(r);
-                result.fixed_view_mut::<3, 1>(0, 3).copy_from(t);
-                result.pseudo_inverse(f64::EPSILON).ok()
-            })
-            .collect::<Vec<_>>();
-        Ok(result)
-    }
-
-    fn refine_pose(&self, camera: Camera) -> Result<Camera, TriangulationError> {
-        // TODO: switch to Levenberg-Marquardt instead?
-        let mut camera = camera.to_owned();
-        let mut params = Matrix6x1::<f64>::zeros();
-        params.fixed_rows_mut::<3>(0).copy_from(&camera.r);
-        params.fixed_rows_mut::<3>(3).copy_from(&camera.t);
-
-        let mut residual = MatrixXx1::<f64>::zeros(2 * self.tracks.len());
-        let mut jacobian = MatrixXx6::<f64>::zeros(2 * self.tracks.len());
-        // TODO: extract all constants.
-        for _ in 0..10 {
-            self.tracks.iter().enumerate().for_each(|(track_i, track)| {
-                let point3d = &track.1;
-                let point_vector = (camera.r_matrix * point3d + camera.t).normalize();
-                let nullspace = if let Some(nullspace) = self.nullspace[track_i] {
-                    nullspace
-                } else {
-                    return;
-                };
-                residual[2 * track_i] = nullspace.0.tr_mul(&point_vector)[0];
-                residual[2 * track_i + 1] = nullspace.1.tr_mul(&point_vector)[0];
-                let d_translation_camerapose = camera.derivative(point3d);
-                let r_d = nullspace.0.tr_mul(&d_translation_camerapose);
-                let s_d = nullspace.1.tr_mul(&d_translation_camerapose);
-                jacobian.row_mut(2 * track_i).copy_from(&r_d);
-                jacobian.row_mut(2 * track_i + 1).copy_from(&s_d);
-            });
-            let jt_j = jacobian.tr_mul(&jacobian);
-            let jt_residual = jacobian.tr_mul(&residual);
-
-            let jt_j_inv = match jt_j.pseudo_inverse(f64::EPSILON) {
-                Ok(res) => res,
-                Err(_) => {
-                    return Err(TriangulationError::new(
-                        "Failed to get pseudoinverse in Gauss-Newton",
-                    ))
-                }
-            };
-            let delta = jt_j_inv * jt_residual;
-
-            if delta.abs().max() > 20.0 || delta.abs().min() > 1.0 {
-                break;
-            }
-
-            let delta_r = delta.fixed_rows::<3>(0);
-            let delta_t = delta.fixed_rows::<3>(3);
-            camera.update_params(&delta_r.into(), &delta_t.into());
-
-            let jt_delta = jacobian.to_owned() * delta;
-            if jt_delta.abs().max() < 1e-6 || delta.abs().max() < 1e-6 {
-                break;
-            }
+        if stable {
+            break;
         }
-        Ok(camera)
     }
 }
 
@@ -1686,7 +1521,34 @@ impl BundleAdjustment<'_> {
             Matrix2x3::new(1.0 / w, 0.0, -u / (w * w), 0.0, 1.0 / w, -v / (w * w));
         let d_hpoint_translation = &camera.k;
 
-        let d_translation_camerapose = camera.derivative(point3d);
+        let mut d_translation_camerapose = Matrix3x6::zeros();
+        // Derivative of rotation matrix, using formula from
+        // "A compact formula for the derivative of a 3-D rotation in exponential coordinates" by Guillermo Gallego, Anthony Yezzi
+        let u = &camera.r;
+        let u_skewsymmetric = u.cross_matrix();
+        if u.norm() > f64::EPSILON {
+            for i in 0..3 {
+                let mut e_i = Vector3::zeros();
+                e_i[i] = 1.0;
+                let d_r_i = (u[i] * u_skewsymmetric
+                    + u.cross(&((Matrix3::identity() - camera.r_matrix) * e_i))
+                        .cross_matrix())
+                    * camera.r_matrix
+                    / u.norm_squared();
+
+                d_translation_camerapose
+                    .column_mut(i)
+                    .copy_from(&(d_r_i * point3d));
+            }
+        } else {
+            // When near zero, derivative of R is equal to u_skewsymmetric.
+            d_translation_camerapose
+                .fixed_view_mut::<3, 3>(0, 0)
+                .copy_from(&-u_skewsymmetric);
+        }
+        d_translation_camerapose
+            .fixed_view_mut::<3, 3>(0, 3)
+            .copy_from(&Matrix3::identity());
 
         d_projection_hpoint * d_hpoint_translation * d_translation_camerapose
     }
