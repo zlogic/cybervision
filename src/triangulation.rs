@@ -18,7 +18,7 @@ const RANSAC_K: usize = 100_000;
 // TODO: this should be proportional to image size
 const MIN_INLIER_DISTANCE: usize = 200;
 const RANSAC_INLIERS_T: f64 = 25.0;
-const RANSAC_T: f64 = 50.0;
+const RANSAC_T: f64 = 75.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 1000;
