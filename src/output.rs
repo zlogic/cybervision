@@ -578,7 +578,12 @@ pub fn output<PL: ProgressListener>(
             out_scale,
         )?)
     } else {
-        Box::new(ImageWriter::new(path, images, &surface)?)
+        Box::new(ImageWriter::new(
+            path,
+            images,
+            &surface,
+            out_scale.2.signum(),
+        )?)
     };
 
     let mesh = Mesh::create(surface, interpolation, progress_listener)?;
@@ -1049,6 +1054,7 @@ struct ImageWriter {
     output_map: DMatrix<Option<f64>>,
     point_projections: Vec<Option<(u32, u32, f64)>>,
     path: String,
+    scale: f64,
     img1_width: u32,
     img1_height: u32,
 }
@@ -1058,6 +1064,7 @@ impl ImageWriter {
         path: &str,
         images: Vec<RgbImage>,
         surface: &triangulation::Surface,
+        scale: f64,
     ) -> Result<ImageWriter, std::io::Error> {
         let point_projections = surface
             .iter_tracks()
@@ -1074,6 +1081,7 @@ impl ImageWriter {
             output_map,
             point_projections,
             path: path.to_owned(),
+            scale,
             img1_width: img1.width(),
             img1_height: img1.height(),
         })
@@ -1123,7 +1131,7 @@ impl MeshWriter for ImageWriter {
         };
         let (row, col) = (point2d.0 as usize, point2d.1 as usize);
         if row < self.output_map.nrows() && col < self.output_map.ncols() {
-            self.output_map[(row, col)] = Some(point3d.z);
+            self.output_map[(row, col)] = Some(point3d.z * self.scale);
         }
         Ok(())
     }
@@ -1158,7 +1166,7 @@ impl MeshWriter for ImageWriter {
                 }
                 let value = if let Some(value) = self.barycentric_interpolation(polygon, (row, col))
                 {
-                    value
+                    value * self.scale
                 } else {
                     continue;
                 };
