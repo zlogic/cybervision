@@ -259,12 +259,7 @@ impl AffineTriangulation {
     }
 
     pub fn retained_images(&self) -> Vec<usize> {
-        self.surface
-            .cameras
-            .iter()
-            .enumerate()
-            .map(|(index, _)| index)
-            .collect::<Vec<_>>()
+        vec![0, 1]
     }
 
     #[inline]
