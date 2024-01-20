@@ -15,8 +15,8 @@ indicatif = { version = "0.17", default_features = false }
 rayon = "*"
 rand = { version = "0.8", default_features = false, features = ["std", "std_rng", "small_rng"] }
 nalgebra = { version = "0.32", default_features = false, features = ["std", "macros"] }
-spade = { version = "2.5", default_features = false, features = ["std"] }
-wgpu = { version = "0.18", default-features = false, features = ["wgsl"] }
+spade = { version = "2.6", default_features = false, features = ["std"] }
+wgpu = { version = "0.19", default-features = false, features = ["wgsl"] }
 pollster = { version = "0.3", default-features = false }
 bytemuck = { version = "*", features = ["derive"] }
 roots = { version = "0.0.8", default-features = false }

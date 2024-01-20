@@ -860,8 +860,8 @@ mod gpu {
                 .request_device(
                     &wgpu::DeviceDescriptor {
                         label: None,
-                        features: wgpu::Features::PUSH_CONSTANTS,
-                        limits,
+                        required_features: wgpu::Features::PUSH_CONSTANTS,
+                        required_limits: limits,
                     },
                     None,
                 )
