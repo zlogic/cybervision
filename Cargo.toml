@@ -14,7 +14,7 @@ image = { version = "0.24", default_features = false, features = ["png", "jpeg",
 indicatif = { version = "0.17", default_features = false }
 rayon = "*"
 rand = { version = "0.8", default_features = false, features = ["std", "std_rng", "small_rng"] }
-nalgebra = { version = "0.32", features = ["rayon"] }
+nalgebra = { version = "0.32", default_features = false, features = ["std", "macros"] }
 spade = { version = "2.5", default_features = false, features = ["std"] }
 wgpu = { version = "0.18", default-features = false, features = ["wgsl"] }
 pollster = { version = "0.3", default-features = false }

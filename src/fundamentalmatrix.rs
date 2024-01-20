@@ -1,3 +1,4 @@
+use crate::data::Point2D;
 use nalgebra::allocator::Allocator;
 use nalgebra::{
     ArrayStorage, DVector, DefaultAllocator, Dim, DimMin, DimMinimum, Dyn, Matrix, Matrix3,
@@ -27,7 +28,7 @@ const RANSAC_CHECK_INTERVAL: usize = 50_000;
 const RANSAC_RANK_EPSILON_AFFINE: f64 = 0.001;
 const RANSAC_RANK_EPSILON_PERSPECTIVE: f64 = 0.001;
 
-type Point = (usize, usize);
+type Point = Point2D<usize>;
 type Match = (Point, Point);
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -165,12 +166,12 @@ impl FundamentalMatrix {
             let next_index = rng.gen_range(0..inliers_limit);
             let next_match = point_matches[next_index];
             let close_to_existing = inliers.iter().any(|check_match| {
-                FundamentalMatrix::dist(next_match.0 .0, check_match.0 .0) < MIN_INLIER_DISTANCE
-                    || FundamentalMatrix::dist(next_match.0 .1, check_match.0 .1)
+                FundamentalMatrix::dist(next_match.0.x, check_match.0.x) < MIN_INLIER_DISTANCE
+                    || FundamentalMatrix::dist(next_match.0.y, check_match.0.y)
                         < MIN_INLIER_DISTANCE
-                    || FundamentalMatrix::dist(next_match.1 .0, check_match.1 .0)
+                    || FundamentalMatrix::dist(next_match.1.x, check_match.1.x)
                         < MIN_INLIER_DISTANCE
-                    || FundamentalMatrix::dist(next_match.1 .1, check_match.1 .1)
+                    || FundamentalMatrix::dist(next_match.1.y, check_match.1.y)
                         < MIN_INLIER_DISTANCE
             });
             if !close_to_existing {
@@ -260,10 +261,10 @@ impl FundamentalMatrix {
         let mut a = SMatrix::<f64, RANSAC_N_AFFINE, 4>::zeros();
         for i in 0..RANSAC_N_AFFINE {
             let inlier = &inliers[i];
-            a[(i, 0)] = inlier.1 .0 as f64;
-            a[(i, 1)] = inlier.1 .1 as f64;
-            a[(i, 2)] = inlier.0 .0 as f64;
-            a[(i, 3)] = inlier.0 .1 as f64;
+            a[(i, 0)] = inlier.1.x as f64;
+            a[(i, 1)] = inlier.1.y as f64;
+            a[(i, 2)] = inlier.0.x as f64;
+            a[(i, 3)] = inlier.0.y as f64;
         }
         let mean = a.row_mean();
         a.row_iter_mut().for_each(|mut r| r -= mean);
@@ -291,8 +292,8 @@ impl FundamentalMatrix {
         let mut x2 = SMatrix::<f64, 3, RANSAC_N_PERSPECTIVE>::zeros();
         for i in 0..RANSAC_N_PERSPECTIVE {
             let inlier = inliers[i];
-            let p1 = Vector3::new(inlier.0 .0 as f64, inlier.0 .1 as f64, 1.0);
-            let p2 = Vector3::new(inlier.1 .0 as f64, inlier.1 .1 as f64, 1.0);
+            let p1 = Vector3::new(inlier.0.x as f64, inlier.0.y as f64, 1.0);
+            let p2 = Vector3::new(inlier.1.x as f64, inlier.1.y as f64, 1.0);
             a[(i, 0)] = p2[0] * p1[0];
             a[(i, 1)] = p2[0] * p1[1];
             a[(i, 2)] = p2[0];
@@ -458,8 +459,8 @@ impl FundamentalMatrix {
 
     #[inline]
     fn reprojection_error(f: &Matrix3<f64>, m: &Match) -> f64 {
-        let p1 = Vector3::new(m.0 .0 as f64, m.0 .1 as f64, 1.0);
-        let p2 = Vector3::new(m.1 .0 as f64, m.1 .1 as f64, 1.0);
+        let p1 = Vector3::new(m.0.x as f64, m.0.y as f64, 1.0);
+        let p2 = Vector3::new(m.1.x as f64, m.1.y as f64, 1.0);
         let p2t_f_p1 = p2.tr_mul(f) * p1;
         let f_p1 = f * p1;
         let ft_p2 = f.tr_mul(&p2);
@@ -474,8 +475,8 @@ impl FundamentalMatrix {
         for i in 0..7 {
             let row = i / 3;
             let col = i % 3;
-            let p1 = Vector3::new(m.0 .0 as f64, m.0 .1 as f64, 1.0);
-            let p2 = Vector3::new(m.1 .0 as f64, m.1 .1 as f64, 1.0);
+            let p1 = Vector3::new(m.0.x as f64, m.0.y as f64, 1.0);
+            let p2 = Vector3::new(m.1.x as f64, m.1.y as f64, 1.0);
             // Return a residual for reprojection error.
             // Using a symbolic formula (not finite differences/central difference).
             // Nominator:

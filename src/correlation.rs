@@ -1,7 +1,7 @@
-use nalgebra::{DMatrix, Matrix3, Vector3};
+use crate::data::{Grid, Point2D};
+use nalgebra::{Matrix3, Vector3};
+use rayon::iter::ParallelIterator;
 use std::{cell::RefCell, error, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering};
-
-use rayon::prelude::*;
 
 const SCALE_MIN_SIZE: usize = 64;
 const KERNEL_SIZE: usize = 5;
@@ -25,7 +25,7 @@ const CORRIDOR_EXTEND_RANGE_PERSPECTIVE: f64 = 1.0;
 const CORRIDOR_MIN_RANGE: f64 = 2.5;
 const CROSS_CHECK_SEARCH_AREA: usize = 2;
 
-type Match = (u32, u32, f32);
+type Match = (Point2D<u32>, f32);
 
 #[derive(Debug)]
 pub struct PointData<const KPC: usize> {
@@ -54,8 +54,8 @@ where
 }
 
 pub struct PointCorrelations {
-    pub correlated_points: DMatrix<Option<Match>>,
-    correlated_points_reverse: DMatrix<Option<Match>>,
+    pub correlated_points: Grid<Option<Match>>,
+    correlated_points_reverse: Grid<Option<Match>>,
     first_pass: bool,
     min_stdev: f32,
     corridor_size: usize,
@@ -72,22 +72,22 @@ enum CorrelationDirection {
 }
 
 struct EpipolarLine {
-    coeff: (f64, f64),
-    add: (f64, f64),
-    corridor_offset: (isize, isize),
+    coeff: Point2D<f64>,
+    add: Point2D<f64>,
+    corridor_offset: Point2D<isize>,
 }
 
 struct BestMatch {
-    pos: Option<(u32, u32)>,
+    pos: Option<Point2D<u32>>,
     corr: Option<f32>,
 }
 
 struct CorrelationStep<'a> {
     scale: f32,
     fundamental_matrix: Matrix3<f64>,
-    correlated_points: &'a DMatrix<Option<Match>>,
-    img1: &'a DMatrix<u8>,
-    img2: &'a DMatrix<u8>,
+    correlated_points: &'a Grid<Option<Match>>,
+    img1: &'a Grid<u8>,
+    img2: &'a Grid<u8>,
     img2_data: ImagePointData,
 }
 
@@ -159,13 +159,10 @@ impl PointCorrelations {
 
         // Height specifies rows, width specifies columns.
         let (correlated_points, correlated_points_reverse) = match gpu_context {
-            Some(_) => (
-                DMatrix::from_element(0, 0, None),
-                DMatrix::from_element(0, 0, None),
-            ),
+            Some(_) => (Grid::new(0, 0, None), Grid::new(0, 0, None)),
             None => (
-                DMatrix::from_element(img1_dimensions.1 as usize, img1_dimensions.0 as usize, None),
-                DMatrix::from_element(img2_dimensions.1 as usize, img2_dimensions.0 as usize, None),
+                Grid::new(img1_dimensions.0 as usize, img1_dimensions.1 as usize, None),
+                Grid::new(img2_dimensions.0 as usize, img2_dimensions.1 as usize, None),
             ),
         };
 
@@ -189,7 +186,7 @@ impl PointCorrelations {
     }
 
     pub fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
-        self.correlated_points_reverse = DMatrix::from_element(0, 0, None);
+        self.correlated_points_reverse = Grid::new(0, 0, None);
         if let Some(gpu_context) = &mut self.gpu_context {
             match gpu_context.complete_process() {
                 Ok(correlated_points) => self.correlated_points = correlated_points,
@@ -202,8 +199,8 @@ impl PointCorrelations {
 
     pub fn correlate_images<PL: ProgressListener>(
         &mut self,
-        img1: DMatrix<u8>,
-        img2: DMatrix<u8>,
+        img1: Grid<u8>,
+        img2: Grid<u8>,
         scale: f32,
         progress_listener: Option<&PL>,
     ) -> Result<(), Box<dyn error::Error>> {
@@ -232,8 +229,8 @@ impl PointCorrelations {
 
     fn correlate_images_step<PL: ProgressListener>(
         &mut self,
-        img1: &DMatrix<u8>,
-        img2: &DMatrix<u8>,
+        img1: &Grid<u8>,
+        img2: &Grid<u8>,
         scale: f32,
         progress_listener: Option<&PL>,
         dir: CorrelationDirection,
@@ -253,8 +250,7 @@ impl PointCorrelations {
             );
         };
         let img2_data = compute_image_point_data(img2);
-        let mut out_data: DMatrix<Option<Match>> =
-            DMatrix::from_element(img1.shape().0, img1.shape().1, None);
+        let mut out_data = Grid::<Option<Match>>::new(img1.width(), img1.height(), None);
 
         let correlated_points = match dir {
             CorrelationDirection::Forward => &self.correlated_points,
@@ -276,46 +272,40 @@ impl PointCorrelations {
         };
 
         let counter = AtomicUsize::new(0);
-        let out_data_cols = out_data.ncols().saturating_sub(KERNEL_SIZE * 2) as f32;
-        let (nrows, ncols) = out_data.shape();
-        out_data
-            .column_iter_mut()
-            .enumerate()
-            .par_bridge()
-            .for_each(|(col, mut out_col)| {
-                if col < KERNEL_SIZE || col >= ncols - KERNEL_SIZE {
-                    return;
-                }
+        let out_data_height = out_data.height().saturating_sub(KERNEL_SIZE * 2) as f32;
+        let (max_width, max_height) = (
+            out_data.width() - KERNEL_SIZE,
+            out_data.height() - KERNEL_SIZE,
+        );
+        out_data.par_iter_mut().for_each(|(x, y, out_point)| {
+            if x == 0 {
                 if let Some(pl) = progress_listener {
-                    let value = counter.fetch_add(1, Ordering::Relaxed) as f32 / out_data_cols;
+                    let value = counter.fetch_add(1, Ordering::Relaxed) as f32 / out_data_height;
                     let value = match dir {
                         CorrelationDirection::Forward => value / 2.0,
                         CorrelationDirection::Reverse => 0.5 + value / 2.0,
                     };
                     pl.report_status(value);
                 }
-                out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                    if row < KERNEL_SIZE || row >= nrows - KERNEL_SIZE {
-                        return;
-                    }
-                    self.correlate_point(&corelation_step, row, col, out_point);
-                })
-            });
+            }
+            if x < KERNEL_SIZE || y < KERNEL_SIZE || x >= max_width || y >= max_height {
+                return;
+            }
+            let point = Point2D::new(x, y);
+            self.correlate_point(&corelation_step, point, out_point);
+        });
 
         let correlated_points = match dir {
             CorrelationDirection::Forward => &mut self.correlated_points,
             CorrelationDirection::Reverse => &mut self.correlated_points_reverse,
         };
 
-        for row in 0..nrows {
-            for col in 0..ncols {
-                let point = out_data[(row, col)];
-                let out_row = (row as f32 / scale) as usize;
-                let out_col = (col as f32 / scale) as usize;
-                let out_point = &mut correlated_points[(out_row, out_col)];
-                *out_point = point;
-            }
-        }
+        out_data.iter().for_each(|(x, y, point)| {
+            let out_x = (x as f32 / scale) as usize;
+            let out_y = (y as f32 / scale) as usize;
+            let out_point = correlated_points.val_mut(out_x, out_y);
+            *out_point = *point;
+        });
 
         Ok(())
     }
@@ -323,13 +313,12 @@ impl PointCorrelations {
     fn correlate_point(
         &self,
         correlation_step: &CorrelationStep,
-        row: usize,
-        col: usize,
+        point: Point2D<usize>,
         out_point: &mut Option<Match>,
     ) {
         let img1 = &correlation_step.img1;
         let img2 = &correlation_step.img2;
-        let p1_data = compute_point_data::<KERNEL_SIZE, KERNEL_POINT_COUNT>(img1, row, col);
+        let p1_data = compute_point_data::<KERNEL_SIZE, KERNEL_POINT_COUNT>(img1, &point);
         let p1_data = match p1_data {
             Some(p) => p,
             None => return,
@@ -338,25 +327,24 @@ impl PointCorrelations {
             return;
         }
 
-        let e_line = PointCorrelations::get_epipolar_line(correlation_step, row, col);
-        if !e_line.coeff.0.is_finite()
-            || !e_line.coeff.1.is_finite()
-            || !e_line.add.0.is_finite()
-            || !e_line.add.1.is_finite()
+        let e_line = PointCorrelations::get_epipolar_line(correlation_step, &point);
+        if !e_line.coeff.x.is_finite()
+            || !e_line.coeff.y.is_finite()
+            || !e_line.add.x.is_finite()
+            || !e_line.add.y.is_finite()
         {
             return;
         }
         const CORRIDOR_START: usize = KERNEL_SIZE;
-        let corridor_end = match e_line.coeff.1.abs() > e_line.coeff.0.abs() {
-            true => img2.ncols().saturating_sub(KERNEL_SIZE),
-            false => img2.nrows().saturating_sub(KERNEL_SIZE),
+        let corridor_end = match e_line.coeff.x.abs() > e_line.coeff.y.abs() {
+            true => img2.width().saturating_sub(KERNEL_SIZE),
+            false => img2.height().saturating_sub(KERNEL_SIZE),
         };
         let corridor_range = match self.first_pass {
             true => Some(CORRIDOR_START..corridor_end),
             false => self.estimate_search_range(
                 correlation_step,
-                row,
-                col,
+                &point,
                 &e_line,
                 CORRIDOR_START,
                 corridor_end,
@@ -385,28 +373,31 @@ impl PointCorrelations {
         }
         *out_point = best_match
             .pos
-            .and_then(|m| best_match.corr.map(|corr| (m.0, m.1, corr)))
+            .and_then(|m| best_match.corr.map(|corr| (m, corr)))
     }
 
     fn get_epipolar_line(
         correlation_step: &CorrelationStep,
-        row: usize,
-        col: usize,
+        point: &Point2D<usize>,
     ) -> EpipolarLine {
         let scale = correlation_step.scale;
-        let p1 = Vector3::new(col as f64 / scale as f64, row as f64 / scale as f64, 1.0);
+        let p1 = Vector3::new(
+            point.x as f64 / scale as f64,
+            point.y as f64 / scale as f64,
+            1.0,
+        );
         let f_p1 = correlation_step.fundamental_matrix * p1;
-        if f_p1[0].abs() > f_p1[1].abs() {
+        if f_p1.x.abs() > f_p1.y.abs() {
             return EpipolarLine {
-                coeff: (1.0, -f_p1[1] / f_p1[0]),
-                add: (0.0, -scale as f64 * f_p1[2] / f_p1[0]),
-                corridor_offset: (0, 1),
+                coeff: Point2D::new(-f_p1[1] / f_p1[0], 1.0),
+                add: Point2D::new(-scale as f64 * f_p1[2] / f_p1[0], 0.0),
+                corridor_offset: Point2D::new(1, 0),
             };
         }
         EpipolarLine {
-            coeff: (-f_p1[0] / f_p1[1], 1.0),
-            add: (-scale as f64 * f_p1[2] / f_p1[1], 0.0),
-            corridor_offset: (1, 0),
+            coeff: Point2D::new(1.0, -f_p1[0] / f_p1[1]),
+            add: Point2D::new(0.0, -scale as f64 * f_p1[2] / f_p1[1]),
+            corridor_offset: Point2D::new(0, 1),
         }
     }
 
@@ -423,32 +414,32 @@ impl PointCorrelations {
         let img2 = &correlation_step.img2;
         let img2_data = &correlation_step.img2_data;
         for i in corridor_range {
-            let row2 = (e_line.coeff.0 * i as f64 + e_line.add.0)
-                + (corridor_offset * e_line.corridor_offset.0) as f64;
-            let col2 = (e_line.coeff.1 * i as f64 + e_line.add.1)
-                + (corridor_offset * e_line.corridor_offset.1) as f64;
-            let row2 = row2.floor() as usize;
-            let col2 = col2.floor() as usize;
-            if row2 < KERNEL_SIZE
-                || row2 >= img2.nrows() - KERNEL_SIZE
-                || col2 < KERNEL_SIZE
-                || col2 >= img2.ncols() - KERNEL_SIZE
+            let x2 = (e_line.coeff.x * i as f64 + e_line.add.x)
+                + (corridor_offset * e_line.corridor_offset.x) as f64;
+            let y2 = (e_line.coeff.y * i as f64 + e_line.add.y)
+                + (corridor_offset * e_line.corridor_offset.y) as f64;
+            let x2 = x2.floor() as usize;
+            let y2 = y2.floor() as usize;
+            if x2 < KERNEL_SIZE
+                || x2 >= img2.width() - KERNEL_SIZE
+                || y2 < KERNEL_SIZE
+                || y2 >= img2.height() - KERNEL_SIZE
             {
                 continue;
             }
-            let avg2 = img2_data.avg[(row2, col2)];
-            let stdev2 = img2_data.stdev[(row2, col2)];
+            let avg2 = img2_data.avg.val(x2, y2);
+            let stdev2 = img2_data.stdev.val(x2, y2);
             if !stdev2.is_finite() || stdev2.abs() < self.min_stdev {
                 continue;
             }
             let mut corr = 0.0;
-            for c in 0..KERNEL_WIDTH {
-                for r in 0..KERNEL_WIDTH {
-                    let delta1 = p1_data.delta[r * KERNEL_WIDTH + c];
-                    let delta2 = img2[(
-                        (row2 + r).saturating_sub(KERNEL_SIZE),
-                        (col2 + c).saturating_sub(KERNEL_SIZE),
-                    )] as f32
+            for y in 0..KERNEL_WIDTH {
+                for x in 0..KERNEL_WIDTH {
+                    let delta1 = p1_data.delta[y * KERNEL_WIDTH + x];
+                    let delta2 = *img2.val(
+                        (x2 + x).saturating_sub(KERNEL_SIZE),
+                        (y2 + y).saturating_sub(KERNEL_SIZE),
+                    ) as f32
                         - avg2;
                     corr += delta1 * delta2;
                 }
@@ -458,9 +449,9 @@ impl PointCorrelations {
             if corr >= self.correlation_threshold
                 && best_match.corr.map_or(true, |best_corr| corr > best_corr)
             {
-                best_match.pos = Some((
-                    (row2 as f32 / scale).round() as u32,
-                    (col2 as f32 / scale).round() as u32,
+                best_match.pos = Some(Point2D::new(
+                    (x2 as f32 / scale).round() as u32,
+                    (y2 as f32 / scale).round() as u32,
                 ));
                 best_match.corr = Some(corr);
             }
@@ -470,8 +461,7 @@ impl PointCorrelations {
     fn estimate_search_range(
         &self,
         correlation_step: &CorrelationStep,
-        row1: usize,
-        col1: usize,
+        point1: &Point2D<usize>,
         e_line: &EpipolarLine,
         corridor_start: usize,
         corridor_end: usize,
@@ -481,34 +471,36 @@ impl PointCorrelations {
         let mut mid_corridor = 0.0;
         let mut neighbor_count: usize = 0;
 
-        let row_min = (row1.saturating_sub(NEIGHBOR_DISTANCE) as f32 / scale).floor() as usize;
-        let row_max = ((row1 + NEIGHBOR_DISTANCE) as f32 / scale).ceil() as usize;
-        let col_min = (col1.saturating_sub(NEIGHBOR_DISTANCE) as f32 / scale).floor() as usize;
-        let col_max = ((col1 + NEIGHBOR_DISTANCE) as f32 / scale).ceil() as usize;
-        let corridor_vertical = e_line.coeff.0.abs() > e_line.coeff.1.abs();
+        let x_min = (point1.x.saturating_sub(NEIGHBOR_DISTANCE) as f32 / scale).floor() as usize;
+        let x_max = ((point1.x + NEIGHBOR_DISTANCE) as f32 / scale).ceil() as usize;
+        let y_min = (point1.y.saturating_sub(NEIGHBOR_DISTANCE) as f32 / scale).floor() as usize;
+        let y_max = ((point1.y + NEIGHBOR_DISTANCE) as f32 / scale).ceil() as usize;
+        let corridor_vertical = e_line.coeff.y.abs() > e_line.coeff.x.abs();
 
         let data = correlation_step.correlated_points;
-        let row_min = row_min.clamp(0, data.nrows());
-        let row_max = row_max.clamp(0, data.nrows());
-        let col_min = col_min.clamp(0, data.ncols());
-        let col_max = col_max.clamp(0, data.ncols());
+        let x_min = x_min.clamp(0, data.width());
+        let x_max = x_max.clamp(0, data.width());
+        let y_min = y_min.clamp(0, data.height());
+        let y_max = y_max.clamp(0, data.height());
         STDEV_RANGE.with(|stdev_range| {
             stdev_range
                 .borrow_mut()
-                .resize((row_max - row_min) * (col_max - col_min), 0.0)
+                .resize((x_max - x_min) * (y_max - y_min), 0.0)
         });
-        for r in row_min..row_max {
-            for c in col_min..col_max {
-                let current_point = match data[(r, c)] {
+        for y in y_min..y_max {
+            for x in x_min..x_max {
+                let current_point = match data.val(x, y) {
                     Some(p) => p,
                     None => continue,
                 };
-                let row2 = scale as f64 * current_point.0 as f64;
-                let col2 = scale as f64 * current_point.1 as f64;
+                let point2 = Point2D::new(
+                    scale as f64 * current_point.0.x as f64,
+                    scale as f64 * current_point.0.y as f64,
+                );
 
                 let corridor_pos = match corridor_vertical {
-                    true => (row2 - e_line.add.0) / e_line.coeff.0,
-                    false => (col2 - e_line.add.1) / e_line.coeff.1,
+                    true => (point2.y - e_line.add.y) / e_line.coeff.y,
+                    false => (point2.x - e_line.add.x) / e_line.coeff.x,
                 };
                 STDEV_RANGE
                     .with(|stdev_range| stdev_range.borrow_mut()[neighbor_count] = corridor_pos);
@@ -570,61 +562,51 @@ impl PointCorrelations {
         };
         let search_area = CROSS_CHECK_SEARCH_AREA * (1.0 / scale).round() as usize;
         correlated_points
-            .column_iter_mut()
-            .enumerate()
-            .par_bridge()
-            .for_each(|(col, mut out_col)| {
-                out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                    if let Some(m) = out_point {
-                        if !PointCorrelations::cross_check_point(
-                            correlated_points_reverse,
-                            search_area,
-                            row,
-                            col,
-                            *m,
-                        ) {
-                            *out_point = None;
-                        }
+            .par_iter_mut()
+            .for_each(|(x, y, out_point)| {
+                if let Some(m) = out_point {
+                    if !PointCorrelations::cross_check_point(
+                        correlated_points_reverse,
+                        search_area,
+                        Point2D::new(x, y),
+                        *m,
+                    ) {
+                        *out_point = None;
                     }
-                })
+                }
             });
     }
 
     #[inline]
     fn cross_check_point(
-        reverse: &DMatrix<Option<Match>>,
+        reverse: &Grid<Option<Match>>,
         search_area: usize,
-        row: usize,
-        col: usize,
+        point: Point2D<usize>,
         m: Match,
     ) -> bool {
-        let min_row = (m.0 as usize)
+        let min_x = (m.0.x as usize)
             .saturating_sub(search_area)
-            .clamp(0, reverse.nrows());
-        let max_row = (m.0 as usize)
+            .clamp(0, reverse.width());
+        let max_x = (m.0.x as usize)
             .saturating_add(search_area + 1)
-            .clamp(0, reverse.nrows());
-        let min_col = (m.1 as usize)
+            .clamp(0, reverse.width());
+        let min_y = (m.0.y as usize)
             .saturating_sub(search_area)
-            .clamp(0, reverse.ncols());
-        let max_col = (m.1 as usize)
+            .clamp(0, reverse.height());
+        let max_y = (m.0.y as usize)
             .saturating_add(search_area + 1)
-            .clamp(0, reverse.ncols());
+            .clamp(0, reverse.height());
 
-        let r_min_row = row.saturating_sub(search_area);
-        let r_max_row = row.saturating_add(search_area + 1);
-        let r_min_col = col.saturating_sub(search_area);
-        let r_max_col = col.saturating_add(search_area + 1);
+        let r_min_x = point.x.saturating_sub(search_area);
+        let r_max_x = point.x.saturating_add(search_area + 1);
+        let r_min_y = point.y.saturating_sub(search_area);
+        let r_max_y = point.y.saturating_add(search_area + 1);
 
-        for srow in min_row..max_row {
-            for scol in min_col..max_col {
-                if let Some(rm) = reverse[(srow, scol)] {
-                    let (rrow, rcol) = (rm.0 as usize, rm.1 as usize);
-                    if rrow >= r_min_row
-                        && rrow < r_max_row
-                        && rcol >= r_min_col
-                        && rcol < r_max_col
-                    {
+        for s_y in min_y..max_y {
+            for s_x in min_x..max_x {
+                if let Some(rm) = reverse.val(s_x, s_y) {
+                    let (r_x, r_y) = (rm.0.x as usize, rm.0.y as usize);
+                    if r_x >= r_min_x && r_x < r_max_x && r_y >= r_min_y && r_y < r_max_y {
                         return true;
                     }
                 }
@@ -640,62 +622,55 @@ struct PointDataCompact {
 }
 
 struct ImagePointData {
-    avg: DMatrix<f32>,
-    stdev: DMatrix<f32>,
+    avg: Grid<f32>,
+    stdev: Grid<f32>,
 }
 
-fn compute_image_point_data(img: &DMatrix<u8>) -> ImagePointData {
+fn compute_image_point_data(img: &Grid<u8>) -> ImagePointData {
     let mut data = ImagePointData {
-        avg: DMatrix::from_element(img.shape().0, img.shape().1, f32::NAN),
-        stdev: DMatrix::from_element(img.shape().0, img.shape().1, f32::NAN),
+        avg: Grid::new(img.width(), img.height(), f32::NAN),
+        stdev: Grid::new(img.width(), img.height(), f32::NAN),
     };
     data.avg
-        .column_iter_mut()
-        .zip(data.stdev.column_iter_mut())
-        .enumerate()
-        .par_bridge()
-        .for_each(|(col, (mut avg, mut stdev))| {
-            for (row, (avg, stdev)) in avg.iter_mut().zip(stdev.iter_mut()).enumerate() {
-                let p = match compute_compact_point_data(img, row, col) {
-                    Some(p) => p,
-                    None => continue,
-                };
-                *avg = p.avg;
-                *stdev = p.stdev;
-            }
+        .iter_mut()
+        .zip(data.stdev.iter_mut())
+        .for_each(|((x, y, avg), (_x, _y, stdev))| {
+            let point = Point2D::new(x, y);
+            let p = match compute_compact_point_data(img, &point) {
+                Some(p) => p,
+                None => return,
+            };
+            *avg = p.avg;
+            *stdev = p.stdev;
         });
     data
 }
 
 #[inline]
-fn compute_compact_point_data(
-    img: &DMatrix<u8>,
-    row: usize,
-    col: usize,
-) -> Option<PointDataCompact> {
-    if !point_inside_bounds::<KERNEL_SIZE>(img.shape(), row, col) {
+fn compute_compact_point_data(img: &Grid<u8>, point: &Point2D<usize>) -> Option<PointDataCompact> {
+    if !point_inside_bounds::<KERNEL_SIZE>(img, point) {
         return None;
     };
     let mut result = PointDataCompact {
         avg: 0.0,
         stdev: 0.0,
     };
-    for r in 0..KERNEL_WIDTH {
-        let srow = (row + r).saturating_sub(KERNEL_SIZE);
-        for c in 0..KERNEL_WIDTH {
-            let scol = (col + c).saturating_sub(KERNEL_SIZE);
-            let value = img[(srow, scol)];
-            result.avg += value as f32;
+    for y in 0..KERNEL_WIDTH {
+        let s_y = (point.y + y).saturating_sub(KERNEL_SIZE);
+        for x in 0..KERNEL_WIDTH {
+            let s_x = (point.x + x).saturating_sub(KERNEL_SIZE);
+            let value = img.val(s_x, s_y);
+            result.avg += *value as f32;
         }
     }
     result.avg /= KERNEL_POINT_COUNT as f32;
 
-    for r in 0..KERNEL_WIDTH {
-        let srow = (row + r).saturating_sub(KERNEL_SIZE);
-        for c in 0..KERNEL_WIDTH {
-            let scol = (col + c).saturating_sub(KERNEL_SIZE);
-            let value = img[(srow, scol)];
-            let delta = value as f32 - result.avg;
+    for y in 0..KERNEL_WIDTH {
+        let s_y = (point.y + y).saturating_sub(KERNEL_SIZE);
+        for x in 0..KERNEL_WIDTH {
+            let s_x = (point.x + x).saturating_sub(KERNEL_SIZE);
+            let value = img.val(s_x, s_y);
+            let delta = *value as f32 - result.avg;
             result.stdev += delta * delta;
         }
     }
@@ -705,17 +680,16 @@ fn compute_compact_point_data(
 }
 
 #[inline]
-pub fn point_inside_bounds<const KS: usize>(shape: (usize, usize), row: usize, col: usize) -> bool {
-    row >= KS && col >= KS && row + KS < shape.0 && col + KS < shape.1
+pub fn point_inside_bounds<const KS: usize>(img: &Grid<u8>, point: &Point2D<usize>) -> bool {
+    point.x >= KS && point.y >= KS && point.x + KS < img.width() && point.y + KS < img.height()
 }
 
 #[inline]
 pub fn compute_point_data<const KS: usize, const KPC: usize>(
-    img: &DMatrix<u8>,
-    row: usize,
-    col: usize,
+    img: &Grid<u8>,
+    point: &Point2D<usize>,
 ) -> Option<PointData<KPC>> {
-    if !point_inside_bounds::<KS>(img.shape(), row, col) {
+    if !point_inside_bounds::<KS>(img, point) {
         return None;
     };
     let kernel_width = KS * 2 + 1;
@@ -724,14 +698,14 @@ pub fn compute_point_data<const KS: usize, const KPC: usize>(
         stdev: 0.0,
     };
     let mut avg = 0.0;
-    for r in 0..=KS * 2 {
-        let row = (row + r).saturating_sub(KS);
-        for c in 0..=KS * 2 {
-            let col = (col + c).saturating_sub(KS);
-            let value = img[(row, col)];
-            let delta_pos = r * kernel_width + c;
-            result.delta[delta_pos] = value.into();
-            avg += value as f32;
+    for y in 0..=KS * 2 {
+        let s_y = (point.y + y).saturating_sub(KS);
+        for x in 0..=KS * 2 {
+            let s_x = (point.x + x).saturating_sub(KS);
+            let value = img.val(s_x, s_y);
+            let delta_pos = y * kernel_width + x;
+            result.delta[delta_pos] = (*value).into();
+            avg += *value as f32;
         }
     }
     avg /= KPC as f32;
@@ -752,11 +726,12 @@ mod gpu {
     use std::{borrow::Cow, collections::HashMap, error, fmt};
 
     use bytemuck::{Pod, Zeroable};
-    use nalgebra::{DMatrix, Matrix3};
+    use nalgebra::Matrix3;
     use pollster::FutureExt;
+    use rayon::iter::ParallelIterator;
     use std::sync::mpsc;
 
-    use rayon::prelude::*;
+    use crate::data::{Grid, Point2D};
 
     use super::{
         CorrelationParameters, ProjectionMode, CORRIDOR_MIN_RANGE,
@@ -795,7 +770,7 @@ mod gpu {
         img1_shape: (usize, usize),
         img2_shape: (usize, usize),
 
-        correlation_values: DMatrix<Option<f32>>,
+        correlation_values: Grid<Option<f32>>,
 
         corridor_segment_length: usize,
         search_area_segment_length: usize,
@@ -836,8 +811,8 @@ mod gpu {
             fundamental_matrix: Matrix3<f64>,
             low_power: bool,
         ) -> Result<GpuContext, Box<dyn error::Error>> {
-            let img1_shape = (img1_dimensions.1, img1_dimensions.0);
-            let img2_shape = (img2_dimensions.1, img2_dimensions.0);
+            let img1_shape = (img1_dimensions.0, img1_dimensions.1);
+            let img2_shape = (img2_dimensions.0, img2_dimensions.1);
 
             let img1_pixels = img1_dimensions.0 * img1_dimensions.1;
             let img2_pixels = img2_dimensions.0 * img2_dimensions.1;
@@ -944,7 +919,7 @@ mod gpu {
                 false,
             );
 
-            let correlation_values = DMatrix::from_element(img1_shape.0, img1_shape.1, None);
+            let correlation_values = Grid::new(img1_shape.0, img1_shape.1, None);
 
             let params = CorrelationParameters::for_projection(projection_mode);
             let result = GpuContext {
@@ -980,17 +955,17 @@ mod gpu {
 
         pub fn correlate_images<PL: super::ProgressListener>(
             &mut self,
-            img1: &DMatrix<u8>,
-            img2: &DMatrix<u8>,
+            img1: &Grid<u8>,
+            img2: &Grid<u8>,
             scale: f32,
             first_pass: bool,
             progress_listener: Option<&PL>,
             dir: CorrelationDirection,
         ) -> Result<(), Box<dyn error::Error>> {
-            let max_width = img1.ncols().max(img2.ncols());
-            let max_height = img1.nrows().max(img2.nrows());
+            let max_width = img1.width().max(img2.width());
+            let max_height = img1.height().max(img2.height());
             let max_shape = (max_height, max_width);
-            let img1_shape = img1.shape();
+            let img1_shape = (img1.width(), img1.height());
             let out_shape = match dir {
                 CorrelationDirection::Forward => self.img1_shape,
                 CorrelationDirection::Reverse => self.img2_shape,
@@ -1008,12 +983,12 @@ mod gpu {
             };
 
             let mut params = ShaderParams {
-                img1_width: img1.ncols() as u32,
-                img1_height: img1.nrows() as u32,
-                img2_width: img2.ncols() as u32,
-                img2_height: img2.nrows() as u32,
-                out_width: out_shape.1 as u32,
-                out_height: out_shape.0 as u32,
+                img1_width: img1.width() as u32,
+                img1_height: img1.height() as u32,
+                img2_width: img2.width() as u32,
+                img2_height: img2.height() as u32,
+                out_width: out_shape.0 as u32,
+                out_height: out_shape.1 as u32,
                 fundamental_matrix: self.convert_fundamental_matrix(&dir),
                 scale,
                 iteration_pass: 0,
@@ -1081,7 +1056,7 @@ mod gpu {
 
             let corridor_size = self.corridor_size;
             let corridor_stripes = 2 * corridor_size + 1;
-            let max_length = img2.nrows().max(img2.ncols());
+            let max_length = img2.width().max(img2.height());
             let segment_length = self.corridor_segment_length;
             let corridor_length = max_length - (KERNEL_SIZE * 2);
             let corridor_segments = corridor_length / segment_length + 1;
@@ -1117,10 +1092,10 @@ mod gpu {
 
             // Reuse/repurpose ShaderParams.
             let params = ShaderParams {
-                img1_width: out_shape.1 as u32,
-                img1_height: out_shape.0 as u32,
-                img2_width: out_shape_reverse.1 as u32,
-                img2_height: out_shape_reverse.0 as u32,
+                img1_width: out_shape.0 as u32,
+                img1_height: out_shape.1 as u32,
+                img2_width: out_shape_reverse.0 as u32,
+                img2_height: out_shape_reverse.1 as u32,
                 out_width: 0,
                 out_height: 0,
                 fundamental_matrix: [0.0; 3 * 4],
@@ -1162,7 +1137,7 @@ mod gpu {
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
             {
-                let workgroup_size = ((shape.1 + 15) / 16, ((shape.0 + 15) / 16));
+                let workgroup_size = ((shape.0 + 15) / 16, ((shape.1 + 15) / 16));
                 let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: None,
                     timestamp_writes: None,
@@ -1192,19 +1167,15 @@ mod gpu {
             f
         }
 
-        fn transfer_in_images(&self, img1: &DMatrix<u8>, img2: &DMatrix<u8>) {
+        fn transfer_in_images(&self, img1: &Grid<u8>, img2: &Grid<u8>) {
+            let img2_offset = img1.width() * img1.height();
             let mut img_slice =
-                Vec::with_capacity(img1.nrows() * img1.ncols() + img2.nrows() * img2.ncols());
-            for row in 0..img1.nrows() {
-                for col in 0..img1.ncols() {
-                    img_slice.push(img1[(row, col)] as f32);
-                }
-            }
-            for row in 0..img2.nrows() {
-                for col in 0..img2.ncols() {
-                    img_slice.push(img2[(row, col)] as f32);
-                }
-            }
+                vec![0.0f32; img1.width() * img1.height() + img2.width() * img2.height()];
+            img1.iter()
+                .for_each(|(x, y, val)| img_slice[y * img1.width() + x] = *val as f32);
+            img2.iter().for_each(|(x, y, val)| {
+                img_slice[img2_offset + y * img2.width() + x] = *val as f32
+            });
             self.queue.write_buffer(
                 &self.buffer_img,
                 0,
@@ -1247,18 +1218,14 @@ mod gpu {
             let out_buffer_slice_mapped = out_buffer_slice.get_mapped_range();
             let out_data: &[f32] = bytemuck::cast_slice(&out_buffer_slice_mapped);
 
-            let ncols = self.correlation_values.ncols();
+            let width = self.correlation_values.width();
             self.correlation_values
-                .column_iter_mut()
-                .enumerate()
-                .par_bridge()
-                .for_each(|(col, mut out_col)| {
-                    out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                        let corr = out_data[row * ncols + col];
-                        if corr > self.correlation_threshold {
-                            *out_point = Some(corr);
-                        }
-                    })
+                .par_iter_mut()
+                .for_each(|(x, y, out_point)| {
+                    let corr = out_data[y * width + x];
+                    if corr > self.correlation_threshold {
+                        *out_point = Some(corr);
+                    }
                 });
             drop(out_buffer_slice_mapped);
             out_buffer.unmap();
@@ -1268,7 +1235,7 @@ mod gpu {
 
         pub fn complete_process(
             &mut self,
-        ) -> Result<DMatrix<Option<super::Match>>, Box<dyn error::Error>> {
+        ) -> Result<Grid<Option<super::Match>>, Box<dyn error::Error>> {
             self.buffer_img.destroy();
             self.buffer_internal_img1.destroy();
             self.buffer_internal_img2.destroy();
@@ -1276,7 +1243,7 @@ mod gpu {
             self.buffer_out_reverse.destroy();
             self.buffer_out_corr.destroy();
 
-            let mut out_image = DMatrix::from_element(self.img1_shape.0, self.img1_shape.1, None);
+            let mut out_image = Grid::new(self.img1_shape.0, self.img1_shape.1, None);
 
             let out_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: None,
@@ -1308,26 +1275,20 @@ mod gpu {
 
             let out_buffer_slice_mapped = out_buffer_slice.get_mapped_range();
             let out_data: &[i32] = bytemuck::cast_slice(&out_buffer_slice_mapped);
-            let ncols = out_image.ncols();
-            out_image
-                .column_iter_mut()
-                .enumerate()
-                .par_bridge()
-                .for_each(|(col, mut out_col)| {
-                    out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                        let pos = 2 * (row * ncols + col);
-                        let point_match = (out_data[pos], out_data[pos + 1]);
-                        if let Some(corr) = self.correlation_values[(row, col)] {
-                            *out_point = if point_match.0 > 0 && point_match.1 > 0 {
-                                Some((point_match.1 as u32, point_match.0 as u32, corr))
-                            } else {
-                                None
-                            };
-                        } else {
-                            *out_point = None;
-                        };
-                    })
-                });
+            let width = out_image.width();
+            out_image.par_iter_mut().for_each(|(x, y, out_point)| {
+                let pos = 2 * (y * width + x);
+                let point_match = Point2D::new(out_data[pos] as u32, out_data[pos + 1] as u32);
+                if let Some(corr) = self.correlation_values.val(x, y) {
+                    *out_point = if point_match.x > 0 && point_match.y > 0 {
+                        Some((point_match, *corr))
+                    } else {
+                        None
+                    };
+                } else {
+                    *out_point = None;
+                };
+            });
             drop(out_buffer_slice_mapped);
             out_buffer.unmap();
             Ok(out_image)

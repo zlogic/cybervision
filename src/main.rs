@@ -1,6 +1,7 @@
 use std::{env, fmt::Display, process::exit};
 
 mod correlation;
+mod data;
 mod fundamentalmatrix;
 mod orb;
 mod output;

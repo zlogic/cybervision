@@ -1,3 +1,4 @@
+use crate::data::{Grid, Point2D};
 use std::{fmt, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
 
 use nalgebra::{
@@ -77,8 +78,8 @@ impl Surface {
     }
 }
 
-type Match = (u32, u32);
-type CorrelatedPoints = DMatrix<Option<(u32, u32, f32)>>;
+type Match = Point2D<u32>;
+type CorrelatedPoints = Grid<Option<(Point2D<u32>, f32)>>;
 
 pub trait ProgressListener
 where
@@ -228,18 +229,11 @@ impl AffineTriangulation {
         }
 
         let points3d = correlated_points
-            .column_iter()
-            .enumerate()
-            .par_bridge()
-            .flat_map(|(col, out_col)| {
-                out_col
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(row, matched_point)| {
-                        let point2 = matched_point.map(|p| (p.0, p.1));
-                        AffineTriangulation::triangulate_point((row, col), &point2)
-                    })
-                    .collect::<Vec<_>>()
+            .par_iter()
+            .flat_map(|(x, y, matched_point)| {
+                let point1 = Point2D::new(x as u32, y as u32);
+                let point2 = matched_point.map(|p| p.0);
+                AffineTriangulation::triangulate_point(&point1, &point2)
             })
             .collect::<Vec<_>>();
 
@@ -263,17 +257,15 @@ impl AffineTriangulation {
     }
 
     #[inline]
-    fn triangulate_point(p1: (usize, usize), p2: &Option<Match>) -> Option<Track> {
+    fn triangulate_point(p1: &Point2D<u32>, p2: &Option<Match>) -> Option<Track> {
         if let Some(p2) = p2 {
-            let dx = p1.1 as f64 - p2.1 as f64;
-            let dy = p1.0 as f64 - p2.0 as f64;
+            let dx = p1.x as f64 - p2.x as f64;
+            let dy = p1.y as f64 - p2.y as f64;
             let distance = (dx * dx + dy * dy).sqrt();
-            let point3d = Vector3::new(p1.1 as f64, p1.0 as f64, distance);
-            let point1 = (p1.0 as u32, p1.1 as u32);
-            let point2 = (p2.0, p2.1);
+            let point3d = Vector3::new(p1.x as f64, p1.y as f64, distance);
 
             let track = Track {
-                points: vec![Some(point1), Some(point2)],
+                points: vec![Some(*p1), Some(*p2)],
                 point3d: Some(point3d),
             };
 
@@ -311,9 +303,9 @@ impl Track {
             } else {
                 continue;
             };
-            let drow = p1.0.max(p2.0) as usize - p1.0.min(p2.0) as usize;
-            let dcol = p1.1.max(p2.1) as usize - p1.1.min(p2.1) as usize;
-            let distance = drow * drow + dcol * dcol;
+            let dx = p1.x.max(p2.x) as usize - p1.x.min(p2.x) as usize;
+            let dy = p1.y.max(p2.y) as usize - p1.y.min(p2.y) as usize;
+            let distance = dx * dx + dy * dy;
             if distance > MERGE_TRACKS_MAX_DISTANCE {
                 return false;
             }
@@ -730,7 +722,7 @@ impl PerspectiveTriangulation {
             .flat_map(|(i, projection)| {
                 let projection = (*projection)?;
                 let point = track.get(i)?;
-                let point = (point.1 as f64, point.0 as f64);
+                let point = Point2D::new(point.x as f64, point.y as f64);
                 Some((point, projection))
             })
             .collect::<Vec<_>>();
@@ -742,9 +734,9 @@ impl PerspectiveTriangulation {
         let mut a = MatrixXx4::zeros(points_projection.len() * 2);
         for (i, (point, projection)) in points_projection.iter().enumerate() {
             a.row_mut(i * 2)
-                .copy_from(&(projection.row(2) * point.0 - projection.row(0)));
+                .copy_from(&(projection.row(2) * point.x - projection.row(0)));
             a.row_mut(i * 2 + 1)
-                .copy_from(&(projection.row(2) * point.1 - projection.row(1)));
+                .copy_from(&(projection.row(2) * point.y - projection.row(1)));
         }
 
         let usv = a.svd(false, true);
@@ -1009,7 +1001,7 @@ impl PerspectiveTriangulation {
             .iter()
             .filter_map(|track| {
                 let p2 = track.get(image_index)?;
-                let p2 = (k_inv * Vector3::new(p2.1 as f64, p2.0 as f64, 1.0)).normalize();
+                let p2 = (k_inv * Vector3::new(p2.x as f64, p2.y as f64, 1.0)).normalize();
                 let point3d = track.point3d?;
 
                 Some((p2, point3d))
@@ -1140,19 +1132,19 @@ impl PerspectiveTriangulation {
         while inliers.len() < RANSAC_N {
             let next_index = rng.gen_range(0..linked_tracks.len());
             let next_match = &linked_tracks[next_index];
-            let (row1, col1) = if let Some(point2d) = next_match.get(image_index) {
+            let p1 = if let Some(point2d) = next_match.get(image_index) {
                 point2d
             } else {
                 continue;
             };
             let close_to_existing = inliers.iter().any(|check_match| {
-                let (row2, col2) = if let Some(point2d) = check_match.get(image_index) {
+                let p2 = if let Some(point2d) = check_match.get(image_index) {
                     point2d
                 } else {
                     return false;
                 };
-                let dx = row1.max(row2).saturating_sub(row1.min(row2)) as usize;
-                let dy = col1.max(col2).saturating_sub(col1.min(col2)) as usize;
+                let dx = p1.x.max(p2.x).saturating_sub(p1.x.min(p2.x)) as usize;
+                let dy = p1.y.max(p2.y).saturating_sub(p1.y.min(p2.y)) as usize;
                 (dx * dx + dy * dy) < MIN_INLIER_DISTANCE
             });
             if !close_to_existing {
@@ -1198,8 +1190,8 @@ impl PerspectiveTriangulation {
                 let original = track.get(*i)?;
                 let mut projected = projection * point4d;
                 projected.unscale_mut(projected.z);
-                let dx = projected.x - original.1 as f64;
-                let dy = projected.y - original.0 as f64;
+                let dx = projected.x - original.x as f64;
+                let dy = projected.y - original.y as f64;
                 let error = (dx * dx + dy * dy).sqrt();
                 Some(error)
             })
@@ -1228,24 +1220,24 @@ impl PerspectiveTriangulation {
             } else {
                 return;
             };
-            let row_start = (point1.0 as usize).saturating_sub(EXTEND_TRACKS_SEARCH_RADIUS);
-            let col_start = (point1.1 as usize).saturating_sub(EXTEND_TRACKS_SEARCH_RADIUS);
-            let row_end =
-                (point1.0 as usize + EXTEND_TRACKS_SEARCH_RADIUS).min(correlated_points.nrows());
-            let col_end =
-                (point1.1 as usize + EXTEND_TRACKS_SEARCH_RADIUS).min(correlated_points.ncols());
+            let min_x = (point1.x as usize).saturating_sub(EXTEND_TRACKS_SEARCH_RADIUS);
+            let min_y = (point1.y as usize).saturating_sub(EXTEND_TRACKS_SEARCH_RADIUS);
+            let max_x =
+                (point1.x as usize + EXTEND_TRACKS_SEARCH_RADIUS).min(correlated_points.width());
+            let max_y =
+                (point1.y as usize + EXTEND_TRACKS_SEARCH_RADIUS).min(correlated_points.height());
             let mut min_distance = None;
             let mut best_match = None;
-            for row in row_start..row_end {
-                for col in col_start..col_end {
-                    let next_point = if let Some(point) = correlated_points[(row, col)] {
+            for y in min_y..max_y {
+                for x in min_x..max_x {
+                    let next_point = if let Some(point) = correlated_points.val(x, y) {
                         point
                     } else {
                         continue;
                     };
-                    let drow = row.max(point1.0 as usize) - row.min(point1.0 as usize);
-                    let dcol = col.max(point1.1 as usize) - col.min(point1.1 as usize);
-                    let distance = drow * drow + dcol * dcol;
+                    let dx = x.max(point1.x as usize) - x.min(point1.x as usize);
+                    let dy = y.max(point1.y as usize) - y.min(point1.y as usize);
+                    let distance = dx * dx + dy * dy;
                     if min_distance.map_or(true, |min_distance| distance < min_distance) {
                         min_distance = Some(distance);
                         best_match = Some(next_point);
@@ -1254,36 +1246,31 @@ impl PerspectiveTriangulation {
             }
 
             if let Some(best_match) = best_match {
-                let track_point = (best_match.0, best_match.1);
+                let track_point = best_match.0;
                 track.add(image2_index, track_point);
-                remaining_points[(best_match.0 as usize, best_match.1 as usize)] = None;
+                *remaining_points.val_mut(track_point.x as usize, track_point.y as usize) = None;
             };
         });
 
         let counter = AtomicUsize::new(0);
-        let total_iterations = remaining_points.ncols();
+        let total_rows = remaining_points.height();
         let mut new_tracks = remaining_points
-            .column_iter()
-            .enumerate()
-            .par_bridge()
-            .flat_map(|(col, start_col)| {
-                if let Some(pl) = progress_listener {
-                    let value = counter.fetch_add(1, AtomicOrdering::Relaxed) as f32
-                        / total_iterations as f32;
-                    pl.report_status(0.98 + value * 0.02);
+            .par_iter()
+            .flat_map(|(x, y, m)| {
+                if x == 0 {
+                    if let Some(pl) = progress_listener {
+                        let value = counter.fetch_add(1, AtomicOrdering::Relaxed) as f32
+                            / total_rows as f32;
+                        pl.report_status(0.98 + value * 0.02);
+                    }
                 }
-                start_col
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(row, m)| {
-                        let track_point2 = m.map(|m| (m.0, m.1))?;
-                        let mut track = Track::new(self.images_count);
-                        track.add(image1_index, (row as u32, col as u32));
-                        track.add(image2_index, track_point2);
+                let track_point1 = Point2D::new(x as u32, y as u32);
+                let track_point2 = (*m)?.0;
+                let mut track = Track::new(self.images_count);
+                track.add(image1_index, track_point1);
+                track.add(image2_index, track_point2);
 
-                        Some(track)
-                    })
-                    .collect::<Vec<_>>()
+                Some(track)
             })
             .collect::<Vec<_>>();
 
@@ -1301,7 +1288,7 @@ impl PerspectiveTriangulation {
             return;
         };
         let tracks_count = self.tracks.len();
-        let mut tracks_index = DMatrix::<Option<usize>>::from_element(shape.0, shape.1, None);
+        let mut tracks_index = Grid::<Option<usize>>::new(shape.0, shape.1, None);
         for track_i in 0..self.tracks.len() {
             let point = if let Some(point) = self.tracks[track_i].get(image_i) {
                 point
@@ -1312,16 +1299,16 @@ impl PerspectiveTriangulation {
                 let value = track_i as f32 / tracks_count as f32;
                 pl.report_status(value * 0.02);
             }
-            let row_start = (point.0 as usize).saturating_sub(MERGE_TRACKS_SEARCH_RADIUS);
-            let col_start = (point.1 as usize).saturating_sub(MERGE_TRACKS_SEARCH_RADIUS);
-            let row_end = (point.0 as usize + MERGE_TRACKS_SEARCH_RADIUS).min(tracks_index.nrows());
-            let col_end = (point.1 as usize + MERGE_TRACKS_SEARCH_RADIUS).min(tracks_index.ncols());
+            let min_x = (point.x as usize).saturating_sub(MERGE_TRACKS_SEARCH_RADIUS);
+            let min_y = (point.y as usize).saturating_sub(MERGE_TRACKS_SEARCH_RADIUS);
+            let max_x = (point.x as usize + MERGE_TRACKS_SEARCH_RADIUS).min(tracks_index.width());
+            let max_y = (point.y as usize + MERGE_TRACKS_SEARCH_RADIUS).min(tracks_index.height());
             let mut min_distance = None;
             let mut best_match = None;
-            for row in row_start..row_end {
-                for col in col_start..col_end {
-                    let potential_match = if let Some(track_j) = tracks_index[(row, col)] {
-                        track_j
+            for y in min_y..max_y {
+                for x in min_x..max_x {
+                    let potential_match = if let Some(track_j) = tracks_index.val(x, y) {
+                        *track_j
                     } else {
                         continue;
                     };
@@ -1330,9 +1317,9 @@ impl PerspectiveTriangulation {
                     {
                         continue;
                     }
-                    let drow = row.max(point.0 as usize) - row.min(point.0 as usize);
-                    let dcol = col.max(point.1 as usize) - col.min(point.1 as usize);
-                    let distance = drow * drow + dcol * dcol;
+                    let dx = x.max(point.x as usize) - x.min(point.x as usize);
+                    let dy = y.max(point.y as usize) - y.min(point.y as usize);
+                    let distance = dx * dx + dy * dy;
                     if min_distance.map_or(true, |min_distance| distance < min_distance) {
                         min_distance = Some(distance);
                         best_match = Some(potential_match);
@@ -1349,7 +1336,7 @@ impl PerspectiveTriangulation {
                 }
                 self.tracks[track_i].points.clear();
             } else {
-                tracks_index[(point.0 as usize, point.1 as usize)] = Some(track_i);
+                *tracks_index.val_mut(point.x as usize, point.y as usize) = Some(track_i);
             }
         }
         self.tracks.retain(|track| !track.points.is_empty());
@@ -1595,8 +1582,8 @@ impl BundleAdjustment<'_> {
             let point4d = point3d.insert_row(3, 1.0);
             let mut projected = projection * point4d;
             projected.unscale_mut(projected.z);
-            let dx = projected.x - original.1 as f64;
-            let dy = projected.y - original.0 as f64;
+            let dx = projected.x - original.x as f64;
+            let dy = projected.y - original.y as f64;
 
             Vector2::new(dx, dy)
         } else {

@@ -1,5 +1,6 @@
 use crate::correlation;
 use crate::correlation::PointCorrelations;
+use crate::data::{Grid, Point2D};
 use crate::fundamentalmatrix;
 use crate::fundamentalmatrix::FundamentalMatrix;
 use crate::orb;
@@ -10,7 +11,7 @@ use crate::Args;
 
 use image::{imageops::FilterType, GenericImageView, GrayImage, RgbImage};
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
-use nalgebra::{DMatrix, Matrix3};
+use nalgebra::Matrix3;
 use std::error;
 use std::fmt::Write;
 use std::fs::File;
@@ -143,17 +144,20 @@ impl SourceImage {
         Ok(result_metadata)
     }
 
-    fn resize(&self, scale: f32) -> DMatrix<u8> {
+    fn resize(&self, scale: f32) -> Grid<u8> {
         let img_resized = image::imageops::resize(
             &self.img,
             (self.img.width() as f32 * scale) as u32,
             (self.img.height() as f32 * scale) as u32,
             FilterType::Lanczos3,
         );
-        let mut img =
-            DMatrix::<u8>::zeros(img_resized.height() as usize, img_resized.width() as usize);
+        let mut img = Grid::<u8>::new(
+            img_resized.width() as usize,
+            img_resized.height() as usize,
+            0,
+        );
         for (x, y, val) in img_resized.enumerate_pixels() {
-            img[(y as usize, x as usize)] = val[0];
+            *img.val_mut(x as usize, y as usize) = val[0];
         }
         img
     }
@@ -287,7 +291,7 @@ pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
     Ok(())
 }
 
-type CorrelatedPoints = DMatrix<Option<(u32, u32, f32)>>;
+type CorrelatedPoints = Grid<Option<(Point2D<u32>, f32)>>;
 
 impl ImageReconstruction {
     fn reconstruct(
@@ -334,12 +338,12 @@ impl ImageReconstruction {
         self.triangulation.set_image_data(
             img1_index,
             &img1.calibration_matrix(self.focal_length),
-            (img1.img.height() as usize, img1.img.width() as usize),
+            (img1.img.width() as usize, img1.img.height() as usize),
         );
         self.triangulation.set_image_data(
             img2_index,
             &img2.calibration_matrix(self.focal_length),
-            (img2.img.height() as usize, img2.img.width() as usize),
+            (img2.img.width() as usize, img2.img.height() as usize),
         );
 
         let point_matches = self.match_keypoints(&img1, &img2);
@@ -378,7 +382,7 @@ impl ImageReconstruction {
         &self,
         img1: &SourceImage,
         img2: &SourceImage,
-    ) -> Vec<((usize, usize), (usize, usize))> {
+    ) -> Vec<(Point2D<usize>, Point2D<usize>)> {
         let start_time = SystemTime::now();
 
         let scale_steps = orb::optimal_scale_steps(img1.img.dimensions());
@@ -406,12 +410,9 @@ impl ImageReconstruction {
             };
             let mut new_keypoints1 = orb::extract_points(&img1_scaled, Some(&img1_pb))
                 .iter()
-                .map(|((row, col), descriptor)| {
+                .map(|(p, descriptor)| {
                     (
-                        (
-                            (*col as f32 / scale) as usize,
-                            (*row as f32 / scale) as usize,
-                        ),
+                        Point2D::new((p.x as f32 / scale) as usize, (p.y as f32 / scale) as usize),
                         descriptor.to_owned(),
                     )
                 })
@@ -427,12 +428,9 @@ impl ImageReconstruction {
             };
             let mut new_keypoints2 = orb::extract_points(&img2_scaled, Some(&img2_pb))
                 .iter()
-                .map(|((row, col), descriptor)| {
+                .map(|(p, descriptor)| {
                     (
-                        (
-                            (*col as f32 / scale) as usize,
-                            (*row as f32 / scale) as usize,
-                        ),
+                        Point2D::new((p.x as f32 / scale) as usize, (p.y as f32 / scale) as usize),
                         descriptor.to_owned(),
                     )
                 })
@@ -486,7 +484,7 @@ impl ImageReconstruction {
         &self,
         img1_dimensions: (u32, u32),
         img2_dimensions: (u32, u32),
-        point_matches: Vec<((usize, usize), (usize, usize))>,
+        point_matches: Vec<(Point2D<usize>, Point2D<usize>)>,
     ) -> Result<FundamentalMatrix, fundamentalmatrix::RansacError> {
         let start_time = SystemTime::now();
         let pb = new_progress_bar(true);

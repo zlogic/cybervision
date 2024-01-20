@@ -1,7 +1,8 @@
+use crate::data::Point2D;
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-type Point = (usize, usize);
+type Point = Point2D<usize>;
 type Keypoint = (Point, [u32; 8]);
 
 const THRESHOLD_AFFINE: u32 = 32;

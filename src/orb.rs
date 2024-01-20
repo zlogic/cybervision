@@ -1,28 +1,30 @@
+use crate::data::{Grid, Point2D};
 use std::f64::consts::PI;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use nalgebra::{DMatrix, Matrix3, SMatrix, SVector};
 use rayon::prelude::*;
 
-type Point = ((usize, usize), [u32; 8]);
+type Point = Point2D<usize>;
+type Offset = Point2D<i8>;
+type Keypoint = (Point, [u32; 8]);
 
-const FAST_CIRCLE_PIXELS: [(i8, i8); 16] = [
-    (0, -3),
-    (1, -3),
-    (2, -2),
-    (3, -1),
-    (3, 0),
-    (3, 1),
-    (2, 2),
-    (1, 3),
-    (0, 3),
-    (-1, 3),
-    (-2, 2),
-    (-3, 1),
-    (-3, 0),
-    (-3, -1),
-    (-2, -2),
-    (-1, -3),
+const FAST_CIRCLE_PIXELS: [Offset; 16] = [
+    Offset::new(0, -3),
+    Offset::new(1, -3),
+    Offset::new(2, -2),
+    Offset::new(3, -1),
+    Offset::new(3, 0),
+    Offset::new(3, 1),
+    Offset::new(2, 2),
+    Offset::new(1, 3),
+    Offset::new(0, 3),
+    Offset::new(-1, 3),
+    Offset::new(-2, 2),
+    Offset::new(-3, 1),
+    Offset::new(-3, 0),
+    Offset::new(-3, -1),
+    Offset::new(-2, -2),
+    Offset::new(-1, -3),
 ];
 
 const FAST_KERNEL_SIZE: usize = 3;
@@ -46,10 +48,10 @@ where
 }
 
 pub fn extract_points<PL: ProgressListener>(
-    img: &DMatrix<u8>,
+    img: &Grid<u8>,
     progress_listener: Option<&PL>,
-) -> Vec<Point> {
-    let mut img_adjusted = img.clone();
+) -> Vec<Keypoint> {
+    let mut img_adjusted = img.to_owned();
     adjust_contrast(&mut img_adjusted);
     let keypoints = find_fast_keypoints(&img_adjusted, progress_listener);
 
@@ -82,27 +84,25 @@ pub fn extract_points<PL: ProgressListener>(
 }
 
 fn find_fast_keypoints<PL: ProgressListener>(
-    img: &DMatrix<u8>,
+    img: &Grid<u8>,
     progress_listener: Option<&PL>,
-) -> Vec<(usize, usize)> {
+) -> Vec<Point> {
     // Detect points
-    let total_cols = img.ncols() - FAST_KERNEL_SIZE * 2;
+    let total_rows = img.height() - FAST_KERNEL_SIZE * 2;
     let counter = AtomicUsize::new(0);
-    let keypoints: Vec<(usize, usize)> = (FAST_KERNEL_SIZE..(img.ncols() - FAST_KERNEL_SIZE))
+    let keypoints: Vec<Point> = (FAST_KERNEL_SIZE..(img.height() - FAST_KERNEL_SIZE))
         .into_par_iter()
-        .map(|col| {
+        .map(|y| {
             if let Some(pl) = progress_listener {
                 let value =
-                    0.20 * (counter.fetch_add(1, Ordering::Relaxed) as f32 / total_cols as f32);
+                    0.20 * (counter.fetch_add(1, Ordering::Relaxed) as f32 / total_rows as f32);
                 pl.report_status(value);
             }
-            let kp: Vec<(usize, usize)> = (FAST_KERNEL_SIZE..(img.nrows() - FAST_KERNEL_SIZE))
-                .filter_map(
-                    |row| match is_keypoint(img, FAST_THRESHOLD.into(), row, col) {
-                        true => Some((row, col)),
-                        false => None,
-                    },
-                )
+            let kp: Vec<Point> = (FAST_KERNEL_SIZE..(img.width() - FAST_KERNEL_SIZE))
+                .filter_map(|x| match is_keypoint(img, FAST_THRESHOLD.into(), x, y) {
+                    true => Some(Point::new(x, y)),
+                    false => None,
+                })
                 .collect();
             kp
         })
@@ -123,7 +123,7 @@ fn find_fast_keypoints<PL: ProgressListener>(
             let mut threshold_max = std::u8::MAX as i16;
             let mut threshold = (threshold_max + threshold_min) / 2;
             while threshold_max > threshold_min + 1 {
-                if is_keypoint(img, threshold, p.0, p.1) {
+                if is_keypoint(img, threshold, p.x, p.y) {
                     threshold_min = threshold;
                 } else {
                     threshold_max = threshold;
@@ -146,12 +146,17 @@ fn find_fast_keypoints<PL: ProgressListener>(
             }
             let p1 = &keypoints[i];
             let score1 = scores[i];
-            if i > 0 && keypoints[i - 1] == (p1.0, p1.1 - 1) && scores[i - 1] >= score1 {
+            if i > 0
+                && keypoints[i - 1].x == p1.x - 1
+                && keypoints[i - 1].y == p1.y
+                && scores[i - 1] >= score1
+            {
                 // Left point has better score
                 return None;
             }
             if i < keypoints.len() - 1
-                && keypoints[i + 1] == (p1.0, p1.1 + 1)
+                && keypoints[i + 1].x == p1.x + 1
+                && keypoints[i + 1].y == p1.y
                 && scores[i + 1] >= score1
             {
                 // Right point has better score
@@ -160,34 +165,34 @@ fn find_fast_keypoints<PL: ProgressListener>(
             // Search for point above current
             for j in (0..i).rev() {
                 let p2 = &keypoints[j];
-                if p2.0 < p1.0 - 1 {
+                if p2.y < p1.y - 1 {
                     break;
                 }
-                if p2.0 == p1.0 - 1 && p2.1 >= p1.1 - 1 && p2.1 <= p1.1 + 1 && scores[j] >= score1 {
+                if p2.y == p1.y - 1 && p2.x >= p1.x - 1 && p2.x <= p1.x + 1 && scores[j] >= score1 {
                     return None;
                 }
             }
             // Search for point below current
             for j in i + 1..keypoints.len() {
                 let p2 = &keypoints[j];
-                if p2.0 > p1.0 + 1 {
+                if p2.y > p1.y + 1 {
                     break;
                 }
-                if p2.0 == p1.0 + 1 && p2.1 >= p1.1 - 1 && p2.1 <= p1.1 + 1 && scores[j] >= score1 {
+                if p2.y == p1.y + 1 && p2.x >= p1.x - 1 && p2.x <= p1.x + 1 && scores[j] >= score1 {
                     return None;
                 }
             }
-            Some((p1.0, p1.1))
+            Some(*p1)
         })
         .collect()
 }
 
-fn gaussian_kernel<const KERNEL_WIDTH: usize>() -> SVector<f64, KERNEL_WIDTH> {
+fn gaussian_kernel<const KERNEL_WIDTH: usize>() -> [f64; KERNEL_WIDTH] {
     let sigma = (KERNEL_WIDTH - 1) as f64 / 6.0;
     let sigma_2 = sigma.powi(2);
     let divider = (2.0 * PI).sqrt() * sigma;
     let center = (KERNEL_WIDTH / 2) as f64;
-    let mut kernel = SVector::<f64, KERNEL_WIDTH>::zeros();
+    let mut kernel = [0.0; KERNEL_WIDTH];
 
     for i in 0..KERNEL_WIDTH {
         kernel[i] = (-(i as f64 - center).powi(2) / (2.0 * sigma_2)).exp() / divider;
@@ -196,49 +201,46 @@ fn gaussian_kernel<const KERNEL_WIDTH: usize>() -> SVector<f64, KERNEL_WIDTH> {
     kernel
 }
 
-fn convolve_kernel<const KERNEL_WIDTH: usize>(
-    img: &DMatrix<u8>,
-    point: (usize, usize),
-    kernel: SMatrix<f64, KERNEL_WIDTH, KERNEL_WIDTH>,
+fn convolve_kernel<const KERNEL_WIDTH: usize, const KERNEL_PIXELS_COUNT: usize>(
+    img: &Grid<u8>,
+    point: Point,
+    kernel: &'static [f64; KERNEL_PIXELS_COUNT],
 ) -> Option<f64> {
     let kernel_size = KERNEL_WIDTH / 2;
-    let (row, col) = point;
-    if col < kernel_size
-        || row < kernel_size
-        || col + kernel_size >= img.ncols()
-        || row + kernel_size >= img.nrows()
+    let (x, y) = (point.x, point.y);
+    if x < kernel_size
+        || y < kernel_size
+        || x + kernel_size >= img.width()
+        || y + kernel_size >= img.height()
     {
         return None;
     }
 
     let mut result = 0.0;
-    for k_col in 0..KERNEL_WIDTH {
-        for k_row in 0..KERNEL_WIDTH {
-            result += kernel[(k_row, k_col)]
-                * img[(row + k_row - kernel_size, col + k_col - kernel_size)] as f64
-                / 255.0;
-        }
+    for i in 0..KERNEL_PIXELS_COUNT {
+        let k_x = i % KERNEL_WIDTH;
+        let k_y = i / KERNEL_WIDTH;
+        result +=
+            kernel[i] * (*img.val(x + k_x - kernel_size, y + k_y - kernel_size)) as f64 / 255.0;
     }
 
     Some(result)
 }
 
 fn harris_response<const KERNEL_WIDTH: usize>(
-    img: &DMatrix<u8>,
-    kernel_gauss: &SVector<f64, KERNEL_WIDTH>,
-    point: (usize, usize),
+    img: &Grid<u8>,
+    kernel_gauss: &[f64; KERNEL_WIDTH],
+    point: Point,
 ) -> Option<f64> {
-    const KERNEL_SOBEL_X: Matrix3<f64> =
-        Matrix3::new(-1.0, -2.0, -1.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0);
-    const KERNEL_SOBEL_Y: Matrix3<f64> =
-        Matrix3::new(-1.0, 0.0, 1.0, -2.0, 0.0, 2.0, -1.0, 0.0, 1.0);
+    const KERNEL_SOBEL_X: [f64; 9] = [-1.0, 0.0, 1.0, -2.0, 0.0, 2.0, -1.0, 0.0, 1.0];
+    const KERNEL_SOBEL_Y: [f64; 9] = [-1.0, -2.0, -1.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0];
 
     let kernel_size = KERNEL_WIDTH / 2;
-    let (row, col) = point;
-    if col < kernel_size
-        || row < kernel_size
-        || col + kernel_size >= img.ncols()
-        || row + kernel_size >= img.nrows()
+    let (x, y) = (point.x, point.y);
+    if x < kernel_size
+        || y < kernel_size
+        || x + kernel_size >= img.width()
+        || y + kernel_size >= img.height()
     {
         return None;
     }
@@ -246,26 +248,13 @@ fn harris_response<const KERNEL_WIDTH: usize>(
     let mut g_dx2 = 0.0;
     let mut g_dy2 = 0.0;
     let mut g_dx_dy = 0.0;
-    for k_row in 0..KERNEL_WIDTH {
-        for k_col in 0..KERNEL_WIDTH {
-            let dx = convolve_kernel(
-                img,
-                (
-                    row + k_row - HARRIS_KERNEL_SIZE,
-                    col + k_col - HARRIS_KERNEL_SIZE,
-                ),
-                KERNEL_SOBEL_X,
-            )?;
-            let dy = convolve_kernel(
-                img,
-                (
-                    row + k_row - HARRIS_KERNEL_SIZE,
-                    col + k_col - HARRIS_KERNEL_SIZE,
-                ),
-                KERNEL_SOBEL_Y,
-            )?;
+    for k_y in 0..KERNEL_WIDTH {
+        for k_x in 0..KERNEL_WIDTH {
+            let point = Point::new(x + k_x - HARRIS_KERNEL_SIZE, y + k_y - HARRIS_KERNEL_SIZE);
+            let dx = convolve_kernel::<KERNEL_WIDTH, 9>(img, point, &KERNEL_SOBEL_X)?;
+            let dy = convolve_kernel::<KERNEL_WIDTH, 9>(img, point, &KERNEL_SOBEL_Y)?;
 
-            let gauss_mul = kernel_gauss[k_row] * kernel_gauss[k_col];
+            let gauss_mul = kernel_gauss[k_x] * kernel_gauss[k_y];
             g_dx2 += dx * dx * gauss_mul;
             g_dy2 += dy * dy * gauss_mul;
             g_dx_dy += dx * dy * gauss_mul;
@@ -280,69 +269,56 @@ fn harris_response<const KERNEL_WIDTH: usize>(
 }
 
 fn gaussian_blur<const KERNEL_WIDTH: usize>(
-    img: &DMatrix<u8>,
-    kernel_gauss: &SVector<f64, KERNEL_WIDTH>,
-) -> DMatrix<Option<f64>> {
-    let mut result = DMatrix::from_element(img.nrows(), img.ncols(), None);
-    let (nrows, ncols) = result.shape();
+    img: &Grid<u8>,
+    kernel_gauss: &[f64; KERNEL_WIDTH],
+) -> Grid<Option<f64>> {
+    let mut result = Grid::new(img.width(), img.height(), None);
     let kernel_size = KERNEL_WIDTH / 2;
 
-    result
-        .column_iter_mut()
-        .enumerate()
-        .par_bridge()
-        .for_each(|(col, mut out_col)| {
-            if col < kernel_size || col + kernel_size >= ncols {
-                return;
-            }
-            out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                if row < kernel_size || row + kernel_size >= nrows {
-                    return;
-                }
-                let mut sum = 0.0;
-                for i in 0..KERNEL_WIDTH {
-                    sum += kernel_gauss[i] * img[(row + i - kernel_size, col)] as f64;
-                }
-                *out_point = Some(sum);
-            })
-        });
+    result.par_iter_mut().for_each(|(x, y, out_point)| {
+        if y < kernel_size || y + kernel_size >= img.height() {
+            return;
+        }
+        if x < kernel_size || x + kernel_size >= img.width() {
+            return;
+        }
+        let mut sum = 0.0;
+        for i in 0..KERNEL_WIDTH {
+            sum += kernel_gauss[i] * (*img.val(x + i - kernel_size, y)) as f64;
+        }
+        *out_point = Some(sum);
+    });
 
     let img = result;
-    let mut result = DMatrix::from_element(nrows, ncols, None);
-    result
-        .column_iter_mut()
-        .enumerate()
-        .par_bridge()
-        .for_each(|(col, mut out_col)| {
-            if col < kernel_size || col + kernel_size >= ncols {
+    let mut result = Grid::new(img.width(), img.width(), None);
+    result.par_iter_mut().for_each(|(x, y, out_point)| {
+        if y < kernel_size || y + kernel_size >= img.height() {
+            return;
+        }
+        if x < kernel_size || x + kernel_size >= img.width() {
+            return;
+        }
+        let mut sum = 0.0;
+        for i in 0..KERNEL_WIDTH {
+            let val = if let Some(val) = img.val(x, y + i - kernel_size) {
+                val
+            } else {
                 return;
-            }
-            out_col.iter_mut().enumerate().for_each(|(row, out_point)| {
-                if row < kernel_size || row + kernel_size >= nrows {
-                    return;
-                }
-                let mut sum = 0.0;
-                for i in 0..KERNEL_WIDTH {
-                    let val = if let Some(val) = img[(row, col + i - kernel_size)] {
-                        val
-                    } else {
-                        return;
-                    };
-                    sum += kernel_gauss[i] * val;
-                }
-                *out_point = Some(sum);
-            })
-        });
+            };
+            sum += kernel_gauss[i] * val;
+        }
+        *out_point = Some(sum);
+    });
 
     result
 }
 
-fn get_brief_orientation(img: &DMatrix<Option<f64>>, point: (usize, usize)) -> Option<f64> {
-    let (row, col) = point;
-    if row < ORB_PATCH_SIZE
-        || col < ORB_PATCH_SIZE
-        || row + ORB_PATCH_SIZE >= img.nrows()
-        || col + ORB_PATCH_SIZE >= img.ncols()
+fn get_brief_orientation(img: &Grid<Option<f64>>, point: &Point) -> Option<f64> {
+    let (x, y) = (point.x, point.y);
+    if x < ORB_PATCH_SIZE
+        || y < ORB_PATCH_SIZE
+        || x + ORB_PATCH_SIZE >= img.width()
+        || y + ORB_PATCH_SIZE >= img.height()
     {
         return None;
     }
@@ -350,28 +326,28 @@ fn get_brief_orientation(img: &DMatrix<Option<f64>>, point: (usize, usize)) -> O
     let mut m_00 = 0;
     let mut m_01 = 0;
     let mut m_10 = 0;
-    for m_col in 0..ORB_PATCH_WIDTH {
-        for m_row in 0..ORB_PATCH_WIDTH {
-            let (s_row, s_col) = (row + m_row - ORB_PATCH_SIZE, col + m_col - ORB_PATCH_SIZE);
-            let val = img[(s_row, s_col)]?.clamp(0.0, 255.0) as usize;
+    for m_y in 0..ORB_PATCH_WIDTH {
+        for m_x in 0..ORB_PATCH_WIDTH {
+            let (s_x, s_y) = (x + m_x - ORB_PATCH_SIZE, y + m_y - ORB_PATCH_SIZE);
+            let val = (*img.val(s_x, s_y))?.clamp(0.0, 255.0) as usize;
             m_00 += val;
-            m_01 += s_row * val;
-            m_10 += s_col * val;
+            m_10 += s_x * val;
+            m_01 += s_y * val;
         }
     }
 
-    let centroid_row = m_01 as f64 / m_00 as f64;
-    let centroid_col = m_10 as f64 / m_00 as f64;
-    let angle = (centroid_row - row as f64).atan2(centroid_col - col as f64);
+    let centroid_x = m_10 as f64 / m_00 as f64;
+    let centroid_y = m_01 as f64 / m_00 as f64;
+    let angle = (centroid_y - y as f64).atan2(centroid_x - x as f64);
 
     Some(angle)
 }
 
 fn extract_brief_descriptors<PL: ProgressListener>(
-    img: &DMatrix<u8>,
-    points: Vec<(usize, usize)>,
+    img: &Grid<u8>,
+    points: Vec<Point>,
     progress_listener: Option<&PL>,
-) -> Vec<Point> {
+) -> Vec<Keypoint> {
     let kernel_gauss = gaussian_kernel::<ORB_GAUSS_KERNEL_WIDTH>();
 
     let img = gaussian_blur(img, &kernel_gauss);
@@ -385,40 +361,40 @@ fn extract_brief_descriptors<PL: ProgressListener>(
                     + 0.30 * (counter.fetch_add(1, Ordering::Relaxed) as f32 / points.len() as f32);
                 pl.report_status(value);
             }
-            let angle = get_brief_orientation(&img, *coords)?;
+            let angle = get_brief_orientation(&img, coords)?;
             let angle_sin = angle.sin();
             let angle_cos = angle.cos();
             let mut orb_descriptor = [0_u32; 8];
             for i in 0..ORB_MATCH_PATTERN.len() {
-                let offset1 = ORB_MATCH_PATTERN[i].0;
-                let offset2 = ORB_MATCH_PATTERN[i].1;
-                let offset1 = (
-                    (offset1.1 as f64 * angle_cos - offset1.0 as f64 * angle_sin).round() as isize,
-                    (offset1.1 as f64 * angle_sin + offset1.0 as f64 * angle_cos).round() as isize,
+                let (offset1_x, offset1_y) = ORB_MATCH_PATTERN[i].0;
+                let (offset2_x, offset2_y) = ORB_MATCH_PATTERN[i].1;
+                let offset1 = Point2D::new(
+                    (offset1_y as f64 * angle_cos - offset1_x as f64 * angle_sin).round() as isize,
+                    (offset1_y as f64 * angle_sin + offset1_x as f64 * angle_cos).round() as isize,
                 );
-                let offset2 = (
-                    (offset2.1 as f64 * angle_cos - offset2.0 as f64 * angle_sin).round() as isize,
-                    (offset2.1 as f64 * angle_sin + offset2.0 as f64 * angle_cos).round() as isize,
+                let offset2 = Point2D::new(
+                    (offset2_y as f64 * angle_cos - offset2_x as f64 * angle_sin).round() as isize,
+                    (offset2_y as f64 * angle_sin + offset2_x as f64 * angle_cos).round() as isize,
                 );
-                let p1_coords = (
-                    coords.0.saturating_add_signed(offset1.0),
-                    coords.1.saturating_add_signed(offset1.1),
+                let p1_coords = Point2D::new(
+                    coords.x.saturating_add_signed(offset1.x),
+                    coords.y.saturating_add_signed(offset1.y),
                 );
-                let p2_coords = (
-                    coords.0.saturating_add_signed(offset2.0),
-                    coords.1.saturating_add_signed(offset2.1),
+                let p2_coords = Point2D::new(
+                    coords.x.saturating_add_signed(offset2.x),
+                    coords.y.saturating_add_signed(offset2.y),
                 );
-                if p1_coords.0 == 0
-                    || p2_coords.0 == 0
-                    || p1_coords.0 + 1 >= img.nrows()
-                    || p2_coords.0 + 1 >= img.nrows()
-                    || p1_coords.1 + 1 >= img.ncols()
-                    || p2_coords.1 + 1 >= img.ncols()
+                if p1_coords.x == 0
+                    || p2_coords.x == 0
+                    || p1_coords.x + 1 >= img.width()
+                    || p2_coords.x + 1 >= img.width()
+                    || p1_coords.y + 1 >= img.height()
+                    || p2_coords.y + 1 >= img.height()
                 {
                     return None;
                 }
-                let p1 = img[p1_coords]?;
-                let p2 = img[p2_coords]?;
+                let p1 = (*img.val(p1_coords.x, p1_coords.y))?;
+                let p2 = (*img.val(p2_coords.x, p2_coords.y))?;
                 let dst_block = &mut orb_descriptor[i / 32];
                 let tau = if p1 < p2 { 1 } else { 0 };
                 *dst_block |= tau << (i % 32);
@@ -439,22 +415,22 @@ pub fn optimal_scale_steps(dimensions: (u32, u32)) -> usize {
 }
 
 #[inline]
-fn get_pixel_offset(img: &DMatrix<u8>, row: usize, col: usize, offset: (i8, i8)) -> i16 {
-    let row_new = row.saturating_add_signed(offset.1 as isize);
-    let col_new = col.saturating_add_signed(offset.0 as isize);
-    img[(row_new, col_new)] as i16
+fn get_pixel_offset(img: &Grid<u8>, x: usize, y: usize, offset: Offset) -> i16 {
+    let x_new = x.saturating_add_signed(offset.x as isize);
+    let y_new = y.saturating_add_signed(offset.y as isize);
+    *img.val(x_new, y_new) as i16
 }
 
 #[inline]
-fn is_keypoint(img: &DMatrix<u8>, threshold: i16, row: usize, col: usize) -> bool {
-    let val: i16 = img[(row, col)] as i16;
+fn is_keypoint(img: &Grid<u8>, threshold: i16, x: usize, y: usize) -> bool {
+    let val: i16 = *img.val(x, y) as i16;
     let mut last_more_pos: Option<usize> = None;
     let mut last_less_pos: Option<usize> = None;
     let mut max_length = 0;
 
     for i in 0..FAST_CIRCLE_LENGTH {
         let p = FAST_CIRCLE_PIXELS[i % FAST_CIRCLE_PIXELS.len()];
-        let c_val = get_pixel_offset(img, row, col, p);
+        let c_val = get_pixel_offset(img, x, y, p);
         if c_val > val + threshold {
             last_more_pos = last_more_pos.or(Some(i));
             let length = last_more_pos.map(|p| i - p).unwrap_or(0) + 1;
@@ -476,11 +452,11 @@ fn is_keypoint(img: &DMatrix<u8>, threshold: i16, row: usize, col: usize) -> boo
     false
 }
 
-fn adjust_contrast(img: &mut DMatrix<u8>) {
+fn adjust_contrast(img: &mut Grid<u8>) {
     let mut min: u8 = core::u8::MAX;
     let mut max: u8 = core::u8::MIN;
 
-    for p in img.iter() {
+    for (_x, _y, p) in img.iter() {
         min = min.min(*p);
         max = max.max(*p);
     }
@@ -490,7 +466,7 @@ fn adjust_contrast(img: &mut DMatrix<u8>) {
     }
 
     let coeff = core::u8::MAX as f32 / ((max - min) as f32);
-    for p in img.iter_mut() {
+    for (_x, _y, p) in img.iter_mut() {
         *p = (coeff * ((*p - min) as f32)).round() as u8;
     }
 }
