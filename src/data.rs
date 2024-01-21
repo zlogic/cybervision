@@ -63,58 +63,145 @@ where
         &mut self.data[self.width * y + x]
     }
 
-    pub fn iter(&self) -> GridIter<'a, T> {
-        GridIter {
+    pub fn iter(&'a self) -> GridIterConst<'a, T> {
+        let view = GridStorageConst {
             grid: self,
             phantom: Default::default(),
-            range: (0..self.data.len()),
             width: self.width,
+        };
+        GridIter {
+            grid: view,
+            phantom: Default::default(),
+            range: (0..self.data.len()),
         }
     }
 
-    pub fn par_iter(&self) -> ParGridIter<'a, T> {
+    pub fn par_iter(&'a self) -> ParGridIterConst<'a, T> {
         ParGridIter { it: self.iter() }
     }
 
-    pub fn iter_mut(&mut self) -> GridIterMut<'a, T> {
-        GridIterMut {
+    pub fn iter_mut(&'a mut self) -> GridIterMut<'a, T> {
+        let view = GridStorageMut {
             grid: self,
             phantom: Default::default(),
-            range: (0..self.data.len()),
             width: self.width,
+        };
+        GridIter {
+            grid: view,
+            phantom: Default::default(),
+            range: (0..self.data.len()),
         }
     }
 
-    pub fn par_iter_mut(&mut self) -> ParGridIterMut<'a, T> {
-        ParGridIterMut {
+    pub fn par_iter_mut(&'a mut self) -> ParGridIterMut<'a, T> {
+        ParGridIter {
             it: self.iter_mut(),
         }
     }
 }
 
-pub struct GridIter<'a, T>
+type GridIterConst<'a, T> = GridIter<'a, T, GridStorageConst<'a, T>, (usize, usize, &'a T)>;
+type GridIterMut<'a, T> = GridIter<'a, T, GridStorageMut<'a, T>, (usize, usize, &'a mut T)>;
+type ParGridIterConst<'a, T> = ParGridIter<'a, T, GridStorageConst<'a, T>, (usize, usize, &'a T)>;
+type ParGridIterMut<'a, T> = ParGridIter<'a, T, GridStorageMut<'a, T>, (usize, usize, &'a mut T)>;
+
+pub trait GridView<'a, T> {
+    type Item;
+    unsafe fn get(&self, i: usize) -> Self::Item;
+}
+
+pub struct GridStorage<'a, T, G>
 where
     T: Send + Sync,
 {
-    grid: *const Grid<T>,
+    grid: G,
     phantom: PhantomData<&'a Grid<T>>,
-    range: Range<usize>,
     width: usize,
 }
 
-impl<'a, T> Iterator for GridIter<'a, T>
+type GridStorageConst<'a, T> = GridStorage<'a, T, *const Grid<T>>;
+type GridStorageMut<'a, T> = GridStorage<'a, T, *mut Grid<T>>;
+
+impl<'a, T> GridView<'a, T> for GridStorageConst<'a, T>
 where
     T: Send + Sync,
 {
     type Item = (usize, usize, &'a T);
 
+    unsafe fn get(&self, i: usize) -> Self::Item {
+        let width = self.width;
+        let x = i % width;
+        let y = i / width;
+        let val = &(*self.grid).data[i];
+        (x, y, val)
+    }
+}
+
+impl<'a, T> GridView<'a, T> for GridStorageMut<'a, T>
+where
+    T: Send + Sync,
+{
+    type Item = (usize, usize, &'a mut T);
+
+    unsafe fn get(&self, i: usize) -> Self::Item {
+        let width = self.width;
+        let x = i % width;
+        let y = i / width;
+        let val = &mut (*self.grid).data[i];
+        (x, y, val)
+    }
+}
+
+impl<'a, T> Clone for GridStorageConst<'a, T>
+where
+    T: Send + Sync,
+{
+    fn clone(&self) -> Self {
+        GridStorageConst {
+            grid: self.grid,
+            phantom: Default::default(),
+            width: self.width,
+        }
+    }
+}
+
+impl<'a, T> Clone for GridStorageMut<'a, T>
+where
+    T: Send + Sync,
+{
+    fn clone(&self) -> Self {
+        GridStorageMut {
+            grid: self.grid,
+            phantom: Default::default(),
+            width: self.width,
+        }
+    }
+}
+
+pub struct GridIter<'a, T, G, I>
+where
+    T: Send + Sync,
+    G: GridView<'a, T, Item = I>,
+    I: Send + Sync,
+{
+    grid: G,
+    phantom: PhantomData<&'a Grid<T>>,
+    range: Range<usize>,
+}
+
+impl<'a, T, G, I> Iterator for GridIter<'a, T, G, I>
+where
+    T: Send + Sync,
+    G: GridView<'a, T, Item = I>,
+    I: Send + Sync,
+{
+    type Item = G::Item;
+
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         let i = self.range.next()?;
-        let x = i % self.width;
-        let y = i / self.width;
-        let val = unsafe { &(*self.grid).data[i] };
-        Some((x, y, val))
+        let val = unsafe { self.grid.get(i) };
+        Some(val)
     }
 
     #[inline]
@@ -129,72 +216,94 @@ where
     }
 }
 
-unsafe impl<'a, T> Send for GridIter<'a, T> where T: Send + Sync {}
-
-impl<'a, T> ExactSizeIterator for GridIter<'a, T> where T: Send + Sync {}
-
-impl<'a, T> DoubleEndedIterator for GridIter<'a, T>
+unsafe impl<'a, T, G, I> Send for GridIter<'a, T, G, I>
 where
     T: Send + Sync,
+    G: GridView<'a, T, Item = I>,
+    I: Send + Sync,
+{
+}
+
+impl<'a, T, G, I> ExactSizeIterator for GridIter<'a, T, G, I>
+where
+    T: Send + Sync,
+    G: GridView<'a, T, Item = I>,
+    I: Send + Sync,
+{
+}
+
+impl<'a, T, G, I> DoubleEndedIterator for GridIter<'a, T, G, I>
+where
+    T: Send + Sync,
+    G: GridView<'a, T, Item = I>,
+    I: Send + Sync,
 {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         let i = self.range.next_back()?;
-        let x = i % self.width;
-        let y = i / self.width;
-        let val = unsafe { &(*self.grid).data[i] };
-        Some((x, y, val))
+        let val = unsafe { self.grid.get(i) };
+        Some(val)
     }
 }
 
-pub struct ParGridIter<'a, T>
+struct GridProducer<'a, T, G, I>(ParGridIter<'a, T, G, I>)
 where
     T: Send + Sync,
+    G: GridView<'a, T, Item = I>,
+    I: Send + Sync;
+
+pub struct ParGridIter<'a, T, G, I>
+where
+    T: Send + Sync,
+    G: GridView<'a, T, Item = I>,
+    I: Send + Sync,
 {
-    it: GridIter<'a, T>,
+    it: GridIter<'a, T, G, I>,
 }
 
-impl<'a, T> Producer for ParGridIter<'a, T>
+impl<'a, T, G, I> Producer for GridProducer<'a, T, G, I>
 where
     T: Send + Sync,
+    G: GridView<'a, T, Item = I> + Clone,
+    I: Send + Sync,
 {
-    type Item = (usize, usize, &'a T);
+    type Item = G::Item;
 
-    type IntoIter = GridIter<'a, T>;
+    type IntoIter = GridIter<'a, T, G, I>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.it
+        self.0.it
     }
 
     #[inline]
     fn split_at(self, index: usize) -> (Self, Self) {
-        let mid = (self.it.range.start + index).min(self.it.range.end);
-        let left_range = self.it.range.start..mid;
-        let right_range = mid..self.it.range.end;
+        let mid = (self.0.it.range.start + index).min(self.0.it.range.end);
+        let left_range = self.0.it.range.start..mid;
+        let right_range = mid..self.0.it.range.end;
         let left = ParGridIter {
             it: GridIter {
-                grid: self.it.grid,
+                grid: self.0.it.grid.clone(),
                 phantom: Default::default(),
                 range: left_range,
-                width: self.it.width,
             },
         };
         let right = ParGridIter {
             it: GridIter {
-                grid: self.it.grid,
+                grid: self.0.it.grid.clone(),
                 phantom: Default::default(),
                 range: right_range,
-                width: self.it.width,
             },
         };
-        (left, right)
+        (Self(left), Self(right))
     }
 }
 
-impl<'a, T> IndexedParallelIterator for ParGridIter<'a, T>
+impl<'a, T, G, I> IndexedParallelIterator for ParGridIter<'a, T, G, I>
 where
     T: Send + Sync,
+    G: GridView<'a, T, Item = I> + Clone,
+    I: Send + Sync,
 {
     #[inline]
     fn len(&self) -> usize {
@@ -206,152 +315,18 @@ where
     }
 
     fn with_producer<CB: ProducerCallback<Self::Item>>(self, callback: CB) -> CB::Output {
-        callback.callback(self)
+        let producer = GridProducer(self);
+        callback.callback(producer)
     }
 }
 
-impl<'a, T> ParallelIterator for ParGridIter<'a, T>
+impl<'a, T, G, I> ParallelIterator for ParGridIter<'a, T, G, I>
 where
     T: Send + Sync,
+    G: GridView<'a, T, Item = I> + Clone,
+    I: Send + Sync,
 {
-    type Item = (usize, usize, &'a T);
-
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        bridge(self, consumer)
-    }
-
-    #[inline]
-    fn opt_len(&self) -> Option<usize> {
-        Some(self.it.range.len())
-    }
-}
-
-pub struct GridIterMut<'a, T>
-where
-    T: Sync + Send,
-{
-    grid: *mut Grid<T>,
-    phantom: PhantomData<&'a Grid<T>>,
-    range: Range<usize>,
-    width: usize,
-}
-
-impl<'a, T> Iterator for GridIterMut<'a, T>
-where
-    T: Send + Sync,
-{
-    type Item = (usize, usize, &'a mut T);
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        let i = self.range.next()?;
-        let x = i % self.width;
-        let y = i / self.width;
-        let val = unsafe { &mut (*self.grid).data[i] };
-        Some((x, y, val))
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let hint = self.range.len();
-        (hint, Some(hint))
-    }
-
-    #[inline]
-    fn count(self) -> usize {
-        self.range.len()
-    }
-}
-
-unsafe impl<'a, T> Send for GridIterMut<'a, T> where T: Send + Sync {}
-
-impl<'a, T> ExactSizeIterator for GridIterMut<'a, T> where T: Send + Sync {}
-
-impl<'a, T> DoubleEndedIterator for GridIterMut<'a, T>
-where
-    T: Send + Sync,
-{
-    #[inline]
-    fn next_back(&mut self) -> Option<Self::Item> {
-        let i = self.range.next_back()?;
-        let x = i % self.width;
-        let y = i / self.width;
-        let val = unsafe { &mut (*self.grid).data[i] };
-        Some((x, y, val))
-    }
-}
-
-pub struct ParGridIterMut<'a, T>
-where
-    T: Send + Sync,
-{
-    it: GridIterMut<'a, T>,
-}
-
-impl<'a, T> Producer for ParGridIterMut<'a, T>
-where
-    T: Send + Sync,
-{
-    type Item = (usize, usize, &'a mut T);
-
-    type IntoIter = GridIterMut<'a, T>;
-
-    #[inline]
-    fn into_iter(self) -> Self::IntoIter {
-        self.it
-    }
-
-    #[inline]
-    fn split_at(self, index: usize) -> (Self, Self) {
-        let mid = (self.it.range.start + index).min(self.it.range.end);
-        let left_range = self.it.range.start..mid;
-        let right_range = mid..self.it.range.end;
-        let left = ParGridIterMut {
-            it: GridIterMut {
-                grid: self.it.grid,
-                phantom: Default::default(),
-                range: left_range,
-                width: self.it.width,
-            },
-        };
-        let right = ParGridIterMut {
-            it: GridIterMut {
-                grid: self.it.grid,
-                phantom: Default::default(),
-                range: right_range,
-                width: self.it.width,
-            },
-        };
-        (left, right)
-    }
-}
-
-impl<'a, T> IndexedParallelIterator for ParGridIterMut<'a, T>
-where
-    T: Sync + Send,
-{
-    #[inline]
-    fn len(&self) -> usize {
-        self.it.range.len()
-    }
-
-    fn drive<C: Consumer<Self::Item>>(self, consumer: C) -> C::Result {
-        bridge(self, consumer)
-    }
-
-    fn with_producer<CB: ProducerCallback<Self::Item>>(self, callback: CB) -> CB::Output {
-        callback.callback(self)
-    }
-}
-
-impl<'a, T> ParallelIterator for ParGridIterMut<'a, T>
-where
-    T: Send + Sync,
-{
-    type Item = (usize, usize, &'a mut T);
+    type Item = G::Item;
 
     fn drive_unindexed<C>(self, consumer: C) -> C::Result
     where
