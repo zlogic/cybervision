@@ -194,8 +194,8 @@ fn gaussian_kernel<const KERNEL_WIDTH: usize>() -> [f64; KERNEL_WIDTH] {
     let center = (KERNEL_WIDTH / 2) as f64;
     let mut kernel = [0.0; KERNEL_WIDTH];
 
-    for i in 0..KERNEL_WIDTH {
-        kernel[i] = (-(i as f64 - center).powi(2) / (2.0 * sigma_2)).exp() / divider;
+    for (i, kernel_out) in kernel.iter_mut().enumerate() {
+        *kernel_out = (-(i as f64 - center).powi(2) / (2.0 * sigma_2)).exp() / divider;
     }
 
     kernel
@@ -217,11 +217,11 @@ fn convolve_kernel<const KERNEL_WIDTH: usize, const KERNEL_PIXELS_COUNT: usize>(
     }
 
     let mut result = 0.0;
-    for i in 0..KERNEL_PIXELS_COUNT {
+    for (i, kernel_val) in kernel.iter().enumerate() {
         let k_x = i % KERNEL_WIDTH;
         let k_y = i / KERNEL_WIDTH;
         result +=
-            kernel[i] * (*img.val(x + k_x - kernel_size, y + k_y - kernel_size)) as f64 / 255.0;
+            kernel_val * (*img.val(x + k_x - kernel_size, y + k_y - kernel_size)) as f64 / 255.0;
     }
 
     Some(result)
@@ -283,8 +283,8 @@ fn gaussian_blur<const KERNEL_WIDTH: usize>(
             return;
         }
         let mut sum = 0.0;
-        for i in 0..KERNEL_WIDTH {
-            sum += kernel_gauss[i] * (*img.val(x + i - kernel_size, y)) as f64;
+        for (i, kernel_val) in kernel_gauss.iter().enumerate() {
+            sum += kernel_val * (*img.val(x + i - kernel_size, y)) as f64;
         }
         *out_point = Some(sum);
     });
@@ -299,13 +299,13 @@ fn gaussian_blur<const KERNEL_WIDTH: usize>(
             return;
         }
         let mut sum = 0.0;
-        for i in 0..KERNEL_WIDTH {
+        for (i, kernel_val) in kernel_gauss.iter().enumerate() {
             let val = if let Some(val) = img.val(x, y + i - kernel_size) {
                 val
             } else {
                 return;
             };
-            sum += kernel_gauss[i] * val;
+            sum += kernel_val * val;
         }
         *out_point = Some(sum);
     });
