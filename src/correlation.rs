@@ -964,7 +964,7 @@ mod gpu {
         ) -> Result<(), Box<dyn error::Error>> {
             let max_width = img1.width().max(img2.width());
             let max_height = img1.height().max(img2.height());
-            let max_shape = (max_height, max_width);
+            let max_shape = (max_width, max_height);
             let img1_shape = (img1.width(), img1.height());
             let out_shape = match dir {
                 CorrelationDirection::Forward => self.img1_shape,
@@ -1278,9 +1278,10 @@ mod gpu {
             let width = out_image.width();
             out_image.par_iter_mut().for_each(|(x, y, out_point)| {
                 let pos = 2 * (y * width + x);
-                let point_match = Point2D::new(out_data[pos] as u32, out_data[pos + 1] as u32);
+                let (match_x, match_y) = (out_data[pos], out_data[pos + 1]);
                 if let Some(corr) = self.correlation_values.val(x, y) {
-                    *out_point = if point_match.x > 0 && point_match.y > 0 {
+                    *out_point = if match_x > 0 && match_y > 0 {
+                        let point_match = Point2D::new(match_x as u32, match_y as u32);
                         Some((point_match, *corr))
                     } else {
                         None
