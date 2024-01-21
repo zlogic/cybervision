@@ -616,11 +616,6 @@ impl PointCorrelations {
     }
 }
 
-struct PointDataCompact {
-    avg: f32,
-    stdev: f32,
-}
-
 struct ImagePointData {
     avg: Grid<f32>,
     stdev: Grid<f32>,
@@ -631,52 +626,63 @@ fn compute_image_point_data(img: &Grid<u8>) -> ImagePointData {
         avg: Grid::new(img.width(), img.height(), f32::NAN),
         stdev: Grid::new(img.width(), img.height(), f32::NAN),
     };
-    data.avg
-        .iter_mut()
-        .zip(data.stdev.iter_mut())
-        .for_each(|((x, y, avg), (_x, _y, stdev))| {
-            let point = Point2D::new(x, y);
-            let p = match compute_compact_point_data(img, &point) {
-                Some(p) => p,
-                None => return,
-            };
-            *avg = p.avg;
-            *stdev = p.stdev;
-        });
+    data.avg.par_iter_mut().for_each(|(x, y, avg)| {
+        let point = Point2D::new(x, y);
+        let point_avg = match compute_point_avg(img, &point) {
+            Some(p) => p,
+            None => return,
+        };
+        *avg = point_avg;
+    });
+    data.stdev.par_iter_mut().for_each(|(x, y, stdev)| {
+        let point = Point2D::new(x, y);
+        let avg = data.avg.val(x, y);
+        let point_stdev = match compute_point_stdev(img, &point, *avg) {
+            Some(p) => p,
+            None => return,
+        };
+        *stdev = point_stdev;
+    });
     data
 }
 
 #[inline]
-fn compute_compact_point_data(img: &Grid<u8>, point: &Point2D<usize>) -> Option<PointDataCompact> {
+fn compute_point_avg(img: &Grid<u8>, point: &Point2D<usize>) -> Option<f32> {
     if !point_inside_bounds::<KERNEL_SIZE>(img, point) {
         return None;
     };
-    let mut result = PointDataCompact {
-        avg: 0.0,
-        stdev: 0.0,
+    let mut avg = 0.0f32;
+    for y in 0..KERNEL_WIDTH {
+        let s_y = (point.y + y).saturating_sub(KERNEL_SIZE);
+        for x in 0..KERNEL_WIDTH {
+            let s_x = (point.x + x).saturating_sub(KERNEL_SIZE);
+            let value = img.val(s_x, s_y);
+            avg += *value as f32;
+        }
+    }
+    avg /= KERNEL_POINT_COUNT as f32;
+    Some(avg)
+}
+
+#[inline]
+fn compute_point_stdev(img: &Grid<u8>, point: &Point2D<usize>, avg: f32) -> Option<f32> {
+    if !point_inside_bounds::<KERNEL_SIZE>(img, point) {
+        return None;
     };
-    for y in 0..KERNEL_WIDTH {
-        let s_y = (point.y + y).saturating_sub(KERNEL_SIZE);
-        for x in 0..KERNEL_WIDTH {
-            let s_x = (point.x + x).saturating_sub(KERNEL_SIZE);
-            let value = img.val(s_x, s_y);
-            result.avg += *value as f32;
-        }
-    }
-    result.avg /= KERNEL_POINT_COUNT as f32;
+    let mut stdev = 0.0f32;
 
     for y in 0..KERNEL_WIDTH {
         let s_y = (point.y + y).saturating_sub(KERNEL_SIZE);
         for x in 0..KERNEL_WIDTH {
             let s_x = (point.x + x).saturating_sub(KERNEL_SIZE);
             let value = img.val(s_x, s_y);
-            let delta = *value as f32 - result.avg;
-            result.stdev += delta * delta;
+            let delta = *value as f32 - avg;
+            stdev += delta * delta;
         }
     }
-    result.stdev = (result.stdev / KERNEL_POINT_COUNT as f32).sqrt();
+    stdev = (stdev / KERNEL_POINT_COUNT as f32).sqrt();
 
-    Some(result)
+    Some(stdev)
 }
 
 #[inline]

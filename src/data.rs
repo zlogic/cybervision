@@ -108,12 +108,24 @@ where
 {
     type Item = (usize, usize, &'a T);
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         let i = self.range.next()?;
         let x = i % self.width;
         let y = i / self.width;
         let val = unsafe { &(*self.grid).data[i] };
         Some((x, y, val))
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let hint = self.range.len();
+        (hint, Some(hint))
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.range.len()
     }
 }
 
@@ -125,6 +137,7 @@ impl<'a, T> DoubleEndedIterator for GridIter<'a, T>
 where
     T: Send + Sync,
 {
+    #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         let i = self.range.next_back()?;
         let x = i % self.width;
@@ -149,13 +162,16 @@ where
 
     type IntoIter = GridIter<'a, T>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.it
     }
 
+    #[inline]
     fn split_at(self, index: usize) -> (Self, Self) {
-        let left_range = self.it.range.start..self.it.range.start + index;
-        let right_range = left_range.end..self.it.range.end;
+        let mid = (self.it.range.start + index).min(self.it.range.end);
+        let left_range = self.it.range.start..mid;
+        let right_range = mid..self.it.range.end;
         let left = ParGridIter {
             it: GridIter {
                 grid: self.it.grid,
@@ -180,6 +196,7 @@ impl<'a, T> IndexedParallelIterator for ParGridIter<'a, T>
 where
     T: Send + Sync,
 {
+    #[inline]
     fn len(&self) -> usize {
         self.it.range.len()
     }
@@ -206,6 +223,7 @@ where
         bridge(self, consumer)
     }
 
+    #[inline]
     fn opt_len(&self) -> Option<usize> {
         Some(self.it.range.len())
     }
@@ -227,12 +245,24 @@ where
 {
     type Item = (usize, usize, &'a mut T);
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         let i = self.range.next()?;
         let x = i % self.width;
         let y = i / self.width;
         let val = unsafe { &mut (*self.grid).data[i] };
         Some((x, y, val))
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let hint = self.range.len();
+        (hint, Some(hint))
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.range.len()
     }
 }
 
@@ -244,6 +274,7 @@ impl<'a, T> DoubleEndedIterator for GridIterMut<'a, T>
 where
     T: Send + Sync,
 {
+    #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         let i = self.range.next_back()?;
         let x = i % self.width;
@@ -268,13 +299,16 @@ where
 
     type IntoIter = GridIterMut<'a, T>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.it
     }
 
+    #[inline]
     fn split_at(self, index: usize) -> (Self, Self) {
-        let left_range = self.it.range.start..self.it.range.start + index;
-        let right_range = left_range.end..self.it.range.end;
+        let mid = (self.it.range.start + index).min(self.it.range.end);
+        let left_range = self.it.range.start..mid;
+        let right_range = mid..self.it.range.end;
         let left = ParGridIterMut {
             it: GridIterMut {
                 grid: self.it.grid,
@@ -299,6 +333,7 @@ impl<'a, T> IndexedParallelIterator for ParGridIterMut<'a, T>
 where
     T: Sync + Send,
 {
+    #[inline]
     fn len(&self) -> usize {
         self.it.range.len()
     }
@@ -325,6 +360,7 @@ where
         bridge(self, consumer)
     }
 
+    #[inline]
     fn opt_len(&self) -> Option<usize> {
         Some(self.it.range.len())
     }
