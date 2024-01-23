@@ -9,22 +9,22 @@ use nalgebra::{
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use rayon::prelude::*;
 
-const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 1000;
+const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 100;
 const EXTEND_TRACKS_SEARCH_RADIUS: usize = 7;
 const MERGE_TRACKS_MAX_DISTANCE: usize = 100;
 const MERGE_TRACKS_SEARCH_RADIUS: usize = 7;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 100_000;
-// TODO: this should be proportional to image size
-const MIN_INLIER_DISTANCE: usize = 200;
-const RANSAC_INLIERS_T: f64 = 25.0;
-const RANSAC_T: f64 = 75.0;
+const MIN_INLIER_DISTANCE_SQR: usize = 100;
+const MIN_INLIER_DISTANCE_DENOMINATOR: usize = 1000;
+const RANSAC_INLIERS_T: f64 = 25.0 / 1000.0;
+const RANSAC_T: f64 = 75.0 / 1000.0;
 const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 1000;
 // Lower this value to get more points (especially on far distance).
-const MIN_ANGLE_BETWEEN_RAYS: f64 = (2.0 / 180.0) * std::f64::consts::PI;
+const MIN_ANGLE_BETWEEN_RAYS: f64 = (0.5 / 180.0) * std::f64::consts::PI;
 
 pub struct Surface {
     tracks: Vec<Track>,
@@ -913,6 +913,9 @@ impl PerspectiveTriangulation {
         }
 
         let ransac_outer = RANSAC_K / RANSAC_CHECK_INTERVAL;
+        let max_dimension = self.image_shapes[image_index].map(|s| s.0.max(s.1))?;
+        let inliers_reprojection_threshold = RANSAC_INLIERS_T * max_dimension as f64;
+        let points_reprojection_threshold = RANSAC_T * max_dimension as f64;
 
         let mut best_result = (
             Camera::from_matrix(k, &Matrix3::identity(), &Vector3::zeros()),
@@ -941,6 +944,7 @@ impl PerspectiveTriangulation {
                     let inliers = PerspectiveTriangulation::choose_inliers(
                         linked_tracks.as_slice(),
                         image_index,
+                        max_dimension,
                     );
 
                     PerspectiveTriangulation::recover_pose_from_points(
@@ -960,7 +964,7 @@ impl PerspectiveTriangulation {
                             inliers.as_slice(),
                             &projections,
                             inlier_projections.as_slice(),
-                            true,
+                            inliers_reprojection_threshold,
                         );
                         if count != RANSAC_N {
                             return None;
@@ -970,7 +974,7 @@ impl PerspectiveTriangulation {
                             &linked_tracks,
                             &projections,
                             validate_projections.as_slice(),
-                            false,
+                            points_reprojection_threshold,
                         );
                         Some((camera, count, error / (count as f64)))
                     })
@@ -1126,9 +1130,15 @@ impl PerspectiveTriangulation {
             .collect()
     }
 
-    fn choose_inliers(linked_tracks: &[Track], image_index: usize) -> Vec<Track> {
+    fn choose_inliers(
+        linked_tracks: &[Track],
+        image_index: usize,
+        max_dimension: usize,
+    ) -> Vec<Track> {
         let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
         let mut inliers: Vec<Track> = Vec::with_capacity(RANSAC_N);
+        let min_inlier_distance =
+            MIN_INLIER_DISTANCE_SQR * max_dimension / MIN_INLIER_DISTANCE_DENOMINATOR;
         while inliers.len() < RANSAC_N {
             let next_index = rng.gen_range(0..linked_tracks.len());
             let next_match = &linked_tracks[next_index];
@@ -1145,7 +1155,7 @@ impl PerspectiveTriangulation {
                 };
                 let dx = p1.x.max(p2.x).saturating_sub(p1.x.min(p2.x)) as usize;
                 let dy = p1.y.max(p2.y).saturating_sub(p1.y.min(p2.y)) as usize;
-                (dx * dx + dy * dy) < MIN_INLIER_DISTANCE
+                (dx * dx + dy * dy) < min_inlier_distance
             });
             if !close_to_existing {
                 inliers.push(next_match.to_owned());
@@ -1158,9 +1168,8 @@ impl PerspectiveTriangulation {
         tracks: &[Track],
         projections: &[Option<Matrix3x4<f64>>],
         include_projections: &[usize],
-        inliers: bool,
+        threshold: f64,
     ) -> (usize, f64) {
-        let threshold = if inliers { RANSAC_INLIERS_T } else { RANSAC_T };
         tracks
             .iter()
             .filter_map(|track| {
