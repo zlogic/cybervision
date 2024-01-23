@@ -33,7 +33,7 @@ jobs:
       run: sudo apt install glslang-tools
 
     - name: Build SPIR-V shaders with glslang
-      run: glslangValidator -V -g0 src/shaders/correlation.comp.glsl -o src/shaders/correlation.spv
+      run: glslangValidator -V -g0 src/correlation/correlation.comp.glsl -o src/correlation/correlation.spv
 
     - name: Validate Rust code with clippy
       run: cargo clippy
@@ -42,7 +42,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: shaders-spv
-        path: src/shaders/correlation.spv
+        path: src/correlation/correlation.spv
 
   build-linux:
     # Older Ubuntu versions will link with an older GLIBC and provide better compatibility
@@ -186,18 +186,16 @@ jobs:
       if: matrix.arch == 'aarch64'
       run: rustup target add ${{ matrix.arch }}-apple-darwin
 
-    - name: Cache shaders
-      id: cache-shaders
-      uses: actions/cache@v4
-      with:
-        path: src/shaders/correlation.metallib
-        key: shaders-${{ runner.os }}-${{matrix.arch}}-${{ hashFiles('src/shaders/correlation.metal') }}
-
     - name: Compile shaders
-      if: steps.cache-shaders.outputs.cache-hit != 'true'
       run: |
-        xcrun -sdk macosx metal -c src/shaders/correlation.metal -o src/shaders/correlation.air
-        xcrun -sdk macosx metallib src/shaders/correlation.air -o src/shaders/correlation.metallib
+        xcrun -sdk macosx metal -c src/correlation/correlation.metal -o src/correlation/correlation.air
+        xcrun -sdk macosx metallib src/correlation/correlation.air -o src/correlation/correlation.metallib
+
+    - name: Upload metallib shaders
+      uses: actions/upload-artifact@v4
+      with:
+        name: shaders-metallib
+        path: src/correlation/correlation.metallib
 
     - name: Build
       run: cargo build --target=${{ matrix.arch }}-apple-darwin --release
