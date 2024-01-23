@@ -35,14 +35,14 @@ jobs:
     - name: Build SPIR-V shaders with glslang
       run: glslangValidator -V -g0 src/shaders/correlation.comp.glsl -o src/shaders/correlation.spv
 
-    - name: Cache SPIR-V shaders
-      uses: actions/cache/save@v4
-      with:
-        path: src/shaders/correlation.spv
-        key: shaders-${{ hashFiles('src/shaders/correlation.comp.glsl') }}
-
     - name: Validate Rust code with clippy
       run: cargo clippy
+
+    - name: Upload SPIR-V shaders
+      uses: actions/upload-artifact@v4
+      with:
+        name: shaders-spv
+        path: src/shaders/correlation.spv
 
   build-linux:
     # Older Ubuntu versions will link with an older GLIBC and provide better compatibility
@@ -88,12 +88,10 @@ jobs:
         echo "CFLAGS=-march=armv8.2-a" >> $GITHUB_ENV
         echo "CXXFLAGS=-march=armv8.2-a" >> $GITHUB_ENV
 
-    - name: Restore SPIR-V shaders from cache
-      uses: actions/cache/restore@v4
+    - name: Download SPIR-V shaders
+      uses: actions/download-artifact@v4
       with:
-        path: src/shaders/correlation.spv
-        key: shaders-${{ hashFiles('src/shaders/correlation.comp.glsl') }}
-        fail-on-cache-miss: true
+        name: shaders-spv
 
     - name: Build
       run: cargo build --target=${{ matrix.arch }}-unknown-linux-gnu --release
@@ -139,13 +137,10 @@ jobs:
       if: matrix.arch == 'aarch64'
       run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
 
-    - name: Restore SPIR-V shaders from cache
-      uses: actions/cache/restore@v4
+    - name: Download SPIR-V shaders
+      uses: actions/download-artifact@v4
       with:
-        path: src/shaders/correlation.spv
-        key: shaders-${{ hashFiles('src/shaders/correlation.comp.glsl') }}
-        fail-on-cache-miss: true
-        enableCrossOsArchive: true
+        name: shaders-spv
 
     - name: Build
       run: |
