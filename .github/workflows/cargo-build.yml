@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: true
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Get current Rust version
       id: get-rust-version
@@ -20,28 +20,34 @@ jobs:
 
     - name: Cache Rust dependencies and artifacts
       id: cache-rust
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry/index
           ~/.cargo/registry/cache
           ~/.cargo/git/db
-          ~/.cargo/bin/naga
           ${{ github.workspace }}/target
         key: lint-${{ runner.os }}-${{ steps.get-rust-version.outputs.VERSION }}-${{ hashFiles('Cargo.lock') }}
 
-    - name: Install naga
-      if: steps.cache-rust.outputs.cache-hit != 'true'
-      run: cargo install naga-cli
+    - name: Install glslang
+      run: sudo apt install glslang-tools
 
-    - name: Validate shaders with naga
-      run: naga src/correlation.wgsl
+    - name: Build SPIR-V shaders with glslang
+      run: glslangValidator -V -g0 src/shaders/correlation.comp.glsl -o src/shaders/correlation.spv
+
     - name: Validate Rust code with clippy
       run: cargo clippy
+
+    - name: Upload SPIR-V shaders
+      uses: actions/upload-artifact@v4
+      with:
+        name: shaders-spv
+        path: src/shaders/correlation.spv
 
   build-linux:
     # Older Ubuntu versions will link with an older GLIBC and provide better compatibility
     runs-on: ubuntu-20.04
+    needs: validate
     strategy:
       fail-fast: true
       matrix:
@@ -52,7 +58,7 @@ jobs:
           os: ubuntu
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Get current Rust version
       id: get-rust-version
@@ -60,7 +66,7 @@ jobs:
 
     - name: Cache Rust dependencies and artifacts
       id: cache-rust
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry/index
@@ -82,28 +88,33 @@ jobs:
         echo "CFLAGS=-march=armv8.2-a" >> $GITHUB_ENV
         echo "CXXFLAGS=-march=armv8.2-a" >> $GITHUB_ENV
 
+    - name: Download SPIR-V shaders
+      uses: actions/download-artifact@v4
+      with:
+        name: shaders-spv
+
     - name: Build
       run: cargo build --target=${{ matrix.arch }}-unknown-linux-gnu --release
-  
+
     - name: Package application
       run: tar -cvjf cybervision-${{ matrix.os }}-${{ matrix.arch }}.tar.bz2 -C target/${{ matrix.arch }}-unknown-linux-gnu/release cybervision
-  
+
     - name: Upload application
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: cybervision-${{ matrix.os }}-${{ matrix.arch }}
         path: cybervision-*.tar.bz2
 
   build-windows:
     runs-on: windows-latest
-
+    needs: validate
     strategy:
       fail-fast: true
       matrix:
         arch: [aarch64, x86_64]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Get current Rust version
       id: get-rust-version
@@ -113,7 +124,7 @@ jobs:
 
     - name: Cache Rust dependencies and artifacts
       id: cache-rust
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~\.cargo\registry\index
@@ -126,6 +137,11 @@ jobs:
       if: matrix.arch == 'aarch64'
       run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
 
+    - name: Download SPIR-V shaders
+      uses: actions/download-artifact@v4
+      with:
+        name: shaders-spv
+
     - name: Build
       run: |
         $Env:RUSTFLAGS = "-C target-feature=+crt-static"
@@ -135,20 +151,21 @@ jobs:
       run: Compress-Archive -Path .\target\${{ matrix.arch }}-pc-windows-msvc\release\cybervision.exe -DestinationPath cybervision-${{ runner.os }}-${{ matrix.arch }}.zip
 
     - name: Upload application
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: cybervision-${{ runner.os }}-${{ matrix.arch }}
         path: cybervision-*.zip
 
   build-macos:
     runs-on: macos-latest
+    needs: validate
     strategy:
       fail-fast: true
       matrix:
         arch: [aarch64, x86_64]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Get current Rust version
       id: get-rust-version
@@ -156,7 +173,7 @@ jobs:
 
     - name: Cache Rust dependencies and artifacts
       id: cache-rust
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry/index
@@ -169,6 +186,19 @@ jobs:
       if: matrix.arch == 'aarch64'
       run: rustup target add ${{ matrix.arch }}-apple-darwin
 
+    - name: Cache shaders
+      id: cache-shaders
+      uses: actions/cache@v4
+      with:
+        path: src/shaders/correlation.metallib
+        key: shaders-${{ runner.os }}-${{matrix.arch}}-${{ hashFiles('src/shaders/correlation.metal') }}
+
+    - name: Compile shaders
+      if: steps.cache-shaders.outputs.cache-hit != 'true'
+      run: |
+        xcrun -sdk macosx metal -c src/shaders/correlation.metal -o src/shaders/correlation.air
+        xcrun -sdk macosx metallib src/shaders/correlation.air -o src/shaders/correlation.metallib
+
     - name: Build
       run: cargo build --target=${{ matrix.arch }}-apple-darwin --release
 
@@ -176,7 +206,7 @@ jobs:
       run: tar -cvjf cybervision-${{ runner.os }}-${{ matrix.arch }}.tar.bz2 -C target/${{ matrix.arch }}-apple-darwin/release cybervision
 
     - name: Upload application
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: cybervision-${{ runner.os }}-${{ matrix.arch }}
         path: cybervision-*.tar.bz2

@@ -878,7 +878,9 @@ mod gpu {
 
             let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("correlation.wgsl"))),
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
+                    "shaders/correlation.wgsl"
+                ))),
             });
 
             // Init buffers.
