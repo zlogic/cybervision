@@ -1,5 +1,3 @@
-const MAX_BINDINGS: u32 = 6;
-
 use std::{borrow::Cow, collections::HashMap, error, fmt};
 
 use bytemuck::{Pod, Zeroable};
@@ -11,11 +9,16 @@ use std::sync::mpsc;
 use crate::data::{Grid, Point2D};
 
 use super::{
-    CorrelationParameters, ProjectionMode, CORRIDOR_MIN_RANGE,
-    CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE, CORRIDOR_SEGMENT_LENGTH_LOWPOWER,
-    CROSS_CHECK_SEARCH_AREA, KERNEL_SIZE, NEIGHBOR_DISTANCE,
-    SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE, SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER,
+    CorrelationParameters, ProjectionMode, CORRIDOR_MIN_RANGE, CROSS_CHECK_SEARCH_AREA,
+    KERNEL_SIZE, NEIGHBOR_DISTANCE,
 };
+
+const MAX_BINDINGS: u32 = 6;
+// Decrease when using a low-powered GPU
+const CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 512;
+const SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 1024;
+const CORRIDOR_SEGMENT_LENGTH_LOWPOWER: usize = 8;
+const SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER: usize = 128;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Pod, Zeroable)]

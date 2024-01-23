@@ -1,3 +1,4 @@
+#[cfg(feature = "gpu")]
 mod gpu;
 
 use crate::data::{Grid, Point2D};
@@ -16,11 +17,6 @@ const MIN_STDEV_AFFINE: f32 = 1.0;
 const MIN_STDEV_PERSPECTIVE: f32 = 3.0;
 const CORRIDOR_SIZE_AFFINE: usize = 2;
 const CORRIDOR_SIZE_PERSPECTIVE: usize = 3;
-// Decrease when using a low-powered GPU
-const CORRIDOR_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 512;
-const SEARCH_AREA_SEGMENT_LENGTH_HIGHPERFORMANCE: usize = 1024;
-const CORRIDOR_SEGMENT_LENGTH_LOWPOWER: usize = 8;
-const SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER: usize = 128;
 const NEIGHBOR_DISTANCE: usize = 10;
 const CORRIDOR_EXTEND_RANGE_AFFINE: f64 = 1.0;
 const CORRIDOR_EXTEND_RANGE_PERSPECTIVE: f64 = 1.0;
@@ -726,4 +722,76 @@ pub fn compute_point_data<const KS: usize, const KPC: usize>(
     result.stdev = (result.stdev / KPC as f32).sqrt();
 
     Some(result)
+}
+
+#[cfg(not(feature = "gpu"))]
+mod gpu {
+    use nalgebra::Matrix3;
+    use std::{error, fmt};
+
+    use crate::data::Grid;
+
+    use super::ProjectionMode;
+
+    pub enum CorrelationDirection {
+        Forward,
+        Reverse,
+    }
+
+    pub struct GpuContext {}
+
+    impl GpuContext {
+        pub fn new(
+            _: (usize, usize),
+            _: (usize, usize),
+            _: &ProjectionMode,
+            _: Matrix3<f64>,
+            _: bool,
+        ) -> Result<GpuContext, Box<dyn error::Error>> {
+            Err(GpuError::new("Compiled without GPU support").into())
+        }
+
+        pub fn get_device_name(&self) -> &'static str {
+            "undefined"
+        }
+
+        pub fn cross_check_filter(&mut self, _: f32, _: CorrelationDirection) {}
+
+        pub fn complete_process(
+            &mut self,
+        ) -> Result<Grid<Option<super::Match>>, Box<dyn error::Error>> {
+            Err(GpuError::new("Compiled without GPU support").into())
+        }
+
+        pub fn correlate_images<PL: super::ProgressListener>(
+            &mut self,
+            _: &Grid<u8>,
+            _: &Grid<u8>,
+            _: f32,
+            _: bool,
+            _: Option<&PL>,
+            _: CorrelationDirection,
+        ) -> Result<(), Box<dyn error::Error>> {
+            Err(GpuError::new("Compiled without GPU support").into())
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct GpuError {
+        msg: &'static str,
+    }
+
+    impl GpuError {
+        fn new(msg: &'static str) -> GpuError {
+            GpuError { msg }
+        }
+    }
+
+    impl std::error::Error for GpuError {}
+
+    impl fmt::Display for GpuError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "{}", self.msg)
+        }
+    }
 }
