@@ -38,13 +38,13 @@ If not specified, EXIF metadata will be used.
  Results might be slightly different between modes because the implementation is not completely identical.
  `gpu-low-power` will prefer a low-power GPU (like an integrated one) and will reduce the batch size to prevent errors (at the cost of reduced performance).
 
-`--interpolation=<none|delaunay>` is an optional argument to specify an interpolation mode, for example `--interpolation=none` or `--interpolation=delaunay`. 
+`--interpolation=<none|delaunay>` is an optional argument to specify an interpolation mode, for example `--interpolation=none` or `--interpolation=delaunay`.
 `none` means that interpolation is disabled, `delaunay` uses [Delaunay triangulation](https://en.wikipedia.org/wiki/Delaunay_triangulation).
 
-`--projection=<parallel|perspective>` is an optional argument to specify a projection mode, for example `--projection=parallel` or `--projection=perspective`. 
+`--projection=<parallel|perspective>` is an optional argument to specify a projection mode, for example `--projection=parallel` or `--projection=perspective`.
 `parallel` projection should be used for images from a scanning electron microscope, `perspective` should be used for photos from a regular camera.
 
-`--mesh=<plain|vertex-colors|texture-coordinates>` is an optional argument to specify how to output OBJ and PLY meshes mode, for example `--mesh=vertex-colors` or `--mesh=texture-coordinates`. 
+`--mesh=<plain|vertex-colors|texture-coordinates>` is an optional argument to specify how to output OBJ and PLY meshes mode, for example `--mesh=vertex-colors` or `--mesh=texture-coordinates`.
 `plain` (the default option) outputs the mesh without any color or texture, `vertex-colors` outputs the mesh with colors assigned to every vertex, and `texture-coordinates` will add texture coordinates.
 
 `--no-bundle-adjustment` disables bundle adjustment when reconstructing images with perspective projection.
@@ -68,8 +68,6 @@ Unfortunately, it requires either camera calibration, which depends on complicat
 
 ### GPU details
 
-Compiling a GPU-accelerated (Vulkan) version requires additional libraries and build tools.
-
 Cybervision was tested to support CPU-only and GPU-accelerated processing on:
 
 * Apple Macbook Air M1 (2020)
@@ -84,6 +82,7 @@ To run Cybervision in Linux, you will need the Vulkan runtime library.
 It's called `libvulkan.so.1` and the package is typically called something like `vulkan`, `vulkan-loader`, `libvulkan` or `libvulkan1`.
 
 In Windows and macOS, no additional libraries are required.
+Windows on ARM64 is untested, but should work if the [OpenCL and OpenGL Compatibility Pack](https://aka.ms/clglcp-faq) is installed.
 
 ## Rust version
 
