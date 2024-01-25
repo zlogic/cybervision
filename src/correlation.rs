@@ -1,12 +1,12 @@
 #[cfg(target_os = "macos")]
-mod metalcorrelation;
+mod metal;
 #[cfg(not(target_os = "macos"))]
-mod vkcorrelation;
+mod vk;
 
 #[cfg(target_os = "macos")]
-use metalcorrelation as gpu;
+use metal as gpu;
 #[cfg(not(target_os = "macos"))]
-use vkcorrelation as gpu;
+use vk as gpu;
 
 use crate::data::{Grid, Point2D};
 use nalgebra::{Matrix3, Vector3};

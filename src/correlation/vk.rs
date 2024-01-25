@@ -58,13 +58,8 @@ pub struct GpuContext {
     search_area_segment_length: usize,
     corridor_size: usize,
     corridor_extend_range: f64,
-
-    device_name: String,
-    entry: ash::Entry,
-    instance: ash::Instance,
-    physical_device: vk::PhysicalDevice,
+    device: Device,
     /*
-    device: vk::Device,
     device: wgpu::Device,
     queue: wgpu::Queue,
     shader_module: wgpu::ShaderModule,
@@ -78,6 +73,14 @@ pub struct GpuContext {
 
     pipeline_configs: HashMap<String, ComputePipelineConfig>,
     */
+}
+
+struct Device {
+    name: String,
+    entry: ash::Entry,
+    instance: ash::Instance,
+    physical_device: vk::PhysicalDevice,
+    //device: vk::Device,
 }
 
 impl GpuContext {
@@ -109,25 +112,7 @@ impl GpuContext {
 
         // Ensure there's enough memory for the largest buffer.
         let max_buffer_size = max_pixels * 4 * std::mem::size_of::<i32>();
-        // Init adapter.
-        let entry = unsafe {
-            match ash::Entry::load() {
-                Ok(entry) => entry,
-                Err(err) => return Err(err.into()),
-            }
-        };
-        let instance = match init_vk(&entry) {
-            Ok(instance) => instance,
-            Err(err) => return Err(err.into()),
-        };
-        let (physical_device, device_name) = unsafe {
-            match find_device(&instance, max_buffer_size) {
-                Ok(dev) => dev,
-                Err(err) => return Err(err.into()),
-            }
-        };
-        let device_name = device_name.to_string();
-        //let device = instance.create_device(physical_device, None, None)?;
+        let device = Device::new(max_buffer_size)?;
 
         /*
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -194,10 +179,7 @@ impl GpuContext {
             correlation_values,
             corridor_segment_length,
             search_area_segment_length,
-            device_name,
-            entry,
-            instance,
-            physical_device,
+            device,
             /*
             device,
             queue,
@@ -216,7 +198,7 @@ impl GpuContext {
     }
 
     pub fn get_device_name(&self) -> &str {
-        &self.device_name.as_str()
+        &self.device.name.as_str()
     }
 
     pub fn cross_check_filter(&mut self, _: f32, _: CorrelationDirection) {}
@@ -240,67 +222,86 @@ impl GpuContext {
     }
 }
 
-impl Drop for GpuContext {
+impl Device {
+    fn new(max_buffer_size: usize) -> Result<Device, Box<dyn error::Error>> {
+        // Init adapter.
+        let entry = unsafe { ash::Entry::load()? };
+        let instance = Device::init_vk(&entry)?;
+        let (physical_device, name) = unsafe { Device::find_device(&instance, max_buffer_size)? };
+        let name = name.to_string();
+
+        //let device = instance.create_device(physical_device, None, None)?;
+        let result = Device {
+            entry,
+            instance,
+            physical_device,
+            name,
+        };
+        Ok(result)
+    }
+
+    fn init_vk(entry: &ash::Entry) -> VkResult<ash::Instance> {
+        let app_name = CString::new("Cybervision").unwrap();
+        let engine_name = CString::new("cybervision").unwrap();
+        let appinfo = vk::ApplicationInfo::builder()
+            .application_name(app_name.as_c_str())
+            .application_version(0)
+            .engine_name(engine_name.as_c_str())
+            .engine_version(0)
+            .api_version(vk::make_api_version(0, 1, 0, 0));
+
+        let create_flags = vk::InstanceCreateFlags::default();
+
+        let create_info = vk::InstanceCreateInfo::builder()
+            .application_info(&appinfo)
+            .flags(create_flags);
+        unsafe { entry.create_instance(&create_info, None) }
+    }
+
+    unsafe fn find_device(
+        instance: &ash::Instance,
+        max_buffer_size: usize,
+    ) -> Result<(vk::PhysicalDevice, &'static str), Box<dyn error::Error>> {
+        let devices = instance.enumerate_physical_devices()?;
+        let device = devices
+            .iter()
+            .filter_map(|device| {
+                let props = instance.get_physical_device_properties(*device);
+                if props.limits.max_push_constants_size < std::mem::size_of::<ShaderParams>() as u32
+                    || props.limits.max_per_stage_descriptor_storage_buffers < MAX_BINDINGS
+                    || props.limits.max_storage_buffer_range < max_buffer_size as u32
+                {
+                    return None;
+                }
+
+                let device_name = CStr::from_ptr(props.device_name.as_ptr());
+                let device_name = device_name.to_str().unwrap();
+                // TODO: allow to specify a device name filter/regex?
+                let score = match props.device_type {
+                    vk::PhysicalDeviceType::DISCRETE_GPU => 3,
+                    vk::PhysicalDeviceType::VIRTUAL_GPU => 2,
+                    vk::PhysicalDeviceType::INTEGRATED_GPU => 1,
+                    _ => 0,
+                };
+                Some((device.to_owned(), device_name, score))
+            })
+            .max_by_key(|(_device, _name, score)| *score);
+        let (device, name) = if let Some((device, name, _score)) = device {
+            (device, name)
+        } else {
+            return Err(GpuError::new("Device not found").into());
+        };
+        Ok((device, name))
+    }
+}
+
+impl Drop for Device {
     fn drop(&mut self) {
         unsafe {
             //self.device.destroy_device(None);
             self.instance.destroy_instance(None);
         }
     }
-}
-
-fn init_vk(entry: &ash::Entry) -> VkResult<ash::Instance> {
-    let app_name = CString::new("Cybervision").unwrap();
-    let engine_name = CString::new("cybervision").unwrap();
-    let appinfo = vk::ApplicationInfo::builder()
-        .application_name(app_name.as_c_str())
-        .application_version(0)
-        .engine_name(engine_name.as_c_str())
-        .engine_version(0)
-        .api_version(vk::make_api_version(0, 1, 0, 0));
-
-    let create_flags = vk::InstanceCreateFlags::default();
-
-    let create_info = vk::InstanceCreateInfo::builder()
-        .application_info(&appinfo)
-        .flags(create_flags);
-    unsafe { entry.create_instance(&create_info, None) }
-}
-
-unsafe fn find_device(
-    instance: &ash::Instance,
-    max_buffer_size: usize,
-) -> Result<(vk::PhysicalDevice, &'static str), Box<dyn error::Error>> {
-    let devices = instance.enumerate_physical_devices()?;
-    let device = devices
-        .iter()
-        .filter_map(|device| {
-            let props = instance.get_physical_device_properties(*device);
-            if props.limits.max_push_constants_size < std::mem::size_of::<ShaderParams>() as u32
-                || props.limits.max_per_stage_descriptor_storage_buffers < MAX_BINDINGS
-                || props.limits.max_storage_buffer_range < max_buffer_size as u32
-            {
-                return None;
-            }
-
-            let device_name = CStr::from_ptr(props.device_name.as_ptr());
-            let device_name = device_name.to_str().unwrap();
-            // TODO: allow to specify a device name filter/regex?
-            let score = match props.device_type {
-                vk::PhysicalDeviceType::DISCRETE_GPU => 3,
-                vk::PhysicalDeviceType::VIRTUAL_GPU => 2,
-                vk::PhysicalDeviceType::INTEGRATED_GPU => 1,
-                _ => 0,
-            };
-            Some((device.to_owned(), device_name, score))
-        })
-        .max_by_key(|(_device, _name, score)| *score);
-    let (device, name) = if let Some((device, name, _score)) = device {
-        (device, name)
-    } else {
-        return Err(GpuError::new("Device not found").into());
-    };
-    Ok((device, name))
 }
 
 #[derive(Debug)]
