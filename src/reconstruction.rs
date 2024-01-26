@@ -181,6 +181,21 @@ impl SourceImage {
     }
 }
 
+fn max_image_size(filenames: &[String]) -> usize {
+    let mut max_size = 0;
+    for path in filenames.iter() {
+        let (width, height) = match image::image_dimensions(path) {
+            Ok(dimensions) => dimensions,
+            Err(err) => {
+                eprintln!("Failed to get size for image {}: {}", path, err);
+                continue;
+            }
+        };
+        max_size = max_size.max(width as usize * height as usize);
+    }
+    max_size
+}
+
 struct ImageReconstruction {
     hardware_mode: correlation::HardwareMode,
     interpolation_mode: output::InterpolationMode,
@@ -240,6 +255,8 @@ pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
         bundle_adjustment,
     );
     let img_filenames = args.img_src.to_owned();
+
+    let max_image_size = max_image_size(img_filenames.as_slice());
 
     let mut reconstruction_task = ImageReconstruction {
         hardware_mode,
@@ -540,13 +557,6 @@ impl ImageReconstruction {
             projection_mode,
             self.hardware_mode,
         );
-        let mut reverse_point_correlations = PointCorrelations::new(
-            img2.img.dimensions(),
-            img1.img.dimensions(),
-            f.transpose(),
-            projection_mode,
-            self.hardware_mode,
-        );
         println!(
             "Selected hardware: {}",
             point_correlations.get_selected_hardware()
@@ -574,7 +584,6 @@ impl ImageReconstruction {
             );
         }
 
-        reverse_point_correlations.complete()?;
         point_correlations.complete()?;
         Ok(point_correlations.correlated_points)
     }
