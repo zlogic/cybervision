@@ -158,7 +158,6 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
-    needs: validate
     strategy:
       fail-fast: true
       matrix:
@@ -198,9 +197,10 @@ jobs:
       run: tar -cvjf cybervision-${{ runner.os }}-${{ matrix.arch }}.tar.bz2 -C target/${{ matrix.arch }}-apple-darwin/release cybervision
 
     - name: Upload metallib shaders
+      if: matrix.arch == 'aarch64'
       uses: actions/upload-artifact@v4
       with:
-        name: shaders-metallib-${{ matrix.arch }}
+        name: shaders-metallib
         path: src/correlation/correlation.metallib
 
     - name: Upload application

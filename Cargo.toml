@@ -20,7 +20,7 @@ roots = { version = "0.0.8", default-features = false }
 kamadak-exif = { version = "0.5", default-features = false }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-ash = { version = "0.37", default-features = true, features = ["loaded"] }
+ash = { version = "0.37", default-features = false, features = ["loaded"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 metal = { version = "0.27", default-features = false }
