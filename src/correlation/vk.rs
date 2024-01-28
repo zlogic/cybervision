@@ -885,6 +885,7 @@ impl Device {
 
         Ok(())
     }
+
     unsafe fn init_vk(entry: &ash::Entry) -> VkResult<ash::Instance> {
         let app_name = CStr::from_bytes_with_nul_unchecked(b"Cybervision\0");
         let engine_name = CStr::from_bytes_with_nul_unchecked(b"cybervision\0");
@@ -913,7 +914,7 @@ impl Device {
                 let device = *device;
                 let props = instance.get_physical_device_properties(device);
                 if props.limits.max_push_constants_size < std::mem::size_of::<ShaderParams>() as u32
-                    || props.limits.max_per_stage_descriptor_storage_buffers < MAX_BINDINGS
+                    || props.limits.max_bound_descriptor_sets < MAX_BINDINGS
                     || props.limits.max_storage_buffer_range < max_buffer_size as u32
                 {
                     return None;
