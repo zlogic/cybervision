@@ -1,3 +1,2 @@
 # Rust build directory
 /target
-/src/correlation/*.spv

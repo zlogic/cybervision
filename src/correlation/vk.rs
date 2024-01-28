@@ -1452,14 +1452,14 @@ impl ShaderModuleType {
     ];
 
     unsafe fn load(&self, device: &ash::Device) -> Result<vk::ShaderModule, Box<dyn error::Error>> {
-        const SHADER_INIT_OUT_DATA: &[u8] = include_bytes!("init_out_data.spv");
+        const SHADER_INIT_OUT_DATA: &[u8] = include_bytes!("shaders/init_out_data.spv");
         const SHADER_PREPARE_INITIALDATA_SEARCHDATA: &[u8] =
-            include_bytes!("prepare_initialdata_searchdata.spv");
+            include_bytes!("shaders/prepare_initialdata_searchdata.spv");
         const SHADER_PREPARE_INITIALDATA_CORRELATION: &[u8] =
-            include_bytes!("prepare_initialdata_correlation.spv");
-        const SHADER_PREPARE_SEARCHDATA: &[u8] = include_bytes!("prepare_searchdata.spv");
-        const SHADER_CROSS_CORRELATE: &[u8] = include_bytes!("cross_correlate.spv");
-        const SHADER_CROSS_CHECK_FILTER: &[u8] = include_bytes!("cross_check_filter.spv");
+            include_bytes!("shaders/prepare_initialdata_correlation.spv");
+        const SHADER_PREPARE_SEARCHDATA: &[u8] = include_bytes!("shaders/prepare_searchdata.spv");
+        const SHADER_CROSS_CORRELATE: &[u8] = include_bytes!("shaders/cross_correlate.spv");
+        const SHADER_CROSS_CHECK_FILTER: &[u8] = include_bytes!("shaders/cross_check_filter.spv");
 
         let shader_module_spv = match self {
             ShaderModuleType::InitOutData => SHADER_INIT_OUT_DATA,

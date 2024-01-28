@@ -33,7 +33,7 @@ jobs:
       run: sudo apt install glslang-tools
 
     - name: Build SPIR-V shaders with glslang
-      run: .github/compile-shaders-spirv.sh
+      run: (cd src/correlation/shaders && ./compile-spirv.sh)
 
     - name: Validate Rust code with clippy
       run: cargo clippy
@@ -42,7 +42,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: shaders-spv
-        path: src/correlation/*.spv
+        path: src/correlation/shaders/*.spv
 
   build-linux:
     # Older Ubuntu versions will link with an older GLIBC and provide better compatibility
