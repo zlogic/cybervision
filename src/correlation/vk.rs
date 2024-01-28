@@ -913,14 +913,12 @@ impl Device {
             .filter_map(|device| {
                 let device = *device;
                 let props = instance.get_physical_device_properties(device);
-                /*
                 if props.limits.max_push_constants_size < std::mem::size_of::<ShaderParams>() as u32
                     || props.limits.max_bound_descriptor_sets < MAX_BINDINGS
                     || props.limits.max_storage_buffer_range < max_buffer_size as u32
                 {
                     return None;
                 }
-                */
                 let queue_index = Device::find_compute_queue(instance, device)?;
 
                 let device_name = CStr::from_ptr(props.device_name.as_ptr());
@@ -935,10 +933,16 @@ impl Device {
                     max_buffer_size
                 );
                 // TODO: allow to specify a device name filter/regex?
+                // Prefer real devices instead of dzn emulation.
+                let dzn_multiplier = if device_name.starts_with("Microsoft Direct3D12") {
+                    1
+                } else {
+                    10
+                };
                 let score = match props.device_type {
-                    vk::PhysicalDeviceType::DISCRETE_GPU => 3,
-                    vk::PhysicalDeviceType::VIRTUAL_GPU => 2,
-                    vk::PhysicalDeviceType::INTEGRATED_GPU => 1,
+                    vk::PhysicalDeviceType::DISCRETE_GPU => 3 * dzn_multiplier,
+                    vk::PhysicalDeviceType::VIRTUAL_GPU => 2 * dzn_multiplier,
+                    vk::PhysicalDeviceType::INTEGRATED_GPU => 1 * dzn_multiplier,
                     _ => 0,
                 };
                 Some((device, device_name, queue_index, score))
