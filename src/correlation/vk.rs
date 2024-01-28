@@ -1127,7 +1127,9 @@ impl Device {
             .iter()
             .enumerate()
             .find(|(memory_type_index, memory_type)| {
-                if memory_properties.memory_heaps[memory_type.heap_index as usize].size < size {
+                if memory_properties.memory_heaps[memory_type.heap_index as usize].size
+                    < memory_requirements.size
+                {
                     return false;
                 };
                 if (1 << memory_type_index) & memory_requirements.memory_type_bits == 0 {
@@ -1160,7 +1162,7 @@ impl Device {
         let host_visible = property_flags.contains(vk::MemoryPropertyFlags::HOST_VISIBLE);
         let host_coherent = property_flags.contains(vk::MemoryPropertyFlags::HOST_COHERENT);
         let allocate_info = vk::MemoryAllocateInfo {
-            allocation_size: size,
+            allocation_size: memory_requirements.size,
             memory_type_index,
             ..Default::default()
         };
