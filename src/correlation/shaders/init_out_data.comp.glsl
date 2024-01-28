@@ -45,7 +45,7 @@ layout(std430, set = 0, binding = 3) buffer Internals_Int
 {
     // Layout:
     // Contains [min, max, neighbor_count] for the corridor range
-    int internals_int[];
+    ivec3 internals_int[];
 };
 layout(std430, set = 0, binding = 4) buffer Result_Matches
 {
@@ -69,4 +69,5 @@ void main() {
 
     // TODO: remove this debug code
     result_corr[0] = threshold;
+    result_corr[1] = (fundamental_matrix * vec3(10.0, 5.0, 2.0)).x;
 }

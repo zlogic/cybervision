@@ -38,4 +38,5 @@ void main() {
 
     // TODO: remove this debug code
     img1[0] = ivec2(img1_width, img1_height);
+    img1[1] = ivec2(img2_width, img2_height);
 }

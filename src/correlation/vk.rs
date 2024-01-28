@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error, ffi::CStr, fmt, slice, time::SystemTime};
+use std::{cmp::Ordering, collections::HashMap, error, ffi::CStr, fmt, slice, time::SystemTime};
 
 use ash::{prelude::VkResult, vk};
 use nalgebra::Matrix3;
@@ -33,7 +33,7 @@ struct ShaderParams {
     out_height: u32,
     scale: f32,
     iteration_pass: u32,
-    fundamental_matrix: [f32; 3 * 4], // matrices are column-major and each column is aligned to 4-component vectors; should be aligned to 16 bytes
+    fundamental_matrix: [f32; 3 * 4], // matrices are stored row-by-row and each row is aligned to 4-component vectors; should be aligned to 16 bytes
     corridor_offset: i32,
     corridor_start: u32,
     corridor_end: u32,
@@ -169,6 +169,9 @@ impl GpuContext {
         }
         let correlation_values = Grid::new(img1_dimensions.0, img1_dimensions.1, None);
 
+        // TODO: remove this debug code
+        let mut fundamental_matrix = Matrix3::zeros();
+        fundamental_matrix[(2, 0)] = 9.8765;
         let params = CorrelationParameters::for_projection(&projection_mode);
         let result = GpuContext {
             min_stdev: params.min_stdev,
@@ -426,7 +429,7 @@ impl GpuContext {
         let mut f = [0f32; 3 * 4];
         for row in 0..3 {
             for col in 0..3 {
-                f[col * 4 + row] = fundamental_matrix[(row, col)] as f32;
+                f[row * 4 + col] = fundamental_matrix[(row, col)] as f32;
             }
         }
         f
@@ -813,7 +816,11 @@ impl Device {
                     });
                 }
                 // TODO: remove this debug code
-                println!("Corr check = {:?}", out_image.val(0, 0));
+                println!(
+                    "Corr check = {:?} {:?}",
+                    out_image.val(0, 0),
+                    out_image.val(1, 0)
+                );
 
                 if !buffer.host_coherent {
                     let flush_memory_ranges = vk::MappedMemoryRange::builder()
@@ -906,7 +913,7 @@ impl Device {
     unsafe fn find_device(
         instance: &ash::Instance,
         max_buffer_size: usize,
-    ) -> Result<(vk::PhysicalDevice, &'static str, u32), Box<dyn error::Error>> {
+    ) -> Result<(vk::PhysicalDevice, String, u32), Box<dyn error::Error>> {
         let devices = instance.enumerate_physical_devices()?;
         let device = devices
             .iter()
@@ -923,16 +930,7 @@ impl Device {
                 let queue_index = Device::find_compute_queue(instance, device)?;
 
                 let device_name = CStr::from_ptr(props.device_name.as_ptr());
-                let device_name = device_name.to_str().unwrap();
-                println!(
-                    "Device {} type {} {}-{}-{}-{}",
-                    device_name,
-                    props.device_type.as_raw(),
-                    props.limits.max_push_constants_size,
-                    props.limits.max_bound_descriptor_sets,
-                    props.limits.max_storage_buffer_range,
-                    max_buffer_size
-                );
+                let device_name = String::from_utf8_lossy(device_name.to_bytes()).to_string();
                 // TODO: allow to specify a device name filter/regex?
                 let score = match props.device_type {
                     vk::PhysicalDeviceType::DISCRETE_GPU => 3,
@@ -941,24 +939,25 @@ impl Device {
                     _ => 0,
                 };
                 // Prefer real devices instead of dzn emulation.
-                let dzn_multiplier = if device_name
+                let is_dzn = device_name
                     .to_lowercase()
-                    .starts_with("microsoft direct3d12")
-                {
-                    1
-                } else {
-                    10
-                };
-                Some((device, device_name, queue_index, score * dzn_multiplier))
+                    .starts_with("microsoft direct3d12");
+                let score = (score, is_dzn);
+                Some((device, device_name, queue_index, score))
             })
-            .max_by_key(|(_device, _name, _queue_index, score)| *score);
-        let (device, name, queue_index) = if let Some((device, name, queue_index, _score)) = device
-        {
+            .max_by(|(_, _, _, a), (_, _, _, b)| {
+                if a.1 && !b.1 {
+                    return Ordering::Less;
+                } else if !a.1 && b.1 {
+                    return Ordering::Greater;
+                }
+                return a.0.cmp(&b.0);
+            });
+        let (device, name, queue_index) = if let Some((device, name, queue_index, score)) = device {
             (device, name, queue_index)
         } else {
             return Err(GpuError::new("Device not found").into());
         };
-        println!("selected device {}", name);
         Ok((device, name, queue_index))
     }
 
@@ -1095,13 +1094,13 @@ impl Device {
         buffer_type: BufferType,
     ) -> Result<Buffer, Box<dyn error::Error>> {
         let size = size as u64;
-        let gpu_local = match buffer_type {
-            BufferType::GpuOnly | BufferType::GpuDestination | BufferType::GpuSource => true,
-            BufferType::HostSource | BufferType::HostDestination => false,
-        };
-        let host_visible = match buffer_type {
-            BufferType::HostSource | BufferType::HostDestination => true,
-            BufferType::GpuOnly | BufferType::GpuDestination | BufferType::GpuSource => false,
+        let required_memory_properties = match buffer_type {
+            BufferType::GpuOnly | BufferType::GpuDestination | BufferType::GpuSource => {
+                vk::MemoryPropertyFlags::DEVICE_LOCAL
+            }
+            BufferType::HostSource | BufferType::HostDestination => {
+                vk::MemoryPropertyFlags::HOST_VISIBLE
+            }
         };
         let extra_usage_flags = match buffer_type {
             BufferType::HostSource => vk::BufferUsageFlags::TRANSFER_SRC,
@@ -1122,57 +1121,40 @@ impl Device {
         };
         let buffer = device.create_buffer(&buffer_create_info, None)?;
         let memory_requirements = device.get_buffer_memory_requirements(buffer);
-        let memory_type_index = memory_properties.memory_types
-            [..memory_properties.memory_type_count as usize]
-            .iter()
-            .enumerate()
-            .find(|(memory_type_index, memory_type)| {
+        let buffer_memory = (0..memory_properties.memory_type_count as usize)
+            .flat_map(|i| {
+                let memory_type = memory_properties.memory_types[i];
                 if memory_properties.memory_heaps[memory_type.heap_index as usize].size
                     < memory_requirements.size
                 {
-                    return false;
+                    return None;
+                }
+                if ((1 << i) & memory_requirements.memory_type_bits) == 0 {
+                    return None;
+                }
+                let property_flags = memory_type.property_flags;
+                if !property_flags.contains(required_memory_properties) {
+                    return None;
+                }
+                let host_visible = property_flags.contains(vk::MemoryPropertyFlags::HOST_VISIBLE);
+                let host_coherent = property_flags.contains(vk::MemoryPropertyFlags::HOST_COHERENT);
+                let allocate_info = vk::MemoryAllocateInfo {
+                    allocation_size: memory_requirements.size,
+                    memory_type_index: i as u32,
+                    ..Default::default()
                 };
-                if (1 << memory_type_index) & memory_requirements.memory_type_bits == 0 {
-                    return false;
-                }
+                // Some buffers may fill up, in this case allocating memory can fail.
+                let mem = device.allocate_memory(&allocate_info, None).ok()?;
 
-                if gpu_local
-                    && memory_type
-                        .property_flags
-                        .contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
-                {
-                    return true;
-                }
-                if host_visible
-                    && memory_type
-                        .property_flags
-                        .contains(vk::MemoryPropertyFlags::HOST_VISIBLE)
-                {
-                    return true;
-                }
-                false
-            });
-        let memory_type_index = if let Some((index, _)) = memory_type_index {
-            index as u32
+                Some((mem, host_visible, host_coherent))
+            })
+            .next();
+
+        let (buffer_memory, host_visible, host_coherent) = if let Some(mem) = buffer_memory {
+            mem
         } else {
+            device.destroy_buffer(buffer, None);
             return Err(GpuError::new("Cannot find suitable memory").into());
-        };
-        let property_flags =
-            memory_properties.memory_types[memory_type_index as usize].property_flags;
-        let host_visible = property_flags.contains(vk::MemoryPropertyFlags::HOST_VISIBLE);
-        let host_coherent = property_flags.contains(vk::MemoryPropertyFlags::HOST_COHERENT);
-        let allocate_info = vk::MemoryAllocateInfo {
-            allocation_size: memory_requirements.size,
-            memory_type_index,
-            ..Default::default()
-        };
-        let buffer_memory = device.allocate_memory(&allocate_info, None);
-        let buffer_memory = match buffer_memory {
-            Ok(mem) => mem,
-            Err(err) => {
-                device.destroy_buffer(buffer, None);
-                return Err(err.into());
-            }
         };
         let result = Buffer {
             buffer,
@@ -1207,10 +1189,10 @@ impl Device {
         };
         let descriptor_pool_size = [vk::DescriptorPoolSize::builder()
             .ty(vk::DescriptorType::STORAGE_BUFFER)
-            .descriptor_count(2)
+            .descriptor_count(6)
             .build()];
         let descriptor_pool_info = vk::DescriptorPoolCreateInfo::builder()
-            .max_sets(1)
+            .max_sets(2)
             .pool_sizes(&descriptor_pool_size);
         let descriptor_pool = device.create_descriptor_pool(&descriptor_pool_info, None)?;
         let cleanup_err = |err| {
