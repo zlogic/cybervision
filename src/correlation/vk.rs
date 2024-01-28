@@ -542,7 +542,7 @@ impl Device {
             pipeline_config.pipeline,
         );
         // It's way easier to map all descriptor sets identically, instead of ensuring that every
-        // kernel gets a to use descriptor = 0.
+        // kernel gets to use set = 0.
         // The cross correlation kernel will need to switch to descriptor set = 1.
         self.device.cmd_bind_descriptor_sets(
             command_buffer,
@@ -1121,6 +1121,9 @@ impl Device {
         };
         let buffer = device.create_buffer(&buffer_create_info, None)?;
         let memory_requirements = device.get_buffer_memory_requirements(buffer);
+        // Most vendors provide a sorted list - with less features going first.
+        // As soon as the right flag is found, this search will stop, so it should pick a memory
+        // type with the closest match.
         let buffer_memory = (0..memory_properties.memory_type_count as usize)
             .flat_map(|i| {
                 let memory_type = memory_properties.memory_types[i];
