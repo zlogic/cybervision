@@ -186,8 +186,8 @@ impl GpuContext {
         Ok(result)
     }
 
-    pub fn get_device_name(&self) -> &str {
-        &self.device.name.as_str()
+    pub fn get_device_name(&self) -> String {
+        self.device.name.to_owned()
     }
 
     pub fn cross_check_filter(
@@ -302,7 +302,7 @@ impl GpuContext {
 
         if first_pass {
             // TODO: remove this test/debug code!
-            params.threshold = 3.14;
+            params.threshold = 1.234;
             unsafe {
                 self.device
                     .run_shader(out_dimensions, ShaderModuleType::InitOutData, params)?;
@@ -802,7 +802,7 @@ impl Device {
                         let (match_x, match_y) = (out_data[pos], out_data[pos + 1]);
                         if let Some(corr) = correlation_values.val(x, y) {
                             *out_point = if match_x > 0 && match_y > 0 {
-                                let point_match = Point2D::new(match_x as u32, match_y as u32);
+                                let point_match = Point2D::new(match_x, match_y);
                                 Some((point_match, *corr))
                             } else {
                                 None
@@ -997,7 +997,7 @@ impl Device {
         };
         let buffer_img = Device::create_buffer(
             device,
-            &memory_properties,
+            memory_properties,
             (img1_pixels + img2_pixels) * std::mem::size_of::<f32>(),
             BufferType::GpuDestination,
         )
@@ -1006,7 +1006,7 @@ impl Device {
 
         let buffer_internal_img1 = Device::create_buffer(
             device,
-            &memory_properties,
+            memory_properties,
             (img1_pixels * 2) * std::mem::size_of::<f32>(),
             BufferType::GpuOnly,
         )
@@ -1015,7 +1015,7 @@ impl Device {
 
         let buffer_internal_img2 = Device::create_buffer(
             device,
-            &memory_properties,
+            memory_properties,
             (img2_pixels * 2) * std::mem::size_of::<f32>(),
             BufferType::GpuOnly,
         )
@@ -1024,7 +1024,7 @@ impl Device {
 
         let buffer_internal_int = Device::create_buffer(
             device,
-            &memory_properties,
+            memory_properties,
             max_pixels * 4 * std::mem::size_of::<i32>(),
             BufferType::GpuOnly,
         )
@@ -1033,7 +1033,7 @@ impl Device {
 
         let buffer_out = Device::create_buffer(
             device,
-            &memory_properties,
+            memory_properties,
             max_pixels * 2 * std::mem::size_of::<i32>(),
             BufferType::GpuSource,
         )
@@ -1042,7 +1042,7 @@ impl Device {
 
         let buffer_out_reverse = Device::create_buffer(
             device,
-            &memory_properties,
+            memory_properties,
             img2_pixels * 2 * std::mem::size_of::<i32>(),
             BufferType::GpuOnly,
         )
@@ -1051,7 +1051,7 @@ impl Device {
 
         let buffer_out_corr = Device::create_buffer(
             device,
-            &memory_properties,
+            memory_properties,
             max_pixels * std::mem::size_of::<f32>(),
             BufferType::GpuSource,
         )
@@ -1318,7 +1318,7 @@ impl Device {
             .map(|(_shader_type, module)| {
                 let stage_create_info = vk::PipelineShaderStageCreateInfo::builder()
                     .module(*module)
-                    .name(&main_module_name)
+                    .name(main_module_name)
                     .stage(vk::ShaderStageFlags::COMPUTE);
                 vk::ComputePipelineCreateInfo::builder()
                     .stage(stage_create_info.build())
