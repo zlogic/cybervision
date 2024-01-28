@@ -29,20 +29,8 @@ jobs:
           ${{ github.workspace }}/target
         key: lint-${{ runner.os }}-${{ steps.get-rust-version.outputs.VERSION }}-${{ hashFiles('Cargo.lock') }}
 
-    - name: Install glslang
-      run: sudo apt install glslang-tools
-
-    - name: Build SPIR-V shaders with glslang
-      run: (cd src/correlation/shaders && ./compile-spirv.sh)
-
     - name: Validate Rust code with clippy
       run: cargo clippy
-
-    - name: Upload SPIR-V shaders
-      uses: actions/upload-artifact@v4
-      with:
-        name: shaders-spv
-        path: src/correlation/shaders/*.spv
 
   build-linux:
     # Older Ubuntu versions will link with an older GLIBC and provide better compatibility
@@ -88,11 +76,6 @@ jobs:
         echo "CFLAGS=-march=armv8.2-a" >> $GITHUB_ENV
         echo "CXXFLAGS=-march=armv8.2-a" >> $GITHUB_ENV
 
-    - name: Download SPIR-V shaders
-      uses: actions/download-artifact@v4
-      with:
-        name: shaders-spv
-
     - name: Build
       run: cargo build --target=${{ matrix.arch }}-unknown-linux-gnu --release
 
@@ -136,11 +119,6 @@ jobs:
     - name: Install compiler and prepare for cross-compilation
       if: matrix.arch == 'aarch64'
       run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
-
-    - name: Download SPIR-V shaders
-      uses: actions/download-artifact@v4
-      with:
-        name: shaders-spv
 
     - name: Build
       run: |
