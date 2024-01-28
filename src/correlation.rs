@@ -4,9 +4,9 @@ mod metal;
 mod vk;
 
 #[cfg(target_os = "macos")]
-use metal as gpu;
+type GpuContext = metal::GpuContext;
 #[cfg(not(target_os = "macos"))]
-use vk as gpu;
+type GpuContext = vk::GpuContext;
 
 use crate::data::{Grid, Point2D};
 use nalgebra::{Matrix3, Vector3};
@@ -67,10 +67,11 @@ pub struct PointCorrelations {
     correlation_threshold: f32,
     corridor_extend_range: f64,
     fundamental_matrix: Matrix3<f64>,
-    gpu_context: Option<gpu::GpuContext>,
+    gpu_context: Option<GpuContext>,
     selected_hardware: String,
 }
 
+#[derive(Copy, Clone)]
 enum CorrelationDirection {
     Forward,
     Reverse,
@@ -141,7 +142,7 @@ impl PointCorrelations {
         let gpu_context = if matches!(hardware_mode, HardwareMode::Gpu | HardwareMode::GpuLowPower)
         {
             let low_power = matches!(hardware_mode, HardwareMode::GpuLowPower);
-            match gpu::GpuContext::new(
+            match GpuContext::new(
                 (img1_dimensions.0 as usize, img1_dimensions.1 as usize),
                 (img2_dimensions.0 as usize, img2_dimensions.1 as usize),
                 projection_mode,
@@ -224,8 +225,8 @@ impl PointCorrelations {
             CorrelationDirection::Reverse,
         )?;
 
-        self.cross_check_filter(scale, CorrelationDirection::Forward);
-        self.cross_check_filter(scale, CorrelationDirection::Reverse);
+        self.cross_check_filter(scale, CorrelationDirection::Forward)?;
+        self.cross_check_filter(scale, CorrelationDirection::Reverse)?;
 
         self.first_pass = false;
 
@@ -543,10 +544,14 @@ impl PointCorrelations {
             .floor() as usize
     }
 
-    fn cross_check_filter(&mut self, scale: f32, dir: CorrelationDirection) {
+    fn cross_check_filter(
+        &mut self,
+        scale: f32,
+        dir: CorrelationDirection,
+    ) -> Result<(), Box<dyn error::Error>> {
         if let Some(gpu_context) = &mut self.gpu_context {
-            gpu_context.cross_check_filter(scale, dir);
-            return;
+            gpu_context.cross_check_filter(scale, dir)?;
+            return Ok(());
         };
 
         let (correlated_points, correlated_points_reverse) = match dir {
@@ -572,6 +577,7 @@ impl PointCorrelations {
                     }
                 }
             });
+        Ok(())
     }
 
     #[inline]
