@@ -914,7 +914,8 @@ impl Device {
                 let device = *device;
                 let props = instance.get_physical_device_properties(device);
                 if props.limits.max_push_constants_size < std::mem::size_of::<ShaderParams>() as u32
-                    || props.limits.max_bound_descriptor_sets < MAX_BINDINGS
+                    || props.limits.max_bound_descriptor_sets < 2
+                    || props.limits.max_per_stage_descriptor_storage_buffers < MAX_BINDINGS
                     || props.limits.max_storage_buffer_range < max_buffer_size as u32
                 {
                     return None;
@@ -933,19 +934,22 @@ impl Device {
                     max_buffer_size
                 );
                 // TODO: allow to specify a device name filter/regex?
+                let score = match props.device_type {
+                    vk::PhysicalDeviceType::DISCRETE_GPU => 3,
+                    vk::PhysicalDeviceType::VIRTUAL_GPU => 2,
+                    vk::PhysicalDeviceType::INTEGRATED_GPU => 1,
+                    _ => 0,
+                };
                 // Prefer real devices instead of dzn emulation.
-                let dzn_multiplier = if device_name.starts_with("Microsoft Direct3D12") {
+                let dzn_multiplier = if device_name
+                    .to_lowercase()
+                    .starts_with("microsoft direct3d12")
+                {
                     1
                 } else {
                     10
                 };
-                let score = match props.device_type {
-                    vk::PhysicalDeviceType::DISCRETE_GPU => 3 * dzn_multiplier,
-                    vk::PhysicalDeviceType::VIRTUAL_GPU => 2 * dzn_multiplier,
-                    vk::PhysicalDeviceType::INTEGRATED_GPU => 1 * dzn_multiplier,
-                    _ => 0,
-                };
-                Some((device, device_name, queue_index, score))
+                Some((device, device_name, queue_index, score * dzn_multiplier))
             })
             .max_by_key(|(_device, _name, _queue_index, score)| *score);
         let (device, name, queue_index) = if let Some((device, name, queue_index, _score)) = device
@@ -954,6 +958,7 @@ impl Device {
         } else {
             return Err(GpuError::new("Device not found").into());
         };
+        println!("selected device {}", name);
         Ok((device, name, queue_index))
     }
 
@@ -966,7 +971,6 @@ impl Device {
             .iter()
             .enumerate()
             .flat_map(|(index, queue)| {
-                println!("queue {} has flags {}", index, queue.queue_flags.as_raw());
                 if queue
                     .queue_flags
                     .contains(vk::QueueFlags::COMPUTE | vk::QueueFlags::TRANSFER)
