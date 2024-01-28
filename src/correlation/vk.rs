@@ -913,16 +913,27 @@ impl Device {
             .filter_map(|device| {
                 let device = *device;
                 let props = instance.get_physical_device_properties(device);
+                /*
                 if props.limits.max_push_constants_size < std::mem::size_of::<ShaderParams>() as u32
                     || props.limits.max_bound_descriptor_sets < MAX_BINDINGS
                     || props.limits.max_storage_buffer_range < max_buffer_size as u32
                 {
                     return None;
                 }
+                */
                 let queue_index = Device::find_compute_queue(instance, device)?;
 
                 let device_name = CStr::from_ptr(props.device_name.as_ptr());
                 let device_name = device_name.to_str().unwrap();
+                println!(
+                    "Device {} type {} {}-{}-{}-{}",
+                    device_name,
+                    props.device_type.as_raw(),
+                    props.limits.max_push_constants_size,
+                    props.limits.max_bound_descriptor_sets,
+                    props.limits.max_storage_buffer_range,
+                    max_buffer_size
+                );
                 // TODO: allow to specify a device name filter/regex?
                 let score = match props.device_type {
                     vk::PhysicalDeviceType::DISCRETE_GPU => 3,
