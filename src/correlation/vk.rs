@@ -688,6 +688,14 @@ impl Device {
                     size_bytes as u64,
                     vk::MemoryMapFlags::empty(),
                 )?;
+                if !buffer.host_coherent {
+                    let invalidate_memory_ranges = vk::MappedMemoryRange::builder()
+                        .memory(buffer.buffer_memory)
+                        .offset(0)
+                        .size(size_bytes as u64);
+                    self.device
+                        .invalidate_mapped_memory_ranges(&[invalidate_memory_ranges.build()])?;
+                }
                 {
                     let out_corr = slice::from_raw_parts_mut(memory as *mut f32, size);
                     correlation_values
@@ -702,14 +710,6 @@ impl Device {
                 // TODO: remove this debug code
                 println!("Corr check = {:?}", correlation_values.val(0, 0));
 
-                if !buffer.host_coherent {
-                    let flush_memory_ranges = vk::MappedMemoryRange::builder()
-                        .memory(buffer.buffer_memory)
-                        .offset(0)
-                        .size(size_bytes as u64);
-                    self.device
-                        .invalidate_mapped_memory_ranges(&[flush_memory_ranges.build()])?;
-                }
                 self.device.unmap_memory(buffer.buffer_memory);
                 Ok(())
             };
@@ -943,7 +943,7 @@ impl Device {
                 } else if !a.1 && b.1 {
                     return Ordering::Greater;
                 }
-                return a.0.cmp(&b.0);
+                a.0.cmp(&b.0)
             });
         let (device, name, queue_index) = if let Some((device, name, queue_index, _score)) = device
         {
@@ -1424,6 +1424,7 @@ impl DeviceBuffers {
 
 impl DescriptorSets {
     unsafe fn destroy(&self, device: &ash::Device) {
+        let _ = device.free_descriptor_sets(self.descriptor_pool, self.descriptor_sets.as_slice());
         device.destroy_pipeline_layout(self.pipeline_layout, None);
         device.destroy_descriptor_set_layout(self.cross_check_layout, None);
         device.destroy_descriptor_set_layout(self.regular_layout, None);
@@ -1442,12 +1443,11 @@ unsafe fn destroy_pipelines(
 }
 
 impl ShaderModuleType {
-    const VALUES: [Self; 7] = [
+    const VALUES: [Self; 6] = [
         Self::InitOutData,
         Self::PrepareInitialdataSearchdata,
         Self::PrepareInitialdataCorrelation,
         Self::PrepareSearchdata,
-        Self::CrossCorrelate,
         Self::CrossCorrelate,
         Self::CrossCheckFilter,
     ];
@@ -1474,7 +1474,9 @@ impl ShaderModuleType {
         };
         let shader_code = ash::util::read_spv(&mut std::io::Cursor::new(shader_module_spv))?;
         let shader_module = device.create_shader_module(
-            &vk::ShaderModuleCreateInfo::builder().code(shader_code.as_slice()),
+            &vk::ShaderModuleCreateInfo::builder()
+                .flags(vk::ShaderModuleCreateFlags::empty())
+                .code(shader_code.as_slice()),
             None,
         )?;
 
