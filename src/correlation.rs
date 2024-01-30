@@ -163,7 +163,6 @@ impl PointCorrelations {
             None
         };
 
-        // Height specifies rows, width specifies columns.
         let (correlated_points, correlated_points_reverse) = match gpu_context {
             Some(_) => (Grid::new(0, 0, None), Grid::new(0, 0, None)),
             None => (

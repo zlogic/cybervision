@@ -33,10 +33,41 @@ layout(std430, set = 1, binding = 1) buffer readonly Img2
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 void main() {
-    const uint x = gl_GlobalInvocationID.x;
-    const uint y = gl_GlobalInvocationID.y;
+    const uint x1 = gl_GlobalInvocationID.x;
+    const uint y1 = gl_GlobalInvocationID.y;
 
-    // TODO: remove this debug code
-    img1[0] = ivec2(img1_width, img1_height);
-    img1[1] = ivec2(img2_width, img2_height);
+    const int search_area = int(neighbor_distance);
+
+    if (x1 >= img1_width || y1 >= img1_height) {
+        return;
+    }
+
+    const ivec2 point = img1[img1_width*y1+x1];
+    if (point.x < 0 || point.y < 0 || uint(point.x) >= img2_width || uint(point.y) >= img2_height) {
+        return;
+    }
+
+    uint min_x = uint(clamp(point.x-search_area, 0, int(img2_width)));
+    uint max_x = uint(clamp(point.x+search_area+1, 0, int(img2_width)));
+    uint min_y = uint(clamp(point.y-search_area, 0, int(img2_height)));
+    uint max_y = uint(clamp(point.y+search_area+1, 0, int(img2_height)));
+
+    int r_min_x = clamp(int(x1)-search_area, 0, int(img1_width));
+    int r_max_x = clamp(int(x1)+search_area+1, 0, int(img1_width));
+    int r_min_y = clamp(int(y1)-search_area, 0, int(img1_height));
+    int r_max_y = clamp(int(y1)+search_area+1, 0, int(img1_height));
+
+    for (uint y2=min_y;y2<max_y;y2++) {
+        for (uint x2=min_x;x2<max_x;x2++) {
+            ivec2 rpoint = img2[img2_width*y2+x2];
+            if (rpoint.x < 0 || rpoint.y < 0) {
+                continue;
+            }
+            if (rpoint.x >= r_min_x && rpoint.x < r_max_x && rpoint.y >= r_min_y && rpoint.y < r_max_y) {
+                return;
+            }
+        }
+    }
+
+    img1[img1_width*y1+x1] = ivec2(-1, -1);
 }

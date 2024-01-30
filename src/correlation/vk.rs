@@ -168,9 +168,6 @@ impl GpuContext {
         }
         let correlation_values = Grid::new(img1_dimensions.0, img1_dimensions.1, None);
 
-        // TODO: remove this debug code
-        let mut fundamental_matrix = Matrix3::zeros();
-        fundamental_matrix[(2, 0)] = 9.8765;
         let params = CorrelationParameters::for_projection(&projection_mode);
         let result = GpuContext {
             min_stdev: params.min_stdev,
@@ -298,8 +295,6 @@ impl GpuContext {
         unsafe { self.device.transfer_in_images(img1, img2)? };
 
         if first_pass {
-            // TODO: remove this test/debug code!
-            params.threshold = 1.234;
             unsafe {
                 self.device
                     .run_shader(out_dimensions, ShaderModuleType::InitOutData, params)?;
@@ -423,7 +418,7 @@ impl GpuContext {
         let mut f = [0f32; 3 * 4];
         for row in 0..3 {
             for col in 0..3 {
-                f[row * 4 + col] = fundamental_matrix[(row, col)] as f32;
+                f[col * 4 + row] = fundamental_matrix[(row, col)] as f32;
             }
         }
         f
@@ -697,7 +692,7 @@ impl Device {
                         .invalidate_mapped_memory_ranges(&[invalidate_memory_ranges.build()])?;
                 }
                 {
-                    let out_corr = slice::from_raw_parts_mut(memory as *mut f32, size);
+                    let out_corr = slice::from_raw_parts(memory as *const f32, size);
                     correlation_values
                         .par_iter_mut()
                         .for_each(|(x, y, out_point)| {
@@ -707,8 +702,6 @@ impl Device {
                             }
                         });
                 }
-                // TODO: remove this debug code
-                println!("Corr check = {:?}", correlation_values.val(0, 0));
 
                 self.device.unmap_memory(buffer.buffer_memory);
                 Ok(())
@@ -780,7 +773,7 @@ impl Device {
     ) -> Result<(), Box<dyn error::Error>> {
         // TODO: combine this with save_corr
         let size = out_image.width() * out_image.height() * 2;
-        let size_bytes = size * std::mem::size_of::<u32>();
+        let size_bytes = size * std::mem::size_of::<i32>();
         let width = out_image.width();
         let copy_out_image =
             |buffer: &Buffer, out_image: &mut Grid<Option<super::Match>>| -> VkResult<()> {
@@ -790,14 +783,22 @@ impl Device {
                     size_bytes as u64,
                     vk::MemoryMapFlags::empty(),
                 )?;
+                if !buffer.host_coherent {
+                    let flush_memory_ranges = vk::MappedMemoryRange::builder()
+                        .memory(buffer.buffer_memory)
+                        .offset(0)
+                        .size(size_bytes as u64);
+                    self.device
+                        .invalidate_mapped_memory_ranges(&[flush_memory_ranges.build()])?;
+                }
                 {
-                    let out_data = slice::from_raw_parts_mut(memory as *mut u32, size);
+                    let out_data = slice::from_raw_parts(memory as *const i32, size);
                     out_image.par_iter_mut().for_each(|(x, y, out_point)| {
                         let pos = 2 * (y * width + x);
                         let (match_x, match_y) = (out_data[pos], out_data[pos + 1]);
                         if let Some(corr) = correlation_values.val(x, y) {
                             *out_point = if match_x > 0 && match_y > 0 {
-                                let point_match = Point2D::new(match_x, match_y);
+                                let point_match = Point2D::new(match_x as u32, match_y as u32);
                                 Some((point_match, *corr))
                             } else {
                                 None
@@ -807,21 +808,7 @@ impl Device {
                         };
                     });
                 }
-                // TODO: remove this debug code
-                println!(
-                    "Corr check = {:?} {:?}",
-                    out_image.val(0, 0),
-                    out_image.val(1, 0)
-                );
 
-                if !buffer.host_coherent {
-                    let flush_memory_ranges = vk::MappedMemoryRange::builder()
-                        .memory(buffer.buffer_memory)
-                        .offset(0)
-                        .size(size_bytes as u64);
-                    self.device
-                        .invalidate_mapped_memory_ranges(&[flush_memory_ranges.build()])?;
-                }
                 self.device.unmap_memory(buffer.buffer_memory);
                 Ok(())
             };
@@ -1046,7 +1033,7 @@ impl Device {
         let buffer_out = Device::create_buffer(
             device,
             memory_properties,
-            max_pixels * 2 * std::mem::size_of::<i32>(),
+            img1_pixels * 2 * std::mem::size_of::<i32>(),
             BufferType::GpuSource,
         )
         .map_err(|err| cleanup_err(buffers.as_slice(), err))?;
@@ -1265,14 +1252,25 @@ impl Device {
                 .buffer_info(buffer_infos)
                 .build()
         };
-        let (buffer_out, buffer_out_reverse) = match direction {
-            CorrelationDirection::Forward => (buffers.buffer_out, buffers.buffer_out_reverse),
-            CorrelationDirection::Reverse => (buffers.buffer_out_reverse, buffers.buffer_out),
-        };
+        let (buffer_internal_img1, buffer_internal_img2, buffer_out, buffer_out_reverse) =
+            match direction {
+                CorrelationDirection::Forward => (
+                    buffers.buffer_internal_img1,
+                    buffers.buffer_internal_img2,
+                    buffers.buffer_out,
+                    buffers.buffer_out_reverse,
+                ),
+                CorrelationDirection::Reverse => (
+                    buffers.buffer_internal_img2,
+                    buffers.buffer_internal_img1,
+                    buffers.buffer_out_reverse,
+                    buffers.buffer_out,
+                ),
+            };
         let regular_buffer_infos = create_buffer_infos(&[
             buffers.buffer_img,
-            buffers.buffer_internal_img1,
-            buffers.buffer_internal_img2,
+            buffer_internal_img1,
+            buffer_internal_img2,
             buffers.buffer_internal_int,
             buffer_out,
             buffers.buffer_out_corr,

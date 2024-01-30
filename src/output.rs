@@ -939,7 +939,7 @@ impl MeshWriter for ObjWriter {
         if let Some(color) = color {
             write!(
                 w,
-                "{} {} {}",
+                " {} {} {}",
                 color[0] as f64 / 255.0,
                 color[1] as f64 / 255.0,
                 color[2] as f64 / 255.0,
