@@ -33,7 +33,7 @@ struct ShaderParams {
     out_height: u32,
     scale: f32,
     iteration_pass: u32,
-    fundamental_matrix: [f32; 3 * 4], // matrices are stored row-by-row and each row is aligned to 4-component vectors; should be aligned to 16 bytes
+    fundamental_matrix: [f32; 3 * 4],
     corridor_offset: i32,
     corridor_start: u32,
     corridor_end: u32,
@@ -416,6 +416,10 @@ impl GpuContext {
             CorrelationDirection::Reverse => self.fundamental_matrix.transpose(),
         };
         let mut f = [0f32; 3 * 4];
+        // Matrix layout in GLSL (OpenGL) is pure madness: https://www.opengl.org/archives/resources/faq/technical/transformations.htm.
+        // "Column major" means that vectors are vertical and a matrix multiplies a vector.
+        // "Row major" means a horizontal vector multiplies a matrix.
+        // This says nothing about how the matrix is stored in memory.
         for row in 0..3 {
             for col in 0..3 {
                 f[col * 4 + row] = fundamental_matrix[(row, col)] as f32;
@@ -577,6 +581,8 @@ impl Device {
         img1: &Grid<u8>,
         img2: &Grid<u8>,
     ) -> Result<(), Box<dyn error::Error>> {
+        // Not all code paths here are fully tested - some actions like flushing memory if memory
+        // is not host_coherent might not work as expected.
         let img2_offset = img1.width() * img1.height();
         let size = img1.width() * img1.height() + img2.width() * img2.height();
         let size_bytes = size * std::mem::size_of::<f32>();
