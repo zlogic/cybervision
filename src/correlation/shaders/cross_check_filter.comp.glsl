@@ -36,11 +36,11 @@ void main() {
     const uint x1 = gl_GlobalInvocationID.x;
     const uint y1 = gl_GlobalInvocationID.y;
 
-    const int search_area = int(neighbor_distance);
-
     if (x1 >= img1_width || y1 >= img1_height) {
         return;
     }
+
+    const int search_area = int(neighbor_distance);
 
     const ivec2 point = img1[img1_width*y1+x1];
     if (point.x < 0 || point.y < 0 || uint(point.x) >= img2_width || uint(point.y) >= img2_height) {

@@ -72,6 +72,11 @@ void calculate_epipolar_line(uint x1, uint y1, out vec2 coeff, out vec2 add_cons
 void main() {
     const uint x = gl_GlobalInvocationID.x;
     const uint y = gl_GlobalInvocationID.y;
+
+    if (x >= img1_width || y >= img1_height) {
+        return;
+    }
+
     const int x_signed = int(x);
     const int y_signed = int(y);
 
@@ -115,7 +120,7 @@ void main() {
             continue;
         }
 
-        float corridor_pos = 0.0;
+        float corridor_pos;
         if (corridor_vertical) {
             corridor_pos = round((coord2.y-add_const.y)/coeff.y);
         } else {

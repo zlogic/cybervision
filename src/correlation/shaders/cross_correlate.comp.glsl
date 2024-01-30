@@ -73,13 +73,13 @@ void main() {
     const uint x1 = gl_GlobalInvocationID.x;
     const uint y1 = gl_GlobalInvocationID.y;
 
-    const bool first_iteration = iteration_pass == 0;
-    const uint kernel_width = kernel_size*2+1;
-    const float kernel_point_count = float(kernel_width*kernel_width);
-
     if (x1 < kernel_size || x1 >= img1_width-kernel_size || y1 < kernel_size ||  y1 >= img1_height-kernel_size) {
         return;
     }
+
+    const bool first_iteration = iteration_pass == 0;
+    const uint kernel_width = kernel_size*2+1;
+    const float kernel_point_count = float(kernel_width*kernel_width);
 
     const uint img1_offset = 0;
     const uint img2_offset = img1_width*img1_height;
