@@ -576,30 +576,28 @@ impl Device {
             .wait_for_fences(&[self.control.fence], true, u64::MAX)
     }
 
-    unsafe fn transfer_in_images(
+    unsafe fn map_buffer_write<F, T>(
         &self,
-        img1: &Grid<u8>,
-        img2: &Grid<u8>,
-    ) -> Result<(), Box<dyn error::Error>> {
+        dst_buffer: &Buffer,
+        size: usize,
+        f: F,
+    ) -> Result<(), Box<dyn error::Error>>
+    where
+        F: FnOnce(&mut [T]),
+    {
         // Not all code paths here are fully tested - some actions like flushing memory if memory
         // is not host_coherent might not work as expected.
-        let img2_offset = img1.width() * img1.height();
-        let size = img1.width() * img1.height() + img2.width() * img2.height();
-        let size_bytes = size * std::mem::size_of::<f32>();
-        let copy_image = |buffer: &Buffer| -> VkResult<()> {
-            let memory = self.device.map_memory(
-                buffer.buffer_memory,
-                0,
-                size_bytes as u64,
-                vk::MemoryMapFlags::empty(),
-            )?;
+        let size_bytes = size * std::mem::size_of::<T>();
+        let handle_buffer = |buffer: &Buffer| -> VkResult<()> {
             {
-                let img_slice = slice::from_raw_parts_mut(memory as *mut f32, size);
-                img1.iter()
-                    .for_each(|(x, y, val)| img_slice[y * img1.width() + x] = *val as f32);
-                img2.iter().for_each(|(x, y, val)| {
-                    img_slice[img2_offset + y * img2.width() + x] = *val as f32
-                });
+                let memory = self.device.map_memory(
+                    buffer.buffer_memory,
+                    0,
+                    size_bytes as u64,
+                    vk::MemoryMapFlags::empty(),
+                )?;
+                let mapped_slice = slice::from_raw_parts_mut(memory as *mut T, size);
+                f(mapped_slice);
             }
 
             if !buffer.host_coherent {
@@ -614,9 +612,9 @@ impl Device {
             Ok(())
         };
 
-        if self.buffers.buffer_img.host_visible {
+        if dst_buffer.host_visible {
             // If memory is available to the host, copy data directly to the buffer.
-            copy_image(&self.buffers.buffer_img)?;
+            handle_buffer(dst_buffer)?;
             return Ok(());
         }
 
@@ -630,45 +628,126 @@ impl Device {
             temp_buffer.destroy(&self.device);
             err
         };
-        copy_image(&temp_buffer).map_err(cleanup_err)?;
 
+        handle_buffer(&temp_buffer).map_err(cleanup_err)?;
+
+        self.copy_buffer_to_buffer(&temp_buffer, dst_buffer, size_bytes)
+            .map_err(cleanup_err)?;
+
+        temp_buffer.destroy(&self.device);
+
+        Ok(())
+    }
+
+    unsafe fn copy_buffer_to_buffer(
+        &self,
+        src: &Buffer,
+        dst: &Buffer,
+        size_bytes: usize,
+    ) -> VkResult<()> {
         let command_buffer = self.control.command_buffer;
         self.device.reset_fences(&[self.control.fence])?;
         self.device
-            .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())
-            .map_err(cleanup_err)?;
+            .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
 
         let info = vk::CommandBufferBeginInfo::builder()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
-        self.device
-            .begin_command_buffer(command_buffer, &info)
-            .map_err(cleanup_err)?;
+        self.device.begin_command_buffer(command_buffer, &info)?;
         let regions = vk::BufferCopy::builder().size(size_bytes as u64);
-        self.device.cmd_copy_buffer(
-            command_buffer,
-            temp_buffer.buffer,
-            self.buffers.buffer_img.buffer,
-            &[regions.build()],
-        );
         self.device
-            .end_command_buffer(command_buffer)
-            .map_err(cleanup_err)?;
+            .cmd_copy_buffer(command_buffer, src.buffer, dst.buffer, &[regions.build()]);
+        self.device.end_command_buffer(command_buffer)?;
 
         let command_buffers = [command_buffer];
         let submit_info = vk::SubmitInfo::builder().command_buffers(&command_buffers);
-        self.device
-            .queue_submit(
-                self.control.queue,
-                &[submit_info.build()],
-                self.control.fence,
-            )
-            .map_err(cleanup_err)?;
+        self.device.queue_submit(
+            self.control.queue,
+            &[submit_info.build()],
+            self.control.fence,
+        )?;
         self.device
             .wait_for_fences(&[self.control.fence], true, u64::MAX)
+    }
+
+    unsafe fn map_buffer_read<F, T>(
+        &self,
+        buffer: &Buffer,
+        size: usize,
+        f: F,
+    ) -> Result<(), Box<dyn error::Error>>
+    where
+        F: FnOnce(&[T]),
+    {
+        // Not all code paths here are fully tested - some actions like flushing memory if memory
+        // is not host_coherent might not work as expected.
+        let size_bytes = size * std::mem::size_of::<T>();
+        let handle_buffer = |buffer: &Buffer| -> VkResult<()> {
+            let memory = self.device.map_memory(
+                buffer.buffer_memory,
+                0,
+                size_bytes as u64,
+                vk::MemoryMapFlags::empty(),
+            )?;
+            if !buffer.host_coherent {
+                let invalidate_memory_ranges = vk::MappedMemoryRange::builder()
+                    .memory(buffer.buffer_memory)
+                    .offset(0)
+                    .size(size_bytes as u64);
+                self.device
+                    .invalidate_mapped_memory_ranges(&[invalidate_memory_ranges.build()])?;
+            }
+            {
+                let mapped_slice = slice::from_raw_parts(memory as *const T, size);
+                f(mapped_slice);
+            }
+
+            self.device.unmap_memory(buffer.buffer_memory);
+            Ok(())
+        };
+
+        if buffer.host_visible {
+            // If memory is available to the host, copy data directly to the buffer.
+            handle_buffer(buffer)?;
+            return Ok(());
+        }
+
+        let temp_buffer = Device::create_buffer(
+            &self.device,
+            &self.memory_properties,
+            size_bytes,
+            BufferType::HostDestination,
+        )?;
+        let cleanup_err = |err| {
+            temp_buffer.destroy(&self.device);
+            err
+        };
+
+        self.copy_buffer_to_buffer(buffer, &temp_buffer, size_bytes)
             .map_err(cleanup_err)?;
 
+        handle_buffer(&temp_buffer).map_err(cleanup_err)?;
         temp_buffer.destroy(&self.device);
+
+        Ok(())
+    }
+
+    unsafe fn transfer_in_images(
+        &self,
+        img1: &Grid<u8>,
+        img2: &Grid<u8>,
+    ) -> Result<(), Box<dyn error::Error>> {
+        let img2_offset = img1.width() * img1.height();
+        let size = img1.width() * img1.height() + img2.width() * img2.height();
+        let copy_images = |img_slice: &mut [f32]| {
+            img1.iter()
+                .for_each(|(x, y, val)| img_slice[y * img1.width() + x] = *val as f32);
+            img2.iter().for_each(|(x, y, val)| {
+                img_slice[img2_offset + y * img2.width() + x] = *val as f32
+            });
+        };
+
+        self.map_buffer_write(&self.buffers.buffer_img, size, copy_images)?;
 
         Ok(())
     }
@@ -679,95 +758,19 @@ impl Device {
         correlation_threshold: f32,
     ) -> Result<(), Box<dyn error::Error>> {
         let size = correlation_values.width() * correlation_values.height();
-        let size_bytes = size * std::mem::size_of::<f32>();
         let width = correlation_values.width();
-        let copy_corr_data =
-            |buffer: &Buffer, correlation_values: &mut Grid<Option<f32>>| -> VkResult<()> {
-                let memory = self.device.map_memory(
-                    buffer.buffer_memory,
-                    0,
-                    size_bytes as u64,
-                    vk::MemoryMapFlags::empty(),
-                )?;
-                if !buffer.host_coherent {
-                    let invalidate_memory_ranges = vk::MappedMemoryRange::builder()
-                        .memory(buffer.buffer_memory)
-                        .offset(0)
-                        .size(size_bytes as u64);
-                    self.device
-                        .invalidate_mapped_memory_ranges(&[invalidate_memory_ranges.build()])?;
-                }
-                {
-                    let out_corr = slice::from_raw_parts(memory as *const f32, size);
-                    correlation_values
-                        .par_iter_mut()
-                        .for_each(|(x, y, out_point)| {
-                            let corr = out_corr[y * width + x];
-                            if corr > correlation_threshold {
-                                *out_point = Some(corr);
-                            }
-                        });
-                }
-
-                self.device.unmap_memory(buffer.buffer_memory);
-                Ok(())
-            };
-
-        if self.buffers.buffer_out_corr.host_visible {
-            // If memory is available to the host, copy data directly to the buffer.
-            copy_corr_data(&self.buffers.buffer_out_corr, correlation_values)?;
-            return Ok(());
-        }
-
-        let temp_buffer = Device::create_buffer(
-            &self.device,
-            &self.memory_properties,
-            size_bytes,
-            BufferType::HostDestination,
-        )?;
-        let cleanup_err = |err| {
-            temp_buffer.destroy(&self.device);
-            err
+        let copy_corr_data = |out_corr: &[f32]| {
+            correlation_values
+                .par_iter_mut()
+                .for_each(|(x, y, out_point)| {
+                    let corr = out_corr[y * width + x];
+                    if corr > correlation_threshold {
+                        *out_point = Some(corr);
+                    }
+                });
         };
 
-        let command_buffer = self.control.command_buffer;
-        self.device.reset_fences(&[self.control.fence])?;
-        self.device
-            .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())
-            .map_err(cleanup_err)?;
-
-        let info = vk::CommandBufferBeginInfo::builder()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-
-        self.device
-            .begin_command_buffer(command_buffer, &info)
-            .map_err(cleanup_err)?;
-        let regions = vk::BufferCopy::builder().size(size_bytes as u64);
-        self.device.cmd_copy_buffer(
-            command_buffer,
-            self.buffers.buffer_out_corr.buffer,
-            temp_buffer.buffer,
-            &[regions.build()],
-        );
-        self.device
-            .end_command_buffer(command_buffer)
-            .map_err(cleanup_err)?;
-
-        let command_buffers = [command_buffer];
-        let submit_info = vk::SubmitInfo::builder().command_buffers(&command_buffers);
-        self.device
-            .queue_submit(
-                self.control.queue,
-                &[submit_info.build()],
-                self.control.fence,
-            )
-            .map_err(cleanup_err)?;
-        self.device
-            .wait_for_fences(&[self.control.fence], true, u64::MAX)
-            .map_err(cleanup_err)?;
-
-        copy_corr_data(&temp_buffer, correlation_values).map_err(cleanup_err)?;
-        temp_buffer.destroy(&self.device);
+        self.map_buffer_read(&self.buffers.buffer_out_corr, size, copy_corr_data)?;
 
         Ok(())
     }
@@ -777,103 +780,26 @@ impl Device {
         out_image: &mut Grid<Option<super::Match>>,
         correlation_values: &Grid<Option<f32>>,
     ) -> Result<(), Box<dyn error::Error>> {
-        // TODO: combine this with save_corr
         let size = out_image.width() * out_image.height() * 2;
-        let size_bytes = size * std::mem::size_of::<i32>();
         let width = out_image.width();
-        let copy_out_image =
-            |buffer: &Buffer, out_image: &mut Grid<Option<super::Match>>| -> VkResult<()> {
-                let memory = self.device.map_memory(
-                    buffer.buffer_memory,
-                    0,
-                    size_bytes as u64,
-                    vk::MemoryMapFlags::empty(),
-                )?;
-                if !buffer.host_coherent {
-                    let flush_memory_ranges = vk::MappedMemoryRange::builder()
-                        .memory(buffer.buffer_memory)
-                        .offset(0)
-                        .size(size_bytes as u64);
-                    self.device
-                        .invalidate_mapped_memory_ranges(&[flush_memory_ranges.build()])?;
-                }
-                {
-                    let out_data = slice::from_raw_parts(memory as *const i32, size);
-                    out_image.par_iter_mut().for_each(|(x, y, out_point)| {
-                        let pos = 2 * (y * width + x);
-                        let (match_x, match_y) = (out_data[pos], out_data[pos + 1]);
-                        if let Some(corr) = correlation_values.val(x, y) {
-                            *out_point = if match_x > 0 && match_y > 0 {
-                                let point_match = Point2D::new(match_x as u32, match_y as u32);
-                                Some((point_match, *corr))
-                            } else {
-                                None
-                            };
-                        } else {
-                            *out_point = None;
-                        };
-                    });
-                }
-
-                self.device.unmap_memory(buffer.buffer_memory);
-                Ok(())
-            };
-
-        if self.buffers.buffer_out.host_visible {
-            // If memory is available to the host, copy data directly to the buffer.
-            copy_out_image(&self.buffers.buffer_out, out_image)?;
-            return Ok(());
-        }
-
-        let temp_buffer = Device::create_buffer(
-            &self.device,
-            &self.memory_properties,
-            size_bytes,
-            BufferType::HostDestination,
-        )?;
-        let cleanup_err = |err| {
-            temp_buffer.destroy(&self.device);
-            err
+        let copy_out_image = |out_data: &[i32]| {
+            out_image.par_iter_mut().for_each(|(x, y, out_point)| {
+                let pos = 2 * (y * width + x);
+                let (match_x, match_y) = (out_data[pos], out_data[pos + 1]);
+                if let Some(corr) = correlation_values.val(x, y) {
+                    *out_point = if match_x > 0 && match_y > 0 {
+                        let point_match = Point2D::new(match_x as u32, match_y as u32);
+                        Some((point_match, *corr))
+                    } else {
+                        None
+                    };
+                } else {
+                    *out_point = None;
+                };
+            });
         };
 
-        let command_buffer = self.control.command_buffer;
-        self.device.reset_fences(&[self.control.fence])?;
-        self.device
-            .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())
-            .map_err(cleanup_err)?;
-
-        let info = vk::CommandBufferBeginInfo::builder()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-
-        self.device
-            .begin_command_buffer(command_buffer, &info)
-            .map_err(cleanup_err)?;
-        let regions = vk::BufferCopy::builder().size(size_bytes as u64);
-        self.device.cmd_copy_buffer(
-            command_buffer,
-            self.buffers.buffer_out.buffer,
-            temp_buffer.buffer,
-            &[regions.build()],
-        );
-        self.device
-            .end_command_buffer(command_buffer)
-            .map_err(cleanup_err)?;
-
-        let command_buffers = [command_buffer];
-        let submit_info = vk::SubmitInfo::builder().command_buffers(&command_buffers);
-        self.device
-            .queue_submit(
-                self.control.queue,
-                &[submit_info.build()],
-                self.control.fence,
-            )
-            .map_err(cleanup_err)?;
-        self.device
-            .wait_for_fences(&[self.control.fence], true, u64::MAX)
-            .map_err(cleanup_err)?;
-
-        copy_out_image(&temp_buffer, out_image).map_err(cleanup_err)?;
-        temp_buffer.destroy(&self.device);
+        self.map_buffer_read(&self.buffers.buffer_out, size, copy_out_image)?;
 
         Ok(())
     }
