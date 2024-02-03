@@ -459,7 +459,6 @@ impl DeviceContext {
         let max_pixels = img1_pixels.max(img2_pixels);
         let max_buffer_size = max_pixels * 4 * std::mem::size_of::<i32>();
 
-        let start_time = SystemTime::now();
         let current_buffer_size = self
             .device
             .as_ref()
@@ -485,9 +484,6 @@ impl DeviceContext {
         };
         device.buffers = Some(buffers);
         device.set_buffer_direction(&CorrelationDirection::Forward)?;
-        if let Ok(t) = start_time.elapsed() {
-            println!("Initialized device in {:.3} seconds", t.as_secs_f32());
-        }
         Ok(())
     }
 
