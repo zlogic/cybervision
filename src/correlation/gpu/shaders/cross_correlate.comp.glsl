@@ -58,8 +58,8 @@ layout(std430, set = 0, binding = 5) buffer  Result_Corr
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 void calculate_epipolar_line(uint x1, uint y1, out vec2 coeff, out vec2 add_const) {
-    vec3 p1 = vec3(float(x1)/scale, float(y1)/scale, 1.0);
-    vec3 f_p1 = fundamental_matrix*p1;
+    const vec3 p1 = vec3(float(x1)/scale, float(y1)/scale, 1.0);
+    const vec3 f_p1 = fundamental_matrix*p1;
     if (abs(f_p1.x)>abs(f_p1.y)) {
         coeff = vec2(-f_p1.y/f_p1.x, 1.0);
         add_const = vec2(-scale*f_p1.z/f_p1.x, 0.0);

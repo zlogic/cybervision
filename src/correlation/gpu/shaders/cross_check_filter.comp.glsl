@@ -47,19 +47,19 @@ void main() {
         return;
     }
 
-    uint min_x = uint(clamp(point.x-search_area, 0, int(img2_width)));
-    uint max_x = uint(clamp(point.x+search_area+1, 0, int(img2_width)));
-    uint min_y = uint(clamp(point.y-search_area, 0, int(img2_height)));
-    uint max_y = uint(clamp(point.y+search_area+1, 0, int(img2_height)));
+    const uint min_x = uint(clamp(point.x-search_area, 0, int(img2_width)));
+    const uint max_x = uint(clamp(point.x+search_area+1, 0, int(img2_width)));
+    const uint min_y = uint(clamp(point.y-search_area, 0, int(img2_height)));
+    const uint max_y = uint(clamp(point.y+search_area+1, 0, int(img2_height)));
 
-    int r_min_x = clamp(int(x1)-search_area, 0, int(img1_width));
-    int r_max_x = clamp(int(x1)+search_area+1, 0, int(img1_width));
-    int r_min_y = clamp(int(y1)-search_area, 0, int(img1_height));
-    int r_max_y = clamp(int(y1)+search_area+1, 0, int(img1_height));
+    const int r_min_x = clamp(int(x1)-search_area, 0, int(img1_width));
+    const int r_max_x = clamp(int(x1)+search_area+1, 0, int(img1_width));
+    const int r_min_y = clamp(int(y1)-search_area, 0, int(img1_height));
+    const int r_max_y = clamp(int(y1)+search_area+1, 0, int(img1_height));
 
     for (uint y2=min_y;y2<max_y;y2++) {
         for (uint x2=min_x;x2<max_x;x2++) {
-            ivec2 rpoint = img2[img2_width*y2+x2];
+            const ivec2 rpoint = img2[img2_width*y2+x2];
             if (rpoint.x < 0 || rpoint.y < 0) {
                 continue;
             }
