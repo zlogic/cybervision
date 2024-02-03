@@ -1,7 +1,6 @@
 use std::{collections::HashMap, error, ffi::c_void, fs, slice};
 
 use metal::objc::rc::autoreleasepool;
-use nalgebra::Matrix3;
 use rayon::iter::ParallelIterator;
 
 use crate::{
@@ -68,16 +67,6 @@ impl DeviceContext {
 }
 
 impl super::DeviceContext<Device> for DeviceContext {
-    fn convert_fundamental_matrix(fundamental_matrix: &Matrix3<f64>) -> [f32; 3 * 4] {
-        let mut f = [0f32; 3 * 4];
-        for row in 0..3 {
-            for col in 0..3 {
-                f[row * 4 + col] = fundamental_matrix[(row, col)] as f32;
-            }
-        }
-        f
-    }
-
     fn is_low_power(&self) -> bool {
         self.low_power
     }

@@ -2,7 +2,6 @@ use std::{cmp::Ordering, collections::HashMap, error, ffi::CStr, slice};
 
 use super::Device as GpuDevice;
 use ash::{prelude::VkResult, vk};
-use nalgebra::Matrix3;
 use rayon::iter::ParallelIterator;
 
 use crate::{
@@ -115,20 +114,6 @@ impl DeviceContext {
 }
 
 impl super::DeviceContext<Device> for DeviceContext {
-    fn convert_fundamental_matrix(fundamental_matrix: &Matrix3<f64>) -> [f32; 3 * 4] {
-        let mut f = [0f32; 3 * 4];
-        // Matrix layout in GLSL (OpenGL) is pure madness: https://www.opengl.org/archives/resources/faq/technical/transformations.htm.
-        // "Column major" means that vectors are vertical and a matrix multiplies a vector.
-        // "Row major" means a horizontal vector multiplies a matrix.
-        // This says nothing about how the matrix is stored in memory.
-        for row in 0..3 {
-            for col in 0..3 {
-                f[col * 4 + row] = fundamental_matrix[(row, col)] as f32;
-            }
-        }
-        f
-    }
-
     fn is_low_power(&self) -> bool {
         self.low_power
     }
