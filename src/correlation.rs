@@ -6,8 +6,9 @@ mod vk;
 #[cfg(target_os = "macos")]
 type GpuContext = metal::GpuContext;
 #[cfg(not(target_os = "macos"))]
-type GpuContext = vk::GpuContext;
+type GpuContext<'a> = vk::GpuContext<'a>;
 
+use self::vk::DeviceContext;
 use crate::data::{Grid, Point2D};
 use nalgebra::{Matrix3, Vector3};
 use rayon::iter::ParallelIterator;
@@ -58,7 +59,7 @@ where
     fn report_status(&self, pos: f32);
 }
 
-pub struct PointCorrelations {
+pub struct PointCorrelations<'a> {
     pub correlated_points: Grid<Option<Match>>,
     correlated_points_reverse: Grid<Option<Match>>,
     first_pass: bool,
@@ -67,7 +68,7 @@ pub struct PointCorrelations {
     correlation_threshold: f32,
     corridor_extend_range: f64,
     fundamental_matrix: Matrix3<f64>,
-    gpu_context: Option<GpuContext>,
+    gpu_context: Option<GpuContext<'a>>,
     selected_hardware: String,
 }
 
@@ -130,24 +131,30 @@ impl CorrelationParameters {
     }
 }
 
-impl PointCorrelations {
+pub type GpuDevice = DeviceContext;
+
+pub fn create_gpu_context(
+    hardware_mode: HardwareMode,
+) -> Result<DeviceContext, Box<dyn error::Error>> {
+    vk::DeviceContext::new(hardware_mode)
+}
+
+impl PointCorrelations<'_> {
     pub fn new(
+        device_context: Option<&mut DeviceContext>,
         img1_dimensions: (u32, u32),
         img2_dimensions: (u32, u32),
         fundamental_matrix: Matrix3<f64>,
         projection_mode: ProjectionMode,
-        hardware_mode: HardwareMode,
     ) -> PointCorrelations {
         let selected_hardware;
-        let gpu_context = if matches!(hardware_mode, HardwareMode::Gpu | HardwareMode::GpuLowPower)
-        {
-            let low_power = matches!(hardware_mode, HardwareMode::GpuLowPower);
+        let gpu_context = if let Some(device_context) = device_context {
             match GpuContext::new(
+                device_context,
                 (img1_dimensions.0 as usize, img1_dimensions.1 as usize),
                 (img2_dimensions.0 as usize, img2_dimensions.1 as usize),
                 projection_mode,
                 fundamental_matrix,
-                low_power,
             ) {
                 Ok(gpu_context) => {
                     selected_hardware = format!("GPU {}", gpu_context.get_device_name());

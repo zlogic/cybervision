@@ -181,23 +181,7 @@ impl SourceImage {
     }
 }
 
-fn max_image_size(filenames: &[String]) -> usize {
-    let mut max_size = 0;
-    for path in filenames.iter() {
-        let (width, height) = match image::image_dimensions(path) {
-            Ok(dimensions) => dimensions,
-            Err(err) => {
-                eprintln!("Failed to get size for image {}: {}", path, err);
-                continue;
-            }
-        };
-        max_size = max_size.max(width as usize * height as usize);
-    }
-    max_size
-}
-
 struct ImageReconstruction {
-    hardware_mode: correlation::HardwareMode,
     interpolation_mode: output::InterpolationMode,
     projection_mode: fundamentalmatrix::ProjectionMode,
     vertex_mode: output::VertexMode,
@@ -256,10 +240,7 @@ pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
     );
     let img_filenames = args.img_src.to_owned();
 
-    let max_image_size = max_image_size(img_filenames.as_slice());
-
     let mut reconstruction_task = ImageReconstruction {
-        hardware_mode,
         interpolation_mode,
         projection_mode,
         vertex_mode,
@@ -269,11 +250,18 @@ pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
     };
 
     let images_count = reconstruction_task.img_filenames.len();
+    let mut gpu_device = match correlation::create_gpu_context(hardware_mode) {
+        Ok(gpu_device) => Some(gpu_device),
+        Err(err) => {
+            eprintln!("Failed to obtain GPU device: {}", err);
+            None
+        }
+    };
     for img_i in 0..images_count - 1 {
         let img1_filename = reconstruction_task.img_filenames[img_i].to_owned();
         for img_j in img_i + 1..images_count {
             let img2_filename = reconstruction_task.img_filenames[img_j].to_owned();
-            match reconstruction_task.reconstruct(img_i, img_j) {
+            match reconstruction_task.reconstruct(gpu_device.as_mut(), img_i, img_j) {
                 Ok(_) => {}
                 Err(err) => {
                     eprintln!(
@@ -284,6 +272,7 @@ pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
             }
         }
     }
+    drop(gpu_device);
 
     match reconstruction_task.recover_poses() {
         Ok(_) => {}
@@ -313,6 +302,7 @@ type CorrelatedPoints = Grid<Option<(Point2D<u32>, f32)>>;
 impl ImageReconstruction {
     fn reconstruct(
         &mut self,
+        gpu_device: Option<&mut correlation::GpuDevice>,
         img1_index: usize,
         img2_index: usize,
     ) -> Result<(), Box<dyn error::Error>> {
@@ -378,7 +368,7 @@ impl ImageReconstruction {
         };
         println!("Kept {} matches", fm.matches_count);
 
-        let correlated_points = match self.correlate_points(&img1, &img2, fm.f) {
+        let correlated_points = match self.correlate_points(gpu_device, &img1, &img2, fm.f) {
             Ok(correlated_points) => correlated_points,
             Err(err) => {
                 eprintln!("Failed to complete points correlation: {}", err);
@@ -529,6 +519,7 @@ impl ImageReconstruction {
 
     fn correlate_points(
         &self,
+        gpu_device: Option<&mut correlation::GpuDevice>,
         img1: &SourceImage,
         img2: &SourceImage,
         f: Matrix3<f64>,
@@ -551,11 +542,11 @@ impl ImageReconstruction {
 
         let mut total_percent_complete = 0.0;
         point_correlations = PointCorrelations::new(
+            gpu_device,
             img1.img.dimensions(),
             img2.img.dimensions(),
             f,
             projection_mode,
-            self.hardware_mode,
         );
         println!(
             "Selected hardware: {}",

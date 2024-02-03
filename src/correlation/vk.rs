@@ -7,7 +7,7 @@ use rayon::iter::ParallelIterator;
 use crate::data::{Grid, Point2D};
 
 use super::{
-    CorrelationDirection, CorrelationParameters, ProjectionMode, CORRIDOR_MIN_RANGE,
+    CorrelationDirection, CorrelationParameters, HardwareMode, ProjectionMode, CORRIDOR_MIN_RANGE,
     CROSS_CHECK_SEARCH_AREA, KERNEL_SIZE, NEIGHBOR_DISTANCE,
 };
 
@@ -52,7 +52,7 @@ const _: () = {
     assert!(std::mem::size_of::<ShaderParams>() < 128);
 };
 
-pub struct GpuContext {
+pub struct GpuContext<'a> {
     min_stdev: f32,
     correlation_threshold: f32,
     fundamental_matrix: Matrix3<f64>,
@@ -65,16 +65,17 @@ pub struct GpuContext {
     search_area_segment_length: usize,
     corridor_size: usize,
     corridor_extend_range: f64,
-    device: Device,
+
+    device_context: &'a mut DeviceContext,
 }
 
 struct Device {
-    _entry: ash::Entry,
     instance: ash::Instance,
     name: String,
     device: ash::Device,
     memory_properties: vk::PhysicalDeviceMemoryProperties,
-    buffers: DeviceBuffers,
+    buffers: Option<DeviceBuffers>,
+    max_buffer_size: usize,
     descriptor_sets: DescriptorSets,
     pipelines: HashMap<ShaderModuleType, ShaderPipeline>,
     control: Control,
@@ -136,18 +137,15 @@ struct Control {
     command_buffer: vk::CommandBuffer,
 }
 
-impl GpuContext {
-    pub fn new(
+impl GpuContext<'_> {
+    pub fn new<'a>(
+        device_context: &'a mut DeviceContext,
         img1_dimensions: (usize, usize),
         img2_dimensions: (usize, usize),
         projection_mode: ProjectionMode,
         fundamental_matrix: Matrix3<f64>,
-        low_power: bool,
-    ) -> Result<GpuContext, Box<dyn error::Error>> {
-        let img1_pixels = img1_dimensions.0 * img1_dimensions.1;
-        let img2_pixels = img2_dimensions.0 * img2_dimensions.1;
-
-        let (search_area_segment_length, corridor_segment_length) = if low_power {
+    ) -> Result<GpuContext<'a>, Box<dyn error::Error>> {
+        let (search_area_segment_length, corridor_segment_length) = if device_context.low_power {
             (
                 SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER,
                 CORRIDOR_SEGMENT_LENGTH_LOWPOWER,
@@ -159,17 +157,11 @@ impl GpuContext {
             )
         };
 
-        let start_time = SystemTime::now();
-        let device = Device::new(img1_pixels, img2_pixels)?;
-        device.set_buffer_direction(&CorrelationDirection::Forward);
-
-        if let Ok(t) = start_time.elapsed() {
-            println!("Initialized device in {:.3} seconds", t.as_secs_f32());
-        }
+        device_context.prepare_device(img1_dimensions, img2_dimensions)?;
         let correlation_values = Grid::new(img1_dimensions.0, img1_dimensions.1, None);
 
         let params = CorrelationParameters::for_projection(&projection_mode);
-        let result = GpuContext {
+        Ok(GpuContext {
             min_stdev: params.min_stdev,
             correlation_threshold: params.correlation_threshold,
             corridor_size: params.corridor_size,
@@ -180,13 +172,17 @@ impl GpuContext {
             correlation_values,
             corridor_segment_length,
             search_area_segment_length,
-            device,
-        };
-        Ok(result)
+            device_context,
+        })
     }
 
     pub fn get_device_name(&self) -> String {
-        self.device.name.to_owned()
+        self.device_context
+            .device()
+            .ok()
+            .map_or(String::from("Error: device not initialized"), |device| {
+                device.name.to_owned()
+            })
     }
 
     pub fn cross_check_filter(
@@ -194,7 +190,8 @@ impl GpuContext {
         scale: f32,
         dir: CorrelationDirection,
     ) -> Result<(), Box<dyn error::Error>> {
-        self.device.set_buffer_direction(&dir);
+        let device = self.device_context.device_mut()?;
+        device.set_buffer_direction(&dir)?;
         let (out_dimensions, out_dimensions_reverse) = match dir {
             CorrelationDirection::Forward => (self.img1_dimensions, self.img2_dimensions),
             CorrelationDirection::Reverse => (self.img2_dimensions, self.img1_dimensions),
@@ -224,8 +221,7 @@ impl GpuContext {
             min_range: 0.0,
         };
         unsafe {
-            self.device
-                .run_shader(out_dimensions, ShaderModuleType::CrossCheckFilter, params)?;
+            device.run_shader(out_dimensions, ShaderModuleType::CrossCheckFilter, params)?;
         }
         Ok(())
     }
@@ -233,10 +229,15 @@ impl GpuContext {
     pub fn complete_process(
         &mut self,
     ) -> Result<Grid<Option<super::Match>>, Box<dyn error::Error>> {
+        let device = self.device_context.device_mut()?;
         let mut out_image = Grid::new(self.img1_dimensions.0, self.img1_dimensions.1, None);
         unsafe {
-            self.device
-                .save_result(&mut out_image, &self.correlation_values)?;
+            device.save_result(&mut out_image, &self.correlation_values)?;
+            device
+                .buffers
+                .as_ref()
+                .map(|buffers| buffers.destroy(&device.device));
+            device.buffers = None;
         }
         Ok(out_image)
     }
@@ -250,7 +251,10 @@ impl GpuContext {
         progress_listener: Option<&PL>,
         dir: CorrelationDirection,
     ) -> Result<(), Box<dyn error::Error>> {
-        self.device.set_buffer_direction(&dir);
+        {
+            let device = self.device_context.device()?;
+            device.set_buffer_direction(&dir)?;
+        }
         let max_width = img1.width().max(img2.width());
         let max_height = img1.height().max(img2.height());
         let max_dimensions = (max_width, max_height);
@@ -292,16 +296,17 @@ impl GpuContext {
             min_range: CORRIDOR_MIN_RANGE as f32,
         };
 
-        unsafe { self.device.transfer_in_images(img1, img2)? };
+        let device = self.device_context.device_mut()?;
+
+        unsafe { device.transfer_in_images(img1, img2)? };
 
         if first_pass {
             unsafe {
-                self.device
-                    .run_shader(out_dimensions, ShaderModuleType::InitOutData, params)?;
+                device.run_shader(out_dimensions, ShaderModuleType::InitOutData, params)?;
             }
         } else {
             unsafe {
-                self.device.run_shader(
+                device.run_shader(
                     out_dimensions,
                     ShaderModuleType::PrepareInitialdataSearchdata,
                     params,
@@ -323,7 +328,7 @@ impl GpuContext {
                     params.corridor_end = neighbor_pixels as u32;
                 }
                 unsafe {
-                    self.device.run_shader(
+                    device.run_shader(
                         img1_dimensions,
                         ShaderModuleType::PrepareSearchdata,
                         params,
@@ -345,7 +350,7 @@ impl GpuContext {
                     params.corridor_end = neighbor_pixels as u32;
                 }
                 unsafe {
-                    self.device.run_shader(
+                    device.run_shader(
                         img1_dimensions,
                         ShaderModuleType::PrepareSearchdata,
                         params,
@@ -363,7 +368,7 @@ impl GpuContext {
         params.iteration_pass = if first_pass { 0 } else { 1 };
 
         unsafe {
-            self.device.run_shader(
+            device.run_shader(
                 max_dimensions,
                 ShaderModuleType::PrepareInitialdataCorrelation,
                 params,
@@ -385,11 +390,7 @@ impl GpuContext {
                     params.corridor_end = corridor_length as u32;
                 }
                 unsafe {
-                    self.device.run_shader(
-                        img1_dimensions,
-                        ShaderModuleType::CrossCorrelate,
-                        params,
-                    )?;
+                    device.run_shader(img1_dimensions, ShaderModuleType::CrossCorrelate, params)?;
                 }
 
                 let corridor_complete = params.corridor_end as f32 / corridor_length as f32;
@@ -402,10 +403,7 @@ impl GpuContext {
         }
 
         if matches!(dir, CorrelationDirection::Forward) {
-            unsafe {
-                self.device
-                    .save_corr(&mut self.correlation_values, self.correlation_threshold)?
-            };
+            unsafe { device.save_corr(&mut self.correlation_values, self.correlation_threshold)? };
         }
         Ok(())
     }
@@ -429,15 +427,95 @@ impl GpuContext {
     }
 }
 
-impl Device {
-    fn new(img1_pixels: usize, img2_pixels: usize) -> Result<Device, Box<dyn error::Error>> {
+pub struct DeviceContext {
+    entry: ash::Entry,
+    low_power: bool,
+    device: Option<Device>,
+}
+
+impl DeviceContext {
+    pub fn new(hardware_mode: HardwareMode) -> Result<DeviceContext, Box<dyn error::Error>> {
+        if !matches!(hardware_mode, HardwareMode::Gpu | HardwareMode::GpuLowPower) {
+            return Err(GpuError::new("GPU mode is not enabled").into());
+        };
+        let low_power = matches!(hardware_mode, HardwareMode::GpuLowPower);
+        let entry = unsafe { ash::Entry::load()? };
+        Ok(DeviceContext {
+            entry,
+            low_power,
+            device: None,
+        })
+    }
+
+    fn prepare_device(
+        &mut self,
+        img1_dimensions: (usize, usize),
+        img2_dimensions: (usize, usize),
+    ) -> Result<(), Box<dyn error::Error>> {
+        let img1_pixels = img1_dimensions.0 * img1_dimensions.1;
+        let img2_pixels = img2_dimensions.0 * img2_dimensions.1;
+
         // Ensure there's enough memory for the largest buffer.
         let max_pixels = img1_pixels.max(img2_pixels);
         let max_buffer_size = max_pixels * 4 * std::mem::size_of::<i32>();
 
+        let start_time = SystemTime::now();
+        let current_buffer_size = self
+            .device
+            .as_ref()
+            .map_or(0, |device| device.max_buffer_size);
+        if current_buffer_size < max_buffer_size || self.device.is_none() {
+            self.device = None;
+            self.device = Some(Device::new(&self.entry, max_buffer_size)?);
+        }
+        let device = self.device_mut()?;
+        unsafe {
+            if let Some(buffers) = device.buffers.as_ref() {
+                buffers.destroy(&device.device);
+                device.buffers = None;
+            }
+        }
+        let buffers = unsafe {
+            Device::create_buffers(
+                &device.device,
+                &device.memory_properties,
+                img1_pixels,
+                img2_pixels,
+            )?
+        };
+        device.buffers = Some(buffers);
+        device.set_buffer_direction(&CorrelationDirection::Forward)?;
+        if let Ok(t) = start_time.elapsed() {
+            println!("Initialized device in {:.3} seconds", t.as_secs_f32());
+        }
+        Ok(())
+    }
+
+    fn device(&self) -> Result<&Device, GpuError> {
+        match self.device.as_ref() {
+            Some(device) => Ok(device),
+            None => Err(GpuError::new("Device not initialized")),
+        }
+    }
+
+    fn device_mut(&mut self) -> Result<&mut Device, GpuError> {
+        match self.device.as_mut() {
+            Some(device) => Ok(device),
+            None => Err(GpuError::new("Device not initialized")),
+        }
+    }
+}
+
+impl Drop for DeviceContext {
+    fn drop(&mut self) {
+        self.device = None;
+    }
+}
+
+impl Device {
+    fn new(entry: &ash::Entry, max_buffer_size: usize) -> Result<Device, Box<dyn error::Error>> {
         // Init adapter.
-        let entry = unsafe { ash::Entry::load()? };
-        let instance = unsafe { Device::init_vk(&entry)? };
+        let instance = unsafe { Device::init_vk(entry)? };
         let cleanup_err = |err| unsafe {
             // TODO: look at refactoring this to follow RAII patterns (like ashpan/scopeguard).
             instance.destroy_instance(None);
@@ -455,20 +533,9 @@ impl Device {
                 }
             }
         };
-        let cleanup_err = |err| unsafe {
-            device.destroy_device(None);
-            instance.destroy_instance(None);
-            err
-        };
-        // Init buffers.
         let memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
-        let buffers = unsafe {
-            Device::create_buffers(&device, &memory_properties, img1_pixels, img2_pixels)
-                .map_err(cleanup_err)?
-        };
         let cleanup_err = |err| unsafe {
-            buffers.destroy(&device);
             device.destroy_device(None);
             instance.destroy_instance(None);
             err
@@ -478,7 +545,6 @@ impl Device {
             unsafe { Device::create_descriptor_sets(&device).map_err(cleanup_err)? };
         let cleanup_err = |err| unsafe {
             descriptor_sets.destroy(&device);
-            buffers.destroy(&device);
             device.destroy_device(None);
             instance.destroy_instance(None);
             err
@@ -488,7 +554,6 @@ impl Device {
         let cleanup_err = |err| unsafe {
             destroy_pipelines(&device, &pipelines);
             descriptor_sets.destroy(&device);
-            buffers.destroy(&device);
             device.destroy_device(None);
             instance.destroy_instance(None);
             err
@@ -497,12 +562,12 @@ impl Device {
         let control =
             unsafe { Device::create_control(&device, compute_queue_index).map_err(cleanup_err)? };
         let result = Device {
-            _entry: entry,
             instance,
             name,
             device,
             memory_properties,
-            buffers,
+            buffers: None,
+            max_buffer_size,
             descriptor_sets,
             pipelines,
             control,
@@ -737,6 +802,7 @@ impl Device {
         img1: &Grid<u8>,
         img2: &Grid<u8>,
     ) -> Result<(), Box<dyn error::Error>> {
+        let buffers = self.buffers()?;
         let img2_offset = img1.width() * img1.height();
         let size = img1.width() * img1.height() + img2.width() * img2.height();
         let copy_images = |img_slice: &mut [f32]| {
@@ -747,7 +813,7 @@ impl Device {
             });
         };
 
-        self.map_buffer_write(&self.buffers.buffer_img, size, copy_images)?;
+        self.map_buffer_write(&buffers.buffer_img, size, copy_images)?;
 
         Ok(())
     }
@@ -757,6 +823,7 @@ impl Device {
         correlation_values: &mut Grid<Option<f32>>,
         correlation_threshold: f32,
     ) -> Result<(), Box<dyn error::Error>> {
+        let buffers = self.buffers()?;
         let size = correlation_values.width() * correlation_values.height();
         let width = correlation_values.width();
         let copy_corr_data = |out_corr: &[f32]| {
@@ -770,7 +837,7 @@ impl Device {
                 });
         };
 
-        self.map_buffer_read(&self.buffers.buffer_out_corr, size, copy_corr_data)?;
+        self.map_buffer_read(&buffers.buffer_out_corr, size, copy_corr_data)?;
 
         Ok(())
     }
@@ -780,6 +847,7 @@ impl Device {
         out_image: &mut Grid<Option<super::Match>>,
         correlation_values: &Grid<Option<f32>>,
     ) -> Result<(), Box<dyn error::Error>> {
+        let buffers = self.buffers()?;
         let size = out_image.width() * out_image.height() * 2;
         let width = out_image.width();
         let copy_out_image = |out_data: &[i32]| {
@@ -799,7 +867,7 @@ impl Device {
             });
         };
 
-        self.map_buffer_read(&self.buffers.buffer_out, size, copy_out_image)?;
+        self.map_buffer_read(&buffers.buffer_out, size, copy_out_image)?;
 
         Ok(())
     }
@@ -999,6 +1067,13 @@ impl Device {
         })
     }
 
+    fn buffers(&self) -> Result<&DeviceBuffers, GpuError> {
+        match self.buffers.as_ref() {
+            Some(buffers) => Ok(buffers),
+            None => Err(GpuError::new("Buffers not initialized")),
+        }
+    }
+
     unsafe fn create_buffer(
         device: &ash::Device,
         memory_properties: &vk::PhysicalDeviceMemoryProperties,
@@ -1161,9 +1236,9 @@ impl Device {
         })
     }
 
-    fn set_buffer_direction(&self, direction: &CorrelationDirection) {
+    fn set_buffer_direction(&self, direction: &CorrelationDirection) -> Result<(), GpuError> {
         let descriptor_sets = &self.descriptor_sets;
-        let buffers = &self.buffers;
+        let buffers = &self.buffers()?;
         let create_buffer_infos = |buffers: &[Buffer]| {
             buffers
                 .iter()
@@ -1215,6 +1290,7 @@ impl Device {
         unsafe {
             self.device.update_descriptor_sets(&write_descriptors, &[]);
         }
+        Ok(())
     }
 
     unsafe fn load_shaders(
@@ -1428,7 +1504,9 @@ impl Drop for Device {
             self.control.destroy(&self.device);
             destroy_pipelines(&self.device, &self.pipelines);
             self.descriptor_sets.destroy(&self.device);
-            self.buffers.destroy(&self.device);
+            self.buffers
+                .as_ref()
+                .map(|buffers| buffers.destroy(&self.device));
             self.device.destroy_device(None);
             self.instance.destroy_instance(None);
         }
