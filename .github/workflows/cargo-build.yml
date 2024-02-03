@@ -165,8 +165,8 @@ jobs:
 
     - name: Compile shaders
       run: |
-        xcrun -sdk macosx metal -c src/correlation/correlation.metal -o src/correlation/correlation.air
-        xcrun -sdk macosx metallib src/correlation/correlation.air -o src/correlation/correlation.metallib
+        xcrun -sdk macosx metal -c src/correlation/gpu/shaders/correlation.metal -o src/correlation/gpu/shaders/correlation.air
+        xcrun -sdk macosx metallib src/correlation/gpu/shaders/correlation.air -o src/correlation/gpu/shaders/correlation.metallib
 
     - name: Build
       run: cargo build --target=${{ matrix.arch }}-apple-darwin --release
@@ -179,7 +179,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: shaders-metallib
-        path: src/correlation/correlation.metallib
+        path: src/correlation/gpu/shaders/correlation.metallib
 
     - name: Upload application
       uses: actions/upload-artifact@v4

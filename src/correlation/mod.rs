@@ -1,14 +1,7 @@
-#[cfg(target_os = "macos")]
-mod metal;
-#[cfg(not(target_os = "macos"))]
-mod vk;
+mod gpu;
 
-#[cfg(target_os = "macos")]
-type GpuContext = metal::GpuContext;
-#[cfg(not(target_os = "macos"))]
-type GpuContext<'a> = vk::GpuContext<'a>;
+use self::gpu::{DefaultDeviceContext, GpuContext};
 
-use self::vk::DeviceContext;
 use crate::data::{Grid, Point2D};
 use nalgebra::{Matrix3, Vector3};
 use rayon::iter::ParallelIterator;
@@ -32,6 +25,8 @@ const CORRIDOR_MIN_RANGE: f64 = 2.5;
 const CROSS_CHECK_SEARCH_AREA: usize = 2;
 
 type Match = (Point2D<u32>, f32);
+
+pub type GpuDevice = DefaultDeviceContext;
 
 #[derive(Debug)]
 pub struct PointData<const KPC: usize> {
@@ -131,17 +126,13 @@ impl CorrelationParameters {
     }
 }
 
-pub type GpuDevice = DeviceContext;
-
-pub fn create_gpu_context(
-    hardware_mode: HardwareMode,
-) -> Result<DeviceContext, Box<dyn error::Error>> {
-    vk::DeviceContext::new(hardware_mode)
+pub fn create_gpu_context(hardware_mode: HardwareMode) -> Result<GpuDevice, Box<dyn error::Error>> {
+    GpuDevice::new(hardware_mode)
 }
 
 impl PointCorrelations<'_> {
     pub fn new(
-        device_context: Option<&mut DeviceContext>,
+        device_context: Option<&mut GpuDevice>,
         img1_dimensions: (u32, u32),
         img2_dimensions: (u32, u32),
         fundamental_matrix: Matrix3<f64>,
