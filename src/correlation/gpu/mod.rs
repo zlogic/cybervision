@@ -1,14 +1,14 @@
 #[cfg(target_os = "macos")]
 mod metal;
 #[cfg(not(target_os = "macos"))]
-mod vk;
+mod vulkan;
 
 use std::{error, fmt};
 #[cfg(not(target_os = "macos"))]
-use vk::ShaderModuleType;
+use vulkan::ShaderModuleType;
 
 #[cfg(not(target_os = "macos"))]
-pub type DefaultDeviceContext = vk::DeviceContext;
+pub type DefaultDeviceContext = vulkan::DeviceContext;
 
 use crate::data::Grid;
 use nalgebra::Matrix3;
