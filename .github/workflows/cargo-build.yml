@@ -27,7 +27,7 @@ jobs:
           ~/.cargo/registry/cache
           ~/.cargo/git/db
           ${{ github.workspace }}/target
-        key: lint-${{ runner.os }}-${{ steps.get-rust-version.outputs.VERSION }}-${{ hashFiles('Cargo.lock') }}
+        key: lint-${{ runner.os }}-${{ steps.get-rust-version.outputs.VERSION }}-${{ hashFiles('Cargo.*') }}
 
     - name: Validate Rust code with clippy
       run: cargo clippy
@@ -61,7 +61,7 @@ jobs:
           ~/.cargo/registry/cache
           ~/.cargo/git/db
           ${{ github.workspace }}/target
-        key: rust-${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-${{ steps.get-rust-version.outputs.VERSION }}-${{ hashFiles('Cargo.lock') }}
+        key: rust-${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-${{ steps.get-rust-version.outputs.VERSION }}-${{ hashFiles('Cargo.*') }}
 
     - name: Install compiler and prepare for cross-compilation
       if: matrix.arch == 'aarch64'
@@ -114,7 +114,7 @@ jobs:
           ~\.cargo\registry\cache
           ~\.cargo\git\db
           ${{ github.workspace }}\target
-        key: rust-${{ runner.os }}-${{ matrix.arch }}-${{ steps.get-rust-version.outputs.VERSION }}-${{ hashFiles('Cargo.lock') }}
+        key: rust-${{ runner.os }}-${{ matrix.arch }}-${{ steps.get-rust-version.outputs.VERSION }}-${{ hashFiles('Cargo.*') }}
 
     - name: Install compiler and prepare for cross-compilation
       if: matrix.arch == 'aarch64'
@@ -157,7 +157,7 @@ jobs:
           ~/.cargo/registry/cache
           ~/.cargo/git/db
           ${{ github.workspace }}/target
-        key: rust-${{ runner.os }}-${{ matrix.arch }}-${{ steps.get-rust-version.outputs.VERSION }}-${{ hashFiles('Cargo.lock') }}
+        key: rust-${{ runner.os }}-${{ matrix.arch }}-${{ steps.get-rust-version.outputs.VERSION }}-${{ hashFiles('Cargo.*') }}
 
     - name: Install compiler and prepare for cross-compilation
       if: matrix.arch == 'aarch64'
