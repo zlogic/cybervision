@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error, ffi::c_void, fs, slice};
+use std::{collections::HashMap, error, ffi::c_void, slice};
 
 use metal::objc::rc::autoreleasepool;
 use rayon::iter::ParallelIterator;
@@ -224,10 +224,8 @@ impl Device {
     ) -> Result<HashMap<ShaderModuleType, metal::ComputePipelineState>, Box<dyn error::Error>> {
         autoreleasepool(|| {
             let mut result = HashMap::new();
-            // TODO: switch to a precompiled library and use new_library_with_data
-            let source = fs::read_to_string("correlation.metal")?;
-            let library =
-                device.new_library_with_source(source.as_str(), &metal::CompileOptions::new())?;
+            let source = include_bytes!("shaders/correlation.metallib");
+            let library = device.new_library_with_data(source)?;
             for module_type in ShaderModuleType::VALUES {
                 let function = module_type.load(&library)?;
                 let pipeline = device.new_compute_pipeline_state_with_function(&function)?;
