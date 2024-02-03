@@ -1,6 +1,8 @@
 use std::{cmp::Ordering, collections::HashMap, error, ffi::CStr, slice};
 
+use super::Device as GpuDevice;
 use ash::{prelude::VkResult, vk};
+use nalgebra::Matrix3;
 use rayon::iter::ParallelIterator;
 
 use crate::{
@@ -113,6 +115,20 @@ impl DeviceContext {
 }
 
 impl super::DeviceContext<Device> for DeviceContext {
+    fn convert_fundamental_matrix(fundamental_matrix: &Matrix3<f64>) -> [f32; 3 * 4] {
+        let mut f = [0f32; 3 * 4];
+        // Matrix layout in GLSL (OpenGL) is pure madness: https://www.opengl.org/archives/resources/faq/technical/transformations.htm.
+        // "Column major" means that vectors are vertical and a matrix multiplies a vector.
+        // "Row major" means a horizontal vector multiplies a matrix.
+        // This says nothing about how the matrix is stored in memory.
+        for row in 0..3 {
+            for col in 0..3 {
+                f[col * 4 + row] = fundamental_matrix[(row, col)] as f32;
+            }
+        }
+        f
+    }
+
     fn is_low_power(&self) -> bool {
         self.low_power
     }
@@ -765,63 +781,6 @@ impl Device {
         })
     }
 
-    pub fn set_buffer_direction(&self, direction: &CorrelationDirection) -> Result<(), GpuError> {
-        let descriptor_sets = &self.descriptor_sets;
-        let buffers = &self.buffers()?;
-        let create_buffer_infos = |buffers: &[Buffer]| {
-            buffers
-                .iter()
-                .map(|buf| {
-                    vk::DescriptorBufferInfo::builder()
-                        .buffer(buf.buffer)
-                        .offset(0)
-                        .range(vk::WHOLE_SIZE)
-                        .build()
-                })
-                .collect::<Vec<_>>()
-        };
-        let create_write_descriptor = |i: usize, buffer_infos: &[vk::DescriptorBufferInfo]| {
-            vk::WriteDescriptorSet::builder()
-                .dst_set(descriptor_sets.descriptor_sets[i])
-                .dst_binding(0)
-                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                .buffer_info(buffer_infos)
-                .build()
-        };
-        let (buffer_internal_img1, buffer_internal_img2, buffer_out, buffer_out_reverse) =
-            match direction {
-                CorrelationDirection::Forward => (
-                    buffers.buffer_internal_img1,
-                    buffers.buffer_internal_img2,
-                    buffers.buffer_out,
-                    buffers.buffer_out_reverse,
-                ),
-                CorrelationDirection::Reverse => (
-                    buffers.buffer_internal_img2,
-                    buffers.buffer_internal_img1,
-                    buffers.buffer_out_reverse,
-                    buffers.buffer_out,
-                ),
-            };
-        let regular_buffer_infos = create_buffer_infos(&[
-            buffers.buffer_img,
-            buffer_internal_img1,
-            buffer_internal_img2,
-            buffers.buffer_internal_int,
-            buffer_out,
-            buffers.buffer_out_corr,
-        ]);
-        let cross_check_buffer_infos = create_buffer_infos(&[buffer_out, buffer_out_reverse]);
-        let write_descriptors = [
-            create_write_descriptor(0, regular_buffer_infos.as_slice()),
-            create_write_descriptor(1, cross_check_buffer_infos.as_slice()),
-        ];
-        unsafe {
-            self.device.update_descriptor_sets(&write_descriptors, &[]);
-        }
-        Ok(())
-    }
-
     unsafe fn load_shaders(
         device: &ash::Device,
     ) -> Result<Vec<(ShaderModuleType, vk::ShaderModule)>, Box<dyn error::Error>> {
@@ -933,6 +892,63 @@ impl Device {
 }
 
 impl super::Device for Device {
+    fn set_buffer_direction(&mut self, direction: &CorrelationDirection) -> Result<(), GpuError> {
+        let descriptor_sets = &self.descriptor_sets;
+        let buffers = &self.buffers()?;
+        let create_buffer_infos = |buffers: &[Buffer]| {
+            buffers
+                .iter()
+                .map(|buf| {
+                    vk::DescriptorBufferInfo::builder()
+                        .buffer(buf.buffer)
+                        .offset(0)
+                        .range(vk::WHOLE_SIZE)
+                        .build()
+                })
+                .collect::<Vec<_>>()
+        };
+        let create_write_descriptor = |i: usize, buffer_infos: &[vk::DescriptorBufferInfo]| {
+            vk::WriteDescriptorSet::builder()
+                .dst_set(descriptor_sets.descriptor_sets[i])
+                .dst_binding(0)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                .buffer_info(buffer_infos)
+                .build()
+        };
+        let (buffer_internal_img1, buffer_internal_img2, buffer_out, buffer_out_reverse) =
+            match direction {
+                CorrelationDirection::Forward => (
+                    buffers.buffer_internal_img1,
+                    buffers.buffer_internal_img2,
+                    buffers.buffer_out,
+                    buffers.buffer_out_reverse,
+                ),
+                CorrelationDirection::Reverse => (
+                    buffers.buffer_internal_img2,
+                    buffers.buffer_internal_img1,
+                    buffers.buffer_out_reverse,
+                    buffers.buffer_out,
+                ),
+            };
+        let regular_buffer_infos = create_buffer_infos(&[
+            buffers.buffer_img,
+            buffer_internal_img1,
+            buffer_internal_img2,
+            buffers.buffer_internal_int,
+            buffer_out,
+            buffers.buffer_out_corr,
+        ]);
+        let cross_check_buffer_infos = create_buffer_infos(&[buffer_out, buffer_out_reverse]);
+        let write_descriptors = [
+            create_write_descriptor(0, regular_buffer_infos.as_slice()),
+            create_write_descriptor(1, cross_check_buffer_infos.as_slice()),
+        ];
+        unsafe {
+            self.device.update_descriptor_sets(&write_descriptors, &[]);
+        }
+        Ok(())
+    }
+
     unsafe fn run_shader(
         &mut self,
         dimensions: (usize, usize),

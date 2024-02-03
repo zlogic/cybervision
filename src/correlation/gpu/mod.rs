@@ -3,15 +3,19 @@ mod metal;
 #[cfg(not(target_os = "macos"))]
 mod vulkan;
 
-use std::{error, fmt};
+#[cfg(target_os = "macos")]
+use metal::ShaderModuleType;
 #[cfg(not(target_os = "macos"))]
 use vulkan::ShaderModuleType;
 
+#[cfg(target_os = "macos")]
+pub type DefaultDeviceContext = metal::DeviceContext;
 #[cfg(not(target_os = "macos"))]
 pub type DefaultDeviceContext = vulkan::DeviceContext;
 
 use crate::data::Grid;
 use nalgebra::Matrix3;
+use std::{error, fmt};
 
 use crate::correlation::{
     CorrelationDirection, CorrelationParameters, HardwareMode, ProjectionMode, CORRIDOR_MIN_RANGE,
@@ -27,6 +31,8 @@ const CORRIDOR_SEGMENT_LENGTH_LOWPOWER: usize = 8;
 const SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER: usize = 128;
 
 trait Device {
+    fn set_buffer_direction(&mut self, direction: &CorrelationDirection) -> Result<(), GpuError>;
+
     unsafe fn run_shader(
         &mut self,
         dimensions: (usize, usize),
@@ -59,6 +65,8 @@ trait DeviceContext<D>
 where
     D: Device,
 {
+    fn convert_fundamental_matrix(fundamental_matrix: &Matrix3<f64>) -> [f32; 3 * 4];
+
     fn is_low_power(&self) -> bool;
 
     fn get_device_name(&self) -> Option<String>;
@@ -224,7 +232,7 @@ impl GpuContext<'_> {
         dir: CorrelationDirection,
     ) -> Result<(), Box<dyn error::Error>> {
         {
-            let device = self.device_context.device()?;
+            let device = self.device_context.device_mut()?;
             device.set_buffer_direction(&dir)?;
         }
         let max_width = img1.width().max(img2.width());
@@ -385,17 +393,7 @@ impl GpuContext<'_> {
             CorrelationDirection::Forward => self.fundamental_matrix,
             CorrelationDirection::Reverse => self.fundamental_matrix.transpose(),
         };
-        let mut f = [0f32; 3 * 4];
-        // Matrix layout in GLSL (OpenGL) is pure madness: https://www.opengl.org/archives/resources/faq/technical/transformations.htm.
-        // "Column major" means that vectors are vertical and a matrix multiplies a vector.
-        // "Row major" means a horizontal vector multiplies a matrix.
-        // This says nothing about how the matrix is stored in memory.
-        for row in 0..3 {
-            for col in 0..3 {
-                f[col * 4 + row] = fundamental_matrix[(row, col)] as f32;
-            }
-        }
-        f
+        DefaultDeviceContext::convert_fundamental_matrix(&fundamental_matrix)
     }
 }
 
