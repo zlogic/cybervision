@@ -14,13 +14,13 @@ use std::{
 };
 
 use image::{RgbImage, Rgba, RgbaImage};
-use nalgebra::{Vector2, Vector3};
+use nalgebra::Vector3;
 use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 
 use rayon::prelude::*;
 
 const PROJECTIONS_INDEX_GRID_SIZE: usize = 1000;
-const MAX_POLYGON_AREA_RATION: f64 = 10.0;
+const MAX_NORMAL_COS: f64 = 0.7;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum InterpolationMode {
@@ -272,14 +272,13 @@ impl Mesh {
     }
 
     #[inline]
-    fn polygon_area(a: f64, b: f64, c: f64) -> f64 {
-        // Heron's formula to find the triangle area.
-        let s = (a + b + c) / 2.0;
-        (s * (s - a) * (s - b) * (s - c)).sqrt()
-    }
-
-    #[inline]
-    fn max_projected_area(&self, polygon: &Polygon) -> Option<f64> {
+    fn polygon_too_steep(&self, polygon: &Polygon) -> bool {
+        let (point0, point1, point2) = if let Some(points) = self.get_polygon_points(polygon) {
+            points
+        } else {
+            return true;
+        };
+        let polygon_normal = (point1 - point0).cross(&(point2 - point0)).normalize();
         let point0_projections = self.points.get_camera_points(polygon.vertices[0]);
         let point1_projections = self.points.get_camera_points(polygon.vertices[1]);
         let point2_projections = self.points.get_camera_points(polygon.vertices[2]);
@@ -288,59 +287,31 @@ impl Mesh {
             .min(point1_projections.len())
             .min(point2_projections.len());
 
-        let (point0, point1, point2) = self.get_polygon_points(polygon)?;
         let affine_projection = self.points.cameras_len() == 0;
 
-        (0..projections_count)
+        let min_cos = (0..projections_count)
             .filter_map(|camera_i| {
-                let (point0, point1, point2) = if affine_projection {
-                    let point0 = point0_projections[camera_i]?;
-                    let point1 = point1_projections[camera_i]?;
-                    let point2 = point2_projections[camera_i]?;
-                    let point0 = Vector2::new(point0.x as f64, point0.y as f64);
-                    let point1 = Vector2::new(point1.x as f64, point1.y as f64);
-                    let point2 = Vector2::new(point2.x as f64, point2.y as f64);
-                    (point0, point1, point2)
+                if point0_projections[camera_i].is_none()
+                    || point1_projections[camera_i].is_none()
+                    || point2_projections[camera_i].is_none()
+                {
+                    return None;
+                }
+                let normal_in_camera = if affine_projection {
+                    Vector3::new(0.0, 0.0, 1.0)
                 } else {
-                    let point0 = self.points.point_in_camera(camera_i, &point0);
-                    let point1 = self.points.point_in_camera(camera_i, &point1);
-                    let point2 = self.points.point_in_camera(camera_i, &point2);
-                    let point0 = Vector2::new(point0.x, point0.y);
-                    let point1 = Vector2::new(point1.x, point1.y);
-                    let point2 = Vector2::new(point2.x, point2.y);
-                    (point0, point1, point2)
+                    self.points.camera_look_direction(camera_i)
                 };
-                let area = Mesh::polygon_area(
-                    (point1 - point0).norm(),
-                    (point2 - point1).norm(),
-                    (point0 - point2).norm(),
-                );
-                Some(area)
+                let cos_angle = normal_in_camera.dot(&polygon_normal);
+                Some(cos_angle)
             })
-            .reduce(|a, b| a.max(b))
-    }
+            .reduce(|a, b| a.max(b));
 
-    #[inline]
-    fn polygon_too_steep(&self, polygon: &Polygon) -> bool {
-        let (point0, point1, point2) = if let Some(points) = self.get_polygon_points(polygon) {
-            points
+        if let Some(min_cos) = min_cos {
+            min_cos < MAX_NORMAL_COS
         } else {
-            return true;
-        };
-
-        let area_3d = Mesh::polygon_area(
-            (point1 - point0).norm(),
-            (point2 - point1).norm(),
-            (point0 - point2).norm(),
-        );
-
-        let area_2d = if let Some(area) = self.max_projected_area(polygon) {
-            area
-        } else {
-            return true;
-        };
-
-        area_3d > area_2d * MAX_POLYGON_AREA_RATION
+            true
+        }
     }
 
     #[inline]
