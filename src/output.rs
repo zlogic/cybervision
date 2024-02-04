@@ -20,7 +20,7 @@ use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 use rayon::prelude::*;
 
 const PROJECTIONS_INDEX_GRID_SIZE: usize = 1000;
-const MAX_POLYGON_AREA_RATION: f64 = 4.0;
+const MAX_POLYGON_AREA_RATION: f64 = 10.0;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum InterpolationMode {
@@ -279,7 +279,7 @@ impl Mesh {
     }
 
     #[inline]
-    fn min_projected_area(&self, polygon: &Polygon) -> Option<f64> {
+    fn max_projected_area(&self, polygon: &Polygon) -> Option<f64> {
         let point0_projections = self.points.get_camera_points(polygon.vertices[0]);
         let point1_projections = self.points.get_camera_points(polygon.vertices[1]);
         let point2_projections = self.points.get_camera_points(polygon.vertices[2]);
@@ -305,9 +305,9 @@ impl Mesh {
                     let point0 = self.points.point_in_camera(camera_i, &point0);
                     let point1 = self.points.point_in_camera(camera_i, &point1);
                     let point2 = self.points.point_in_camera(camera_i, &point2);
-                    let point0 = Vector2::new(point0.x as f64, point0.y as f64);
-                    let point1 = Vector2::new(point1.x as f64, point1.y as f64);
-                    let point2 = Vector2::new(point2.x as f64, point2.y as f64);
+                    let point0 = Vector2::new(point0.x, point0.y);
+                    let point1 = Vector2::new(point1.x, point1.y);
+                    let point2 = Vector2::new(point2.x, point2.y);
                     (point0, point1, point2)
                 };
                 let area = Mesh::polygon_area(
@@ -317,7 +317,7 @@ impl Mesh {
                 );
                 Some(area)
             })
-            .reduce(|a, b| a.min(b))
+            .reduce(|a, b| a.max(b))
     }
 
     #[inline]
@@ -334,7 +334,7 @@ impl Mesh {
             (point0 - point2).norm(),
         );
 
-        let area_2d = if let Some(area) = self.min_projected_area(polygon) {
+        let area_2d = if let Some(area) = self.max_projected_area(polygon) {
             area
         } else {
             return true;
