@@ -60,6 +60,7 @@ impl Surface {
     pub fn point_depth(&self, camera_i: usize, track_i: usize) -> Option<f64> {
         let track = &self.tracks[track_i];
         if self.cameras.is_empty() {
+            // Cameras is empty for affine projection.
             return Some(track.point3d?.z);
         }
         let camera = &self.cameras[camera_i];
