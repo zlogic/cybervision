@@ -20,6 +20,7 @@ use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 use rayon::prelude::*;
 
 const PROJECTIONS_INDEX_GRID_SIZE: usize = 1000;
+const PEAK_FILTER_ITERATIONS: usize = 4;
 const MAX_NORMAL_COS: f64 = 0.5;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -42,7 +43,7 @@ where
     fn report_status(&self, pos: f32);
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Point {
     point: Point2<f64>,
     track_i: usize,
@@ -429,7 +430,7 @@ impl Mesh {
             return Ok(());
         }
 
-        let camera_points = self
+        let mut camera_points = self
             .points
             .iter_tracks()
             .enumerate()
@@ -443,8 +444,6 @@ impl Mesh {
         if self.camera_ranges.is_empty() {
             self.camera_ranges = self.camera_ranges();
         }
-
-        let triangulated_surface = DelaunayTriangulation::<Point>::bulk_load(camera_points)?;
 
         let cameras_len = self.points.cameras_len();
         let (percent_complete, percent_multiplier) = if cameras_len > 0 {
@@ -461,10 +460,11 @@ impl Mesh {
             pl.report_status(0.9 * percent_complete);
         }
 
-        let mut new_polygons = triangulated_surface
-            .inner_faces()
-            .par_bridge()
-            .filter_map(|f| {
+        let mut skip_points = vec![0; self.points.tracks_len()];
+        for i in 0..PEAK_FILTER_ITERATIONS {
+            let triangulated_surface =
+                DelaunayTriangulation::<Point>::bulk_load(camera_points.to_owned())?;
+            triangulated_surface.inner_faces().for_each(|f| {
                 let vertices = f.vertices();
                 let v0 = vertices[0].data().track_i;
                 let v1 = vertices[1].data().track_i;
@@ -473,9 +473,41 @@ impl Mesh {
 
                 // Discard polygons that are too steep.
                 if self.polygon_too_steep(&polygon) {
-                    return None;
+                    skip_points[v0] += 1;
+                    skip_points[v1] += 1;
+                    skip_points[v2] += 1;
                 };
-                Some(polygon)
+            });
+            camera_points.retain(|point| skip_points[point.track_i] < 3);
+
+            let percent_multiplier = i as f32 / (PEAK_FILTER_ITERATIONS + 1) as f32;
+            let percent_complete = percent_complete + percent_multiplier * 0.2;
+            if let Some(pl) = progress_listener {
+                pl.report_status(0.9 * percent_complete);
+            }
+        }
+
+        let camera_points = self
+            .points
+            .iter_tracks()
+            .enumerate()
+            .par_bridge()
+            .filter_map(|(track_i, track)| {
+                let projection = track.get(camera_i)?;
+                let point = Point2::new(projection.x as f64, projection.y as f64);
+                Some(Point { track_i, point })
+            })
+            .collect::<Vec<_>>();
+        let triangulated_surface = DelaunayTriangulation::<Point>::bulk_load(camera_points)?;
+        let mut new_polygons = triangulated_surface
+            .inner_faces()
+            .par_bridge()
+            .map(|f| {
+                let vertices = f.vertices();
+                let v0 = vertices[0].data().track_i;
+                let v1 = vertices[1].data().track_i;
+                let v2 = vertices[2].data().track_i;
+                Polygon::new(camera_i, [v0, v1, v2])
             })
             .collect::<Vec<_>>();
         drop(triangulated_surface);
