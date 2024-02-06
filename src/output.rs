@@ -20,8 +20,8 @@ use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 use rayon::prelude::*;
 
 const PROJECTIONS_INDEX_GRID_SIZE: usize = 1000;
-const PEAK_FILTER_ITERATIONS: usize = 4;
-const MAX_NORMAL_COS: f64 = 0.5;
+const PEAK_FILTER_ITERATIONS: usize = 1;
+const MAX_NORMAL_COS: f64 = 0.8;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum InterpolationMode {
