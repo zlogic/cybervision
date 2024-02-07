@@ -20,7 +20,6 @@ use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 use rayon::prelude::*;
 
 const PROJECTIONS_INDEX_GRID_SIZE: usize = 1000;
-const PEAK_FILTER_ITERATIONS: usize = 1;
 const MAX_NORMAL_COS: f64 = 0.8;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -273,12 +272,8 @@ impl Mesh {
     }
 
     #[inline]
-    fn polygon_too_steep(&self, polygon: &Polygon) -> bool {
-        let (point0, point1, point2) = if let Some(points) = self.get_polygon_points(polygon) {
-            points
-        } else {
-            return true;
-        };
+    fn min_angle_cos(&self, polygon: &Polygon) -> Option<f64> {
+        let (point0, point1, point2) = self.get_polygon_points(polygon)?;
         let polygon_normal = (point1 - point0).cross(&(point2 - point0)).normalize();
         let point0_projections = self.points.get_camera_points(polygon.vertices[0]);
         let point1_projections = self.points.get_camera_points(polygon.vertices[1]);
@@ -290,7 +285,7 @@ impl Mesh {
 
         let affine_projection = self.points.cameras_len() == 0;
 
-        let min_cos = (0..projections_count)
+        (0..projections_count)
             .filter_map(|camera_i| {
                 if point0_projections[camera_i].is_none()
                     || point1_projections[camera_i].is_none()
@@ -298,21 +293,20 @@ impl Mesh {
                 {
                     return None;
                 }
-                let normal_in_camera = if affine_projection {
-                    Vector3::new(0.0, 0.0, 1.0)
+                if affine_projection {
+                    let cos_angle = Vector3::new(0.0, 0.0, 1.0).dot(&polygon_normal);
+                    Some(cos_angle)
                 } else {
-                    self.points.camera_look_direction(camera_i)
-                };
-                let cos_angle = normal_in_camera.dot(&polygon_normal);
-                Some(cos_angle)
+                    [point0, point1, point2]
+                        .iter()
+                        .map(|point| {
+                            let direction = point - self.points.camera_center(camera_i);
+                            direction.dot(&polygon_normal)
+                        })
+                        .reduce(|a, b| a.min(b))
+                }
             })
-            .reduce(|a, b| a.max(b));
-
-        if let Some(min_cos) = min_cos {
-            min_cos < MAX_NORMAL_COS
-        } else {
-            true
-        }
+            .reduce(|a, b| a.min(b))
     }
 
     #[inline]
@@ -430,7 +424,7 @@ impl Mesh {
             return Ok(());
         }
 
-        let mut camera_points = self
+        let camera_points = self
             .points
             .iter_tracks()
             .enumerate()
@@ -444,6 +438,8 @@ impl Mesh {
         if self.camera_ranges.is_empty() {
             self.camera_ranges = self.camera_ranges();
         }
+
+        let triangulated_surface = DelaunayTriangulation::<Point>::bulk_load(camera_points)?;
 
         let cameras_len = self.points.cameras_len();
         let (percent_complete, percent_multiplier) = if cameras_len > 0 {
@@ -460,11 +456,10 @@ impl Mesh {
             pl.report_status(0.9 * percent_complete);
         }
 
-        let mut skip_points = vec![0; self.points.tracks_len()];
-        for i in 0..PEAK_FILTER_ITERATIONS {
-            let triangulated_surface =
-                DelaunayTriangulation::<Point>::bulk_load(camera_points.to_owned())?;
-            triangulated_surface.inner_faces().for_each(|f| {
+        let mut new_polygons = triangulated_surface
+            .inner_faces()
+            .par_bridge()
+            .flat_map(|f| {
                 let vertices = f.vertices();
                 let v0 = vertices[0].data().track_i;
                 let v1 = vertices[1].data().track_i;
@@ -472,42 +467,14 @@ impl Mesh {
                 let polygon = Polygon::new(camera_i, [v0, v1, v2]);
 
                 // Discard polygons that are too steep.
-                if self.polygon_too_steep(&polygon) {
-                    skip_points[v0] += 1;
-                    skip_points[v1] += 1;
-                    skip_points[v2] += 1;
-                };
-            });
-            camera_points.retain(|point| skip_points[point.track_i] < 3);
-
-            let percent_multiplier = i as f32 / (PEAK_FILTER_ITERATIONS + 1) as f32;
-            let percent_complete = percent_complete + percent_multiplier * 0.2;
-            if let Some(pl) = progress_listener {
-                pl.report_status(0.9 * percent_complete);
-            }
-        }
-
-        let camera_points = self
-            .points
-            .iter_tracks()
-            .enumerate()
-            .par_bridge()
-            .filter_map(|(track_i, track)| {
-                let projection = track.get(camera_i)?;
-                let point = Point2::new(projection.x as f64, projection.y as f64);
-                Some(Point { track_i, point })
-            })
-            .collect::<Vec<_>>();
-        let triangulated_surface = DelaunayTriangulation::<Point>::bulk_load(camera_points)?;
-        let mut new_polygons = triangulated_surface
-            .inner_faces()
-            .par_bridge()
-            .map(|f| {
-                let vertices = f.vertices();
-                let v0 = vertices[0].data().track_i;
-                let v1 = vertices[1].data().track_i;
-                let v2 = vertices[2].data().track_i;
-                Polygon::new(camera_i, [v0, v1, v2])
+                if self
+                    .min_angle_cos(&polygon)
+                    .map_or(true, |angle_cos| angle_cos < MAX_NORMAL_COS)
+                {
+                    None
+                } else {
+                    Some(polygon)
+                }
             })
             .collect::<Vec<_>>();
         drop(triangulated_surface);
