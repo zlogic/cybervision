@@ -20,7 +20,7 @@ use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 use rayon::prelude::*;
 
 const PROJECTIONS_INDEX_GRID_SIZE: usize = 1000;
-const MAX_NORMAL_COS: f64 = 0.8;
+const MAX_NORMAL_COS: f64 = 0.2;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum InterpolationMode {
@@ -272,7 +272,7 @@ impl Mesh {
     }
 
     #[inline]
-    fn min_angle_cos(&self, polygon: &Polygon) -> Option<f64> {
+    fn max_angle_cos(&self, polygon: &Polygon) -> Option<f64> {
         let (point0, point1, point2) = self.get_polygon_points(polygon)?;
         let polygon_normal = (point1 - point0).cross(&(point2 - point0)).normalize();
         let point0_projections = self.points.get_camera_points(polygon.vertices[0]);
@@ -293,20 +293,16 @@ impl Mesh {
                 {
                     return None;
                 }
-                if affine_projection {
-                    let cos_angle = Vector3::new(0.0, 0.0, 1.0).dot(&polygon_normal);
-                    Some(cos_angle)
+                let direction = if affine_projection {
+                    Vector3::new(0.0, 0.0, 1.0)
                 } else {
-                    [point0, point1, point2]
-                        .iter()
-                        .map(|point| {
-                            let direction = point - self.points.camera_center(camera_i);
-                            direction.dot(&polygon_normal)
-                        })
-                        .reduce(|a, b| a.min(b))
-                }
+                    ((point0 + point1 + point2).unscale(3.0) - self.points.camera_center(camera_i))
+                        .normalize()
+                };
+                let cos_angle = direction.dot(&polygon_normal);
+                Some(cos_angle)
             })
-            .reduce(|a, b| a.min(b))
+            .reduce(|a, b| a.max(b))
     }
 
     #[inline]
@@ -468,7 +464,7 @@ impl Mesh {
 
                 // Discard polygons that are too steep.
                 if self
-                    .min_angle_cos(&polygon)
+                    .max_angle_cos(&polygon)
                     .map_or(true, |angle_cos| angle_cos < MAX_NORMAL_COS)
                 {
                     None
