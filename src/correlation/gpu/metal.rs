@@ -50,7 +50,7 @@ pub enum ShaderModuleType {
 
 pub struct DeviceContext {
     low_power: bool,
-    device: Device,
+    device: Option<Device>,
 }
 
 impl DeviceContext {
@@ -61,7 +61,10 @@ impl DeviceContext {
             };
             let low_power = matches!(hardware_mode, HardwareMode::GpuLowPower);
             let device = Device::new()?;
-            Ok(DeviceContext { low_power, device })
+            Ok(DeviceContext {
+                low_power,
+                device: Some(device),
+            })
         })
     }
 }
@@ -72,7 +75,11 @@ impl super::DeviceContext<Device> for DeviceContext {
     }
 
     fn get_device_name(&self) -> Option<String> {
-        autoreleasepool(|| Some(self.device.device.name().into()))
+        autoreleasepool(|| {
+            self.device()
+                .ok()
+                .map(|device| device.device.name().to_owned())
+        })
     }
 
     fn prepare_device(
@@ -84,7 +91,7 @@ impl super::DeviceContext<Device> for DeviceContext {
         let img2_pixels = img2_dimensions.0 * img2_dimensions.1;
 
         autoreleasepool(|| {
-            let device = &mut self.device;
+            let device = self.device_mut()?;
             device.buffers = None;
             let buffers = unsafe { device.create_buffers(img1_pixels, img2_pixels)? };
             device.buffers = Some(buffers);
@@ -94,11 +101,17 @@ impl super::DeviceContext<Device> for DeviceContext {
     }
 
     fn device(&self) -> Result<&Device, GpuError> {
-        Ok(&self.device)
+        match self.device.as_ref() {
+            Some(device) => Ok(device),
+            None => Err(GpuError::new("Device not initialized")),
+        }
     }
 
     fn device_mut(&mut self) -> Result<&mut Device, GpuError> {
-        Ok(&mut self.device)
+        match self.device.as_mut() {
+            Some(device) => Ok(device),
+            None => Err(GpuError::new("Device not initialized")),
+        }
     }
 }
 
@@ -410,6 +423,18 @@ impl super::Device for Device {
         autoreleasepool(|| {
             self.buffers = None;
         })
+    }
+}
+
+impl Drop for DeviceContext {
+    fn drop(&mut self) {
+        autoreleasepool(|| {
+            self.device.as_mut().map(|device| {
+                device.pipelines.clear();
+                device.buffers = None;
+            });
+            self.device = None;
+        });
     }
 }
 
