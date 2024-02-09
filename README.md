@@ -16,7 +16,7 @@ More information is available in the [Wiki](https://github.com/zlogic/cybervisio
 
 ![Example parallel projection](https://raw.githubusercontent.com/wiki/zlogic/cybervision/Explanation/03_mesh_small.png)
 
-![Example perspective projection](https://raw.githubusercontent.com/wiki/zlogic/cybervision/Examples/Photos/photo5.mov)
+![Example perspective projection](https://raw.githubusercontent.com/wiki/zlogic/cybervision/Examples/Photos/photo6.mov)
 
 ## How to use it
 
