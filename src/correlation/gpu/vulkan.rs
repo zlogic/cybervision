@@ -403,8 +403,8 @@ impl Device {
     }
 
     unsafe fn init_vk(entry: &ash::Entry) -> VkResult<ash::Instance> {
-        let app_name = CStr::from_bytes_with_nul_unchecked(b"Cybervision\0");
-        let engine_name = CStr::from_bytes_with_nul_unchecked(b"cybervision\0");
+        let app_name = c"Cybervision";
+        let engine_name = c"cybervision";
         let appinfo = vk::ApplicationInfo::builder()
             .application_name(app_name)
             .application_version(0)
@@ -791,7 +791,7 @@ impl Device {
     ) -> Result<HashMap<ShaderModuleType, ShaderPipeline>, Box<dyn error::Error>> {
         let shader_modules = Device::load_shaders(device)?;
 
-        let main_module_name = CStr::from_bytes_with_nul_unchecked(b"main\0");
+        let main_module_name = c"main";
 
         let pipeline_create_info = shader_modules
             .iter()
