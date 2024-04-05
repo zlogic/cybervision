@@ -53,13 +53,13 @@ Arguments:\
 \n  <IMG_SRC>...  Source image(s)\
 \n  <IMG_OUT>     Output image\n\n\
 Options:\
-\n      --scale <SCALE>                  Depth scale [default: -1]\
-\n      --focal-length <FOCAL_LENGTH>    Focal length in 35mm equivalent\
-\n      --mode <MODE>                    Hardware mode [default: gpu] [possible values: gpu, gpu-low-power, cpu]\
-\n      --interpolation <INTERPOLATION>  Interpolation mode [default: delaunay] [possible values: delaunay, none]\
-\n      --no-bundle-adjustment           Bundle adjustment\
-\n      --projection <PROJECTION>        Hardware mode [default: parallel] [possible values: parallel, perspective]\
-\n      --mesh <MESH>                    Mesh options [default: plain] [possible values: plain, vertex-colors, texture-coordinates]\
+\n      --scale=<SCALE>                  Depth scale [default: -1]\
+\n      --focal-length=<FOCAL_LENGTH>    Focal length in 35mm equivalent\
+\n      --mode=<MODE>                    Hardware mode [default: gpu] [possible values: gpu, gpu-low-power, cpu]\
+\n      --interpolation=<INTERPOLATION>  Interpolation mode [default: delaunay] [possible values: delaunay, none]\
+\n      --no-bundle-adjustment           Skip bundle adjustment [if unspecified, bundle adjustment will be applied]\
+\n      --projection=<PROJECTION>        Projection mode [default: perspective] [possible values: parallel, perspective]\
+\n      --mesh=<MESH>                    Mesh options [default: vertex-colors] [possible values: plain, vertex-colors, texture-coordinates]\
 \n      --help                           Print help";
 impl Args {
     fn parse() -> Args {
