@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::HashMap, error, ffi::CStr, slice};
+use std::{cmp::Ordering, collections::HashMap, error, slice};
 
 use super::Device as GpuDevice;
 use ash::{prelude::VkResult, vk};
@@ -271,12 +271,12 @@ impl Device {
             }
 
             if !buffer.host_coherent {
-                let flush_memory_ranges = vk::MappedMemoryRange::builder()
+                let flush_memory_ranges = vk::MappedMemoryRange::default()
                     .memory(buffer.buffer_memory)
                     .offset(0)
                     .size(size_bytes as u64);
                 self.device
-                    .flush_mapped_memory_ranges(&[flush_memory_ranges.build()])?;
+                    .flush_mapped_memory_ranges(&[flush_memory_ranges])?;
             }
             self.device.unmap_memory(buffer.buffer_memory);
             Ok(())
@@ -320,22 +320,19 @@ impl Device {
         self.device
             .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
 
-        let info = vk::CommandBufferBeginInfo::builder()
+        let info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
         self.device.begin_command_buffer(command_buffer, &info)?;
-        let regions = vk::BufferCopy::builder().size(size_bytes as u64);
+        let regions = vk::BufferCopy::default().size(size_bytes as u64);
         self.device
-            .cmd_copy_buffer(command_buffer, src.buffer, dst.buffer, &[regions.build()]);
+            .cmd_copy_buffer(command_buffer, src.buffer, dst.buffer, &[regions]);
         self.device.end_command_buffer(command_buffer)?;
 
         let command_buffers = [command_buffer];
-        let submit_info = vk::SubmitInfo::builder().command_buffers(&command_buffers);
-        self.device.queue_submit(
-            self.control.queue,
-            &[submit_info.build()],
-            self.control.fence,
-        )?;
+        let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
+        self.device
+            .queue_submit(self.control.queue, &[submit_info], self.control.fence)?;
         self.device
             .wait_for_fences(&[self.control.fence], true, u64::MAX)
     }
@@ -360,12 +357,12 @@ impl Device {
                 vk::MemoryMapFlags::empty(),
             )?;
             if !buffer.host_coherent {
-                let invalidate_memory_ranges = vk::MappedMemoryRange::builder()
+                let invalidate_memory_ranges = vk::MappedMemoryRange::default()
                     .memory(buffer.buffer_memory)
                     .offset(0)
                     .size(size_bytes as u64);
                 self.device
-                    .invalidate_mapped_memory_ranges(&[invalidate_memory_ranges.build()])?;
+                    .invalidate_mapped_memory_ranges(&[invalidate_memory_ranges])?;
             }
             {
                 let mapped_slice = slice::from_raw_parts(memory as *const T, size);
@@ -403,9 +400,9 @@ impl Device {
     }
 
     unsafe fn init_vk(entry: &ash::Entry) -> VkResult<ash::Instance> {
-        let app_name = CStr::from_bytes_with_nul_unchecked(b"Cybervision\0");
-        let engine_name = CStr::from_bytes_with_nul_unchecked(b"cybervision\0");
-        let appinfo = vk::ApplicationInfo::builder()
+        let app_name = c"Cybervision";
+        let engine_name = c"cybervision";
+        let appinfo = vk::ApplicationInfo::default()
             .application_name(app_name)
             .application_version(0)
             .engine_name(engine_name)
@@ -413,7 +410,7 @@ impl Device {
             .api_version(vk::make_api_version(0, 1, 0, 0));
 
         let create_flags = vk::InstanceCreateFlags::default();
-        let create_info = vk::InstanceCreateInfo::builder()
+        let create_info = vk::InstanceCreateInfo::default()
             .application_info(&appinfo)
             .flags(create_flags);
         entry.create_instance(&create_info, None)
@@ -438,8 +435,11 @@ impl Device {
                 }
                 let queue_index = Device::find_compute_queue(instance, device)?;
 
-                let device_name = CStr::from_ptr(props.device_name.as_ptr());
-                let device_name = String::from_utf8_lossy(device_name.to_bytes()).to_string();
+                let device_name = props
+                    .device_name_as_c_str()
+                    .ok()?
+                    .to_string_lossy()
+                    .into_owned();
                 // TODO: allow to specify a device name filter/regex?
                 let score = match props.device_type {
                     vk::PhysicalDeviceType::DISCRETE_GPU => 3,
@@ -498,11 +498,11 @@ impl Device {
         physical_device: vk::PhysicalDevice,
         compute_queue_index: u32,
     ) -> Result<ash::Device, Box<dyn error::Error>> {
-        let queue_info = vk::DeviceQueueCreateInfo::builder()
+        let queue_info = vk::DeviceQueueCreateInfo::default()
             .queue_family_index(compute_queue_index)
             .queue_priorities(&[1.0f32]);
         let device_create_info =
-            vk::DeviceCreateInfo::builder().queue_create_infos(std::slice::from_ref(&queue_info));
+            vk::DeviceCreateInfo::default().queue_create_infos(std::slice::from_ref(&queue_info));
         match instance.create_device(physical_device, &device_create_info, None) {
             Ok(device) => Ok(device),
             Err(err) => Err(err.into()),
@@ -641,15 +641,17 @@ impl Device {
         // Most vendors provide a sorted list - with less features going first.
         // As soon as the right flag is found, this search will stop, so it should pick a memory
         // type with the closest match.
-        let buffer_memory = (0..memory_properties.memory_type_count as usize)
-            .flat_map(|i| {
-                let memory_type = memory_properties.memory_types[i];
+        let buffer_memory = memory_properties
+            .memory_types_as_slice()
+            .iter()
+            .enumerate()
+            .flat_map(|(memory_type_index, memory_type)| {
                 if memory_properties.memory_heaps[memory_type.heap_index as usize].size
                     < memory_requirements.size
                 {
                     return None;
                 }
-                if ((1 << i) & memory_requirements.memory_type_bits) == 0 {
+                if ((1 << memory_type_index) & memory_requirements.memory_type_bits) == 0 {
                     return None;
                 }
                 let property_flags = memory_type.property_flags;
@@ -660,7 +662,7 @@ impl Device {
                 let host_coherent = property_flags.contains(vk::MemoryPropertyFlags::HOST_COHERENT);
                 let allocate_info = vk::MemoryAllocateInfo {
                     allocation_size: memory_requirements.size,
-                    memory_type_index: i as u32,
+                    memory_type_index: memory_type_index as u32,
                     ..Default::default()
                 };
                 // Some buffers may fill up, in this case allocating memory can fail.
@@ -692,23 +694,21 @@ impl Device {
         let create_layout_bindings = |count| {
             let bindings = (0..count)
                 .map(|i| {
-                    vk::DescriptorSetLayoutBinding::builder()
+                    vk::DescriptorSetLayoutBinding::default()
                         .binding(i as u32)
                         .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                         .descriptor_count(1)
                         .stage_flags(vk::ShaderStageFlags::COMPUTE)
-                        .build()
                 })
                 .collect::<Vec<_>>();
             let layout_info =
-                vk::DescriptorSetLayoutCreateInfo::builder().bindings(bindings.as_slice());
+                vk::DescriptorSetLayoutCreateInfo::default().bindings(bindings.as_slice());
             device.create_descriptor_set_layout(&layout_info, None)
         };
-        let descriptor_pool_size = [vk::DescriptorPoolSize::builder()
+        let descriptor_pool_size = [vk::DescriptorPoolSize::default()
             .ty(vk::DescriptorType::STORAGE_BUFFER)
-            .descriptor_count(6)
-            .build()];
-        let descriptor_pool_info = vk::DescriptorPoolCreateInfo::builder()
+            .descriptor_count(6)];
+        let descriptor_pool_info = vk::DescriptorPoolCreateInfo::default()
             .max_sets(2)
             .pool_sizes(&descriptor_pool_size);
         let descriptor_pool = device.create_descriptor_pool(&descriptor_pool_info, None)?;
@@ -730,14 +730,13 @@ impl Device {
             err
         };
         let layouts = [regular_layout, cross_check_layout];
-        let push_constant_ranges = vk::PushConstantRange::builder()
+        let push_constant_ranges = vk::PushConstantRange::default()
             .offset(0)
             .size(std::mem::size_of::<ShaderParams>() as u32)
-            .stage_flags(vk::ShaderStageFlags::COMPUTE)
-            .build();
+            .stage_flags(vk::ShaderStageFlags::COMPUTE);
         let pipeline_layout = device
             .create_pipeline_layout(
-                &vk::PipelineLayoutCreateInfo::builder()
+                &vk::PipelineLayoutCreateInfo::default()
                     .set_layouts(&layouts)
                     .push_constant_ranges(&[push_constant_ranges]),
                 None,
@@ -750,7 +749,7 @@ impl Device {
             device.destroy_descriptor_pool(descriptor_pool, None);
             err
         };
-        let descriptor_set_allocate_info = vk::DescriptorSetAllocateInfo::builder()
+        let descriptor_set_allocate_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(descriptor_pool)
             .set_layouts(&layouts);
         let descriptor_sets = device
@@ -791,19 +790,18 @@ impl Device {
     ) -> Result<HashMap<ShaderModuleType, ShaderPipeline>, Box<dyn error::Error>> {
         let shader_modules = Device::load_shaders(device)?;
 
-        let main_module_name = CStr::from_bytes_with_nul_unchecked(b"main\0");
+        let main_module_name = c"main";
 
         let pipeline_create_info = shader_modules
             .iter()
             .map(|(_shader_type, module)| {
-                let stage_create_info = vk::PipelineShaderStageCreateInfo::builder()
+                let stage_create_info = vk::PipelineShaderStageCreateInfo::default()
                     .module(*module)
                     .name(main_module_name)
                     .stage(vk::ShaderStageFlags::COMPUTE);
-                vk::ComputePipelineCreateInfo::builder()
-                    .stage(stage_create_info.build())
+                vk::ComputePipelineCreateInfo::default()
+                    .stage(stage_create_info)
                     .layout(descriptor_sets.pipeline_layout)
-                    .build()
             })
             .collect::<Vec<_>>();
         let pipelines = match device.create_compute_pipelines(
@@ -843,7 +841,7 @@ impl Device {
         queue_family_index: u32,
     ) -> Result<Control, Box<dyn error::Error>> {
         let queue = device.get_device_queue(queue_family_index, 0);
-        let command_pool_info = vk::CommandPoolCreateInfo::builder()
+        let command_pool_info = vk::CommandPoolCreateInfo::default()
             .queue_family_index(queue_family_index)
             .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
         let command_pool = device.create_command_pool(&command_pool_info, None)?;
@@ -851,7 +849,7 @@ impl Device {
             device.destroy_command_pool(command_pool, None);
             err
         };
-        let fence_create_info = vk::FenceCreateInfo::builder();
+        let fence_create_info = vk::FenceCreateInfo::default();
         let fence = device
             .create_fence(&fence_create_info, None)
             .map_err(cleanup_err)?;
@@ -860,7 +858,7 @@ impl Device {
             device.destroy_fence(fence, None);
             err
         };
-        let command_buffers_info = vk::CommandBufferAllocateInfo::builder()
+        let command_buffers_info = vk::CommandBufferAllocateInfo::default()
             .command_buffer_count(1)
             .command_pool(command_pool)
             .level(vk::CommandBufferLevel::PRIMARY);
@@ -884,21 +882,12 @@ impl super::Device for Device {
             buffers
                 .iter()
                 .map(|buf| {
-                    vk::DescriptorBufferInfo::builder()
+                    vk::DescriptorBufferInfo::default()
                         .buffer(buf.buffer)
                         .offset(0)
                         .range(vk::WHOLE_SIZE)
-                        .build()
                 })
                 .collect::<Vec<_>>()
-        };
-        let create_write_descriptor = |i: usize, buffer_infos: &[vk::DescriptorBufferInfo]| {
-            vk::WriteDescriptorSet::builder()
-                .dst_set(descriptor_sets.descriptor_sets[i])
-                .dst_binding(0)
-                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                .buffer_info(buffer_infos)
-                .build()
         };
         let (buffer_internal_img1, buffer_internal_img2, buffer_out, buffer_out_reverse) =
             match direction {
@@ -923,11 +912,18 @@ impl super::Device for Device {
             buffer_out,
             buffers.buffer_out_corr,
         ]);
+        let regular_write_descriptor = vk::WriteDescriptorSet::default()
+            .dst_set(descriptor_sets.descriptor_sets[0])
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+            .buffer_info(regular_buffer_infos.as_slice());
         let cross_check_buffer_infos = create_buffer_infos(&[buffer_out, buffer_out_reverse]);
-        let write_descriptors = [
-            create_write_descriptor(0, regular_buffer_infos.as_slice()),
-            create_write_descriptor(1, cross_check_buffer_infos.as_slice()),
-        ];
+        let cross_check_write_descriptor = vk::WriteDescriptorSet::default()
+            .dst_set(descriptor_sets.descriptor_sets[1])
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+            .buffer_info(cross_check_buffer_infos.as_slice());
+        let write_descriptors = [regular_write_descriptor, cross_check_write_descriptor];
         unsafe {
             self.device.update_descriptor_sets(&write_descriptors, &[]);
         }
@@ -947,7 +943,7 @@ impl super::Device for Device {
         self.device.reset_fences(&[self.control.fence])?;
         self.device
             .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
-        let info = vk::CommandBufferBeginInfo::builder()
+        let info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
         self.device.begin_command_buffer(command_buffer, &info)?;
 
@@ -989,12 +985,9 @@ impl super::Device for Device {
         self.device.end_command_buffer(command_buffer)?;
 
         let command_buffers = [command_buffer];
-        let submit_info = vk::SubmitInfo::builder().command_buffers(&command_buffers);
-        self.device.queue_submit(
-            self.control.queue,
-            &[submit_info.build()],
-            self.control.fence,
-        )?;
+        let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
+        self.device
+            .queue_submit(self.control.queue, &[submit_info], self.control.fence)?;
 
         self.device
             .wait_for_fences(&[self.control.fence], true, u64::MAX)?;
@@ -1162,7 +1155,7 @@ impl ShaderModuleType {
         };
         let shader_code = ash::util::read_spv(&mut std::io::Cursor::new(shader_module_spv))?;
         let shader_module = device.create_shader_module(
-            &vk::ShaderModuleCreateInfo::builder()
+            &vk::ShaderModuleCreateInfo::default()
                 .flags(vk::ShaderModuleCreateFlags::empty())
                 .code(shader_code.as_slice()),
             None,

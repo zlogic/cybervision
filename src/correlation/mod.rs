@@ -466,7 +466,7 @@ impl PointCorrelations<'_> {
         corridor_end: usize,
     ) -> Option<Range<usize>> {
         let scale = correlation_step.scale;
-        thread_local! {static STDEV_RANGE: RefCell<Vec<f64>> = RefCell::new(Vec::new())};
+        thread_local! {static STDEV_RANGE: RefCell<Vec<f64>> = const { RefCell::new(Vec::new()) }};
         let mut mid_corridor = 0.0;
         let mut neighbor_count: usize = 0;
 

@@ -429,10 +429,10 @@ impl super::Device for Device {
 impl Drop for DeviceContext {
     fn drop(&mut self) {
         autoreleasepool(|| {
-            self.device.as_mut().map(|device| {
+            if let Some(device) = self.device.as_mut() {
                 device.pipelines.clear();
                 device.buffers = None;
-            });
+            };
             self.device = None;
         });
     }
