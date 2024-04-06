@@ -22,11 +22,11 @@ layout(std430, push_constant) uniform readonly Parameters
     float extend_range;
     float min_range;
 };
-layout(std430, set = 1, binding = 0) buffer Img1
+layout(std430, set = 0, binding = 0) buffer Img1
 {
     ivec2 img1[];
 };
-layout(std430, set = 1, binding = 1) buffer readonly Img2
+layout(std430, set = 0, binding = 1) buffer readonly Img2
 {
     ivec2 img2[];
 };
