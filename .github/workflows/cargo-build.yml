@@ -160,7 +160,7 @@ jobs:
         key: rust-${{ runner.os }}-${{ matrix.arch }}-${{ steps.get-rust-version.outputs.VERSION }}-${{ hashFiles('Cargo.*') }}
 
     - name: Install compiler and prepare for cross-compilation
-      if: matrix.arch == 'aarch64'
+      if: matrix.arch == 'x86_64'
       run: rustup target add ${{ matrix.arch }}-apple-darwin
 
     - name: Compile shaders
