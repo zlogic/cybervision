@@ -23,7 +23,7 @@ kamadak-exif = { version = "0.5", default-features = false }
 ash = { version = "0.38", default-features = false, features = ["loaded"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-metal = { version = "0.27", default-features = false, features = ["link"] }
+metal = { version = "0.28", default-features = false, features = ["link"] }
 
 [profile.release]
 strip = true

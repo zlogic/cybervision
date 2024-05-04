@@ -288,7 +288,7 @@ impl Device {
 
 impl super::Device for Device {
     fn set_buffer_direction(&mut self, direction: &CorrelationDirection) -> Result<(), GpuError> {
-        self.direction = direction.to_owned();
+        self.direction.clone_from(&direction.to_owned());
         Ok(())
     }
 

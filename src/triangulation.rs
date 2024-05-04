@@ -773,7 +773,8 @@ impl PerspectiveTriangulation {
         }
         for (i, remap_projection) in remap_projections.iter().enumerate() {
             if let Some(new_index) = remap_projection {
-                self.cameras[*new_index] = self.cameras[i].to_owned();
+                let src_camera = self.cameras[i].clone();
+                self.cameras[*new_index] = src_camera;
                 self.projections[*new_index] = self.projections[i];
             }
         }
@@ -981,7 +982,7 @@ impl PerspectiveTriangulation {
                     })
                     .reduce(reduce_best_result)
                 })
-                .reduce(|| best_result.clone(), reduce_best_result);
+                .reduce(|| best_result.to_owned(), reduce_best_result);
 
             best_result = (camera, count, error);
             if count >= RANSAC_D_EARLY_EXIT {
