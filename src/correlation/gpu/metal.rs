@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error, ffi::c_void, slice};
+use std::{collections::HashMap, error, ffi::c_void, fmt, slice};
 
 use metal::objc::rc::autoreleasepool;
 use rayon::iter::ParallelIterator;
@@ -8,7 +8,7 @@ use crate::{
     data::{Grid, Point2D},
 };
 
-use super::{CorrelationDirection, GpuError, HardwareMode};
+use super::{CorrelationDirection, HardwareMode};
 
 // This is optimized to work with built-in Apple Silicon GPUs.
 // AMD or built-in Intel GPUs will likely underperform.
@@ -54,10 +54,10 @@ pub struct DeviceContext {
 }
 
 impl DeviceContext {
-    pub fn new(hardware_mode: HardwareMode) -> Result<DeviceContext, Box<dyn error::Error>> {
+    pub fn new(hardware_mode: HardwareMode) -> Result<DeviceContext, GpuError> {
         autoreleasepool(|| {
             if !matches!(hardware_mode, HardwareMode::Gpu | HardwareMode::GpuLowPower) {
-                return Err(GpuError::new("GPU mode is not enabled").into());
+                return Err("GPU mode is not enabled".into());
             };
             let low_power = matches!(hardware_mode, HardwareMode::GpuLowPower);
             let device = Device::new()?;
@@ -86,7 +86,7 @@ impl super::DeviceContext<Device> for DeviceContext {
         &mut self,
         img1_dimensions: (usize, usize),
         img2_dimensions: (usize, usize),
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), GpuError> {
         let img1_pixels = img1_dimensions.0 * img1_dimensions.1;
         let img2_pixels = img2_dimensions.0 * img2_dimensions.1;
 
@@ -103,24 +103,24 @@ impl super::DeviceContext<Device> for DeviceContext {
     fn device(&self) -> Result<&Device, GpuError> {
         match self.device.as_ref() {
             Some(device) => Ok(device),
-            None => Err(GpuError::new("Device not initialized")),
+            None => Err("Device not initialized".into()),
         }
     }
 
     fn device_mut(&mut self) -> Result<&mut Device, GpuError> {
         match self.device.as_mut() {
             Some(device) => Ok(device),
-            None => Err(GpuError::new("Device not initialized")),
+            None => Err("Device not initialized".into()),
         }
     }
 }
 
 impl Device {
-    fn new() -> Result<Device, Box<dyn error::Error>> {
+    fn new() -> Result<Device, GpuError> {
         autoreleasepool(|| {
             let device = match metal::Device::system_default() {
                 Some(device) => device,
-                None => return Err(GpuError::new("GPU mode is not enabled").into()),
+                None => return Err("GPU mode is not enabled".into()),
             };
             let direction = CorrelationDirection::Forward;
             let unified_memory = device.has_unified_memory();
@@ -141,7 +141,7 @@ impl Device {
         &self,
         img1_pixels: usize,
         img2_pixels: usize,
-    ) -> Result<DeviceBuffers, Box<dyn error::Error>> {
+    ) -> Result<DeviceBuffers, GpuError> {
         let max_pixels = img1_pixels.max(img2_pixels);
         let buffer_img = self.create_buffer(
             (img1_pixels + img2_pixels) * std::mem::size_of::<f32>(),
@@ -192,7 +192,7 @@ impl Device {
     fn buffers(&self) -> Result<&DeviceBuffers, GpuError> {
         match self.buffers.as_ref() {
             Some(buffers) => Ok(buffers),
-            None => Err(GpuError::new("Buffers not initialized")),
+            None => Err("Buffers not initialized".into()),
         }
     }
 
@@ -234,7 +234,7 @@ impl Device {
 
     fn create_pipelines(
         device: &metal::Device,
-    ) -> Result<HashMap<ShaderModuleType, metal::ComputePipelineState>, Box<dyn error::Error>> {
+    ) -> Result<HashMap<ShaderModuleType, metal::ComputePipelineState>, GpuError> {
         autoreleasepool(|| {
             let mut result = HashMap::new();
             let source = include_bytes!("shaders/correlation.metallib");
@@ -297,7 +297,7 @@ impl super::Device for Device {
         dimensions: (usize, usize),
         shader_type: ShaderModuleType,
         shader_params: ShaderParams,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), GpuError> {
         let workgroup_size = ((dimensions.0 + 15) / 16, ((dimensions.1 + 15) / 16));
         autoreleasepool(|| {
             let pipeline = self.pipelines.get(&shader_type).unwrap();
@@ -338,11 +338,7 @@ impl super::Device for Device {
         })
     }
 
-    unsafe fn transfer_in_images(
-        &self,
-        img1: &Grid<u8>,
-        img2: &Grid<u8>,
-    ) -> Result<(), Box<dyn error::Error>> {
+    unsafe fn transfer_in_images(&self, img1: &Grid<u8>, img2: &Grid<u8>) -> Result<(), GpuError> {
         autoreleasepool(|| {
             let buffers = self.buffers()?;
             let buffer = &buffers.buffer_img;
@@ -365,7 +361,7 @@ impl super::Device for Device {
         &self,
         correlation_values: &mut Grid<Option<f32>>,
         correlation_threshold: f32,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), GpuError> {
         autoreleasepool(|| {
             let buffers = self.buffers()?;
             let buffer = &buffers.buffer_out_corr;
@@ -391,7 +387,7 @@ impl super::Device for Device {
         &self,
         out_image: &mut Grid<Option<Match>>,
         correlation_values: &Grid<Option<f32>>,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), GpuError> {
         autoreleasepool(|| {
             let buffers = self.buffers()?;
             let buffer = &buffers.buffer_out;
@@ -448,7 +444,7 @@ impl ShaderModuleType {
         Self::CrossCheckFilter,
     ];
 
-    fn load(&self, library: &metal::Library) -> Result<metal::Function, Box<dyn error::Error>> {
+    fn load(&self, library: &metal::Library) -> Result<metal::Function, GpuError> {
         let function_name = match self {
             ShaderModuleType::InitOutData => "init_out_data",
             ShaderModuleType::PrepareInitialdataSearchdata => "prepare_initialdata_searchdata",
@@ -460,5 +456,41 @@ impl ShaderModuleType {
         let function = library.get_function(function_name, None)?;
 
         Ok(function)
+    }
+}
+
+#[derive(Debug)]
+pub enum GpuError {
+    Internal(&'static str),
+    Metal(String),
+}
+
+impl fmt::Display for GpuError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            GpuError::Internal(msg) => f.write_str(msg),
+            GpuError::Metal(ref msg) => f.write_str(msg),
+        }
+    }
+}
+
+impl std::error::Error for GpuError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match *self {
+            GpuError::Internal(_msg) => None,
+            GpuError::Metal(ref _msg) => None,
+        }
+    }
+}
+
+impl From<String> for GpuError {
+    fn from(e: String) -> GpuError {
+        GpuError::Metal(e)
+    }
+}
+
+impl From<&'static str> for GpuError {
+    fn from(msg: &'static str) -> GpuError {
+        GpuError::Internal(msg)
     }
 }

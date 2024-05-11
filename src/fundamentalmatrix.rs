@@ -110,7 +110,7 @@ impl FundamentalMatrix {
         progress_listener: Option<&PL>,
     ) -> Result<RansacIterationResult, RansacError> {
         if point_matches.len() < RANSAC_D + self.ransac_n {
-            return Err(RansacError::new("Not enough matches"));
+            return Err("Not enough matches".into());
         }
 
         let ransac_outer = self.ransac_k / RANSAC_CHECK_INTERVAL;
@@ -146,7 +146,7 @@ impl FundamentalMatrix {
         }
         match best_result {
             Some(res) => Ok(self.optimize_result(res, point_matches)),
-            None => Err(RansacError::new("No reliable matches found")),
+            None => Err("No reliable matches found".into()),
         }
     }
 
@@ -571,7 +571,7 @@ where
         let delta = if let Some(delta) = delta {
             delta
         } else {
-            return Err(RansacError::new("Failed to compute delta vector"));
+            return Err("Failed to compute delta vector".into());
         };
 
         if delta.norm() <= DELTA_EPSILON * (params.norm() + DELTA_EPSILON) {
@@ -614,7 +614,7 @@ where
     }
 
     if !found {
-        return Err(RansacError::new("Levenberg-Marquardt failed to converge"));
+        return Err("Levenberg-Marquardt failed to converge".into());
     }
 
     Ok(params)
@@ -667,16 +667,16 @@ pub struct RansacError {
     msg: &'static str,
 }
 
-impl RansacError {
-    fn new(msg: &'static str) -> RansacError {
-        RansacError { msg }
+impl fmt::Display for RansacError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.msg)
     }
 }
 
 impl std::error::Error for RansacError {}
 
-impl fmt::Display for RansacError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.msg)
+impl From<&'static str> for RansacError {
+    fn from(msg: &'static str) -> RansacError {
+        RansacError { msg }
     }
 }

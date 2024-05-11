@@ -12,12 +12,12 @@ use crate::Args;
 use image::{imageops::FilterType, GenericImageView, GrayImage, RgbImage};
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use nalgebra::Matrix3;
-use std::error;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::BufReader;
 use std::str::FromStr;
 use std::time::SystemTime;
+use std::{error, fmt};
 
 const TIFFTAG_META_PHENOM: exif::Tag = exif::Tag(exif::Context::Tiff, 34683);
 const TIFFTAG_META_QUANTA: exif::Tag = exif::Tag(exif::Context::Tiff, 34682);
@@ -190,7 +190,7 @@ struct ImageReconstruction {
     img_filenames: Vec<String>,
 }
 
-pub fn reconstruct(args: &Args) -> Result<(), Box<dyn error::Error>> {
+pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
     let start_time = SystemTime::now();
 
     let projection_mode = match args.projection {
@@ -305,7 +305,7 @@ impl ImageReconstruction {
         gpu_device: Option<&mut correlation::GpuDevice>,
         img1_index: usize,
         img2_index: usize,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), ReconstructionError> {
         let img1_filename = &self.img_filenames[img1_index];
         let img2_filename = &self.img_filenames[img2_index];
         println!("Processing images {} and {}", img1_filename, img2_filename);
@@ -523,7 +523,7 @@ impl ImageReconstruction {
         img1: &SourceImage,
         img2: &SourceImage,
         f: Matrix3<f64>,
-    ) -> Result<CorrelatedPoints, Box<dyn error::Error>> {
+    ) -> Result<CorrelatedPoints, ReconstructionError> {
         let mut point_correlations;
 
         let start_time = SystemTime::now();
@@ -629,7 +629,9 @@ impl ImageReconstruction {
         result
     }
 
-    fn complete_triangulation(&mut self) -> Result<triangulation::Surface, Box<dyn error::Error>> {
+    fn complete_triangulation(
+        &mut self,
+    ) -> Result<triangulation::Surface, triangulation::TriangulationError> {
         let start_time = SystemTime::now();
 
         let pb = new_progress_bar(false);
@@ -663,7 +665,7 @@ impl ImageReconstruction {
         out_scale: (f64, f64, f64),
         texture_filenames: &[String],
         output_filename: &str,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), output::OutputError> {
         let start_time = SystemTime::now();
         let pb = new_progress_bar(false);
         let images = texture_filenames
@@ -761,5 +763,68 @@ impl triangulation::ProgressListener for ProgressBar {
 impl output::ProgressListener for ProgressBar {
     fn report_status(&self, pos: f32) {
         self.set_position((pos * 10000.0) as u64);
+    }
+}
+
+#[derive(Debug)]
+pub enum ReconstructionError {
+    Image(image::ImageError),
+    Ransac(fundamentalmatrix::RansacError),
+    Correlation(correlation::CorrelationError),
+    Triangulation(triangulation::TriangulationError),
+    Output(output::OutputError),
+}
+
+impl fmt::Display for ReconstructionError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ReconstructionError::Image(ref err) => err.fmt(f),
+            ReconstructionError::Ransac(ref err) => err.fmt(f),
+            ReconstructionError::Correlation(ref err) => err.fmt(f),
+            ReconstructionError::Triangulation(ref err) => err.fmt(f),
+            ReconstructionError::Output(ref err) => err.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for ReconstructionError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match *self {
+            ReconstructionError::Image(ref err) => err.source(),
+            ReconstructionError::Ransac(ref err) => err.source(),
+            ReconstructionError::Correlation(ref err) => err.source(),
+            ReconstructionError::Triangulation(ref err) => err.source(),
+            ReconstructionError::Output(ref err) => err.source(),
+        }
+    }
+}
+
+impl From<image::ImageError> for ReconstructionError {
+    fn from(e: image::ImageError) -> ReconstructionError {
+        ReconstructionError::Image(e)
+    }
+}
+
+impl From<fundamentalmatrix::RansacError> for ReconstructionError {
+    fn from(e: fundamentalmatrix::RansacError) -> ReconstructionError {
+        ReconstructionError::Ransac(e)
+    }
+}
+
+impl From<correlation::CorrelationError> for ReconstructionError {
+    fn from(e: correlation::CorrelationError) -> ReconstructionError {
+        ReconstructionError::Correlation(e)
+    }
+}
+
+impl From<triangulation::TriangulationError> for ReconstructionError {
+    fn from(e: triangulation::TriangulationError) -> ReconstructionError {
+        ReconstructionError::Triangulation(e)
+    }
+}
+
+impl From<output::OutputError> for ReconstructionError {
+    fn from(e: output::OutputError) -> ReconstructionError {
+        ReconstructionError::Output(e)
     }
 }

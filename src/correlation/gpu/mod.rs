@@ -13,9 +13,13 @@ pub type DefaultDeviceContext = metal::DeviceContext;
 #[cfg(not(target_os = "macos"))]
 pub type DefaultDeviceContext = vulkan::DeviceContext;
 
+#[cfg(target_os = "macos")]
+pub type GpuError = metal::GpuError;
+#[cfg(not(target_os = "macos"))]
+pub type GpuError = vulkan::GpuError;
+
 use crate::data::Grid;
 use nalgebra::Matrix3;
-use std::{error, fmt};
 
 use crate::correlation::{
     CorrelationDirection, CorrelationParameters, HardwareMode, ProjectionMode, CORRIDOR_MIN_RANGE,
@@ -38,25 +42,21 @@ trait Device {
         dimensions: (usize, usize),
         shader_type: ShaderModuleType,
         shader_params: ShaderParams,
-    ) -> Result<(), Box<dyn error::Error>>;
+    ) -> Result<(), GpuError>;
 
-    unsafe fn transfer_in_images(
-        &self,
-        img1: &Grid<u8>,
-        img2: &Grid<u8>,
-    ) -> Result<(), Box<dyn error::Error>>;
+    unsafe fn transfer_in_images(&self, img1: &Grid<u8>, img2: &Grid<u8>) -> Result<(), GpuError>;
 
     unsafe fn save_corr(
         &self,
         correlation_values: &mut Grid<Option<f32>>,
         correlation_threshold: f32,
-    ) -> Result<(), Box<dyn error::Error>>;
+    ) -> Result<(), GpuError>;
 
     unsafe fn save_result(
         &self,
         out_image: &mut Grid<Option<Match>>,
         correlation_values: &Grid<Option<f32>>,
-    ) -> Result<(), Box<dyn error::Error>>;
+    ) -> Result<(), GpuError>;
 
     unsafe fn destroy_buffers(&mut self);
 }
@@ -73,7 +73,7 @@ where
         &mut self,
         img1_dimensions: (usize, usize),
         img2_dimensions: (usize, usize),
-    ) -> Result<(), Box<dyn error::Error>>;
+    ) -> Result<(), GpuError>;
 
     fn device(&self) -> Result<&D, GpuError>;
 
@@ -127,7 +127,7 @@ impl GpuContext<'_> {
         img2_dimensions: (usize, usize),
         projection_mode: ProjectionMode,
         fundamental_matrix: Matrix3<f64>,
-    ) -> Result<GpuContext, Box<dyn error::Error>> {
+    ) -> Result<GpuContext, GpuError> {
         let (search_area_segment_length, corridor_segment_length) = if device_context.is_low_power()
         {
             (
@@ -171,7 +171,7 @@ impl GpuContext<'_> {
         &mut self,
         scale: f32,
         dir: CorrelationDirection,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), GpuError> {
         let device = self.device_context.device_mut()?;
         device.set_buffer_direction(&dir)?;
         let (out_dimensions, out_dimensions_reverse) = match dir {
@@ -208,9 +208,7 @@ impl GpuContext<'_> {
         Ok(())
     }
 
-    pub fn complete_process(
-        &mut self,
-    ) -> Result<Grid<Option<super::Match>>, Box<dyn error::Error>> {
+    pub fn complete_process(&mut self) -> Result<Grid<Option<super::Match>>, GpuError> {
         let device = self.device_context.device_mut()?;
         let mut out_image = Grid::new(self.img1_dimensions.0, self.img1_dimensions.1, None);
         unsafe {
@@ -228,7 +226,7 @@ impl GpuContext<'_> {
         first_pass: bool,
         progress_listener: Option<&PL>,
         dir: CorrelationDirection,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), GpuError> {
         {
             let device = self.device_context.device_mut()?;
             device.set_buffer_direction(&dir)?;
@@ -404,24 +402,5 @@ impl GpuContext<'_> {
             }
         }
         f
-    }
-}
-
-#[derive(Debug)]
-pub struct GpuError {
-    msg: &'static str,
-}
-
-impl GpuError {
-    fn new(msg: &'static str) -> GpuError {
-        GpuError { msg }
-    }
-}
-
-impl std::error::Error for GpuError {}
-
-impl fmt::Display for GpuError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.msg)
     }
 }

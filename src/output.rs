@@ -5,7 +5,6 @@ use crate::{
 use core::fmt;
 use std::{
     collections::HashMap,
-    error,
     fs::File,
     io::{BufWriter, Write},
     path::Path,
@@ -209,7 +208,7 @@ impl Mesh {
         surface: triangulation::Surface,
         interpolation: InterpolationMode,
         progress_listener: Option<&PL>,
-    ) -> Result<Mesh, Box<dyn error::Error>> {
+    ) -> Result<Mesh, OutputError> {
         let point_normals = vec![Vector3::zeros(); surface.tracks_len()];
         let mut surface = Mesh {
             points: surface,
@@ -415,7 +414,7 @@ impl Mesh {
         camera_i: usize,
         interpolation: InterpolationMode,
         progress_listener: Option<&PL>,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), OutputError> {
         if interpolation != InterpolationMode::Delaunay {
             return Ok(());
         }
@@ -546,7 +545,7 @@ impl Mesh {
         &self,
         mut writer: Box<dyn MeshWriter>,
         progress_listener: Option<&PL>,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), OutputError> {
         writer.output_header(self.points.tracks_len(), self.polygons.len())?;
         let nvertices = self.points.tracks_len() as f32;
         self.points
@@ -601,7 +600,7 @@ pub fn output<PL: ProgressListener>(
     interpolation: InterpolationMode,
     vertex_mode: VertexMode,
     progress_listener: Option<&PL>,
-) -> Result<(), Box<dyn error::Error>> {
+) -> Result<(), OutputError> {
     let output_normals = interpolation != InterpolationMode::None;
     let writer: Box<dyn MeshWriter> = if path.to_lowercase().ends_with(".obj") {
         Box::new(ObjWriter::new(
@@ -643,33 +642,23 @@ trait MeshWriter {
         &mut self,
         _point: &triangulation::Track,
         _normal: &Vector3<f64>,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), OutputError> {
         Ok(())
     }
 
-    fn output_vertex_normal(
-        &mut self,
-        _normal: &Vector3<f64>,
-    ) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex_normal(&mut self, _normal: &Vector3<f64>) -> Result<(), OutputError> {
         Ok(())
     }
 
-    fn output_vertex_uv(
-        &mut self,
-        _point: &triangulation::Track,
-    ) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex_uv(&mut self, _point: &triangulation::Track) -> Result<(), OutputError> {
         Ok(())
     }
 
-    fn output_face(
-        &mut self,
-        _p: &Polygon,
-        _tracks: [&Track; 3],
-    ) -> Result<(), Box<dyn error::Error>> {
+    fn output_face(&mut self, _p: &Polygon, _tracks: [&Track; 3]) -> Result<(), OutputError> {
         Ok(())
     }
 
-    fn complete(&mut self) -> Result<(), Box<dyn error::Error>>;
+    fn complete(&mut self) -> Result<(), OutputError>;
 }
 
 const WRITE_BUFFER_SIZE: usize = 1024 * 1024;
@@ -690,7 +679,7 @@ impl PlyWriter {
         output_normals: bool,
         vertex_mode: VertexMode,
         out_scale: (f64, f64, f64),
-    ) -> Result<PlyWriter, Box<dyn error::Error>> {
+    ) -> Result<PlyWriter, OutputError> {
         let writer = BufWriter::new(File::create(path)?);
         let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
 
@@ -750,7 +739,7 @@ impl MeshWriter for PlyWriter {
         &mut self,
         track: &triangulation::Track,
         normal: &Vector3<f64>,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), OutputError> {
         let color = match self.vertex_mode {
             VertexMode::Plain | VertexMode::Texture => None,
             VertexMode::Color => {
@@ -764,7 +753,7 @@ impl MeshWriter for PlyWriter {
                     img.get_pixel_checked(point2d.x, point2d.y)
                         .map(|pixel| pixel.0)
                 } else {
-                    return Err(OutputError::new("Track has no images").into());
+                    return Err("Track has no images".into());
                 }
             }
         };
@@ -774,7 +763,7 @@ impl MeshWriter for PlyWriter {
         let p = if let Some(point3d) = track.get_point3d() {
             point3d
         } else {
-            return Err(OutputError::new("Point has no 3D coordinates").into());
+            return Err("Point has no 3D coordinates".into());
         };
         let (x, y, z) = (
             p.x * self.out_scale.0,
@@ -798,11 +787,7 @@ impl MeshWriter for PlyWriter {
         Ok(())
     }
 
-    fn output_face(
-        &mut self,
-        polygon: &Polygon,
-        _tracks: [&Track; 3],
-    ) -> Result<(), Box<dyn error::Error>> {
+    fn output_face(&mut self, polygon: &Polygon, _tracks: [&Track; 3]) -> Result<(), OutputError> {
         let indices = polygon.vertices;
 
         self.check_flush_buffer()?;
@@ -815,7 +800,7 @@ impl MeshWriter for PlyWriter {
         Ok(())
     }
 
-    fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
+    fn complete(&mut self) -> Result<(), OutputError> {
         let buffer = &mut self.buffer;
         let w = &mut self.writer;
         w.write_all(buffer)?;
@@ -843,7 +828,7 @@ impl ObjWriter {
         output_normals: bool,
         vertex_mode: VertexMode,
         out_scale: (f64, f64, f64),
-    ) -> Result<ObjWriter, Box<dyn error::Error>> {
+    ) -> Result<ObjWriter, OutputError> {
         let writer = BufWriter::new(File::create(path)?);
         let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
         Ok(ObjWriter {
@@ -898,7 +883,7 @@ impl ObjWriter {
         Ok(())
     }
 
-    fn write_materials(&mut self) -> Result<(), Box<dyn error::Error>> {
+    fn write_materials(&mut self) -> Result<(), OutputError> {
         let out_filename = match self.vertex_mode {
             VertexMode::Plain | VertexMode::Color => return Ok(()),
             VertexMode::Texture => self.get_output_filename().unwrap(),
@@ -948,7 +933,7 @@ impl MeshWriter for ObjWriter {
         &mut self,
         track: &triangulation::Track,
         _normal: &Vector3<f64>,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), OutputError> {
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
 
@@ -965,7 +950,7 @@ impl MeshWriter for ObjWriter {
                     img.get_pixel_checked(point2d.x, point2d.y)
                         .map(|pixel| pixel.0)
                 } else {
-                    return Err(OutputError::new("Track has no images").into());
+                    return Err("Track has no images".into());
                 }
             }
         };
@@ -973,7 +958,7 @@ impl MeshWriter for ObjWriter {
         let p = if let Some(point3d) = track.get_point3d() {
             point3d
         } else {
-            return Err(OutputError::new("Point has no 3D coordinates").into());
+            return Err("Point has no 3D coordinates".into());
         };
         let (x, y, z) = (
             p.x * self.out_scale.0,
@@ -995,7 +980,7 @@ impl MeshWriter for ObjWriter {
         Ok(())
     }
 
-    fn output_vertex_normal(&mut self, normal: &Vector3<f64>) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex_normal(&mut self, normal: &Vector3<f64>) -> Result<(), OutputError> {
         self.check_flush_buffer()?;
         let w = &mut self.buffer;
 
@@ -1006,10 +991,7 @@ impl MeshWriter for ObjWriter {
         Ok(())
     }
 
-    fn output_vertex_uv(
-        &mut self,
-        track: &triangulation::Track,
-    ) -> Result<(), Box<dyn error::Error>> {
+    fn output_vertex_uv(&mut self, track: &triangulation::Track) -> Result<(), OutputError> {
         self.check_flush_buffer()?;
         match self.vertex_mode {
             VertexMode::Plain | VertexMode::Color => {}
@@ -1032,7 +1014,7 @@ impl MeshWriter for ObjWriter {
                     )?
                 }
                 if projections_count == 0 {
-                    return Err(OutputError::new("Track has no images").into());
+                    return Err("Track has no images".into());
                 }
                 // Tracks are output in an ordered way, so uv_index will use the same ordering as tracks.
                 let last_index = self.uv_index.last().map_or(0, |last_index| *last_index);
@@ -1042,11 +1024,7 @@ impl MeshWriter for ObjWriter {
         Ok(())
     }
 
-    fn output_face(
-        &mut self,
-        polygon: &Polygon,
-        tracks: [&Track; 3],
-    ) -> Result<(), Box<dyn error::Error>> {
+    fn output_face(&mut self, polygon: &Polygon, tracks: [&Track; 3]) -> Result<(), OutputError> {
         let indices = polygon.vertices;
 
         // Polygons are sorted by their image IDs, so if the index is increased, this is a new image.
@@ -1082,7 +1060,7 @@ impl MeshWriter for ObjWriter {
         Ok(())
     }
 
-    fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
+    fn complete(&mut self) -> Result<(), OutputError> {
         let buffer = &mut self.buffer;
         let w = &mut self.writer;
         w.write_all(buffer)?;
@@ -1162,17 +1140,17 @@ impl MeshWriter for ImageWriter {
         &mut self,
         track: &triangulation::Track,
         _normal: &Vector3<f64>,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), OutputError> {
         // TODO: project all polygons into first image
         let point2d = if let Some(point2d) = track.get(0) {
             point2d
         } else {
-            return Err(OutputError::new("Track is absent from first image").into());
+            return Err("Track is absent from first image".into());
         };
         let point3d = if let Some(point3d) = track.get_point3d() {
             point3d
         } else {
-            return Err(OutputError::new("Point has no 3D coordinates").into());
+            return Err("Point has no 3D coordinates".into());
         };
         let (x, y) = (point2d.x as usize, point2d.y as usize);
         if x < self.output_map.width() && y < self.output_map.height() {
@@ -1181,11 +1159,7 @@ impl MeshWriter for ImageWriter {
         Ok(())
     }
 
-    fn output_face(
-        &mut self,
-        polygon: &Polygon,
-        _tracks: [&Track; 3],
-    ) -> Result<(), Box<dyn error::Error>> {
+    fn output_face(&mut self, polygon: &Polygon, _tracks: [&Track; 3]) -> Result<(), OutputError> {
         let vertices = polygon.vertices;
         let (min_x, max_x, min_y, max_y) = vertices.iter().fold(
             (self.output_map.width(), 0, self.output_map.height(), 0),
@@ -1225,7 +1199,7 @@ impl MeshWriter for ImageWriter {
         Ok(())
     }
 
-    fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
+    fn complete(&mut self) -> Result<(), OutputError> {
         let (min_depth, max_depth) = self.output_map.iter().fold((f64::MAX, f64::MIN), |acc, v| {
             if let Some(v) = v.2 {
                 (acc.0.min(*v), acc.1.max(*v))
@@ -1376,20 +1350,55 @@ impl HasPosition for Point {
 }
 
 #[derive(Debug)]
-pub struct OutputError {
-    msg: &'static str,
+pub enum OutputError {
+    Internal(&'static str),
+    Triangulation(spade::InsertionError),
+    Io(std::io::Error),
+    Image(image::ImageError),
 }
-
-impl OutputError {
-    fn new(msg: &'static str) -> OutputError {
-        OutputError { msg }
-    }
-}
-
-impl std::error::Error for OutputError {}
 
 impl fmt::Display for OutputError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.msg)
+        match *self {
+            OutputError::Internal(msg) => f.write_str(msg),
+            OutputError::Triangulation(ref err) => err.fmt(f),
+            OutputError::Io(ref err) => err.fmt(f),
+            OutputError::Image(ref err) => err.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for OutputError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match *self {
+            OutputError::Internal(_msg) => None,
+            OutputError::Triangulation(ref err) => err.source(),
+            OutputError::Io(ref err) => err.source(),
+            OutputError::Image(ref err) => err.source(),
+        }
+    }
+}
+
+impl From<&'static str> for OutputError {
+    fn from(msg: &'static str) -> OutputError {
+        OutputError::Internal(msg)
+    }
+}
+
+impl From<spade::InsertionError> for OutputError {
+    fn from(e: spade::InsertionError) -> OutputError {
+        OutputError::Triangulation(e)
+    }
+}
+
+impl From<std::io::Error> for OutputError {
+    fn from(e: std::io::Error) -> OutputError {
+        OutputError::Io(e)
+    }
+}
+
+impl From<image::ImageError> for OutputError {
+    fn from(e: image::ImageError) -> OutputError {
+        OutputError::Image(e)
     }
 }

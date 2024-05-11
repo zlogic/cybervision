@@ -1,11 +1,16 @@
 mod gpu;
 
-use self::gpu::{DefaultDeviceContext, GpuContext};
+use self::gpu::{DefaultDeviceContext, GpuContext, GpuError};
 
 use crate::data::{Grid, Point2D};
 use nalgebra::{Matrix3, Vector3};
 use rayon::iter::ParallelIterator;
-use std::{cell::RefCell, error, ops::Range, sync::atomic::AtomicUsize, sync::atomic::Ordering};
+use std::{
+    cell::RefCell,
+    error, fmt,
+    ops::Range,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 const SCALE_MIN_SIZE: usize = 64;
 const KERNEL_SIZE: usize = 5;
@@ -126,7 +131,7 @@ impl CorrelationParameters {
     }
 }
 
-pub fn create_gpu_context(hardware_mode: HardwareMode) -> Result<GpuDevice, Box<dyn error::Error>> {
+pub fn create_gpu_context(hardware_mode: HardwareMode) -> Result<GpuDevice, GpuError> {
     GpuDevice::new(hardware_mode)
 }
 
@@ -188,13 +193,10 @@ impl PointCorrelations<'_> {
         &self.selected_hardware
     }
 
-    pub fn complete(&mut self) -> Result<(), Box<dyn error::Error>> {
+    pub fn complete(&mut self) -> Result<(), CorrelationError> {
         self.correlated_points_reverse = Grid::new(0, 0, None);
         if let Some(gpu_context) = &mut self.gpu_context {
-            match gpu_context.complete_process() {
-                Ok(correlated_points) => self.correlated_points = correlated_points,
-                Err(err) => return Err(err),
-            };
+            self.correlated_points = gpu_context.complete_process()?;
             self.gpu_context = None;
         }
         Ok(())
@@ -206,7 +208,7 @@ impl PointCorrelations<'_> {
         img2: Grid<u8>,
         scale: f32,
         progress_listener: Option<&PL>,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), CorrelationError> {
         self.correlate_images_step(
             &img1,
             &img2,
@@ -237,16 +239,11 @@ impl PointCorrelations<'_> {
         scale: f32,
         progress_listener: Option<&PL>,
         dir: CorrelationDirection,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), CorrelationError> {
         if let Some(gpu_context) = &mut self.gpu_context {
-            return gpu_context.correlate_images(
-                img1,
-                img2,
-                scale,
-                self.first_pass,
-                progress_listener,
-                dir,
-            );
+            return gpu_context
+                .correlate_images(img1, img2, scale, self.first_pass, progress_listener, dir)
+                .map_err(|err| err.into());
         };
         let img2_data = compute_image_point_data(img2);
         let mut out_data = Grid::<Option<Match>>::new(img1.width(), img1.height(), None);
@@ -545,7 +542,7 @@ impl PointCorrelations<'_> {
         &mut self,
         scale: f32,
         dir: CorrelationDirection,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), CorrelationError> {
         if let Some(gpu_context) = &mut self.gpu_context {
             gpu_context.cross_check_filter(scale, dir)?;
             return Ok(());
@@ -724,4 +721,31 @@ pub fn compute_point_data<const KS: usize, const KPC: usize>(
     result.stdev = (result.stdev / KPC as f32).sqrt();
 
     Some(result)
+}
+
+#[derive(Debug)]
+pub enum CorrelationError {
+    Gpu(GpuError),
+}
+
+impl fmt::Display for CorrelationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            CorrelationError::Gpu(ref err) => err.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for CorrelationError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match *self {
+            CorrelationError::Gpu(ref err) => err.source(),
+        }
+    }
+}
+
+impl From<GpuError> for CorrelationError {
+    fn from(e: GpuError) -> CorrelationError {
+        CorrelationError::Gpu(e)
+    }
 }

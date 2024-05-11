@@ -168,7 +168,7 @@ impl Triangulation {
                 progress_listener,
             )
         } else {
-            Err(TriangulationError::new("Triangulation not initialized"))
+            Err("Triangulation not initialized".into())
         }
     }
 
@@ -181,7 +181,7 @@ impl Triangulation {
         } else if let Some(perspective) = &mut self.perspective {
             perspective.recover_next_camera(progress_listener)
         } else {
-            Err(TriangulationError::new("Triangulation not initialized"))
+            Err("Triangulation not initialized".into())
         }
     }
 
@@ -194,7 +194,7 @@ impl Triangulation {
         } else if let Some(perspective) = &mut self.perspective {
             perspective.triangulate_all(progress_listener)
         } else {
-            Err(TriangulationError::new("Triangulation not initialized"))
+            Err("Triangulation not initialized".into())
         }
     }
 
@@ -204,7 +204,7 @@ impl Triangulation {
         } else if let Some(perspective) = &self.perspective {
             Ok(perspective.retained_images())
         } else {
-            Err(TriangulationError::new("Triangulation not initialized"))
+            Err("Triangulation not initialized".into())
         }
     }
 
@@ -224,9 +224,7 @@ impl AffineTriangulation {
         correlated_points: &CorrelatedPoints,
     ) -> Result<(), TriangulationError> {
         if !self.surface.tracks.is_empty() {
-            return Err(TriangulationError::new(
-                "Triangulation of multiple affine image is not supported",
-            ));
+            return Err("Triangulation of multiple affine image is not supported".into());
         }
 
         let points3d = correlated_points
@@ -488,12 +486,12 @@ impl PerspectiveTriangulation {
         let k1 = if let Some(calibration) = self.calibration[image1_index] {
             calibration
         } else {
-            return Err(TriangulationError::new("Missing calibration matrix"));
+            return Err("Missing calibration matrix".into());
         };
         let k2 = if let Some(calibration) = self.calibration[image2_index] {
             calibration
         } else {
-            return Err(TriangulationError::new("Missing calibration matrix"));
+            return Err("Missing calibration matrix".into());
         };
         let short_tracks = self
             .tracks
@@ -514,7 +512,7 @@ impl PerspectiveTriangulation {
             short_tracks.as_slice(),
         ) {
             Some(res) => res,
-            None => return Err(TriangulationError::new("Unable to find projection matrix")),
+            None => return Err("Unable to find projection matrix".into()),
         };
 
         if self
@@ -543,12 +541,12 @@ impl PerspectiveTriangulation {
             let k1 = if let Some(calibration) = self.calibration[initial_images.0] {
                 calibration
             } else {
-                return Err(TriangulationError::new("Missing calibration matrix"));
+                return Err("Missing calibration matrix".into());
             };
             let k2 = if let Some(calibration) = self.calibration[initial_images.1] {
                 calibration
             } else {
-                return Err(TriangulationError::new("Missing calibration matrix"));
+                return Err("Missing calibration matrix".into());
             };
             let p1 = k1 * Matrix3x4::identity();
             let camera1 = Camera::from_matrix(&k1, &Matrix3::identity(), &Vector3::zeros());
@@ -557,9 +555,7 @@ impl PerspectiveTriangulation {
             let p2 = if let Some(p2) = self.best_initial_p2 {
                 p2
             } else {
-                return Err(TriangulationError::new(
-                    "Missing projection matrix for initial image pair",
-                ));
+                return Err("Missing projection matrix for initial image pair".into());
             };
             let camera2_r = p2.fixed_view::<3, 3>(0, 0);
             let camera2_t = p2.column(3);
@@ -623,19 +619,15 @@ impl PerspectiveTriangulation {
         let k2 = if let Some(calibration) = self.calibration[best_candidate] {
             calibration
         } else {
-            return Err(TriangulationError::new("Missing calibration matrix"));
+            return Err("Missing calibration matrix".into());
         };
         let k2_inv = match k2.pseudo_inverse(f64::EPSILON) {
             Ok(k_inverse) => k_inverse,
-            Err(_) => {
-                return Err(TriangulationError::new(
-                    "Unable to invert calibration matrix",
-                ))
-            }
+            Err(_) => return Err("Unable to invert calibration matrix".into()),
         };
         let camera2 = match self.recover_pose(best_candidate, &k2, &k2_inv, progress_listener) {
             Some(camera2) => camera2,
-            None => return Err(TriangulationError::new("Unable to find projection matrix")),
+            None => return Err("Unable to find projection matrix".into()),
         };
         let projection2 = camera2.projection();
         self.cameras[best_candidate] = Some(camera2);
@@ -1881,7 +1873,7 @@ impl BundleAdjustment<'_> {
             let delta = if let Some(delta) = self.calculate_delta_step() {
                 delta
             } else {
-                return Err(TriangulationError::new("Failed to compute delta vector"));
+                return Err("Failed to compute delta vector".into());
             };
 
             let params_norm;
@@ -1959,9 +1951,7 @@ impl BundleAdjustment<'_> {
         }
 
         if !found {
-            return Err(TriangulationError::new(
-                "Levenberg-Marquardt failed to converge",
-            ));
+            return Err("Levenberg-Marquardt failed to converge".into());
         }
 
         Ok(self.cameras.to_vec())
@@ -1973,16 +1963,16 @@ pub struct TriangulationError {
     msg: &'static str,
 }
 
-impl TriangulationError {
-    fn new(msg: &'static str) -> TriangulationError {
-        TriangulationError { msg }
+impl fmt::Display for TriangulationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.msg)
     }
 }
 
 impl std::error::Error for TriangulationError {}
 
-impl fmt::Display for TriangulationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.msg)
+impl From<&'static str> for TriangulationError {
+    fn from(msg: &'static str) -> TriangulationError {
+        TriangulationError { msg }
     }
 }
