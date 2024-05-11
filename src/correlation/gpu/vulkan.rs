@@ -555,6 +555,9 @@ impl Device {
             BufferType::GpuSource,
         )?;
 
+        // All is good - defuse the scope rollback.
+        buffers.consume();
+
         Ok(DeviceBuffers {
             buffer_img,
             buffer_internal_img1,
