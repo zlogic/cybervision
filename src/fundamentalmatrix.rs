@@ -52,9 +52,13 @@ struct RansacIterationResult {
     best_error: f64,
 }
 
-pub struct FundamentalMatrix {
+#[derive(Debug)]
+pub struct FundamentalMatrixResult {
     pub f: Matrix3<f64>,
-    pub matches_count: usize,
+    pub inliers: Vec<Match>,
+}
+
+pub struct FundamentalMatrix {
     projection: ProjectionMode,
     ransac_k: usize,
     ransac_n: usize,
@@ -68,7 +72,7 @@ impl FundamentalMatrix {
         max_dimension: f64,
         point_matches: &[Match],
         progress_listener: Option<&PL>,
-    ) -> Result<FundamentalMatrix, RansacError> {
+    ) -> Result<FundamentalMatrixResult, RansacError> {
         let ransac_k = match projection {
             ProjectionMode::Affine => RANSAC_K_AFFINE,
             ProjectionMode::Perspective => RANSAC_K_PERSPECTIVE,
@@ -85,30 +89,21 @@ impl FundamentalMatrix {
             ProjectionMode::Affine => RANSAC_D_EARLY_EXIT_AFFINE,
             ProjectionMode::Perspective => RANSAC_D_EARLY_EXIT_PERSPECTIVE,
         };
-        let mut fm = FundamentalMatrix {
-            f: Matrix3::from_element(f64::NAN),
-            matches_count: 0,
+        let fm = FundamentalMatrix {
             projection,
             ransac_k,
             ransac_n,
             ransac_t,
             ransac_d_early_exit,
         };
-        match fm.find_ransac(point_matches, progress_listener) {
-            Ok(res) => {
-                fm.f = res.f;
-                fm.matches_count = res.matches_count;
-                Ok(fm)
-            }
-            Err(err) => Err(err),
-        }
+        fm.find_ransac(point_matches, progress_listener)
     }
 
     fn find_ransac<PL: ProgressListener>(
         &self,
         point_matches: &[Match],
         progress_listener: Option<&PL>,
-    ) -> Result<RansacIterationResult, RansacError> {
+    ) -> Result<FundamentalMatrixResult, RansacError> {
         if point_matches.len() < RANSAC_D + self.ransac_n {
             return Err("Not enough matches".into());
         }
@@ -239,21 +234,29 @@ impl FundamentalMatrix {
         &self,
         res: RansacIterationResult,
         point_matches: &[Match],
-    ) -> RansacIterationResult {
-        if self.projection == ProjectionMode::Affine {
-            return res;
-        }
-
+    ) -> FundamentalMatrixResult {
         let inliers = point_matches
             .iter()
             .filter_map(|point_match| self.fits_model(&res.f, point_match).map(|_| *point_match))
             .collect::<Vec<_>>();
+        if self.projection == ProjectionMode::Affine {
+            return FundamentalMatrixResult { f: res.f, inliers };
+        }
 
         let optimal_f =
             FundamentalMatrix::optimize_perspective_f(&res.f, inliers.as_slice()).unwrap_or(res.f);
-        let mut best_result = res;
-        best_result.f = optimal_f;
-        best_result
+
+        let inliers = point_matches
+            .iter()
+            .filter_map(|point_match| {
+                self.fits_model(&optimal_f, point_match)
+                    .map(|_| *point_match)
+            })
+            .collect::<Vec<_>>();
+        FundamentalMatrixResult {
+            f: optimal_f,
+            inliers,
+        }
     }
 
     #[inline]

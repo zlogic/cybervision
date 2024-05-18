@@ -1,13 +1,11 @@
-use crate::correlation;
 use crate::correlation::PointCorrelations;
 use crate::data::{Grid, Point2D};
-use crate::fundamentalmatrix;
-use crate::fundamentalmatrix::FundamentalMatrix;
 use crate::orb;
 use crate::output;
 use crate::pointmatching;
 use crate::triangulation;
 use crate::Args;
+use crate::{correlation, fundamentalmatrix};
 
 use image::{imageops::FilterType, GenericImageView, GrayImage, RgbImage};
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
@@ -366,7 +364,7 @@ impl ImageReconstruction {
                 return Err(err.into());
             }
         };
-        println!("Kept {} matches", fm.matches_count);
+        println!("Kept {} matches", fm.inliers.len());
 
         let correlated_points = match self.correlate_points(gpu_device, &img1, &img2, fm.f) {
             Ok(correlated_points) => correlated_points,
@@ -492,7 +490,7 @@ impl ImageReconstruction {
         img1_dimensions: (u32, u32),
         img2_dimensions: (u32, u32),
         point_matches: Vec<(Point2D<usize>, Point2D<usize>)>,
-    ) -> Result<FundamentalMatrix, fundamentalmatrix::RansacError> {
+    ) -> Result<fundamentalmatrix::FundamentalMatrixResult, fundamentalmatrix::RansacError> {
         let start_time = SystemTime::now();
         let pb = new_progress_bar(true);
 
@@ -502,7 +500,7 @@ impl ImageReconstruction {
             .max(img2_dimensions.0)
             .max(img2_dimensions.1) as f64;
 
-        let result = FundamentalMatrix::new(
+        let result = fundamentalmatrix::FundamentalMatrix::new(
             self.projection_mode,
             max_dimension,
             &point_matches,
