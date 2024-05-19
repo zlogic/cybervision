@@ -425,8 +425,13 @@ impl Mesh {
             .enumerate()
             .par_bridge()
             .filter_map(|(track_i, track)| {
-                let projection = track.get(camera_i)?;
-                let point = Point2::new(projection.x as f64, projection.y as f64);
+                // Do not include invisible points to build point index.
+                track.get(camera_i)?;
+                let point3d = track.get_point3d()?;
+                let point3d_in_camera = self.points.point_in_camera(camera_i, &point3d);
+                let x = point3d_in_camera.x / point3d_in_camera.z;
+                let y = point3d_in_camera.y / point3d_in_camera.z;
+                let point = Point2::new(x, y);
                 Some(Point { track_i, point })
             })
             .collect::<Vec<_>>();
