@@ -248,38 +248,54 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
     };
 
     let images_count = reconstruction_task.img_filenames.len();
-    let mut gpu_device = match correlation::create_gpu_context(hardware_mode) {
+
+    // Use sparse matching (using only ORB matches) to find the best matches and recover camera poses.
+    let mut f_matrices = Vec::with_capacity(images_count - 1);
+    for img_i in 0..images_count - 1 {
+        let img1_filename = reconstruction_task.img_filenames[img_i].to_owned();
+        let mut f_matrices_i = Vec::with_capacity(images_count - 1 - img_i);
+        for img_j in img_i + 1..images_count {
+            let img2_filename = reconstruction_task.img_filenames[img_j].to_owned();
+            let f = match reconstruction_task.reconstruct_sparse(img_i, img_j) {
+                Ok(f) => f,
+                Err(err) => {
+                    eprintln!(
+                        "Failed to match images {} and {} ({})",
+                        img1_filename, img2_filename, err
+                    );
+                    None
+                }
+            };
+            f_matrices_i.push(f);
+        }
+        f_matrices.push(f_matrices_i);
+    }
+    let linked_images = match reconstruction_task.recover_camera_poses() {
+        Ok(img_index) => img_index,
+        Err(err) => {
+            eprintln!("Failed to recover camera poses: {}", err);
+            return Err(err.into());
+        }
+    };
+
+    // Perform dense correlation for images that could be matched together.
+    let gpu_device = match correlation::create_gpu_context(hardware_mode) {
         Ok(gpu_device) => Some(gpu_device),
         Err(err) => {
             eprintln!("Failed to obtain GPU device: {}", err);
             None
         }
     };
-    for img_i in 0..images_count - 1 {
-        let img1_filename = reconstruction_task.img_filenames[img_i].to_owned();
-        for img_j in img_i + 1..images_count {
-            let img2_filename = reconstruction_task.img_filenames[img_j].to_owned();
-            match reconstruction_task.reconstruct(gpu_device.as_mut(), img_i, img_j) {
-                Ok(_) => {}
-                Err(err) => {
-                    eprintln!(
-                        "Failed to match images {} and {} ({})",
-                        img1_filename, img2_filename, err
-                    );
-                }
+    let retained_images =
+        match reconstruction_task.reconstruct_dense(gpu_device, linked_images, f_matrices) {
+            Ok(retained_images) => retained_images,
+            Err(err) => {
+                eprintln!("Failed to recover image poses: {}", err);
+                return Err(err.into());
             }
-        }
-    }
-    drop(gpu_device);
+        };
 
-    match reconstruction_task.recover_poses() {
-        Ok(_) => {}
-        Err(err) => {
-            eprintln!("Failed to recover image poses: {}", err)
-        }
-    }
-
-    let surface = reconstruction_task.complete_triangulation()?;
+    let surface = reconstruction_task.complete_triangulation(retained_images)?;
     let img_filenames = reconstruction_task.img_filenames.to_owned();
     reconstruction_task.output_surface(
         surface,
@@ -295,15 +311,12 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
     Ok(())
 }
 
-type CorrelatedPoints = Grid<Option<(Point2D<u32>, f32)>>;
-
 impl ImageReconstruction {
-    fn reconstruct(
+    fn reconstruct_sparse(
         &mut self,
-        gpu_device: Option<&mut correlation::GpuDevice>,
         img1_index: usize,
         img2_index: usize,
-    ) -> Result<(), ReconstructionError> {
+    ) -> Result<Option<Matrix3<f64>>, ReconstructionError> {
         let img1_filename = &self.img_filenames[img1_index];
         let img2_filename = &self.img_filenames[img2_index];
         println!("Processing images {} and {}", img1_filename, img2_filename);
@@ -315,7 +328,7 @@ impl ImageReconstruction {
         );
         if let Some(focal_length) = img1.focal_length {
             println!(
-                "Image {} has focal length {} equivalent to 35mm film",
+                "Image {} has focal length {}mm equivalent to 35mm film",
                 img1.filename, focal_length
             );
         } else if self.projection_mode == fundamentalmatrix::ProjectionMode::Perspective {
@@ -327,7 +340,7 @@ impl ImageReconstruction {
         );
         if let Some(focal_length) = img1.focal_length {
             println!(
-                "Image {} has focal length {} equivalent to 35mm film",
+                "Image {} has focal length {}mm equivalent to 35mm film",
                 img2.filename, focal_length
             );
         } else if self.projection_mode == fundamentalmatrix::ProjectionMode::Perspective {
@@ -353,29 +366,21 @@ impl ImageReconstruction {
 
         let point_matches = self.match_keypoints(&img1, &img2);
 
-        let fm = match self.find_fundamental_matrix(
+        let (f, inliers) = match self.find_fundamental_matrix(
             img1.img.dimensions(),
             img2.img.dimensions(),
             point_matches,
         ) {
-            Ok(f) => f,
+            Ok(f) => (f.f, f.inliers),
             Err(err) => {
                 eprintln!("Failed to complete RANSAC task: {}", err);
                 return Err(err.into());
             }
         };
-        println!("Kept {} matches", fm.inliers.len());
+        println!("Kept {} matches", inliers.len());
 
-        let correlated_points = match self.correlate_points(gpu_device, &img1, &img2, fm.f) {
-            Ok(correlated_points) => correlated_points,
-            Err(err) => {
-                eprintln!("Failed to complete points correlation: {}", err);
-                return Err(err);
-            }
-        };
-
-        match self.triangulate_surface(img1_index, img2_index, fm.f, correlated_points) {
-            Ok(()) => Ok(()),
+        match self.triangulate_sparse(img1_index, img2_index, f, inliers) {
+            Ok(()) => Ok(Some(f)),
             Err(err) => {
                 eprintln!("Failed to add image pair: {}", err);
                 Err(err.into())
@@ -515,13 +520,15 @@ impl ImageReconstruction {
         result
     }
 
-    fn correlate_points(
-        &self,
+    fn correlate_dense(
+        &mut self,
         gpu_device: Option<&mut correlation::GpuDevice>,
         img1: &SourceImage,
         img2: &SourceImage,
+        img1_index: usize,
+        img2_index: usize,
         f: Matrix3<f64>,
-    ) -> Result<CorrelatedPoints, ReconstructionError> {
+    ) -> Result<(), ReconstructionError> {
         let mut point_correlations;
 
         let start_time = SystemTime::now();
@@ -568,60 +575,236 @@ impl ImageReconstruction {
         pb.finish_and_clear();
         if let Ok(t) = start_time.elapsed() {
             println!(
-                "Completed surface generation in {:.3} seconds",
+                "Completed dense correlation in {:.3} seconds",
                 t.as_secs_f32()
             );
         }
 
         point_correlations.complete()?;
-        Ok(point_correlations.correlated_points)
+        let point_correlations = point_correlations.correlated_points;
+
+        let start_time = SystemTime::now();
+
+        let pb = new_progress_bar(true);
+        let result =
+            self.triangulation
+                .triangulate(img1_index, img2_index, &point_correlations, Some(&pb));
+        pb.finish_and_clear();
+
+        if let Ok(t) = start_time.elapsed() {
+            println!("Added dense image pair in {:.3} seconds", t.as_secs_f32());
+        }
+        Ok(result?)
     }
 
-    fn recover_poses(&mut self) -> Result<(), triangulation::TriangulationError> {
+    fn recover_camera_poses(&mut self) -> Result<Vec<usize>, triangulation::TriangulationError> {
+        let mut camera_order = vec![];
         loop {
             let start_time = SystemTime::now();
             let pb = new_progress_bar(true);
-            let result = self.triangulation.recover_next_camera(Some(&pb));
+            let result = self.triangulation.recover_next_cameras(Some(&pb));
             pb.finish_and_clear();
 
-            match result {
-                Ok(Some(image)) => {
-                    println!("Recovered pose for image {}", self.img_filenames[image])
-                }
-                Ok(None) => break,
+            let mut images = match result {
+                Ok(images) => images,
                 Err(err) => {
                     eprintln!("Failed to recover pose for next image: {}", err);
+                    continue;
                 }
-            }
+            };
 
+            if images.is_empty() {
+                break;
+            };
             if let Ok(t) = start_time.elapsed() {
-                println!("Recovered pose in {:.3} seconds", t.as_secs_f32());
+                let image_filenames = images
+                    .iter()
+                    .map(|image| self.img_filenames[*image].to_owned())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                println!(
+                    "Recovered pose for images {} in {:.3} seconds",
+                    image_filenames,
+                    t.as_secs_f32()
+                );
+            }
+            camera_order.append(&mut images);
+        }
+
+        let start_time = SystemTime::now();
+        let pb = new_progress_bar(true);
+        let result = self.triangulation.complete_sparse_triangulation(Some(&pb));
+        pb.finish_and_clear();
+
+        if let Ok(t) = start_time.elapsed() {
+            println!(
+                "Completed sparse triangulation in {:.3} seconds",
+                t.as_secs_f32()
+            );
+        }
+
+        match result {
+            Ok(_) => Ok(camera_order),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn reconstruct_dense(
+        &mut self,
+        gpu_device: Option<correlation::GpuDevice>,
+        linked_images: Vec<usize>,
+        f_matrices: Vec<Vec<Option<Matrix3<f64>>>>,
+    ) -> Result<Vec<usize>, triangulation::TriangulationError> {
+        let mut gpu_device = gpu_device;
+        let img_filenames = self.img_filenames.clone();
+        for (img1_index, img1_filename) in img_filenames
+            .iter()
+            .take(img_filenames.len() - 1)
+            .enumerate()
+        {
+            if !linked_images.contains(&img1_index) {
+                continue;
+            }
+            let img1 = match SourceImage::load(&img1_filename) {
+                Ok(img1) => img1,
+                Err(err) => {
+                    eprintln!("Failed to load image: {}", err);
+                    continue;
+                }
+            };
+            let f_matrices_i = f_matrices[img1_index].to_owned();
+
+            for (img2_index, img2_filename) in img_filenames.iter().skip(img1_index + 1).enumerate()
+            {
+                let img2 = match SourceImage::load(&img2_filename) {
+                    Ok(img1) => img1,
+                    Err(err) => {
+                        eprintln!("Failed to load image: {}", err);
+                        continue;
+                    }
+                };
+
+                let f = if let Some(f) = f_matrices_i[img2_index] {
+                    f
+                } else {
+                    // No matches between images, skip correlation.
+                    continue;
+                };
+                println!(
+                    "Performing dense correlation of images {} and {}",
+                    img1_filename, img2_filename
+                );
+                match self.correlate_dense(
+                    gpu_device.as_mut(),
+                    &img1,
+                    &img2,
+                    img1_index,
+                    img1_index + 1 + img2_index,
+                    f,
+                ) {
+                    Ok(_) => {}
+                    Err(err) => {
+                        eprintln!("Failed to perform dense correlation of images: {}", err)
+                    }
+                }
             }
         }
 
-        Ok(())
+        /*
+        for img1_index in linked_images {
+            let img1_filename = self.img_filenames[img1_index].to_owned();
+            if matched_images.is_empty() {
+                matched_images.push(img1_index);
+                continue;
+            }
+
+            let img1 = match SourceImage::load(&img1_filename) {
+                Ok(img1) => img1,
+                Err(err) => {
+                    eprintln!("Failed to load image: {}", err);
+                    continue;
+                }
+            };
+            for img2_index in matched_images.iter() {
+                let img2_index = *img2_index;
+                let img2_filename = self.img_filenames[img2_index].to_owned();
+                let img2 = match SourceImage::load(&img2_filename) {
+                    Ok(img1) => img1,
+                    Err(err) => {
+                        eprintln!("Failed to load image: {}", err);
+                        continue;
+                    }
+                };
+                // All code expects images to be provided in the same order as specified in the commandline.
+                // Reverse order so that img1_index is before img2_index.
+                let (img1, img2) = if img1_index < img2_index {
+                    (&img1, &img2)
+                } else {
+                    (&img2, &img1)
+                };
+                let img1_filename = img1_filename.to_owned();
+                let (img1_filename, img2_filename) = if img1_index < img2_index {
+                    (img1_filename, img2_filename)
+                } else {
+                    (img2_filename, img1_filename)
+                };
+                let (img1_index, img2_index) =
+                    (img1_index.min(img2_index), img1_index.max(img2_index));
+
+                let f_matrices_i = f_matrices[img1_index].to_owned();
+                let f = if let Some(f) = f_matrices_i[img2_index - 1 - img1_index] {
+                    f
+                } else {
+                    eprintln!(
+                        "No reliable matches between images {} and {}",
+                        img1_filename, img2_filename
+                    );
+                    continue;
+                };
+                println!(
+                    "Performing dense correlation of images {} and {}",
+                    img1_filename, img2_filename
+                );
+                match self.correlate_dense(
+                    gpu_device.as_mut(),
+                    &img1,
+                    &img2,
+                    img1_index,
+                    img2_index,
+                    f,
+                ) {
+                    Ok(_) => {}
+                    Err(err) => {
+                        eprintln!("Failed to perform dense correlation of images: {}", err)
+                    }
+                }
+            }
+            matched_images.push(img1_index);
+        }
+        */
+
+        let mut linked_images = linked_images;
+        linked_images.sort();
+        Ok(linked_images)
     }
-    fn triangulate_surface(
+
+    fn triangulate_sparse(
         &mut self,
         img1_index: usize,
         img2_index: usize,
         f: Matrix3<f64>,
-        correlated_points: CorrelatedPoints,
+        inliers: Vec<(Point2D<usize>, Point2D<usize>)>,
     ) -> Result<(), triangulation::TriangulationError> {
         let start_time = SystemTime::now();
 
         let pb = new_progress_bar(true);
-        let result = self.triangulation.triangulate(
-            img1_index,
-            img2_index,
-            &correlated_points,
-            &f,
-            Some(&pb),
-        );
+        let result =
+            self.triangulation
+                .triangulate_sparse(img1_index, img2_index, &f, inliers, Some(&pb));
         pb.finish_and_clear();
 
         if let Ok(t) = start_time.elapsed() {
-            println!("Added image pair in {:.3} seconds", t.as_secs_f32());
+            println!("Added sparse image pair in {:.3} seconds", t.as_secs_f32());
         }
 
         result
@@ -629,15 +812,14 @@ impl ImageReconstruction {
 
     fn complete_triangulation(
         &mut self,
+        retained_images: Vec<usize>,
     ) -> Result<triangulation::Surface, triangulation::TriangulationError> {
         let start_time = SystemTime::now();
 
         let pb = new_progress_bar(false);
 
         let surface = self.triangulation.triangulate_all(Some(&pb))?;
-        let retained_images = self
-            .triangulation
-            .retained_images()?
+        let retained_images = retained_images
             .iter()
             .map(|src_img_i| self.img_filenames[*src_img_i].to_owned())
             .collect::<Vec<_>>();

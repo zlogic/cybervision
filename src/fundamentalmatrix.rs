@@ -21,7 +21,8 @@ const RANSAC_N_AFFINE: usize = 4;
 const RANSAC_N_PERSPECTIVE: usize = 7;
 const RANSAC_T_AFFINE: f64 = 0.1;
 const RANSAC_T_PERSPECTIVE: f64 = 1.0 / 1000.0;
-const RANSAC_D: usize = 10;
+const RANSAC_D_AFFINE: usize = 10;
+const RANSAC_D_PERSPECTIVE: usize = 200;
 const RANSAC_D_EARLY_EXIT_AFFINE: usize = 1000;
 const RANSAC_D_EARLY_EXIT_PERSPECTIVE: usize = 10_000;
 const RANSAC_CHECK_INTERVAL: usize = 50_000;
@@ -63,6 +64,7 @@ pub struct FundamentalMatrix {
     ransac_k: usize,
     ransac_n: usize,
     ransac_t: f64,
+    ransac_d: usize,
     ransac_d_early_exit: usize,
 }
 
@@ -85,6 +87,10 @@ impl FundamentalMatrix {
             ProjectionMode::Affine => RANSAC_T_AFFINE,
             ProjectionMode::Perspective => RANSAC_T_PERSPECTIVE * max_dimension,
         };
+        let ransac_d = match projection {
+            ProjectionMode::Affine => RANSAC_D_AFFINE,
+            ProjectionMode::Perspective => RANSAC_D_PERSPECTIVE,
+        };
         let ransac_d_early_exit = match projection {
             ProjectionMode::Affine => RANSAC_D_EARLY_EXIT_AFFINE,
             ProjectionMode::Perspective => RANSAC_D_EARLY_EXIT_PERSPECTIVE,
@@ -94,6 +100,7 @@ impl FundamentalMatrix {
             ransac_k,
             ransac_n,
             ransac_t,
+            ransac_d,
             ransac_d_early_exit,
         };
         fm.find_ransac(point_matches, progress_listener)
@@ -104,7 +111,7 @@ impl FundamentalMatrix {
         point_matches: &[Match],
         progress_listener: Option<&PL>,
     ) -> Result<FundamentalMatrixResult, RansacError> {
-        if point_matches.len() < RANSAC_D + self.ransac_n {
+        if point_matches.len() < self.ransac_d + self.ransac_n {
             return Err("Not enough matches".into());
         }
 
@@ -217,7 +224,7 @@ impl FundamentalMatrix {
             })
             .fold((0, 0.0), |acc, err| (acc.0 + err.0, acc.1 + err.1));
 
-        if all_inliers.0 < RANSAC_D + self.ransac_n {
+        if all_inliers.0 < self.ransac_d + self.ransac_n {
             return None;
         }
 
