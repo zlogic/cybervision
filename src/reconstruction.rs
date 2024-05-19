@@ -23,7 +23,8 @@ const TIFFTAG_META_QUANTA: exif::Tag = exif::Tag(exif::Context::Tiff, 34682);
 struct SourceImage {
     img: GrayImage,
     scale: (f32, f32),
-    focal_length: Option<u32>,
+    focal_length_native: Option<f64>,
+    focal_length_35mm: Option<u32>,
     tilt_angle: Option<f32>,
     filename: String,
 }
@@ -33,7 +34,8 @@ struct ImageMeta {
     scale: (f32, f32),
     tilt_angle: Option<f32>,
     databar_height: u32,
-    focal_length: Option<u32>,
+    focal_length_native: Option<f64>,
+    focal_length_35mm: Option<u32>,
 }
 
 impl SourceImage {
@@ -45,7 +47,8 @@ impl SourceImage {
         Ok(SourceImage {
             img: img.to_image(),
             scale: metadata.scale,
-            focal_length: metadata.focal_length,
+            focal_length_native: metadata.focal_length_native,
+            focal_length_35mm: metadata.focal_length_35mm,
             tilt_angle: metadata.tilt_angle,
             filename: path.to_string(),
         })
@@ -64,7 +67,8 @@ impl SourceImage {
             scale: (1.0, 1.0),
             tilt_angle: None,
             databar_height: 0,
-            focal_length: None,
+            focal_length_native: None,
+            focal_length_35mm: None,
         };
         match SourceImage::get_metadata_exif(path) {
             Ok(metadata) => metadata,
@@ -88,7 +92,8 @@ impl SourceImage {
             scale: (1.0, 1.0),
             tilt_angle: None,
             databar_height: 0,
-            focal_length: None,
+            focal_length_native: None,
+            focal_length_35mm: None,
         };
         let sem_metadata = if let Some(metadata) = sem_metadata {
             match metadata.value {
@@ -137,7 +142,41 @@ impl SourceImage {
         if let Some(focal_length) =
             exif.get_field(exif::Tag::FocalLengthIn35mmFilm, exif::In::PRIMARY)
         {
-            result_metadata.focal_length = focal_length.value.get_uint(0);
+            result_metadata.focal_length_35mm = focal_length.value.get_uint(0);
+        }
+        if let Some(focal_length) = exif.get_field(exif::Tag::FocalLength, exif::In::PRIMARY) {
+            let value = match focal_length.value {
+                exif::Value::Rational(ref vec) => {
+                    if !vec.is_empty() {
+                        Some(vec[0].to_f64())
+                    } else {
+                        None
+                    }
+                }
+                exif::Value::SRational(ref vec) => {
+                    if !vec.is_empty() {
+                        Some(vec[0].to_f64())
+                    } else {
+                        None
+                    }
+                }
+                exif::Value::Float(ref vec) => {
+                    if !vec.is_empty() {
+                        Some(vec[0] as f64)
+                    } else {
+                        None
+                    }
+                }
+                exif::Value::Double(ref vec) => {
+                    if !vec.is_empty() {
+                        Some(vec[0])
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+            result_metadata.focal_length_native = value;
         }
         Ok(result_metadata)
     }
@@ -160,11 +199,23 @@ impl SourceImage {
         img
     }
 
-    fn calibration_matrix(&self, focal_length: Option<u32>) -> Matrix3<f64> {
-        // Scale focal length: f_img/f_35mm == width / 36mm (because 35mm film is 36mm wide).
-        let max_width = self.img.width().max(self.img.height()) as f64;
-        let focal_length =
-            focal_length.or(self.focal_length).unwrap_or(1) as f64 / 36.0 * max_width;
+    fn calibration_matrix(&self, focal_length_35mm: Option<u32>) -> Matrix3<f64> {
+        // Scale focal length: f_img/f_35mm == diagonal / diagonal(24mm x 36mm) (because 35mm equivalent is based on diagonal length)
+        let diagonal_35mm = (24.0f64 * 24.0 + 36.0 * 36.0).sqrt();
+        //let ratio_35mm = 36.0 / 24.0;
+        let width = self.img.width() as f64;
+        let height = self.img.height() as f64;
+        //let (width, height) = (width.max(height), width.min(height));
+        //let width = height * ratio_35mm;
+
+        let diagonal = (width * width + height * height).sqrt();
+        let focal_length = focal_length_35mm.or(self.focal_length_35mm).unwrap_or(1) as f64
+            * diagonal
+            / diagonal_35mm;
+
+        //let max_width = self.img.width().max(self.img.height()) as f64;
+        //let focal_length = focal_length_35mm.or(self.focal_length_35mm).unwrap_or(1) as f64 / 36.0 * max_width;
+
         Matrix3::new(
             focal_length,
             0.0,
@@ -326,7 +377,7 @@ impl ImageReconstruction {
             "Image {} has scale width {:?}, height {:?}",
             img1_filename, img1.scale.0, img1.scale.1
         );
-        if let Some(focal_length) = img1.focal_length {
+        if let Some(focal_length) = img1.focal_length_35mm {
             println!(
                 "Image {} has focal length {}mm equivalent to 35mm film",
                 img1.filename, focal_length
@@ -338,7 +389,7 @@ impl ImageReconstruction {
             "Image {} has scale width {:?}, height {:?}",
             img2_filename, img2.scale.0, img1.scale.1
         );
-        if let Some(focal_length) = img1.focal_length {
+        if let Some(focal_length) = img1.focal_length_35mm {
             println!(
                 "Image {} has focal length {}mm equivalent to 35mm film",
                 img2.filename, focal_length
