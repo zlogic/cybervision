@@ -10,16 +10,16 @@ use rand::{rngs::SmallRng, Rng, SeedableRng};
 use rayon::prelude::*;
 
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 100;
-const EXTEND_TRACKS_SEARCH_RADIUS: usize = 7;
-const MERGE_TRACKS_MAX_DISTANCE: usize = 200;
-const MERGE_TRACKS_SEARCH_RADIUS: usize = 7;
+const EXTEND_TRACKS_SEARCH_RADIUS: usize = 5;
+const MERGE_TRACKS_SEARCH_RADIUS: usize = 5;
+const TRACKS_RADIUS_DENOMINATOR: usize = 1000;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 100_000;
 const MIN_INLIER_DISTANCE_SQR: usize = 100;
 const MIN_INLIER_DISTANCE_DENOMINATOR: usize = 1000;
 const RANSAC_INLIERS_T: f64 = 25.0 / 1000.0;
-const RANSAC_T: f64 = 100.0 / 1000.0;
+const RANSAC_T: f64 = 75.0 / 1000.0;
 const RANSAC_D: usize = 200;
 const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 1000;
@@ -215,6 +215,16 @@ impl Triangulation {
         }
     }
 
+    pub fn complete_sparse_triangulation(&mut self) -> Result<(), TriangulationError> {
+        if self.affine.is_some() {
+            Ok(())
+        } else if let Some(perspective) = &mut self.perspective {
+            Ok(perspective.complete_sparse_triangulation())
+        } else {
+            Err("Triangulation not initialized".into())
+        }
+    }
+
     pub fn triangulate_all<PL: ProgressListener>(
         &mut self,
         progress_listener: Option<&PL>,
@@ -312,7 +322,7 @@ impl Track {
         }
     }
 
-    fn can_merge(&self, other: &Track) -> bool {
+    fn can_merge(&self, other: &Track, max_distance_sqr: usize) -> bool {
         for i in 0..self.points.len() {
             let p1 = if let Some(point) = self.points[i] {
                 point
@@ -328,7 +338,7 @@ impl Track {
             let dx = p1.x.max(p2.x) as usize - p1.x.min(p2.x) as usize;
             let dy = p1.y.max(p2.y) as usize - p1.y.min(p2.y) as usize;
             let distance = dx * dx + dy * dy;
-            if distance > MERGE_TRACKS_MAX_DISTANCE {
+            if distance > max_distance_sqr {
                 return false;
             }
         }
@@ -682,6 +692,10 @@ impl PerspectiveTriangulation {
 
         self.triangulate_tracks();
         Ok(vec![best_candidate])
+    }
+
+    fn complete_sparse_triangulation(&mut self) {
+        self.tracks.clear();
     }
 
     fn triangulate_all<PL: ProgressListener>(
@@ -1250,6 +1264,13 @@ impl PerspectiveTriangulation {
         let counter = AtomicUsize::new(0);
         let total_iterations = self.tracks.len();
 
+        let search_radius = if let Some(shape) = self.image_shapes[image2_index] {
+            let max_dimension = shape.0.max(shape.1);
+            max_dimension * EXTEND_TRACKS_SEARCH_RADIUS / TRACKS_RADIUS_DENOMINATOR
+        } else {
+            return;
+        };
+
         self.tracks.iter_mut().for_each(|track| {
             if let Some(pl) = progress_listener {
                 let value =
@@ -1261,12 +1282,10 @@ impl PerspectiveTriangulation {
             } else {
                 return;
             };
-            let min_x = (point1.x as usize).saturating_sub(EXTEND_TRACKS_SEARCH_RADIUS);
-            let min_y = (point1.y as usize).saturating_sub(EXTEND_TRACKS_SEARCH_RADIUS);
-            let max_x =
-                (point1.x as usize + EXTEND_TRACKS_SEARCH_RADIUS).min(correlated_points.width());
-            let max_y =
-                (point1.y as usize + EXTEND_TRACKS_SEARCH_RADIUS).min(correlated_points.height());
+            let min_x = (point1.x as usize).saturating_sub(search_radius);
+            let min_y = (point1.y as usize).saturating_sub(search_radius);
+            let max_x = (point1.x as usize + search_radius).min(correlated_points.width());
+            let max_y = (point1.y as usize + search_radius).min(correlated_points.height());
             let mut min_distance = None;
             let mut best_match = None;
             for y in min_y..max_y {
@@ -1330,6 +1349,12 @@ impl PerspectiveTriangulation {
         };
         let tracks_count = self.tracks.len();
         let mut tracks_index = Grid::<Option<usize>>::new(shape.0, shape.1, None);
+        let max_dimension = shape.0.max(shape.1);
+        let search_radius = max_dimension * MERGE_TRACKS_SEARCH_RADIUS / TRACKS_RADIUS_DENOMINATOR;
+        let max_distance_sqr =
+            max_dimension * MERGE_TRACKS_SEARCH_RADIUS * MERGE_TRACKS_SEARCH_RADIUS
+                / TRACKS_RADIUS_DENOMINATOR;
+
         for track_i in 0..self.tracks.len() {
             let point = if let Some(point) = self.tracks[track_i].get(image_i) {
                 point
@@ -1340,10 +1365,10 @@ impl PerspectiveTriangulation {
                 let value = track_i as f32 / tracks_count as f32;
                 pl.report_status(value * 0.02);
             }
-            let min_x = (point.x as usize).saturating_sub(MERGE_TRACKS_SEARCH_RADIUS);
-            let min_y = (point.y as usize).saturating_sub(MERGE_TRACKS_SEARCH_RADIUS);
-            let max_x = (point.x as usize + MERGE_TRACKS_SEARCH_RADIUS).min(tracks_index.width());
-            let max_y = (point.y as usize + MERGE_TRACKS_SEARCH_RADIUS).min(tracks_index.height());
+            let min_x = (point.x as usize).saturating_sub(search_radius);
+            let min_y = (point.y as usize).saturating_sub(search_radius);
+            let max_x = (point.x as usize + search_radius).min(tracks_index.width());
+            let max_y = (point.y as usize + search_radius).min(tracks_index.height());
             let mut min_distance = None;
             let mut best_match = None;
             for y in min_y..max_y {
@@ -1354,7 +1379,8 @@ impl PerspectiveTriangulation {
                         continue;
                     };
                     if potential_match == track_i
-                        || !self.tracks[track_i].can_merge(&self.tracks[potential_match])
+                        || !self.tracks[track_i]
+                            .can_merge(&self.tracks[potential_match], max_distance_sqr)
                     {
                         continue;
                     }

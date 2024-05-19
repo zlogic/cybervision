@@ -275,7 +275,13 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
         }
         f_matrices.push(f_matrices_i);
     }
-    let linked_images = reconstruction_task.recover_camera_poses();
+    let linked_images = match reconstruction_task.recover_camera_poses() {
+        Ok(img_index) => img_index,
+        Err(err) => {
+            eprintln!("Failed to recover camera poses: {}", err);
+            return Err(err.into());
+        }
+    };
 
     // Perform dense correlation for images that could be matched together.
     let gpu_device = match correlation::create_gpu_context(hardware_mode) {
@@ -596,7 +602,7 @@ impl ImageReconstruction {
         Ok(result?)
     }
 
-    fn recover_camera_poses(&mut self) -> Vec<usize> {
+    fn recover_camera_poses(&mut self) -> Result<Vec<usize>, triangulation::TriangulationError> {
         let mut camera_order = vec![];
         loop {
             let start_time = SystemTime::now();
@@ -630,7 +636,10 @@ impl ImageReconstruction {
             camera_order.append(&mut images);
         }
 
-        camera_order
+        match self.triangulation.complete_sparse_triangulation() {
+            Ok(_) => Ok(camera_order),
+            Err(err) => Err(err),
+        }
     }
 
     fn reconstruct_dense(
