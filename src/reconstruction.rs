@@ -275,13 +275,7 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
         }
         f_matrices.push(f_matrices_i);
     }
-    let linked_images = match reconstruction_task.recover_camera_poses() {
-        Ok(img_index) => img_index,
-        Err(err) => {
-            eprintln!("Failed to recover camera poses: {}", err);
-            return Err(err.into());
-        }
-    };
+    let linked_images = reconstruction_task.recover_camera_poses();
 
     // Perform dense correlation for images that could be matched together.
     let gpu_device = match correlation::create_gpu_context(hardware_mode) {
@@ -602,7 +596,7 @@ impl ImageReconstruction {
         Ok(result?)
     }
 
-    fn recover_camera_poses(&mut self) -> Result<Vec<usize>, triangulation::TriangulationError> {
+    fn recover_camera_poses(&mut self) -> Vec<usize> {
         let mut camera_order = vec![];
         loop {
             let start_time = SystemTime::now();
@@ -636,22 +630,7 @@ impl ImageReconstruction {
             camera_order.append(&mut images);
         }
 
-        let start_time = SystemTime::now();
-        let pb = new_progress_bar(true);
-        let result = self.triangulation.complete_sparse_triangulation(Some(&pb));
-        pb.finish_and_clear();
-
-        if let Ok(t) = start_time.elapsed() {
-            println!(
-                "Completed sparse triangulation in {:.3} seconds",
-                t.as_secs_f32()
-            );
-        }
-
-        match result {
-            Ok(_) => Ok(camera_order),
-            Err(err) => Err(err),
-        }
+        camera_order
     }
 
     fn reconstruct_dense(
@@ -714,79 +693,6 @@ impl ImageReconstruction {
                 }
             }
         }
-
-        /*
-        for img1_index in linked_images {
-            let img1_filename = self.img_filenames[img1_index].to_owned();
-            if matched_images.is_empty() {
-                matched_images.push(img1_index);
-                continue;
-            }
-
-            let img1 = match SourceImage::load(&img1_filename) {
-                Ok(img1) => img1,
-                Err(err) => {
-                    eprintln!("Failed to load image: {}", err);
-                    continue;
-                }
-            };
-            for img2_index in matched_images.iter() {
-                let img2_index = *img2_index;
-                let img2_filename = self.img_filenames[img2_index].to_owned();
-                let img2 = match SourceImage::load(&img2_filename) {
-                    Ok(img1) => img1,
-                    Err(err) => {
-                        eprintln!("Failed to load image: {}", err);
-                        continue;
-                    }
-                };
-                // All code expects images to be provided in the same order as specified in the commandline.
-                // Reverse order so that img1_index is before img2_index.
-                let (img1, img2) = if img1_index < img2_index {
-                    (&img1, &img2)
-                } else {
-                    (&img2, &img1)
-                };
-                let img1_filename = img1_filename.to_owned();
-                let (img1_filename, img2_filename) = if img1_index < img2_index {
-                    (img1_filename, img2_filename)
-                } else {
-                    (img2_filename, img1_filename)
-                };
-                let (img1_index, img2_index) =
-                    (img1_index.min(img2_index), img1_index.max(img2_index));
-
-                let f_matrices_i = f_matrices[img1_index].to_owned();
-                let f = if let Some(f) = f_matrices_i[img2_index - 1 - img1_index] {
-                    f
-                } else {
-                    eprintln!(
-                        "No reliable matches between images {} and {}",
-                        img1_filename, img2_filename
-                    );
-                    continue;
-                };
-                println!(
-                    "Performing dense correlation of images {} and {}",
-                    img1_filename, img2_filename
-                );
-                match self.correlate_dense(
-                    gpu_device.as_mut(),
-                    &img1,
-                    &img2,
-                    img1_index,
-                    img2_index,
-                    f,
-                ) {
-                    Ok(_) => {}
-                    Err(err) => {
-                        eprintln!("Failed to perform dense correlation of images: {}", err)
-                    }
-                }
-            }
-            matched_images.push(img1_index);
-        }
-        */
 
         let mut linked_images = linked_images;
         linked_images.sort();

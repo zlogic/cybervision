@@ -215,19 +215,6 @@ impl Triangulation {
         }
     }
 
-    pub fn complete_sparse_triangulation<PL: ProgressListener>(
-        &mut self,
-        progress_listener: Option<&PL>,
-    ) -> Result<(), TriangulationError> {
-        if self.affine.is_some() {
-            Ok(())
-        } else if let Some(perspective) = &mut self.perspective {
-            perspective.complete_sparse_triangulation(progress_listener)
-        } else {
-            Err("Triangulation not initialized".into())
-        }
-    }
-
     pub fn triangulate_all<PL: ProgressListener>(
         &mut self,
         progress_listener: Option<&PL>,
@@ -695,62 +682,6 @@ impl PerspectiveTriangulation {
 
         self.triangulate_tracks();
         Ok(vec![best_candidate])
-    }
-
-    fn complete_sparse_triangulation<PL: ProgressListener>(
-        &mut self,
-        progress_listener: Option<&PL>,
-    ) -> Result<(), TriangulationError> {
-        // TODO 0.20: combine this with triangulate_all.
-        /*
-        let previous_cameras = self.cameras.clone();
-        self.triangulate_tracks();
-        self.prune_projections();
-
-        let cameras = self
-            .cameras
-            .iter()
-            .map(|camera| {
-                if let Some(camera) = camera {
-                    camera.to_owned()
-                } else {
-                    Camera {
-                        k: Matrix3::from_element(f64::NAN),
-                        r: Vector3::from_element(f64::NAN),
-                        r_matrix: Matrix3::from_element(f64::NAN),
-                        t: Vector3::from_element(f64::NAN),
-                        center: Vector3::from_element(f64::NAN),
-                    }
-                }
-            })
-            .collect::<Vec<_>>();
-
-        //self.filter_outliers(cameras.as_slice());
-        self.bundle_adjustment(cameras.as_slice(), progress_listener)?;
-        let cameras = self.cameras.clone();
-
-        self.cameras = previous_cameras;
-        let mut camera_index = 0;
-        for remap_camera in self.cameras.iter_mut() {
-            if let Some(remap_camera) = remap_camera {
-                *remap_camera = cameras[camera_index].to_owned().unwrap();
-                camera_index += 1;
-            }
-        }
-        self.projections = self
-            .cameras
-            .iter()
-            .map(|camera| {
-                if let Some(camera) = camera {
-                    Some(camera.projection())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-        */
-        self.tracks.clear();
-        Ok(())
     }
 
     fn triangulate_all<PL: ProgressListener>(
