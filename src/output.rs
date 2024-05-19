@@ -502,7 +502,7 @@ impl Mesh {
                 let mut scanlines = Scanlines::new(&self.points, camera_j);
                 scanlines.index_camera_points(&self.points, camera_j, |percent| {
                     if let Some(pl) = progress_listener {
-                        let camera_percent = percent * 0.3;
+                        let camera_percent = percent * 0.1;
                         let value = percent_complete + percent_multiplier * camera_percent;
 
                         pl.report_status(0.9 * value);
@@ -515,7 +515,7 @@ impl Mesh {
                     .enumerate()
                     .for_each(|(polygon_i, polygon)| {
                         if let Some(pl) = progress_listener {
-                            let camera_percent = 0.3 + 0.3 * polygon_i as f32 / polygons_count;
+                            let camera_percent = 0.1 + 0.1 * polygon_i as f32 / polygons_count;
                             let value = percent_complete + percent_multiplier * camera_percent;
 
                             pl.report_status(0.9 * value);
@@ -528,7 +528,7 @@ impl Mesh {
 
                 scanlines.detect_obstruction(|percent| {
                     if let Some(pl) = progress_listener {
-                        let camera_percent = 0.6 + percent * 0.4;
+                        let camera_percent = 0.2 + percent * 0.8;
                         let value = percent_complete + percent_multiplier * camera_percent;
 
                         pl.report_status(0.9 * value);
