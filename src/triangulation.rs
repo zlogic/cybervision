@@ -58,6 +58,11 @@ impl Surface {
     }
 
     #[inline]
+    pub fn camera_look_direction(&self, camera_i: usize) -> Vector3<f64> {
+        self.cameras[camera_i].look_direction
+    }
+
+    #[inline]
     pub fn point_depth(&self, camera_i: usize, track_i: usize) -> Option<f64> {
         let track = &self.tracks[track_i];
         if self.cameras.is_empty() {
@@ -394,6 +399,7 @@ struct Camera {
     r_matrix: Matrix3<f64>,
     t: Vector3<f64>,
     center: Vector3<f64>,
+    look_direction: Vector3<f64>,
 }
 
 impl Camera {
@@ -442,12 +448,14 @@ impl Camera {
 
         let r_matrix = Camera::matrix_r(&r);
         let center = Camera::center(&r_matrix, t);
+        let look_direction = Camera::look_direction(&r_matrix, t);
         Camera {
             k: k.to_owned(),
             r,
             r_matrix,
             t: t.to_owned(),
             center,
+            look_direction,
         }
     }
 
@@ -456,6 +464,7 @@ impl Camera {
         self.t += delta_t;
         self.r_matrix = Camera::matrix_r(&self.r);
         self.center = Camera::center(&self.r_matrix, &self.t);
+        self.look_direction = Camera::look_direction(&self.r_matrix, &self.t);
     }
 
     fn matrix_r(r: &Vector3<f64>) -> Matrix3<f64> {
@@ -472,6 +481,12 @@ impl Camera {
 
     fn center(r_matrix: &Matrix3<f64>, t: &Vector3<f64>) -> Vector3<f64> {
         -r_matrix.tr_mul(t)
+    }
+
+    fn look_direction(r_matrix: &Matrix3<f64>, t: &Vector3<f64>) -> Vector3<f64> {
+        r_matrix
+            .tr_mul(&(Vector3::new(0.0, 0.0, 1.0) - t))
+            .normalize()
     }
 
     #[inline]
@@ -727,6 +742,7 @@ impl PerspectiveTriangulation {
                         r_matrix: Matrix3::from_element(f64::NAN),
                         t: Vector3::from_element(f64::NAN),
                         center: Vector3::from_element(f64::NAN),
+                        look_direction: Vector3::from_element(f64::NAN),
                     }
                 }
             })

@@ -405,13 +405,12 @@ impl Mesh {
                 {
                     return None;
                 }
-                let direction = if affine_projection {
+                let look_direction = if affine_projection {
                     Vector3::new(0.0, 0.0, 1.0)
                 } else {
-                    ((point0 + point1 + point2).unscale(3.0) - self.points.camera_center(camera_i))
-                        .normalize()
+                    self.points.camera_look_direction(camera_i)
                 };
-                let cos_angle = direction.dot(&polygon_normal);
+                let cos_angle = look_direction.dot(&polygon_normal);
                 Some(cos_angle)
             })
             .reduce(|a, b| a.max(b))
