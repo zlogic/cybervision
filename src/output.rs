@@ -4,12 +4,14 @@ use crate::{
 };
 use core::fmt;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::File,
     io::{BufWriter, Write},
     path::Path,
-    sync::atomic::AtomicUsize,
-    sync::atomic::Ordering as AtomicOrdering,
+    sync::{
+        atomic::{AtomicUsize, Ordering as AtomicOrdering},
+        RwLock,
+    },
 };
 
 use image::{RgbImage, Rgba, RgbaImage};
@@ -40,13 +42,13 @@ where
     fn report_status(&self, pos: f32);
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct Point {
     point: Point2<f64>,
     track_i: usize,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy)]
 struct Polygon {
     camera_i: usize,
     vertices: [usize; 3],
@@ -58,17 +60,24 @@ impl Polygon {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Copy)]
 struct PolygonInCamera {
     vertices: [Vector3<f64>; 3],
+}
+
+#[derive(Clone)]
+struct ScanlinePolygons {
+    entering: Vec<usize>,
+    exiting: Vec<usize>,
 }
 
 struct Scanlines {
     camera_center: Vector3<f64>,
     camera_points: Vec<Vector3<f64>>,
     polygons: Vec<Option<PolygonInCamera>>,
+    height: usize,
     line_points: Vec<Vec<usize>>,
-    line_polygons: Vec<Vec<usize>>,
+    line_polygons: Vec<ScanlinePolygons>,
 }
 
 impl Scanlines {
@@ -78,6 +87,7 @@ impl Scanlines {
             camera_center,
             camera_points: vec![],
             polygons: vec![],
+            height: 0,
             line_points: vec![],
             line_polygons: vec![],
         }
@@ -128,6 +138,14 @@ impl Scanlines {
             .collect::<Vec<_>>();
 
         self.line_points = point_scanlines;
+        self.height = self.line_points.len();
+        self.line_polygons = vec![
+            ScanlinePolygons {
+                entering: vec![],
+                exiting: vec![]
+            };
+            self.height
+        ];
     }
 
     fn index_polygon(
@@ -150,43 +168,41 @@ impl Scanlines {
         let min_y = point0_y.min(point1_y).min(point2_y);
         let max_y = point0_y.max(point1_y).max(point2_y);
 
-        if max_y < 0.0 || min_y > self.line_points.len() as f64 {
+        if max_y < 0.0 || min_y > self.height as f64 || self.height == 0 {
             return;
         }
 
         let min_y = min_y.round() as usize;
-        let max_y = max_y.round() as usize;
+        let max_y = (max_y.round() as usize).min(self.height - 1);
 
         let indexed_polygon = PolygonInCamera {
             vertices: [point0, point1, point2],
         };
-        self.line_polygons
-            .resize(self.line_polygons.len().max(max_y), vec![]);
         // TODO: In addition to indexing by the y-axis, also list min/max x coordinates which are inside the polygon.
-        for y in min_y..max_y {
-            self.line_polygons[y].push(polygon_i);
-        }
+        self.line_polygons[min_y].entering.push(polygon_i);
+        self.line_polygons[max_y].exiting.push(polygon_i);
         self.polygons
             .resize(self.polygons.len().max(polygon_i + 1), None);
         self.polygons[polygon_i] = Some(indexed_polygon);
     }
 
     fn complete_indexing(&mut self) {
-        let max_height = self.scanlines_count();
-        self.line_points.truncate(max_height);
-        self.line_polygons.truncate(max_height);
-
-        self.line_polygons
-            .iter_mut()
-            .for_each(|scanline| scanline.shrink_to_fit());
+        self.line_polygons.iter_mut().for_each(|scanline| {
+            scanline.entering.shrink_to_fit();
+            scanline.exiting.shrink_to_fit();
+        });
     }
 
-    fn scanlines_count(&self) -> usize {
-        self.line_points.len().min(self.line_polygons.len())
+    fn height(&self) -> usize {
+        self.height
     }
 
     #[inline]
-    fn polygon_obstructs(&self, polygon: &PolygonInCamera, point: Vector3<f64>) -> bool {
+    fn polygon_obstructs(
+        camera_center: &Vector3<f64>,
+        polygon: &PolygonInCamera,
+        point: Vector3<f64>,
+    ) -> bool {
         let (point0, point1, point2) = (
             polygon.vertices[0],
             polygon.vertices[1],
@@ -198,14 +214,14 @@ impl Scanlines {
         if point == point0 || point == point1 || point == point2 {
             return false;
         }
-        let ray_vector = point - self.camera_center;
+        let ray_vector = point - camera_center;
         let ray_cross_e2 = ray_vector.cross(&edge2);
         let det = edge1.dot(&ray_cross_e2);
         if det.abs() < f64::EPSILON {
             return false;
         }
         let inv_det = 1.0 / det;
-        let s = self.camera_center - point0;
+        let s = camera_center - point0;
         let u = inv_det * s.dot(&ray_cross_e2);
         if !(0.0..=1.0).contains(&u) {
             return false;
@@ -219,42 +235,72 @@ impl Scanlines {
         t > 1.0
     }
 
-    fn detect_obstruction<PL>(&mut self, report_progress: PL)
+    fn detect_obstruction<PL>(&mut self, report_progress: PL) -> Result<(), OutputError>
     where
         PL: Fn(f32) + Sync,
     {
         let counter = AtomicUsize::new(0);
-        let scanlines_count = self.scanlines_count() as f32;
+        let scanlines_count = self.height() as f32;
 
-        for line_i in 0..self.scanlines_count() {
-            let line_polygons = &self.line_polygons[line_i];
-            let line_points = &self.line_points[line_i];
-            report_progress(counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / scanlines_count);
-            let discarded_polygons = line_polygons
-                .par_iter()
-                .filter_map(|polygon_i| {
-                    let indexed_polygon = if let Some(polygon) = &self.polygons[*polygon_i] {
-                        polygon
-                    } else {
-                        return None;
-                    };
-
-                    for point_i in line_points {
-                        let point_in_camera = self.camera_points[*point_i];
-                        // Discard polygons that obstruct points.
-                        // TODO: cut holes in the polygon?
-                        // TODO: check if polygon obstructs other polygons?
-                        if self.polygon_obstructs(indexed_polygon, point_in_camera) {
-                            return Some(*polygon_i);
+        let camera_center = self.camera_center;
+        let polygons = self.polygons.as_mut_slice();
+        let polygons_lock = RwLock::new(polygons);
+        self.line_points.par_iter().enumerate().try_for_each(
+            |(line_i, line_points)| -> Result<(), _> {
+                report_progress(
+                    counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / scanlines_count,
+                );
+                let line_polygons = {
+                    let mut line_polygons = HashSet::new();
+                    self.line_polygons
+                        .iter()
+                        .take(line_i + 1)
+                        .for_each(|scanline| {
+                            scanline.entering.iter().for_each(|entering| {
+                                line_polygons.insert(*entering);
+                            });
+                            scanline.exiting.iter().for_each(|exiting| {
+                                line_polygons.remove(exiting);
+                            });
+                        });
+                    let polygons = polygons_lock
+                        .read()
+                        .map_err(|_err| "Failed to obtain read lock")?;
+                    line_polygons
+                        .iter()
+                        .filter_map(|polygon_i| Some((*polygon_i, polygons[*polygon_i]?)))
+                        .collect::<Vec<_>>()
+                };
+                let discarded_polygons = line_polygons
+                    .iter()
+                    .filter_map(|(polygon_i, polygon)| {
+                        for point_i in line_points {
+                            let point_in_camera = self.camera_points[*point_i];
+                            // Discard polygons that obstruct points.
+                            // TODO: cut holes in the polygon?
+                            // TODO: check if polygon obstructs other polygons?
+                            if Scanlines::polygon_obstructs(
+                                &camera_center,
+                                polygon,
+                                point_in_camera,
+                            ) {
+                                return Some(*polygon_i);
+                            }
                         }
-                    }
-                    None
-                })
-                .collect::<Vec<_>>();
-            discarded_polygons
-                .iter()
-                .for_each(|polygon_i| self.polygons[*polygon_i] = None);
-        }
+                        None
+                    })
+                    .collect::<Vec<_>>();
+
+                let mut polygons = polygons_lock
+                    .write()
+                    .map_err(|_err| "Failed to obtain write lock")?;
+                discarded_polygons
+                    .iter()
+                    .for_each(|polygon_i| polygons[*polygon_i] = None);
+
+                Ok(())
+            },
+        )
     }
 
     fn polygon_not_valid(&self, polygon_i: usize) -> bool {
