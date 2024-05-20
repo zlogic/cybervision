@@ -1447,7 +1447,6 @@ impl PerspectiveTriangulation {
                 return;
             };
             // Clear points which don't have enough matches.
-            // TODO 0.20: check if this helps
             if track
                 .points()
                 .iter()

@@ -8,10 +8,7 @@ use std::{
     fs::File,
     io::{BufWriter, Write},
     path::Path,
-    sync::{
-        atomic::{AtomicUsize, Ordering as AtomicOrdering},
-        RwLock,
-    },
+    sync::atomic::{AtomicUsize, Ordering as AtomicOrdering},
 };
 
 use image::{RgbImage, Rgba, RgbaImage};
@@ -172,13 +169,14 @@ impl Scanlines {
             return;
         }
 
-        let min_y = min_y.round() as usize;
-        let max_y = (max_y.round() as usize).min(self.height - 1);
+        let min_y = min_y.floor() as usize;
+        let max_y = (max_y.ceil() as usize).min(self.height - 1);
 
         let indexed_polygon = PolygonInCamera {
             vertices: [point0, point1, point2],
         };
         // TODO: In addition to indexing by the y-axis, also list min/max x coordinates which are inside the polygon.
+        // TODO: Switch to a HashSet if memory usage gets out of hand? Or it's Spade that causes huge memory usage issues?
         self.line_polygons[min_y].entering.push(polygon_i);
         self.line_polygons[max_y].exiting.push(polygon_i);
         self.polygons
@@ -191,10 +189,6 @@ impl Scanlines {
             scanline.entering.shrink_to_fit();
             scanline.exiting.shrink_to_fit();
         });
-    }
-
-    fn height(&self) -> usize {
-        self.height
     }
 
     #[inline]
@@ -235,44 +229,32 @@ impl Scanlines {
         t > 1.0
     }
 
-    fn detect_obstruction<PL>(&mut self, report_progress: PL) -> Result<(), OutputError>
+    fn detect_obstruction<PL>(&mut self, report_progress: PL)
     where
         PL: Fn(f32) + Sync,
     {
-        let counter = AtomicUsize::new(0);
-        let scanlines_count = self.height() as f32;
+        let scanlines_count = self.height as f32;
 
-        let camera_center = self.camera_center;
         let polygons = self.polygons.as_mut_slice();
-        let polygons_lock = RwLock::new(polygons);
-        self.line_points.par_iter().enumerate().try_for_each(
-            |(line_i, line_points)| -> Result<(), _> {
-                report_progress(
-                    counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / scanlines_count,
-                );
-                let line_polygons = {
-                    let mut line_polygons = HashSet::new();
-                    self.line_polygons
-                        .iter()
-                        .take(line_i + 1)
-                        .for_each(|scanline| {
-                            scanline.entering.iter().for_each(|entering| {
-                                line_polygons.insert(*entering);
-                            });
-                            scanline.exiting.iter().for_each(|exiting| {
-                                line_polygons.remove(exiting);
-                            });
-                        });
-                    let polygons = polygons_lock
-                        .read()
-                        .map_err(|_err| "Failed to obtain read lock")?;
-                    line_polygons
-                        .iter()
-                        .filter_map(|polygon_i| Some((*polygon_i, polygons[*polygon_i]?)))
-                        .collect::<Vec<_>>()
-                };
+        let mut current_line = HashSet::new();
+        self.line_polygons
+            .iter()
+            .enumerate()
+            .for_each(|(line_i, scanline)| {
+                report_progress(line_i as f32 / scanlines_count);
+                scanline.entering.iter().for_each(|entering| {
+                    current_line.insert(*entering);
+                });
+                scanline.exiting.iter().for_each(|exiting| {
+                    current_line.remove(exiting);
+                });
+                let line_polygons = current_line
+                    .par_iter()
+                    .filter_map(|polygon_i| Some((*polygon_i, polygons[*polygon_i]?)))
+                    .collect::<Vec<_>>();
+                let line_points = &self.line_points[line_i];
                 let discarded_polygons = line_polygons
-                    .iter()
+                    .par_iter()
                     .filter_map(|(polygon_i, polygon)| {
                         for point_i in line_points {
                             let point_in_camera = self.camera_points[*point_i];
@@ -280,7 +262,7 @@ impl Scanlines {
                             // TODO: cut holes in the polygon?
                             // TODO: check if polygon obstructs other polygons?
                             if Scanlines::polygon_obstructs(
-                                &camera_center,
+                                &self.camera_center,
                                 polygon,
                                 point_in_camera,
                             ) {
@@ -291,16 +273,11 @@ impl Scanlines {
                     })
                     .collect::<Vec<_>>();
 
-                let mut polygons = polygons_lock
-                    .write()
-                    .map_err(|_err| "Failed to obtain write lock")?;
-                discarded_polygons
-                    .iter()
-                    .for_each(|polygon_i| polygons[*polygon_i] = None);
-
-                Ok(())
-            },
-        )
+                discarded_polygons.iter().for_each(|polygon_i| {
+                    polygons[*polygon_i] = None;
+                    current_line.remove(polygon_i);
+                });
+            });
     }
 
     fn polygon_not_valid(&self, polygon_i: usize) -> bool {
