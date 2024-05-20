@@ -186,6 +186,7 @@ impl SourceImage {
 
 struct ImageReconstruction {
     interpolation_mode: output::InterpolationMode,
+    min_angle_cos: f64,
     projection_mode: fundamentalmatrix::ProjectionMode,
     vertex_mode: output::VertexMode,
     triangulation: triangulation::Triangulation,
@@ -230,6 +231,7 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
         crate::ProjectionMode::Perspective => out_scale,
     };
     let focal_length = args.focal_length;
+    let min_angle_cos = args.min_angle_cos;
 
     let triangulation_projection = match args.projection {
         crate::ProjectionMode::Parallel => triangulation::ProjectionMode::Affine,
@@ -245,6 +247,7 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
 
     let mut reconstruction_task = ImageReconstruction {
         interpolation_mode,
+        min_angle_cos,
         projection_mode,
         vertex_mode,
         triangulation,
@@ -779,6 +782,7 @@ impl ImageReconstruction {
             images,
             output_filename,
             self.interpolation_mode,
+            self.min_angle_cos,
             self.vertex_mode,
             Some(&pb),
         );

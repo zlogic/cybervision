@@ -41,6 +41,7 @@ pub struct Args {
     focal_length: Option<u32>,
     mode: HardwareMode,
     interpolation: InterpolationMode,
+    min_angle_cos: f64,
     no_bundle_adjustment: bool,
     projection: ProjectionMode,
     mesh: Mesh,
@@ -57,6 +58,7 @@ Options:\
 \n      --focal-length=<FOCAL_LENGTH>    Focal length in 35mm equivalent\
 \n      --mode=<MODE>                    Hardware mode [default: gpu] [possible values: gpu, gpu-low-power, cpu]\
 \n      --interpolation=<INTERPOLATION>  Interpolation mode [default: delaunay] [possible values: delaunay, none]\
+\n      --min-angle-cos=<COS_VALUE>      Minimum cos value for polygon normals [default: 0.2]\
 \n      --no-bundle-adjustment           Skip bundle adjustment [if unspecified, bundle adjustment will be applied]\
 \n      --projection=<PROJECTION>        Projection mode [default: perspective] [possible values: parallel, perspective]\
 \n      --mesh=<MESH>                    Mesh options [default: vertex-colors] [possible values: plain, vertex-colors, texture-coordinates]\
@@ -68,6 +70,7 @@ impl Args {
             focal_length: None,
             mode: HardwareMode::Gpu,
             interpolation: InterpolationMode::Delaunay,
+            min_angle_cos: 0.2,
             no_bundle_adjustment: false,
             projection: ProjectionMode::Perspective,
             mesh: Mesh::VertexColors,
@@ -131,6 +134,11 @@ impl Args {
                             println!("{}", USAGE_INSTRUCTIONS);
                             exit(2);
                         }
+                    };
+                } else if name == "--min-angle-cos" {
+                    match value.parse() {
+                        Ok(min_angle_cos) => args.min_angle_cos = min_angle_cos,
+                        Err(err) => fail_with_error(name, value, &err),
                     };
                 } else if name == "--projection" {
                     match value {

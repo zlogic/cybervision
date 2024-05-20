@@ -17,8 +17,6 @@ use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 
 use rayon::prelude::*;
 
-const MAX_NORMAL_COS: f64 = 0.2;
-
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum InterpolationMode {
     Delaunay,
@@ -336,6 +334,8 @@ impl PolygonIndex {
 }
 
 struct Mesh {
+    interpolation: InterpolationMode,
+    min_angle_cos: f64,
     points: triangulation::Surface,
     polygons: Vec<Polygon>,
     polygon_index: PolygonIndex,
@@ -346,10 +346,13 @@ impl Mesh {
     fn create<PL: ProgressListener>(
         surface: triangulation::Surface,
         interpolation: InterpolationMode,
+        min_angle_cos: f64,
         progress_listener: Option<&PL>,
     ) -> Result<Mesh, OutputError> {
         let point_normals = vec![Vector3::zeros(); surface.tracks_len()];
         let mut surface = Mesh {
+            interpolation,
+            min_angle_cos,
             points: surface,
             polygons: vec![],
             polygon_index: PolygonIndex::new(),
@@ -357,10 +360,10 @@ impl Mesh {
         };
 
         if surface.points.cameras_len() == 0 {
-            surface.process_camera(0, interpolation, progress_listener)?;
+            surface.process_camera(0, progress_listener)?;
         } else {
             for camera_i in 0..surface.points.cameras_len() {
-                surface.process_camera(camera_i, interpolation, progress_listener)?;
+                surface.process_camera(camera_i, progress_listener)?;
             }
         }
 
@@ -439,10 +442,9 @@ impl Mesh {
     fn process_camera<PL: ProgressListener>(
         &mut self,
         camera_i: usize,
-        interpolation: InterpolationMode,
         progress_listener: Option<&PL>,
     ) -> Result<(), OutputError> {
-        if interpolation != InterpolationMode::Delaunay {
+        if self.interpolation != InterpolationMode::Delaunay {
             return Ok(());
         }
 
@@ -494,7 +496,7 @@ impl Mesh {
                 // Discard polygons that are too steep.
                 if self
                     .max_angle_cos(&polygon)
-                    .map_or(true, |angle_cos| angle_cos < MAX_NORMAL_COS)
+                    .map_or(true, |angle_cos| angle_cos < self.min_angle_cos)
                 {
                     None
                 } else {
@@ -643,6 +645,7 @@ pub fn output<PL: ProgressListener>(
     images: Vec<RgbImage>,
     path: &str,
     interpolation: InterpolationMode,
+    min_angle_cos: f64,
     vertex_mode: VertexMode,
     progress_listener: Option<&PL>,
 ) -> Result<(), OutputError> {
@@ -672,7 +675,7 @@ pub fn output<PL: ProgressListener>(
         )?)
     };
 
-    let mesh = Mesh::create(surface, interpolation, progress_listener)?;
+    let mesh = Mesh::create(surface, interpolation, min_angle_cos, progress_listener)?;
     mesh.output(writer, progress_listener)
 }
 
