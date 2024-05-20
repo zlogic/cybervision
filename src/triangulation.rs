@@ -16,7 +16,7 @@ const TRACKS_RADIUS_DENOMINATOR: usize = 1000;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 100_000;
-const MIN_INLIER_DISTANCE_SQR: usize = 100;
+const MIN_INLIER_DISTANCE_SQR: usize = 400;
 const MIN_INLIER_DISTANCE_DENOMINATOR: usize = 1000;
 const RANSAC_INLIERS_T: f64 = 25.0 / 1000.0;
 const RANSAC_T: f64 = 150.0 / 1000.0;
@@ -1191,8 +1191,11 @@ impl PerspectiveTriangulation {
     ) -> Vec<Track> {
         let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
         let mut inliers: Vec<Track> = Vec::with_capacity(RANSAC_N);
-        let min_inlier_distance =
-            MIN_INLIER_DISTANCE_SQR * max_dimension / MIN_INLIER_DISTANCE_DENOMINATOR;
+        let min_inlier_distance = if max_dimension > MIN_INLIER_DISTANCE_DENOMINATOR {
+            MIN_INLIER_DISTANCE_SQR * max_dimension / MIN_INLIER_DISTANCE_DENOMINATOR
+        } else {
+            MIN_INLIER_DISTANCE_SQR
+        };
         while inliers.len() < RANSAC_N {
             let next_index = rng.gen_range(0..linked_tracks.len());
             let next_match = &linked_tracks[next_index];
@@ -1272,11 +1275,15 @@ impl PerspectiveTriangulation {
         let counter = AtomicUsize::new(0);
         let total_iterations = self.tracks.len();
 
-        let search_radius = if let Some(shape) = self.image_shapes[image2_index] {
-            let max_dimension = shape.0.max(shape.1);
-            max_dimension * EXTEND_TRACKS_SEARCH_RADIUS / TRACKS_RADIUS_DENOMINATOR
+        let max_dimension = if let Some(shape) = self.image_shapes[image2_index] {
+            shape.0.max(shape.1)
         } else {
             return;
+        };
+        let search_radius = if max_dimension > TRACKS_RADIUS_DENOMINATOR {
+            EXTEND_TRACKS_SEARCH_RADIUS * max_dimension / TRACKS_RADIUS_DENOMINATOR
+        } else {
+            EXTEND_TRACKS_SEARCH_RADIUS
         };
 
         self.tracks.iter_mut().for_each(|track| {
@@ -1358,10 +1365,17 @@ impl PerspectiveTriangulation {
         let tracks_count = self.tracks.len();
         let mut tracks_index = Grid::<Option<usize>>::new(shape.0, shape.1, None);
         let max_dimension = shape.0.max(shape.1);
-        let search_radius = max_dimension * MERGE_TRACKS_SEARCH_RADIUS / TRACKS_RADIUS_DENOMINATOR;
-        let max_distance_sqr =
-            max_dimension * MERGE_TRACKS_SEARCH_RADIUS * MERGE_TRACKS_SEARCH_RADIUS
-                / TRACKS_RADIUS_DENOMINATOR;
+        let search_radius = if max_dimension > TRACKS_RADIUS_DENOMINATOR {
+            MERGE_TRACKS_SEARCH_RADIUS * max_dimension / TRACKS_RADIUS_DENOMINATOR
+        } else {
+            MERGE_TRACKS_SEARCH_RADIUS
+        };
+        let max_distance_sqr = if max_dimension > TRACKS_RADIUS_DENOMINATOR {
+            MERGE_TRACKS_SEARCH_RADIUS * MERGE_TRACKS_SEARCH_RADIUS * max_dimension
+                / TRACKS_RADIUS_DENOMINATOR
+        } else {
+            MERGE_TRACKS_SEARCH_RADIUS * MERGE_TRACKS_SEARCH_RADIUS
+        };
 
         for track_i in 0..self.tracks.len() {
             let point = if let Some(point) = self.tracks[track_i].get(image_i) {
