@@ -232,7 +232,8 @@ impl Triangulation {
         if self.affine.is_some() {
             Ok(())
         } else if let Some(perspective) = &mut self.perspective {
-            Ok(perspective.complete_sparse_triangulation())
+            perspective.complete_sparse_triangulation();
+            Ok(())
         } else {
             Err("Triangulation not initialized".into())
         }
@@ -602,7 +603,7 @@ impl PerspectiveTriangulation {
         self.extend_tracks(
             image1_index,
             image2_index,
-            &correlated_points,
+            correlated_points,
             progress_listener,
         )
     }
@@ -732,20 +733,7 @@ impl PerspectiveTriangulation {
         let cameras = self
             .cameras
             .iter()
-            .map(|camera| {
-                if let Some(camera) = camera {
-                    camera.to_owned()
-                } else {
-                    Camera {
-                        k: Matrix3::from_element(f64::NAN),
-                        r: Vector3::from_element(f64::NAN),
-                        r_matrix: Matrix3::from_element(f64::NAN),
-                        t: Vector3::from_element(f64::NAN),
-                        center: Vector3::from_element(f64::NAN),
-                        look_direction: Vector3::from_element(f64::NAN),
-                    }
-                }
-            })
+            .map(|camera| camera.to_owned().unwrap())
             .collect::<Vec<_>>();
 
         self.filter_outliers(cameras.as_slice());
@@ -753,16 +741,9 @@ impl PerspectiveTriangulation {
             self.bundle_adjustment(cameras.as_slice(), progress_listener)?;
         }
 
-        let surface_projections = self
-            .cameras
+        let surface_projections = cameras
             .iter()
-            .map(|camera| {
-                if let Some(camera) = camera {
-                    camera.projection()
-                } else {
-                    Matrix3x4::from_element(f64::NAN)
-                }
-            })
+            .map(|camera| camera.projection())
             .collect::<Vec<_>>();
         let surface_tracks = self
             .tracks

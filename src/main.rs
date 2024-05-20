@@ -70,7 +70,7 @@ impl Args {
             focal_length: None,
             mode: HardwareMode::Gpu,
             interpolation: InterpolationMode::Delaunay,
-            min_angle_cos: 0.2,
+            min_angle_cos: 0.1,
             no_bundle_adjustment: false,
             projection: ProjectionMode::Perspective,
             mesh: Mesh::VertexColors,

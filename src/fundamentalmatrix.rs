@@ -69,12 +69,7 @@ pub struct FundamentalMatrix {
 }
 
 impl FundamentalMatrix {
-    pub fn new<PL: ProgressListener>(
-        projection: ProjectionMode,
-        max_dimension: f64,
-        point_matches: &[Match],
-        progress_listener: Option<&PL>,
-    ) -> Result<FundamentalMatrixResult, RansacError> {
+    pub fn new(projection: ProjectionMode, max_dimension: f64) -> FundamentalMatrix {
         let ransac_k = match projection {
             ProjectionMode::Affine => RANSAC_K_AFFINE,
             ProjectionMode::Perspective => RANSAC_K_PERSPECTIVE,
@@ -95,18 +90,17 @@ impl FundamentalMatrix {
             ProjectionMode::Affine => RANSAC_D_EARLY_EXIT_AFFINE,
             ProjectionMode::Perspective => RANSAC_D_EARLY_EXIT_PERSPECTIVE,
         };
-        let fm = FundamentalMatrix {
+        FundamentalMatrix {
             projection,
             ransac_k,
             ransac_n,
             ransac_t,
             ransac_d,
             ransac_d_early_exit,
-        };
-        fm.find_ransac(point_matches, progress_listener)
+        }
     }
 
-    fn find_ransac<PL: ProgressListener>(
+    pub fn find_ransac<PL: ProgressListener>(
         &self,
         point_matches: &[Match],
         progress_listener: Option<&PL>,

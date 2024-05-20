@@ -513,12 +513,8 @@ impl ImageReconstruction {
             .max(img2_dimensions.0)
             .max(img2_dimensions.1) as f64;
 
-        let result = fundamentalmatrix::FundamentalMatrix::new(
-            self.projection_mode,
-            max_dimension,
-            &point_matches,
-            Some(&pb),
-        );
+        let fm = fundamentalmatrix::FundamentalMatrix::new(self.projection_mode, max_dimension);
+        let result = fm.find_ransac(&point_matches, Some(&pb));
         pb.finish_and_clear();
 
         if let Ok(t) = start_time.elapsed() {
@@ -661,7 +657,7 @@ impl ImageReconstruction {
             if !linked_images.contains(&img1_index) {
                 continue;
             }
-            let img1 = match SourceImage::load(&img1_filename) {
+            let img1 = match SourceImage::load(img1_filename) {
                 Ok(img1) => img1,
                 Err(err) => {
                     eprintln!("Failed to load image: {}", err);
@@ -672,7 +668,7 @@ impl ImageReconstruction {
 
             for (img2_index, img2_filename) in img_filenames.iter().skip(img1_index + 1).enumerate()
             {
-                let img2 = match SourceImage::load(&img2_filename) {
+                let img2 = match SourceImage::load(img2_filename) {
                     Ok(img1) => img1,
                     Err(err) => {
                         eprintln!("Failed to load image: {}", err);
@@ -781,9 +777,11 @@ impl ImageReconstruction {
             out_scale,
             images,
             output_filename,
-            self.interpolation_mode,
-            self.min_angle_cos,
-            self.vertex_mode,
+            output::MeshConfiguration {
+                interpolation: self.interpolation_mode,
+                min_angle_cos: self.min_angle_cos,
+                vertex_mode: self.vertex_mode,
+            },
             Some(&pb),
         );
         pb.finish_and_clear();

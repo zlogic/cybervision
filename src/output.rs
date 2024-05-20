@@ -345,14 +345,13 @@ struct Mesh {
 impl Mesh {
     fn create<PL: ProgressListener>(
         surface: triangulation::Surface,
-        interpolation: InterpolationMode,
-        min_angle_cos: f64,
+        configuration: MeshConfiguration,
         progress_listener: Option<&PL>,
     ) -> Result<Mesh, OutputError> {
         let point_normals = vec![Vector3::zeros(); surface.tracks_len()];
         let mut surface = Mesh {
-            interpolation,
-            min_angle_cos,
+            interpolation: configuration.interpolation,
+            min_angle_cos: configuration.min_angle_cos,
             points: surface,
             polygons: vec![],
             polygon_index: PolygonIndex::new(),
@@ -638,23 +637,27 @@ impl Mesh {
     }
 }
 
+pub struct MeshConfiguration {
+    pub interpolation: InterpolationMode,
+    pub min_angle_cos: f64,
+    pub vertex_mode: VertexMode,
+}
+
 pub fn output<PL: ProgressListener>(
     surface: triangulation::Surface,
     out_scale: (f64, f64, f64),
     images: Vec<RgbImage>,
     path: &str,
-    interpolation: InterpolationMode,
-    min_angle_cos: f64,
-    vertex_mode: VertexMode,
+    configuration: MeshConfiguration,
     progress_listener: Option<&PL>,
 ) -> Result<(), OutputError> {
-    let output_normals = interpolation != InterpolationMode::None;
+    let output_normals = configuration.interpolation != InterpolationMode::None;
     let writer: Box<dyn MeshWriter> = if path.to_lowercase().ends_with(".obj") {
         Box::new(ObjWriter::new(
             path,
             images,
             output_normals,
-            vertex_mode,
+            configuration.vertex_mode,
             out_scale,
         )?)
     } else if path.to_lowercase().ends_with(".ply") {
@@ -662,7 +665,7 @@ pub fn output<PL: ProgressListener>(
             path,
             images,
             output_normals,
-            vertex_mode,
+            configuration.vertex_mode,
             out_scale,
         )?)
     } else {
@@ -674,7 +677,7 @@ pub fn output<PL: ProgressListener>(
         )?)
     };
 
-    let mesh = Mesh::create(surface, interpolation, min_angle_cos, progress_listener)?;
+    let mesh = Mesh::create(surface, configuration, progress_listener)?;
     mesh.output(writer, progress_listener)
 }
 
