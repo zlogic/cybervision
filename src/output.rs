@@ -70,18 +70,20 @@ struct Scanlines {
     camera_center: Vector3<f64>,
     camera_points: Vec<Vector3<f64>>,
     polygons: Vec<Option<PolygonInCamera>>,
+    width: usize,
     height: usize,
     line_points: Vec<Vec<usize>>,
     line_polygons: Vec<ScanlinePolygons>,
 }
 
 impl Scanlines {
-    fn new(surface: &triangulation::Surface, camera_j: usize) -> Scanlines {
+    fn new(surface: &triangulation::Surface, camera_j: usize, polygons_count: usize) -> Scanlines {
         let camera_center = surface.camera_center(camera_j);
         Scanlines {
             camera_center,
             camera_points: vec![],
-            polygons: vec![],
+            polygons: vec![None; polygons_count],
+            width: 0,
             height: 0,
             line_points: vec![],
             line_polygons: vec![],
@@ -115,11 +117,14 @@ impl Scanlines {
             })
             .collect::<Vec<_>>();
         let mut point_scanlines = vec![];
+        let mut width = 0;
         camera_points
             .iter()
             .enumerate()
             .for_each(|(point_i, point)| {
+                let point_x = point.1.x.round() as usize;
                 let point_y = point.1.y.round() as usize;
+                width = width.max(point_x);
                 point_scanlines.resize((point_y + 1).max(point_scanlines.len()), vec![]);
                 point_scanlines[point_y].push(point_i);
             });
@@ -134,6 +139,7 @@ impl Scanlines {
 
         self.line_points = point_scanlines;
         self.height = self.line_points.len();
+        self.width = width;
         self.line_polygons = vec![
             ScanlinePolygons {
                 entering: vec![],
@@ -156,20 +162,42 @@ impl Scanlines {
             return;
         };
 
-        let point0_y = surface.project_point(camera_j, &point0).y;
-        let point1_y = surface.project_point(camera_j, &point1).y;
-        let point2_y = surface.project_point(camera_j, &point2).y;
+        let point0_projection = surface.project_point(camera_j, &point0);
+        let point1_projection = surface.project_point(camera_j, &point1);
+        let point2_projection = surface.project_point(camera_j, &point2);
 
-        let min_y = point0_y.min(point1_y).min(point2_y);
-        let max_y = point0_y.max(point1_y).max(point2_y);
+        let min_x = point0_projection
+            .x
+            .min(point1_projection.x)
+            .min(point2_projection.x);
+        let min_y = point0_projection
+            .y
+            .min(point1_projection.y)
+            .min(point2_projection.y);
+        let max_x = point0_projection
+            .x
+            .max(point1_projection.x)
+            .max(point2_projection.x);
+        let max_y = point0_projection
+            .y
+            .max(point1_projection.y)
+            .max(point2_projection.y);
 
-        if max_y < 0.0 || min_y > self.height as f64 || self.height == 0 {
+        if max_y < 0.0
+            || max_x < 0.0
+            || min_y > self.height as f64
+            || min_x > self.width as f64
+            || self.height == 0
+        {
             return;
         }
 
         let min_y = min_y.floor() as usize;
         let max_y = (max_y.ceil() as usize).min(self.height - 1);
 
+        if min_y >= max_y {
+            return;
+        }
         let indexed_polygon = PolygonInCamera {
             vertices: [point0, point1, point2],
         };
@@ -177,8 +205,6 @@ impl Scanlines {
         // TODO: Switch to a HashSet if memory usage gets out of hand? Or it's Spade that causes huge memory usage issues?
         self.line_polygons[min_y].entering.push(polygon_i);
         self.line_polygons[max_y].exiting.push(polygon_i);
-        self.polygons
-            .resize(self.polygons.len().max(polygon_i + 1), None);
         self.polygons[polygon_i] = Some(indexed_polygon);
     }
 
@@ -240,14 +266,16 @@ impl Scanlines {
             .enumerate()
             .for_each(|(line_i, scanline)| {
                 report_progress(line_i as f32 / scanlines_count);
-                scanline.entering.iter().for_each(|entering| {
-                    current_line.insert(*entering);
-                });
                 scanline.exiting.iter().for_each(|exiting| {
                     current_line.remove(exiting);
                 });
+                scanline.entering.iter().for_each(|entering| {
+                    current_line.insert(*entering);
+                });
+                current_line.shrink_to_fit();
+
                 let line_polygons = current_line
-                    .par_iter()
+                    .iter()
                     .filter_map(|polygon_i| Some((*polygon_i, polygons[*polygon_i]?)))
                     .collect::<Vec<_>>();
                 let line_points = &self.line_points[line_i];
@@ -479,7 +507,7 @@ impl Mesh {
                     pl.report_status(0.9 * percent_complete);
                 }
 
-                let mut scanlines = Scanlines::new(&self.points, camera_j);
+                let mut scanlines = Scanlines::new(&self.points, camera_j, new_polygons.len());
                 scanlines.index_camera_points(&self.points, camera_j, |percent| {
                     if let Some(pl) = progress_listener {
                         let camera_percent = percent * 0.1;
