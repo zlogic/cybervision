@@ -414,6 +414,8 @@ impl Mesh {
             return Ok(());
         }
 
+        let affine_projection = self.points.cameras_len() == 0;
+
         let camera_points = self
             .points
             .iter_tracks()
@@ -421,10 +423,14 @@ impl Mesh {
             .par_bridge()
             .filter_map(|(track_i, track)| {
                 // Do not include invisible points to build point index.
-                track.get(camera_i)?;
+                let point_in_image = track.get(camera_i)?;
                 let point3d = track.get_point3d()?;
-                let projection = self.points.project_point(camera_i, &point3d);
-                let point = Point2::new(projection.x, projection.y);
+                let point = if affine_projection {
+                    Point2::new(point_in_image.x as f64, point_in_image.y as f64)
+                } else {
+                    let projection = self.points.project_point(camera_i, &point3d);
+                    Point2::new(projection.x, projection.y)
+                };
                 Some(Point { track_i, point })
             })
             .collect::<Vec<_>>();
@@ -464,7 +470,7 @@ impl Mesh {
             .collect::<Vec<_>>();
         drop(triangulated_surface);
 
-        if self.points.cameras_len() > 0 {
+        if self.points.cameras_len() > 0 && !affine_projection {
             let mut processed_cameras = 0usize;
             for camera_j in 0..cameras_len {
                 if camera_i == camera_j {
