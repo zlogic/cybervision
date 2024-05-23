@@ -4,8 +4,9 @@ use crate::{
 };
 use core::fmt;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fs::File,
+    hash::{Hash, Hasher},
     io::{BufWriter, Write},
     path::Path,
     sync::atomic::{AtomicUsize, Ordering as AtomicOrdering},
@@ -43,7 +44,7 @@ struct Point {
     track_i: usize,
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(Eq, Clone, Copy)]
 struct Polygon {
     camera_i: usize,
     vertices: [usize; 3],
@@ -51,13 +52,50 @@ struct Polygon {
 
 impl Polygon {
     fn new(camera_i: usize, vertices: [usize; 3]) -> Polygon {
+        let v = &vertices;
+        // Sort vertices to allow comparison.
+        let vertices = if v[0] < v[1] && v[0] < v[2] {
+            [v[0], v[1], v[2]]
+        } else if v[1] < v[0] && v[1] < v[2] {
+            [v[1], v[2], v[0]]
+        } else {
+            [v[2], v[0], v[1]]
+        };
         Polygon { camera_i, vertices }
+    }
+
+    #[inline]
+    fn get_points(
+        &self,
+        surface: &triangulation::Surface,
+    ) -> Option<(Vector3<f64>, Vector3<f64>, Vector3<f64>)> {
+        let point0 = surface.get_point(self.vertices[0])?;
+        let point1 = surface.get_point(self.vertices[1])?;
+        let point2 = surface.get_point(self.vertices[2])?;
+        Some((point0, point1, point2))
     }
 }
 
-#[derive(Clone, Copy)]
-struct PolygonInCamera {
-    vertices: [Vector3<f64>; 3],
+impl PartialEq for Polygon {
+    fn eq(&self, other: &Self) -> bool {
+        let vs = &self.vertices;
+        let vo = &other.vertices;
+        //vs[0] == vo[0] && ((vs[1] == vo[1] && vs[2] == vo[2]) || (vs[2] == vo[1] && vs[1] == vo[2]))
+        vs[0] == vo[0] && vs[1] == vo[1] && vs[2] == vo[2]
+    }
+}
+
+impl Hash for Polygon {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let [v0, v1, v2] = self.vertices;
+        v0.hash(state);
+        /*
+        v1.min(v2).hash(state);
+        v1.max(v2).hash(state);
+        */
+        v1.hash(state);
+        v2.hash(state);
+    }
 }
 
 #[derive(Clone)]
@@ -69,7 +107,7 @@ struct ScanlinePolygons {
 struct Scanlines {
     camera_center: Vector3<f64>,
     camera_points: Vec<Vector3<f64>>,
-    polygons: Vec<Option<PolygonInCamera>>,
+    polygons: Vec<bool>,
     width: usize,
     height: usize,
     line_points: Vec<Vec<usize>>,
@@ -82,7 +120,7 @@ impl Scanlines {
         Scanlines {
             camera_center,
             camera_points: vec![],
-            polygons: vec![None; polygons_count],
+            polygons: vec![false; polygons_count],
             width: 0,
             height: 0,
             line_points: vec![],
@@ -154,9 +192,9 @@ impl Scanlines {
         surface: &triangulation::Surface,
         camera_j: usize,
         polygon_i: usize,
-        polygon_points: Option<(Vector3<f64>, Vector3<f64>, Vector3<f64>)>,
+        polygon: &Polygon,
     ) {
-        let (point0, point1, point2) = if let Some(points) = polygon_points {
+        let (point0, point1, point2) = if let Some(points) = polygon.get_points(surface) {
             points
         } else {
             return;
@@ -198,14 +236,11 @@ impl Scanlines {
         if min_y >= max_y {
             return;
         }
-        let indexed_polygon = PolygonInCamera {
-            vertices: [point0, point1, point2],
-        };
         // TODO: In addition to indexing by the y-axis, also list min/max x coordinates which are inside the polygon.
         // TODO: Switch to a HashSet if memory usage gets out of hand? Or it's Spade that causes huge memory usage issues?
         self.line_polygons[min_y].entering.push(polygon_i);
         self.line_polygons[max_y].exiting.push(polygon_i);
-        self.polygons[polygon_i] = Some(indexed_polygon);
+        self.polygons[polygon_i] = true
     }
 
     fn complete_indexing(&mut self) {
@@ -218,14 +253,10 @@ impl Scanlines {
     #[inline]
     fn polygon_obstructs(
         camera_center: &Vector3<f64>,
-        polygon: &PolygonInCamera,
+        polygon_points: (Vector3<f64>, Vector3<f64>, Vector3<f64>),
         point: Vector3<f64>,
     ) -> bool {
-        let (point0, point1, point2) = (
-            polygon.vertices[0],
-            polygon.vertices[1],
-            polygon.vertices[2],
-        );
+        let (point0, point1, point2) = polygon_points;
         // Möller–Trumbore intersection algorithm.
         let edge1 = point1 - point0;
         let edge2 = point2 - point0;
@@ -253,43 +284,46 @@ impl Scanlines {
         t > 1.0
     }
 
-    fn detect_obstruction<PL>(&mut self, report_progress: PL)
-    where
+    fn detect_obstruction<PL>(
+        &mut self,
+        surface: &triangulation::Surface,
+        polygons: &[Polygon],
+        report_progress: PL,
+    ) where
         PL: Fn(f32) + Sync,
     {
         let scanlines_count = self.height as f32;
 
-        let polygons = self.polygons.as_mut_slice();
         let mut current_line = HashSet::new();
         self.line_polygons
-            .iter()
+            .iter_mut()
             .enumerate()
             .for_each(|(line_i, scanline)| {
                 report_progress(line_i as f32 / scanlines_count);
                 scanline.exiting.iter().for_each(|exiting| {
                     current_line.remove(exiting);
                 });
+                scanline.exiting = vec![];
                 scanline.entering.iter().for_each(|entering| {
                     current_line.insert(*entering);
                 });
+                scanline.entering = vec![];
                 current_line.shrink_to_fit();
 
-                let line_polygons = current_line
-                    .iter()
-                    .filter_map(|polygon_i| Some((*polygon_i, polygons[*polygon_i]?)))
-                    .collect::<Vec<_>>();
                 let line_points = &self.line_points[line_i];
-                let discarded_polygons = line_polygons
+                let discarded_polygons = current_line
                     .par_iter()
-                    .filter_map(|(polygon_i, polygon)| {
+                    .filter_map(|polygon_i| {
                         for point_i in line_points {
                             let point_in_camera = self.camera_points[*point_i];
+                            let polygon = polygons[*polygon_i];
+                            let polygon_points = polygon.get_points(surface)?;
                             // Discard polygons that obstruct points.
                             // TODO: cut holes in the polygon?
                             // TODO: check if polygon obstructs other polygons?
                             if Scanlines::polygon_obstructs(
                                 &self.camera_center,
-                                polygon,
+                                polygon_points,
                                 point_in_camera,
                             ) {
                                 return Some(*polygon_i);
@@ -300,64 +334,14 @@ impl Scanlines {
                     .collect::<Vec<_>>();
 
                 discarded_polygons.iter().for_each(|polygon_i| {
-                    polygons[*polygon_i] = None;
+                    self.polygons[*polygon_i] = false;
                     current_line.remove(polygon_i);
                 });
             });
     }
 
     fn polygon_not_valid(&self, polygon_i: usize) -> bool {
-        self.polygons.len() <= polygon_i || self.polygons[polygon_i].is_none()
-    }
-}
-
-struct PolygonIndex {
-    index: HashMap<usize, Vec<[usize; 2]>>,
-}
-
-impl PolygonIndex {
-    fn new() -> PolygonIndex {
-        PolygonIndex {
-            index: HashMap::new(),
-        }
-    }
-
-    #[inline]
-    fn entry(&self, polygon: &Polygon) -> (usize, [usize; 2]) {
-        let v = &polygon.vertices;
-        if v[0] < v[1] && v[0] < v[2] {
-            (v[0], [v[1], v[2]])
-        } else if v[1] < v[0] && v[1] < v[2] {
-            (v[1], [v[2], v[0]])
-        } else {
-            (v[2], [v[0], v[1]])
-        }
-    }
-
-    fn contains(&self, polygon: &Polygon) -> bool {
-        let (i, remain) = self.entry(polygon);
-        self.index.get(&i).map_or(false, |polygons| {
-            polygons
-                .iter()
-                .any(|polygon| polygon[0] == remain[0] && polygon[1] == remain[1])
-        })
-    }
-
-    fn add(&mut self, polygon: &Polygon) -> bool {
-        let (i, remain) = self.entry(polygon);
-        let mut found = false;
-        self.index
-            .entry(i)
-            .and_modify(|polygons| {
-                found = polygons
-                    .iter()
-                    .any(|polygon| polygon[0] == remain[0] && polygon[1] == remain[1]);
-                if !found {
-                    polygons.push(remain)
-                }
-            })
-            .or_insert(vec![remain]);
-        found
+        self.polygons.len() <= polygon_i || !self.polygons[polygon_i]
     }
 }
 
@@ -365,7 +349,8 @@ struct Mesh {
     interpolation: InterpolationMode,
     points: triangulation::Surface,
     polygons: Vec<Polygon>,
-    polygon_index: PolygonIndex,
+    // TODO 0.20: Remove the index and use sorting to detect duplicates.
+    polygon_index: HashSet<Polygon>,
 }
 
 impl Mesh {
@@ -378,7 +363,7 @@ impl Mesh {
             interpolation: configuration.interpolation,
             points: surface,
             polygons: vec![],
-            polygon_index: PolygonIndex::new(),
+            polygon_index: HashSet::new(),
         };
 
         if surface.points.cameras_len() == 0 {
@@ -389,20 +374,9 @@ impl Mesh {
             }
         }
 
-        surface.polygon_index = PolygonIndex::new();
+        surface.polygon_index = HashSet::new();
 
         Ok(surface)
-    }
-
-    #[inline]
-    fn get_polygon_points(
-        &self,
-        polygon: &Polygon,
-    ) -> Option<(Vector3<f64>, Vector3<f64>, Vector3<f64>)> {
-        let point0 = self.points.get_point(polygon.vertices[0])?;
-        let point1 = self.points.get_point(polygon.vertices[1])?;
-        let point2 = self.points.get_point(polygon.vertices[2])?;
-        Some((point0, point1, point2))
     }
 
     fn process_camera<PL: ProgressListener>(
@@ -509,13 +483,12 @@ impl Mesh {
 
                             pl.report_status(0.9 * value);
                         }
-                        let points = self.get_polygon_points(polygon);
-                        scanlines.index_polygon(&self.points, camera_j, polygon_i, points);
+                        scanlines.index_polygon(&self.points, camera_j, polygon_i, polygon);
                     });
 
                 scanlines.complete_indexing();
 
-                scanlines.detect_obstruction(|percent| {
+                scanlines.detect_obstruction(&self.points, new_polygons.as_slice(), |percent| {
                     if let Some(pl) = progress_listener {
                         let camera_percent = 0.2 + percent * 0.8;
                         let value = percent_complete + percent_multiplier * camera_percent;
@@ -538,12 +511,13 @@ impl Mesh {
             }
         }
 
-        new_polygons.iter().for_each(|polygon| {
-            if self.polygon_index.add(polygon) {
-                return;
+        new_polygons.into_iter().for_each(|polygon| {
+            if self.polygon_index.insert(polygon) {
+                self.polygons.push(polygon);
             }
-            self.polygons.push(*polygon);
         });
+        self.polygons.shrink_to_fit();
+        self.polygon_index.shrink_to_fit();
 
         Ok(())
     }
