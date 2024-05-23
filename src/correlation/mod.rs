@@ -18,16 +18,17 @@ const KERNEL_WIDTH: usize = KERNEL_SIZE * 2 + 1;
 const KERNEL_POINT_COUNT: usize = KERNEL_WIDTH * KERNEL_WIDTH;
 
 const THRESHOLD_AFFINE: f32 = 0.6;
-const THRESHOLD_PERSPECTIVE: f32 = 0.8;
+const THRESHOLD_PERSPECTIVE: f32 = 0.5;
 const MIN_STDEV_AFFINE: f32 = 1.0;
-const MIN_STDEV_PERSPECTIVE: f32 = 3.0;
+const MIN_STDEV_PERSPECTIVE: f32 = 1.0;
 const CORRIDOR_SIZE_AFFINE: usize = 2;
 const CORRIDOR_SIZE_PERSPECTIVE: usize = 4;
 const NEIGHBOR_DISTANCE: usize = 10;
 const CORRIDOR_EXTEND_RANGE_AFFINE: f64 = 1.0;
-const CORRIDOR_EXTEND_RANGE_PERSPECTIVE: f64 = 1.0;
-const CORRIDOR_MIN_RANGE: f64 = 2.5;
-const CROSS_CHECK_SEARCH_AREA: usize = 2;
+const CORRIDOR_EXTEND_RANGE_PERSPECTIVE: f64 = 0.25;
+const CORRIDOR_MIN_RANGE_AFFINE: f64 = 2.5;
+const CORRIDOR_MIN_RANGE_PERSPECTIVE: f64 = 0.75;
+const CROSS_CHECK_SEARCH_AREA: usize = 4;
 
 type Match = (Point2D<u32>, f32);
 
@@ -66,6 +67,7 @@ pub struct PointCorrelations<'a> {
     min_stdev: f32,
     corridor_size: usize,
     correlation_threshold: f32,
+    corridor_min_range: f64,
     corridor_extend_range: f64,
     fundamental_matrix: Matrix3<f64>,
     gpu_context: Option<GpuContext<'a>>,
@@ -102,30 +104,39 @@ struct CorrelationParameters {
     min_stdev: f32,
     corridor_size: usize,
     correlation_threshold: f32,
+    corridor_min_range: f64,
     corridor_extend_range: f64,
 }
 
 impl CorrelationParameters {
     fn for_projection(projection_mode: &ProjectionMode) -> CorrelationParameters {
-        let (min_stdev, correlation_threshold, corridor_size, corridor_extend_range) =
-            match projection_mode {
-                ProjectionMode::Affine => (
-                    MIN_STDEV_AFFINE,
-                    THRESHOLD_AFFINE,
-                    CORRIDOR_SIZE_AFFINE,
-                    CORRIDOR_EXTEND_RANGE_AFFINE,
-                ),
-                ProjectionMode::Perspective => (
-                    MIN_STDEV_PERSPECTIVE,
-                    THRESHOLD_PERSPECTIVE,
-                    CORRIDOR_SIZE_PERSPECTIVE,
-                    CORRIDOR_EXTEND_RANGE_PERSPECTIVE,
-                ),
-            };
+        let (
+            min_stdev,
+            correlation_threshold,
+            corridor_size,
+            corridor_min_range,
+            corridor_extend_range,
+        ) = match projection_mode {
+            ProjectionMode::Affine => (
+                MIN_STDEV_AFFINE,
+                THRESHOLD_AFFINE,
+                CORRIDOR_SIZE_AFFINE,
+                CORRIDOR_MIN_RANGE_AFFINE,
+                CORRIDOR_EXTEND_RANGE_AFFINE,
+            ),
+            ProjectionMode::Perspective => (
+                MIN_STDEV_PERSPECTIVE,
+                THRESHOLD_PERSPECTIVE,
+                CORRIDOR_SIZE_PERSPECTIVE,
+                CORRIDOR_MIN_RANGE_PERSPECTIVE,
+                CORRIDOR_EXTEND_RANGE_PERSPECTIVE,
+            ),
+        };
         CorrelationParameters {
             min_stdev,
             corridor_size,
             correlation_threshold,
+            corridor_min_range,
             corridor_extend_range,
         }
     }
@@ -182,6 +193,7 @@ impl PointCorrelations<'_> {
             min_stdev: params.min_stdev,
             corridor_size: params.corridor_size,
             correlation_threshold: params.correlation_threshold,
+            corridor_min_range: params.corridor_min_range,
             corridor_extend_range: params.corridor_extend_range,
             fundamental_matrix,
             gpu_context,
@@ -518,7 +530,7 @@ impl PointCorrelations<'_> {
 
         let corridor_center = mid_corridor.round() as usize;
         let corridor_length =
-            (CORRIDOR_MIN_RANGE + range_stdev * self.corridor_extend_range).round() as usize;
+            (self.corridor_min_range + range_stdev * self.corridor_extend_range).round() as usize;
         let corridor_start = corridor_center
             .saturating_sub(corridor_length)
             .clamp(corridor_start, corridor_end);

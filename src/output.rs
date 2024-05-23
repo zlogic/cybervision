@@ -335,7 +335,6 @@ impl PolygonIndex {
 
 struct Mesh {
     interpolation: InterpolationMode,
-    min_angle_cos: f64,
     points: triangulation::Surface,
     polygons: Vec<Polygon>,
     polygon_index: PolygonIndex,
@@ -351,7 +350,6 @@ impl Mesh {
         let point_normals = vec![Vector3::zeros(); surface.tracks_len()];
         let mut surface = Mesh {
             interpolation: configuration.interpolation,
-            min_angle_cos: configuration.min_angle_cos,
             points: surface,
             polygons: vec![],
             polygon_index: PolygonIndex::new(),
@@ -380,39 +378,6 @@ impl Mesh {
         let point1 = self.points.get_point(polygon.vertices[1])?;
         let point2 = self.points.get_point(polygon.vertices[2])?;
         Some((point0, point1, point2))
-    }
-
-    #[inline]
-    fn max_angle_cos(&self, polygon: &Polygon) -> Option<f64> {
-        let (point0, point1, point2) = self.get_polygon_points(polygon)?;
-        let polygon_normal = (point1 - point0).cross(&(point2 - point0)).normalize();
-        let point0_projections = self.points.get_camera_points(polygon.vertices[0]);
-        let point1_projections = self.points.get_camera_points(polygon.vertices[1]);
-        let point2_projections = self.points.get_camera_points(polygon.vertices[2]);
-        let projections_count = point0_projections
-            .len()
-            .min(point1_projections.len())
-            .min(point2_projections.len());
-
-        let affine_projection = self.points.cameras_len() == 0;
-
-        (0..projections_count)
-            .filter_map(|camera_i| {
-                if point0_projections[camera_i].is_none()
-                    || point1_projections[camera_i].is_none()
-                    || point2_projections[camera_i].is_none()
-                {
-                    return None;
-                }
-                let look_direction = if affine_projection {
-                    Vector3::new(0.0, 0.0, 1.0)
-                } else {
-                    self.points.camera_look_direction(camera_i)
-                };
-                let cos_angle = look_direction.dot(&polygon_normal);
-                Some(cos_angle)
-            })
-            .reduce(|a, b| a.max(b))
     }
 
     fn polygon_normal(&self, polygon: &Polygon) -> Vector3<f64> {
@@ -478,50 +443,6 @@ impl Mesh {
             pl.report_status(0.9 * percent_complete);
         }
 
-        let mut point_normals = vec![vec![]; triangulated_surface.num_vertices()];
-
-        triangulated_surface.inner_faces().for_each(|f| {
-            let vertices = f.vertices();
-            let v0 = vertices[0].data().track_i;
-            let v1 = vertices[1].data().track_i;
-            let v2 = vertices[2].data().track_i;
-            // TODO: use 3D points directly
-            let polygon = Polygon::new(camera_i, [v0, v1, v2]);
-            let polygon_normal = self.polygon_normal(&polygon).normalize();
-            f.vertices()
-                .iter()
-                .for_each(|vertex| point_normals[vertex.index()].push(polygon_normal));
-        });
-        let point_dominant_normal = point_normals
-            .par_iter()
-            .map(|normals| {
-                if normals.len() < 2 {
-                    return None;
-                }
-                let (min_angle_cos, dominant_direction) = normals
-                    .iter()
-                    .enumerate()
-                    .take(normals.len() - 1)
-                    .flat_map(|(i, normal_i)| {
-                        normals
-                            .iter()
-                            .skip(i + 1)
-                            .map(|normal_j| {
-                                let angle_cos = normal_i.dot(&normal_j);
-                                let dominant_direction = (normal_i + normal_j).normalize();
-                                (angle_cos, dominant_direction)
-                            })
-                            .reduce(|a, b| if a.0 > b.0 { a } else { b })
-                    })
-                    .reduce(|a, b| if a.0 > b.0 { a } else { b })?;
-
-                if min_angle_cos > self.min_angle_cos {
-                    Some(dominant_direction)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
         let mut new_polygons = triangulated_surface
             .inner_faces()
             .par_bridge()
@@ -535,21 +456,7 @@ impl Mesh {
                     return None;
                 }
 
-                let polygon_normal = self.polygon_normal(&polygon).normalize();
-                // Discard polygons that are too steep.
-                // TODO: precalculate normals once, then read a yes/no value
-                let angle_too_steep = vertices.iter().any(|vertex| {
-                    if let Some(point_normal) = point_dominant_normal[vertex.index()] {
-                        point_normal.dot(&polygon_normal) < self.min_angle_cos
-                    } else {
-                        true
-                    }
-                });
-                if angle_too_steep {
-                    None
-                } else {
-                    Some(polygon)
-                }
+                Some(polygon)
             })
             .collect::<Vec<_>>();
         drop(triangulated_surface);
@@ -689,7 +596,6 @@ impl Mesh {
 
 pub struct MeshConfiguration {
     pub interpolation: InterpolationMode,
-    pub min_angle_cos: f64,
     pub vertex_mode: VertexMode,
 }
 

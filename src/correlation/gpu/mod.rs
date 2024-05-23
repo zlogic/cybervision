@@ -22,7 +22,7 @@ use crate::data::Grid;
 use nalgebra::Matrix3;
 
 use crate::correlation::{
-    CorrelationDirection, CorrelationParameters, HardwareMode, ProjectionMode, CORRIDOR_MIN_RANGE,
+    CorrelationDirection, CorrelationParameters, HardwareMode, ProjectionMode,
     CROSS_CHECK_SEARCH_AREA, KERNEL_SIZE, NEIGHBOR_DISTANCE,
 };
 
@@ -115,6 +115,7 @@ pub struct GpuContext<'a> {
     corridor_segment_length: usize,
     search_area_segment_length: usize,
     corridor_size: usize,
+    corridor_min_range: f64,
     corridor_extend_range: f64,
 
     device_context: &'a mut DefaultDeviceContext,
@@ -149,6 +150,7 @@ impl GpuContext<'_> {
             min_stdev: params.min_stdev,
             correlation_threshold: params.correlation_threshold,
             corridor_size: params.corridor_size,
+            corridor_min_range: params.corridor_min_range,
             corridor_extend_range: params.corridor_extend_range,
             fundamental_matrix,
             img1_dimensions,
@@ -269,7 +271,7 @@ impl GpuContext<'_> {
             min_stdev: self.min_stdev,
             neighbor_distance: NEIGHBOR_DISTANCE as u32,
             extend_range: self.corridor_extend_range as f32,
-            min_range: CORRIDOR_MIN_RANGE as f32,
+            min_range: self.corridor_min_range as f32,
         };
 
         let device = self.device_context.device_mut()?;

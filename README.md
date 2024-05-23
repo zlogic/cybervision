@@ -25,7 +25,7 @@ Download a release distribution from [releases](/zlogic/cybervision/releases).
 Run cybervision:
 
 ```shell
-cybervision [--scale=<scale>] [--focal-length=<focal-length>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] [--min-angle-cos=<cos-value>] [--projection=<parallel|perspective>] [--mesh=<plain|vertex-colors|texture-coordinates>] [--no-bundle-adjustment] <img1> <img2> [<imgn>] <output>
+cybervision [--scale=<scale>] [--focal-length=<focal-length>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] [--projection=<parallel|perspective>] [--mesh=<plain|vertex-colors|texture-coordinates>] [--no-bundle-adjustment] <img1> <img2> [<imgn>] <output>
 ```
 
 `--scale=<scale>` is an optional argument to specify a depth scale, for example `--scale=-10.0`.
@@ -40,10 +40,6 @@ If not specified, EXIF metadata will be used.
 
 `--interpolation=<none|delaunay>` is an optional argument to specify an interpolation mode, for example `--interpolation=none` or `--interpolation=delaunay`.
 `none` means that interpolation is disabled, `delaunay` uses [Delaunay triangulation](https://en.wikipedia.org/wiki/Delaunay_triangulation).
-
-`--min-angle-cos=<cos-value>` is an optional argument to specify the minimum cos value between a polygon normal and the camera forward vector, for example `--min-angle-cos=0.1`.
-Increasing this ensures that steep slopes will be discarded; setting this to 0.0 will keep all polygons and produce an "extruded" look.
-If not specified, will use the default 0.1 value.
 
 `--projection=<parallel|perspective>` is an optional argument to specify a projection mode, for example `--projection=parallel` or `--projection=perspective`.
 `parallel` projection should be used for images from a scanning electron microscope, `perspective` should be used for photos from a regular camera.
