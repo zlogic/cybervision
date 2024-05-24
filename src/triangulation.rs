@@ -53,20 +53,13 @@ impl Surface {
     }
 
     #[inline]
-    pub fn camera_center(&self, camera_i: usize) -> Vector3<f64> {
-        self.cameras[camera_i].center
-    }
-
-    #[inline]
-    pub fn point_depth(&self, camera_i: usize, track_i: usize) -> Option<f64> {
-        let track = &self.tracks[track_i];
+    pub fn point_depth(&self, camera_i: usize, point3d: &Vector3<f64>) -> f64 {
         if self.cameras.is_empty() {
             // Cameras is empty for affine projection.
-            return Some(track.point3d?.z);
+            return point3d.z;
         }
         let camera = &self.cameras[camera_i];
-        track.get(camera_i)?;
-        Some(camera.point_depth(&track.point3d?))
+        camera.point_depth(point3d)
     }
 
     #[inline]
@@ -75,12 +68,6 @@ impl Surface {
         let point4d = point3d.insert_row(3, 1.0);
         let projection = camera.projection() * point4d;
         projection.remove_row(2).unscale(projection.z)
-    }
-
-    #[inline]
-    pub fn point_in_camera(&self, camera_i: usize, point3d: &Vector3<f64>) -> Vector3<f64> {
-        let camera = &self.cameras[camera_i];
-        camera.r_matrix * (point3d + camera.r_matrix.tr_mul(&camera.t))
     }
 
     pub fn cameras_len(&self) -> usize {

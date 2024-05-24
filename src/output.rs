@@ -4,9 +4,8 @@ use crate::{
 };
 use core::fmt;
 use std::{
-    collections::HashSet,
+    cmp::Ordering,
     fs::File,
-    hash::{Hash, Hasher},
     io::{BufWriter, Write},
     path::Path,
     sync::atomic::{AtomicUsize, Ordering as AtomicOrdering},
@@ -76,272 +75,262 @@ impl Polygon {
     }
 }
 
+impl Ord for Polygon {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let vs = &self.vertices;
+        let vo = &other.vertices;
+
+        vs[0]
+            .cmp(&vo[0])
+            .then(vs[1].cmp(&vo[1]))
+            .then(vs[2].cmp(&vo[2]))
+    }
+}
+
+impl PartialOrd for Polygon {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl PartialEq for Polygon {
     fn eq(&self, other: &Self) -> bool {
         let vs = &self.vertices;
         let vo = &other.vertices;
-        //vs[0] == vo[0] && ((vs[1] == vo[1] && vs[2] == vo[2]) || (vs[2] == vo[1] && vs[1] == vo[2]))
         vs[0] == vo[0] && vs[1] == vo[1] && vs[2] == vo[2]
     }
 }
 
-impl Hash for Polygon {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let [v0, v1, v2] = self.vertices;
-        v0.hash(state);
-        /*
-        v1.min(v2).hash(state);
-        v1.max(v2).hash(state);
-        */
-        v1.hash(state);
-        v2.hash(state);
-    }
+struct ProjectedPolygon {
+    projections: [Point2D<f64>; 3],
+    values: [f64; 3],
+    max_x: usize,
+    max_y: usize,
 }
 
-#[derive(Clone)]
-struct ScanlinePolygons {
-    entering: Vec<usize>,
-    exiting: Vec<usize>,
-}
-
-struct Scanlines {
-    camera_center: Vector3<f64>,
-    camera_points: Vec<Vector3<f64>>,
-    polygons: Vec<bool>,
-    width: usize,
-    height: usize,
-    line_points: Vec<Vec<usize>>,
-    line_polygons: Vec<ScanlinePolygons>,
-}
-
-impl Scanlines {
-    fn new(surface: &triangulation::Surface, camera_j: usize, polygons_count: usize) -> Scanlines {
-        let camera_center = surface.camera_center(camera_j);
-        Scanlines {
-            camera_center,
-            camera_points: vec![],
-            polygons: vec![false; polygons_count],
-            width: 0,
-            height: 0,
-            line_points: vec![],
-            line_polygons: vec![],
+impl ProjectedPolygon {
+    fn new(mut points: [Vector3<f64>; 3], max_x: usize, max_y: usize) -> ProjectedPolygon {
+        points.sort_by(|a, b| a.y.total_cmp(&b.y));
+        let projections = [
+            Point2D::new(points[0].x, points[0].y),
+            Point2D::new(points[1].x, points[1].y),
+            Point2D::new(points[2].x, points[2].y),
+        ];
+        let values = [points[0].z, points[1].z, points[2].z];
+        ProjectedPolygon {
+            projections,
+            values,
+            max_x,
+            max_y,
         }
     }
 
-    fn index_camera_points<PL>(
-        &mut self,
-        surface: &triangulation::Surface,
-        camera_j: usize,
-        report_progress: PL,
-    ) where
-        PL: Fn(f32) + Sync,
-    {
-        let counter = AtomicUsize::new(0);
-        let tracks_count = surface.tracks_len() as f32;
+    fn iter(&self) -> ProjectedPolygonIterator {
+        let min_y = self.projections[0].y.floor().clamp(0.0, self.max_y as f64) as usize;
+        let max_y = (self.projections[2].y + 1.0)
+            .ceil()
+            .clamp(0.0, self.max_y as f64) as usize;
+
+        ProjectedPolygonIterator {
+            polygon: &self,
+            max_x: self.max_x,
+            max_y,
+            x: 0,
+            y: min_y,
+            scanline_y: None,
+            start_x: 0.0,
+            end_x: 0.0,
+            start_value: 0.0,
+            end_value: 0.0,
+            scanline_max_x: 0,
+        }
+    }
+}
+
+struct ProjectedPolygonIterator<'a> {
+    polygon: &'a ProjectedPolygon,
+    max_x: usize,
+    max_y: usize,
+    x: usize,
+    y: usize,
+    scanline_y: Option<usize>,
+    start_x: f64,
+    end_x: f64,
+    start_value: f64,
+    end_value: f64,
+    scanline_max_x: usize,
+}
+
+impl<'a> ProjectedPolygonIterator<'a> {
+    fn update_scanline(&mut self, y: usize) -> bool {
+        const EPSILON: f64 = f64::EPSILON;
+        let scanline_ready = if let Some(scanline_y) = self.scanline_y {
+            y == scanline_y
+        } else {
+            false
+        };
+        if scanline_ready {
+            return true;
+        }
+        let y_usize = y;
+        let y = y as f64;
+        let polygon = self.polygon;
+        let (a, b, c) = (
+            polygon.projections[0],
+            polygon.projections[1],
+            polygon.projections[2],
+        );
+        if y < a.y || y > c.y {
+            return false;
+        }
+
+        let (start_x, start_value) = if y < b.y || ((b.y - c.y) / (b.x - c.x)).abs() < EPSILON {
+            let coeff = (y - a.y) / (b.y - a.y);
+            let start_x = a.x * (1.0 - coeff) + b.x * coeff;
+            let start_value = polygon.values[0] * (1.0 - coeff) + polygon.values[1] * coeff;
+            (start_x, start_value)
+        } else {
+            let coeff = (y - b.y) / (c.y - b.y);
+            let start_x = b.x * (1.0 - coeff) + c.x * coeff;
+            let start_value = polygon.values[1] * (1.0 - coeff) + polygon.values[2] * coeff;
+            (start_x, start_value)
+        };
+
+        let coeff = (y - a.y) / (c.y - a.y);
+        let end_x = a.x * (1.0 - coeff) + c.x * coeff;
+        let end_value = polygon.values[0] * (1.0 - coeff) + polygon.values[2] * coeff;
+
+        self.scanline_y = Some(y_usize);
+        if start_x < end_x {
+            self.start_x = start_x;
+            self.end_x = end_x;
+            self.start_value = start_value;
+            self.end_value = end_value;
+        } else {
+            self.start_x = end_x;
+            self.end_x = start_x;
+            self.start_value = end_value;
+            self.end_value = start_value;
+        }
+
+        self.x = self.start_x.floor().clamp(0.0, self.max_x as f64) as usize;
+        self.scanline_max_x = (self.end_x + 1.0).ceil().clamp(0.0, self.max_x as f64) as usize;
+
+        true
+    }
+
+    fn scanline_value(&self, x: f64) -> Option<f64> {
+        let x_c = (x as f64 - self.start_x) / (self.end_x - self.start_x);
+        if x_c >= 0.0 && x_c <= 1.0 {
+            Some(self.start_value * (1.0 - x_c) + x_c * self.end_value)
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> Iterator for ProjectedPolygonIterator<'a> {
+    type Item = (Point2D<usize>, f64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        for y in self.y..self.max_y {
+            self.y = y;
+            if !self.update_scanline(y) {
+                continue;
+            }
+
+            for x in self.x..self.scanline_max_x {
+                if let Some(value) = self.scanline_value(x as f64) {
+                    self.x = x + 1;
+                    return Some((Point2D::new(x, y), value));
+                }
+            }
+        }
+        None
+    }
+}
+
+struct DepthBuffer {
+    points_projection: Grid<Option<f64>>,
+    camera_j: usize,
+}
+
+impl DepthBuffer {
+    fn new(surface: &triangulation::Surface, camera_j: usize) -> DepthBuffer {
         let camera_points = surface
             .iter_tracks()
             .par_bridge()
             .filter_map(|track| {
-                report_progress(
-                    counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 * 0.8 / tracks_count,
-                );
-
                 track.get(camera_j)?;
                 let point3d = track.get_point3d()?;
-                let point_in_camera = surface.point_in_camera(camera_j, &point3d);
+                let point_depth = surface.point_depth(camera_j, &point3d);
                 let projection = surface.project_point(camera_j, &point3d);
 
-                Some((point_in_camera, projection))
+                Some(Vector3::new(projection.x, projection.y, point_depth))
             })
             .collect::<Vec<_>>();
-        let mut point_scanlines = vec![];
-        let mut width = 0;
-        camera_points
-            .iter()
-            .enumerate()
-            .for_each(|(point_i, point)| {
-                let point_x = point.1.x.round() as usize;
-                let point_y = point.1.y.round() as usize;
-                width = width.max(point_x);
-                point_scanlines.resize((point_y + 1).max(point_scanlines.len()), vec![]);
-                point_scanlines[point_y].push(point_i);
-            });
-        point_scanlines.shrink_to_fit();
-        point_scanlines
-            .iter_mut()
-            .for_each(|scanline| scanline.shrink_to_fit());
-        self.camera_points = camera_points
-            .iter()
-            .map(|(point3d, _projection)| point3d.to_owned())
-            .collect::<Vec<_>>();
 
-        self.line_points = point_scanlines;
-        self.height = self.line_points.len();
-        self.width = width;
-        self.line_polygons = vec![
-            ScanlinePolygons {
-                entering: vec![],
-                exiting: vec![]
-            };
-            self.height
-        ];
-    }
-
-    fn index_polygon(
-        &mut self,
-        surface: &triangulation::Surface,
-        camera_j: usize,
-        polygon_i: usize,
-        polygon: &Polygon,
-    ) {
-        let (point0, point1, point2) = if let Some(points) = polygon.get_points(surface) {
-            points
+        let (max_x, max_y) = if let Some(stats) = camera_points
+            .iter()
+            .map(|point| (point.x, point.y))
+            .reduce(|a, b| (a.0.max(b.0), a.1.max(b.1)))
+        {
+            stats
         } else {
-            return;
+            return DepthBuffer {
+                points_projection: Grid::new(0, 0, None),
+                camera_j,
+            };
         };
 
-        let point0_projection = surface.project_point(camera_j, &point0);
-        let point1_projection = surface.project_point(camera_j, &point1);
-        let point2_projection = surface.project_point(camera_j, &point2);
-
-        let min_x = point0_projection
-            .x
-            .min(point1_projection.x)
-            .min(point2_projection.x);
-        let min_y = point0_projection
-            .y
-            .min(point1_projection.y)
-            .min(point2_projection.y);
-        let max_x = point0_projection
-            .x
-            .max(point1_projection.x)
-            .max(point2_projection.x);
-        let max_y = point0_projection
-            .y
-            .max(point1_projection.y)
-            .max(point2_projection.y);
-
-        if max_y < 0.0
-            || max_x < 0.0
-            || min_y > self.height as f64
-            || min_x > self.width as f64
-            || self.height == 0
-        {
-            return;
-        }
-
-        let min_y = min_y.floor() as usize;
-        let max_y = (max_y.ceil() as usize).min(self.height - 1);
-
-        if min_y >= max_y {
-            return;
-        }
-        // TODO: In addition to indexing by the y-axis, also list min/max x coordinates which are inside the polygon.
-        // TODO: Switch to a HashSet if memory usage gets out of hand? Or it's Spade that causes huge memory usage issues?
-        self.line_polygons[min_y].entering.push(polygon_i);
-        self.line_polygons[max_y].exiting.push(polygon_i);
-        self.polygons[polygon_i] = true
-    }
-
-    fn complete_indexing(&mut self) {
-        self.line_polygons.iter_mut().for_each(|scanline| {
-            scanline.entering.shrink_to_fit();
-            scanline.exiting.shrink_to_fit();
+        let mut points_projection =
+            Grid::new(max_x.ceil() as usize + 1, max_y.ceil() as usize + 1, None);
+        camera_points.into_iter().for_each(|point| {
+            let point_x = point.x.round() as usize;
+            let point_y = point.y.round() as usize;
+            // TODO 0.20: use the closest point if they overwrite each other
+            *points_projection.val_mut(point_x, point_y) = Some(point.z);
         });
+
+        DepthBuffer {
+            points_projection,
+            camera_j,
+        }
     }
 
-    #[inline]
-    fn polygon_obstructs(
-        camera_center: &Vector3<f64>,
-        polygon_points: (Vector3<f64>, Vector3<f64>, Vector3<f64>),
-        point: Vector3<f64>,
-    ) -> bool {
-        let (point0, point1, point2) = polygon_points;
-        // Möller–Trumbore intersection algorithm.
-        let edge1 = point1 - point0;
-        let edge2 = point2 - point0;
-        if point == point0 || point == point1 || point == point2 {
+    fn polygon_obstructs(&self, surface: &triangulation::Surface, polygon: &Polygon) -> bool {
+        let camera_j = self.camera_j;
+        let project_polygon_point = |point3d: Vector3<f64>| {
+            let projection = surface.project_point(camera_j, &point3d);
+            let point_depth = surface.point_depth(camera_j, &point3d);
+            Vector3::new(projection.x, projection.y, point_depth)
+        };
+        let project_polygon = |(p0, p1, p2)| {
+            [
+                project_polygon_point(p0),
+                project_polygon_point(p1),
+                project_polygon_point(p2),
+            ]
+        };
+        let polygon_points = if let Some(points) = polygon.get_points(surface) {
+            points
+        } else {
             return false;
-        }
-        let ray_vector = point - camera_center;
-        let ray_cross_e2 = ray_vector.cross(&edge2);
-        let det = edge1.dot(&ray_cross_e2);
-        if det.abs() < f64::EPSILON {
-            return false;
-        }
-        let inv_det = 1.0 / det;
-        let s = camera_center - point0;
-        let u = inv_det * s.dot(&ray_cross_e2);
-        if !(0.0..=1.0).contains(&u) {
-            return false;
-        }
-        let s_cross_e1 = s.cross(&edge1);
-        let v = inv_det * ray_vector.dot(&s_cross_e1);
-        if v < 0.0 || u + v > 1.0 {
-            return false;
-        }
-        let t = inv_det * edge2.dot(&s_cross_e1);
-        t > 1.0
-    }
+        };
 
-    fn detect_obstruction<PL>(
-        &mut self,
-        surface: &triangulation::Surface,
-        polygons: &[Polygon],
-        report_progress: PL,
-    ) where
-        PL: Fn(f32) + Sync,
-    {
-        let scanlines_count = self.height as f32;
-
-        let mut current_line = HashSet::new();
-        self.line_polygons
-            .iter_mut()
-            .enumerate()
-            .for_each(|(line_i, scanline)| {
-                report_progress(line_i as f32 / scanlines_count);
-                scanline.exiting.iter().for_each(|exiting| {
-                    current_line.remove(exiting);
-                });
-                scanline.exiting = vec![];
-                scanline.entering.iter().for_each(|entering| {
-                    current_line.insert(*entering);
-                });
-                scanline.entering = vec![];
-                current_line.shrink_to_fit();
-
-                let line_points = &self.line_points[line_i];
-                let discarded_polygons = current_line
-                    .par_iter()
-                    .filter_map(|polygon_i| {
-                        for point_i in line_points {
-                            let point_in_camera = self.camera_points[*point_i];
-                            let polygon = polygons[*polygon_i];
-                            let polygon_points = polygon.get_points(surface)?;
-                            // Discard polygons that obstruct points.
-                            // TODO: cut holes in the polygon?
-                            // TODO: check if polygon obstructs other polygons?
-                            if Scanlines::polygon_obstructs(
-                                &self.camera_center,
-                                polygon_points,
-                                point_in_camera,
-                            ) {
-                                return Some(*polygon_i);
-                            }
-                        }
-                        None
-                    })
-                    .collect::<Vec<_>>();
-
-                discarded_polygons.iter().for_each(|polygon_i| {
-                    self.polygons[*polygon_i] = false;
-                    current_line.remove(polygon_i);
-                });
-            });
-    }
-
-    fn polygon_not_valid(&self, polygon_i: usize) -> bool {
-        self.polygons.len() <= polygon_i || !self.polygons[polygon_i]
+        let projected_polygon = ProjectedPolygon::new(
+            project_polygon(polygon_points),
+            self.points_projection.width(),
+            self.points_projection.height(),
+        );
+        projected_polygon.iter().any(|(point, depth)| {
+            // TODO: cut holes in the polygon?
+            // TODO: check if polygon obstructs other polygons?
+            self.points_projection
+                .val(point.x, point.y)
+                .map(|point_depth| depth - f64::EPSILON < point_depth)
+                .unwrap_or(false)
+        })
     }
 }
 
@@ -349,8 +338,6 @@ struct Mesh {
     interpolation: InterpolationMode,
     points: triangulation::Surface,
     polygons: Vec<Polygon>,
-    // TODO 0.20: Remove the index and use sorting to detect duplicates.
-    polygon_index: HashSet<Polygon>,
 }
 
 impl Mesh {
@@ -363,7 +350,6 @@ impl Mesh {
             interpolation: configuration.interpolation,
             points: surface,
             polygons: vec![],
-            polygon_index: HashSet::new(),
         };
 
         if surface.points.cameras_len() == 0 {
@@ -374,7 +360,8 @@ impl Mesh {
             }
         }
 
-        surface.polygon_index = HashSet::new();
+        // Some writers need polygons to ge grouped by camera index.
+        surface.polygons.sort_by_key(|polygon| polygon.camera_i);
 
         Ok(surface)
     }
@@ -429,15 +416,12 @@ impl Mesh {
         let mut new_polygons = triangulated_surface
             .inner_faces()
             .par_bridge()
-            .flat_map(|f| {
+            .map(|f| {
                 let vertices = f.vertices();
                 let v0 = vertices[0].data().track_i;
                 let v1 = vertices[1].data().track_i;
                 let v2 = vertices[2].data().track_i;
                 let polygon = Polygon::new(camera_i, [v0, v1, v2]);
-                if self.polygon_index.contains(&polygon) {
-                    return None;
-                }
 
                 Some(polygon)
             })
@@ -462,62 +446,48 @@ impl Mesh {
                     pl.report_status(0.9 * percent_complete);
                 }
 
-                let mut scanlines = Scanlines::new(&self.points, camera_j, new_polygons.len());
-                scanlines.index_camera_points(&self.points, camera_j, |percent| {
-                    if let Some(pl) = progress_listener {
-                        let camera_percent = percent * 0.1;
-                        let value = percent_complete + percent_multiplier * camera_percent;
+                let depth_buffer = DepthBuffer::new(&self.points, camera_j);
+                if let Some(pl) = progress_listener {
+                    let camera_percent = 0.05;
+                    let value = percent_complete + percent_multiplier * camera_percent;
 
-                        pl.report_status(0.9 * value);
-                    }
-                });
+                    pl.report_status(0.9 * value);
+                };
 
+                let counter = AtomicUsize::new(0);
                 let polygons_count = new_polygons.len() as f32;
-                new_polygons
-                    .iter()
-                    .enumerate()
-                    .for_each(|(polygon_i, polygon)| {
-                        if let Some(pl) = progress_listener {
-                            let camera_percent = 0.1 + 0.1 * polygon_i as f32 / polygons_count;
-                            let value = percent_complete + percent_multiplier * camera_percent;
-
-                            pl.report_status(0.9 * value);
-                        }
-                        scanlines.index_polygon(&self.points, camera_j, polygon_i, polygon);
-                    });
-
-                scanlines.complete_indexing();
-
-                scanlines.detect_obstruction(&self.points, new_polygons.as_slice(), |percent| {
+                new_polygons.par_iter_mut().for_each(|check_polygon| {
                     if let Some(pl) = progress_listener {
-                        let camera_percent = 0.2 + percent * 0.8;
+                        let percent =
+                            counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / polygons_count;
+                        let camera_percent = 0.05 + percent * 0.95;
                         let value = percent_complete + percent_multiplier * camera_percent;
 
                         pl.report_status(0.9 * value);
                     }
+
+                    let polygon = if let Some(polygon) = check_polygon {
+                        polygon
+                    } else {
+                        return;
+                    };
+                    if depth_buffer.polygon_obstructs(&self.points, polygon) {
+                        *check_polygon = None;
+                    }
                 });
 
-                new_polygons = new_polygons
-                    .par_iter()
-                    .enumerate()
-                    .filter_map(|(polygon_i, polygon)| {
-                        if scanlines.polygon_not_valid(polygon_i) {
-                            return None;
-                        }
-                        Some(polygon.to_owned())
-                    })
-                    .collect::<Vec<_>>();
+                new_polygons.retain(|polygon| polygon.is_some());
                 processed_cameras += 1;
             }
         }
 
         new_polygons.into_iter().for_each(|polygon| {
-            if self.polygon_index.insert(polygon) {
+            if let Some(polygon) = polygon {
                 self.polygons.push(polygon);
             }
         });
-        self.polygons.shrink_to_fit();
-        self.polygon_index.shrink_to_fit();
+        self.polygons.sort_unstable();
+        self.polygons.dedup();
 
         Ok(())
     }
@@ -1006,10 +976,11 @@ impl ImageWriter {
     ) -> Result<ImageWriter, std::io::Error> {
         let point_projections = surface
             .iter_tracks()
-            .enumerate()
-            .map(|(track_i, track)| {
+            .map(|track| {
+                // TODO 0.20: use first image's scale and project all points and polygons into its space; resize if necessary
                 let point = track.get(0)?;
-                let point_depth = surface.point_depth(0, track_i)?;
+                let point3d = track.get_point3d()?;
+                let point_depth = surface.point_depth(0, &point3d);
                 Some((point, point_depth))
             })
             .collect::<Vec<_>>();
@@ -1024,38 +995,11 @@ impl ImageWriter {
             img1_height: img1.height(),
         })
     }
-
-    #[inline]
-    fn barycentric_interpolation(&self, polygon: &Polygon, pos: Point2D<usize>) -> Option<f64> {
-        let convert_projection = |i: usize| {
-            self.point_projections[polygon.vertices[i]]
-                .map(|(point, _depth)| Point2D::new(point.x as f64, point.y as f64))
-        };
-
-        let convert_depth =
-            |i: usize| self.point_projections[polygon.vertices[i]].map(|(_point, depth)| depth);
-        let polygon_projection = [
-            convert_projection(0)?,
-            convert_projection(1)?,
-            convert_projection(2)?,
-        ];
-        let polygon_depths = [convert_depth(0)?, convert_depth(1)?, convert_depth(2)?];
-
-        let lambda = barycentric_interpolation(
-            polygon_projection,
-            Point2D::new(pos.x as f64, pos.y as f64),
-        )?;
-        let value = lambda[0] * polygon_depths[0]
-            + lambda[1] * polygon_depths[1]
-            + lambda[2] * polygon_depths[2];
-
-        Some(value)
-    }
 }
 
 impl MeshWriter for ImageWriter {
     fn output_vertex(&mut self, track: &triangulation::Track) -> Result<(), OutputError> {
-        // TODO: project all polygons into first image
+        // TODO 0.20: project all polygons into first image
         let point2d = if let Some(point2d) = track.get(0) {
             point2d
         } else {
@@ -1074,42 +1018,37 @@ impl MeshWriter for ImageWriter {
     }
 
     fn output_face(&mut self, polygon: &Polygon, _tracks: [&Track; 3]) -> Result<(), OutputError> {
-        let vertices = polygon.vertices;
-        let (min_x, max_x, min_y, max_y) = vertices.iter().fold(
-            (self.output_map.width(), 0, self.output_map.height(), 0),
-            |acc, v| {
-                let p = if let Some(point) = self.point_projections[*v] {
-                    Point2D::new(point.0.x as usize, point.0.y as usize)
-                } else {
-                    return acc;
-                };
-                (
-                    acc.0.min(p.x),
-                    acc.1.max(p.x),
-                    acc.2.min(p.y),
-                    acc.3.max(p.y),
-                )
-            },
+        let convert_projection = |i: usize| {
+            self.point_projections[polygon.vertices[i]]
+                .map(|(point, depth)| Vector3::new(point.x as f64, point.y as f64, depth))
+        };
+
+        let polygon_projection = match (
+            convert_projection(0),
+            convert_projection(1),
+            convert_projection(2),
+        ) {
+            (Some(p0), Some(p1), Some(p2)) => [p0, p1, p2],
+            _ => return Ok(()),
+        };
+
+        let polygon_projection = ProjectedPolygon::new(
+            polygon_projection,
+            self.output_map.width(),
+            self.output_map.height(),
         );
-
-        for y in min_y..=max_y {
-            for x in min_x..=max_x {
-                if self.output_map.val(x, y).is_some() {
-                    continue;
-                }
-                let value = if let Some(value) =
-                    self.barycentric_interpolation(polygon, Point2D::new(x, y))
-                {
-                    value * self.scale
-                } else {
-                    continue;
-                };
-
-                if x < self.output_map.width() && y < self.output_map.height() {
-                    *self.output_map.val_mut(x, y) = Some(value);
-                }
+        polygon_projection.iter().for_each(|(point, value)| {
+            let new_value = value * self.scale;
+            let current_value = self.output_map.val_mut(point.x, point.y);
+            let better_value = if let Some(val) = current_value {
+                new_value < *val
+            } else {
+                true
+            };
+            if better_value {
+                *current_value = Some(new_value);
             }
-        }
+        });
         Ok(())
     }
 
@@ -1137,37 +1076,6 @@ impl MeshWriter for ImageWriter {
         output_image.save(&self.path)?;
         Ok(())
     }
-}
-
-#[inline]
-fn barycentric_interpolation(
-    projections: [Point2D<f64>; 3],
-    pos: Point2D<f64>,
-) -> Option<[f64; 3]> {
-    let v0 = projections[0];
-    let v1 = projections[1];
-    let v2 = projections[2];
-
-    let (x0, x1, x2) = (v0.x, v1.x, v2.x);
-    let (y0, y1, y2) = (v0.y, v1.y, v2.y);
-    let det = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2);
-    if det.abs() < f64::EPSILON {
-        return None;
-    }
-    let lambda0 = ((y1 - y2) * (pos.x - x2) + (x2 - x1) * (pos.y - y2)) / det;
-    let lambda1 = ((y2 - y0) * (pos.x - x2) + (x0 - x2) * (pos.y - y2)) / det;
-    let lambda2 = 1.0 - lambda0 - lambda1;
-
-    if lambda0 < -f64::EPSILON
-        || lambda1 < -f64::EPSILON
-        || lambda2 < -f64::EPSILON
-        || lambda0 > 1.0 + f64::EPSILON
-        || lambda1 > 1.0 + f64::EPSILON
-        || lambda2 > 1.0 + f64::EPSILON
-    {
-        return None;
-    }
-    Some([lambda0, lambda1, lambda2])
 }
 
 #[inline]
