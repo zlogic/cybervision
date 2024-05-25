@@ -132,7 +132,7 @@ impl ProjectedPolygon {
             .clamp(0.0, self.max_y as f64) as usize;
 
         ProjectedPolygonIterator {
-            polygon: &self,
+            polygon: self,
             max_x: self.max_x,
             max_y,
             x: 0,
@@ -220,8 +220,8 @@ impl<'a> ProjectedPolygonIterator<'a> {
     }
 
     fn scanline_value(&self, x: f64) -> Option<f64> {
-        let x_c = (x as f64 - self.start_x) / (self.end_x - self.start_x);
-        if x_c >= 0.0 && x_c <= 1.0 {
+        let x_c = (x - self.start_x) / (self.end_x - self.start_x);
+        if (0.0..=1.0).contains(&x_c) {
             Some(self.start_value * (1.0 - x_c) + x_c * self.end_value)
         } else {
             None

@@ -646,7 +646,7 @@ impl ImageReconstruction {
     fn reconstruct_dense(
         &mut self,
         gpu_device: Option<correlation::GpuDevice>,
-        linked_images: &Vec<usize>,
+        linked_images: &[usize],
         f_matrices: Vec<Vec<Option<Matrix3<f64>>>>,
     ) -> Result<(), triangulation::TriangulationError> {
         let mut gpu_device = gpu_device;
