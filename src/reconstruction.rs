@@ -191,6 +191,7 @@ struct ImageReconstruction {
     triangulation: triangulation::Triangulation,
     focal_length: Option<u32>,
     img_filenames: Vec<String>,
+    best_image: Option<usize>,
 }
 
 pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
@@ -250,6 +251,7 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
         triangulation,
         focal_length,
         img_filenames,
+        best_image: None,
     };
 
     let images_count = reconstruction_task.img_filenames.len();
@@ -282,6 +284,10 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
             return Err(err.into());
         }
     };
+    if linked_images.is_empty() {
+        eprintln!("No matching image pairs found");
+        return Err("No mathing images found".into());
+    }
 
     // Perform dense correlation for images that could be matched together.
     let gpu_device = match correlation::create_gpu_context(hardware_mode) {
@@ -291,16 +297,15 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
             None
         }
     };
-    let retained_images =
-        match reconstruction_task.reconstruct_dense(gpu_device, linked_images, f_matrices) {
-            Ok(retained_images) => retained_images,
-            Err(err) => {
-                eprintln!("Failed to recover image poses: {}", err);
-                return Err(err.into());
-            }
-        };
+    match reconstruction_task.reconstruct_dense(gpu_device, &linked_images, f_matrices) {
+        Ok(_) => {}
+        Err(err) => {
+            eprintln!("Failed to recover image poses: {}", err);
+            return Err(err.into());
+        }
+    };
 
-    let surface = reconstruction_task.complete_triangulation(retained_images)?;
+    let surface = reconstruction_task.complete_triangulation(linked_images)?;
     let img_filenames = reconstruction_task.img_filenames.to_owned();
     reconstruction_task.output_surface(
         surface,
@@ -641,9 +646,9 @@ impl ImageReconstruction {
     fn reconstruct_dense(
         &mut self,
         gpu_device: Option<correlation::GpuDevice>,
-        linked_images: Vec<usize>,
+        linked_images: &Vec<usize>,
         f_matrices: Vec<Vec<Option<Matrix3<f64>>>>,
-    ) -> Result<Vec<usize>, triangulation::TriangulationError> {
+    ) -> Result<(), triangulation::TriangulationError> {
         let mut gpu_device = gpu_device;
         let img_filenames = self.img_filenames.clone();
         for (img1_index, img1_filename) in img_filenames
@@ -699,9 +704,7 @@ impl ImageReconstruction {
             }
         }
 
-        let mut linked_images = linked_images;
-        linked_images.sort();
-        Ok(linked_images)
+        Ok(())
     }
 
     fn triangulate_sparse(
@@ -728,22 +731,30 @@ impl ImageReconstruction {
 
     fn complete_triangulation(
         &mut self,
-        retained_images: Vec<usize>,
+        linked_images: Vec<usize>,
     ) -> Result<triangulation::Surface, triangulation::TriangulationError> {
         let start_time = SystemTime::now();
 
         let pb = new_progress_bar(false);
 
         let surface = self.triangulation.triangulate_all(Some(&pb))?;
-        let retained_images = retained_images
-            .iter()
-            .map(|src_img_i| self.img_filenames[*src_img_i].to_owned())
-            .collect::<Vec<_>>();
         self.triangulation.complete();
 
         pb.finish_and_clear();
 
-        self.img_filenames = retained_images;
+        self.best_image = linked_images.first().copied();
+        self.img_filenames = self
+            .img_filenames
+            .iter()
+            .enumerate()
+            .flat_map(|(src_img_i, filename)| {
+                if linked_images.contains(&src_img_i) {
+                    Some(filename.to_owned())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
 
         if let Ok(t) = start_time.elapsed() {
             println!(
@@ -761,7 +772,7 @@ impl ImageReconstruction {
         out_scale: (f64, f64, f64),
         texture_filenames: &[String],
         output_filename: &str,
-    ) -> Result<(), output::OutputError> {
+    ) -> Result<(), ReconstructionError> {
         let start_time = SystemTime::now();
         let pb = new_progress_bar(false);
         let images = texture_filenames
@@ -769,9 +780,15 @@ impl ImageReconstruction {
             .map(|img_filename| SourceImage::load_rgb(img_filename).unwrap())
             .collect();
 
+        let best_image = match self.best_image {
+            Some(best_image) => Ok(best_image),
+            None => Err("No primary image found"),
+        }?;
+
         let result = output::output(
             surface,
             out_scale,
+            best_image,
             images,
             output_filename,
             output::MeshConfiguration {
@@ -785,7 +802,7 @@ impl ImageReconstruction {
             Ok(_) => {}
             Err(err) => {
                 eprintln!("Failed to save image: {}", err);
-                return Err(err);
+                return Err(err.into());
             }
         }
 
@@ -866,6 +883,7 @@ impl output::ProgressListener for ProgressBar {
 
 #[derive(Debug)]
 pub enum ReconstructionError {
+    Internal(&'static str),
     Image(image::ImageError),
     Ransac(fundamentalmatrix::RansacError),
     Correlation(correlation::CorrelationError),
@@ -876,6 +894,7 @@ pub enum ReconstructionError {
 impl fmt::Display for ReconstructionError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            ReconstructionError::Internal(msg) => f.write_str(msg),
             ReconstructionError::Image(ref err) => err.fmt(f),
             ReconstructionError::Ransac(ref err) => err.fmt(f),
             ReconstructionError::Correlation(ref err) => err.fmt(f),
@@ -888,6 +907,7 @@ impl fmt::Display for ReconstructionError {
 impl std::error::Error for ReconstructionError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
+            ReconstructionError::Internal(_msg) => None,
             ReconstructionError::Image(ref err) => err.source(),
             ReconstructionError::Ransac(ref err) => err.source(),
             ReconstructionError::Correlation(ref err) => err.source(),
@@ -924,5 +944,11 @@ impl From<triangulation::TriangulationError> for ReconstructionError {
 impl From<output::OutputError> for ReconstructionError {
     fn from(e: output::OutputError) -> ReconstructionError {
         ReconstructionError::Output(e)
+    }
+}
+
+impl From<&'static str> for ReconstructionError {
+    fn from(msg: &'static str) -> ReconstructionError {
+        ReconstructionError::Internal(msg)
     }
 }

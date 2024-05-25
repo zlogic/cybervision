@@ -54,10 +54,6 @@ impl Surface {
 
     #[inline]
     pub fn point_depth(&self, camera_i: usize, point3d: &Vector3<f64>) -> f64 {
-        if self.cameras.is_empty() {
-            // Cameras is empty for affine projection.
-            return point3d.z;
-        }
         let camera = &self.cameras[camera_i];
         camera.point_depth(point3d)
     }
@@ -67,7 +63,13 @@ impl Surface {
         let camera = &self.cameras[camera_i];
         let point4d = point3d.insert_row(3, 1.0);
         let projection = camera.projection() * point4d;
-        projection.remove_row(2).unscale(projection.z)
+        let scale = if projection.z.abs() < f64::EPSILON {
+            // If camera is affine, don't unscale point projection.
+            1.0
+        } else {
+            projection.z
+        };
+        projection.remove_row(2).unscale(scale)
     }
 
     pub fn cameras_len(&self) -> usize {
@@ -264,6 +266,13 @@ impl AffineTriangulation {
             .collect::<Vec<_>>();
 
         self.surface.tracks = points3d;
+
+        let affine_camera = Camera::from_matrix(
+            &Matrix3::from_diagonal(&Vector3::new(1.0, 1.0, 0.0)),
+            &Matrix3::identity(),
+            &Vector3::zeros(),
+        );
+        self.surface.cameras = vec![affine_camera; 2];
 
         Ok(())
     }

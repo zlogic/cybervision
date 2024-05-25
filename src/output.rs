@@ -288,8 +288,15 @@ impl DepthBuffer {
         camera_points.into_iter().for_each(|point| {
             let point_x = point.x.round() as usize;
             let point_y = point.y.round() as usize;
-            // TODO 0.20: use the closest point if they overwrite each other
-            *points_projection.val_mut(point_x, point_y) = Some(point.z);
+            let current_value = points_projection.val_mut(point_x, point_y);
+            let better_value = if let Some(val) = current_value {
+                point.z < *val
+            } else {
+                true
+            };
+            if better_value {
+                *current_value = Some(point.z);
+            }
         });
 
         DepthBuffer {
@@ -541,6 +548,7 @@ pub struct MeshConfiguration {
 pub fn output<PL: ProgressListener>(
     surface: triangulation::Surface,
     out_scale: (f64, f64, f64),
+    project_to_image: usize,
     images: Vec<RgbImage>,
     path: &str,
     configuration: MeshConfiguration,
@@ -563,8 +571,8 @@ pub fn output<PL: ProgressListener>(
     } else {
         Box::new(ImageWriter::new(
             path,
-            images,
             &surface,
+            project_to_image,
             out_scale.2.signum(),
         )?)
     };
@@ -960,73 +968,75 @@ impl MeshWriter for ObjWriter {
 
 struct ImageWriter {
     output_map: Grid<Option<f64>>,
-    point_projections: Vec<Option<(Point2D<u32>, f64)>>,
+    point_projections: Vec<Option<Vector3<f64>>>,
     path: String,
-    scale: f64,
-    img1_width: u32,
-    img1_height: u32,
 }
 
 impl ImageWriter {
     fn new(
         path: &str,
-        images: Vec<RgbImage>,
         surface: &triangulation::Surface,
+        project_to_image: usize,
         scale: f64,
-    ) -> Result<ImageWriter, std::io::Error> {
-        let point_projections = surface
+    ) -> Result<ImageWriter, OutputError> {
+        // Project all points onto the first image.
+        let camera_points = surface
             .iter_tracks()
             .map(|track| {
-                // TODO 0.20: use first image's scale and project all points and polygons into its space; resize if necessary
-                let point = track.get(0)?;
                 let point3d = track.get_point3d()?;
-                let point_depth = surface.point_depth(0, &point3d);
-                Some((point, point_depth))
+                let point_depth = surface.point_depth(project_to_image, &point3d);
+                let projection = surface.project_point(project_to_image, &point3d);
+
+                Some(Vector3::new(projection.x, projection.y, point_depth))
             })
             .collect::<Vec<_>>();
-        let img1 = &images[0];
-        let output_map = Grid::new(img1.width() as usize, img1.height() as usize, None);
+
+        let (min_x, max_x, min_y, max_y) = camera_points
+            .iter()
+            .filter_map(|point| {
+                let point = (*point)?;
+                Some((point.x, point.x, point.y, point.y))
+            })
+            .reduce(|a, b| (a.0.min(b.0), a.1.max(b.1), a.2.min(b.2), a.3.max(b.3)))
+            .ok_or("No point projections found")?;
+
+        let width = (max_x.ceil() - min_x.floor()) as usize + 1;
+        let height = (max_y.ceil() - min_y.floor()) as usize + 1;
+        let mut output_map = Grid::new(width, height, None);
+
+        let point_projections = camera_points
+            .into_iter()
+            .map(|projection| {
+                let projection = projection?;
+                let point_depth = projection.z * scale;
+                let projection =
+                    Vector3::new(projection.x - min_x, projection.y - min_y, point_depth);
+                let dst_x = (projection.x.round() as usize).clamp(0, width - 1);
+                let dst_y = (projection.y.round() as usize).clamp(0, height - 1);
+                *output_map.val_mut(dst_x, dst_y) = Some(point_depth);
+                Some(projection)
+            })
+            .collect::<Vec<_>>();
         Ok(ImageWriter {
             output_map,
             point_projections,
             path: path.to_owned(),
-            scale,
-            img1_width: img1.width(),
-            img1_height: img1.height(),
         })
     }
 }
 
 impl MeshWriter for ImageWriter {
-    fn output_vertex(&mut self, track: &triangulation::Track) -> Result<(), OutputError> {
-        // TODO 0.20: project all polygons into first image
-        let point2d = if let Some(point2d) = track.get(0) {
-            point2d
-        } else {
-            return Err("Track is absent from first image".into());
-        };
-        let point3d = if let Some(point3d) = track.get_point3d() {
-            point3d
-        } else {
-            return Err("Point has no 3D coordinates".into());
-        };
-        let (x, y) = (point2d.x as usize, point2d.y as usize);
-        if x < self.output_map.width() && y < self.output_map.height() {
-            *self.output_map.val_mut(x, y) = Some(point3d.z * self.scale);
-        }
+    fn output_vertex(&mut self, _track: &triangulation::Track) -> Result<(), OutputError> {
+        // Points are output when processing surface.
+        // The output_map already contains projected vertices.
         Ok(())
     }
 
     fn output_face(&mut self, polygon: &Polygon, _tracks: [&Track; 3]) -> Result<(), OutputError> {
-        let convert_projection = |i: usize| {
-            self.point_projections[polygon.vertices[i]]
-                .map(|(point, depth)| Vector3::new(point.x as f64, point.y as f64, depth))
-        };
-
         let polygon_projection = match (
-            convert_projection(0),
-            convert_projection(1),
-            convert_projection(2),
+            self.point_projections[polygon.vertices[0]],
+            self.point_projections[polygon.vertices[1]],
+            self.point_projections[polygon.vertices[2]],
         ) {
             (Some(p0), Some(p1), Some(p2)) => [p0, p1, p2],
             _ => return Ok(()),
@@ -1034,11 +1044,10 @@ impl MeshWriter for ImageWriter {
 
         let polygon_projection = ProjectedPolygon::new(
             polygon_projection,
-            self.output_map.width(),
-            self.output_map.height(),
+            self.output_map.width() - 1,
+            self.output_map.height() - 1,
         );
-        polygon_projection.iter().for_each(|(point, value)| {
-            let new_value = value * self.scale;
+        polygon_projection.iter().for_each(|(point, new_value)| {
             let current_value = self.output_map.val_mut(point.x, point.y);
             let better_value = if let Some(val) = current_value {
                 new_value < *val
@@ -1060,8 +1069,11 @@ impl MeshWriter for ImageWriter {
                 acc
             }
         });
-        let mut output_image =
-            RgbaImage::from_pixel(self.img1_width, self.img1_height, Rgba::from([0, 0, 0, 0]));
+        let mut output_image = RgbaImage::from_pixel(
+            self.output_map.width() as u32,
+            self.output_map.height() as u32,
+            Rgba::from([0, 0, 0, 0]),
+        );
         output_image
             .enumerate_pixels_mut()
             .par_bridge()
