@@ -328,7 +328,7 @@ impl DepthBuffer {
             // TODO: check if polygon obstructs other polygons?
             self.points_projection
                 .val(point.x, point.y)
-                .map(|point_depth| depth - f64::EPSILON < point_depth)
+                .map(|point_depth| depth < point_depth)
                 .unwrap_or(false)
         })
     }
