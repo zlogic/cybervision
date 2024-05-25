@@ -1011,7 +1011,15 @@ impl ImageWriter {
                     Vector3::new(projection.x - min_x, projection.y - min_y, point_depth);
                 let dst_x = (projection.x.round() as usize).clamp(0, width - 1);
                 let dst_y = (projection.y.round() as usize).clamp(0, height - 1);
-                *output_map.val_mut(dst_x, dst_y) = Some(point_depth);
+                let current_value = output_map.val_mut(dst_x, dst_y);
+                let better_value = if let Some(val) = current_value {
+                    point_depth > *val
+                } else {
+                    true
+                };
+                if better_value {
+                    *current_value = Some(point_depth);
+                }
                 Some(projection)
             })
             .collect::<Vec<_>>();
@@ -1048,7 +1056,7 @@ impl MeshWriter for ImageWriter {
         polygon_projection.iter().for_each(|(point, new_value)| {
             let current_value = self.output_map.val_mut(point.x, point.y);
             let better_value = if let Some(val) = current_value {
-                new_value < *val
+                new_value > *val
             } else {
                 true
             };
