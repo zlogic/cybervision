@@ -6,7 +6,7 @@ use nalgebra::{
     Vector2, Vector3, Vector4,
 };
 
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
 use rayon::prelude::*;
 
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 100;
@@ -225,12 +225,13 @@ impl Triangulation {
 
     pub fn triangulate_all<PL: ProgressListener>(
         &mut self,
+        max_points: Option<usize>,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
         if let Some(affine) = &self.affine {
             affine.triangulate_all()
         } else if let Some(perspective) = &mut self.perspective {
-            perspective.triangulate_all(progress_listener)
+            perspective.triangulate_all(max_points, progress_listener)
         } else {
             Err("Triangulation not initialized".into())
         }
@@ -705,6 +706,7 @@ impl PerspectiveTriangulation {
 
     fn triangulate_all<PL: ProgressListener>(
         &mut self,
+        max_points: Option<usize>,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
         self.triangulate_tracks();
@@ -721,6 +723,15 @@ impl PerspectiveTriangulation {
         if self.bundle_adjustment {
             self.bundle_adjustment(cameras.as_slice(), progress_listener)?;
         }
+
+        if let Some(max_points) = max_points {
+            let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
+            if self.tracks.len() > max_points {
+                self.tracks.shuffle(rng);
+                self.tracks.truncate(max_points);
+                self.tracks.shrink_to_fit();
+            }
+        };
 
         let surface_projections = cameras
             .iter()

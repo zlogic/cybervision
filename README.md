@@ -25,7 +25,7 @@ Download a release distribution from [releases](/zlogic/cybervision/releases).
 Run cybervision:
 
 ```shell
-cybervision [--scale=<scale>] [--focal-length=<focal-length>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] [--projection=<parallel|perspective>] [--mesh=<plain|vertex-colors|texture-coordinates>] [--no-bundle-adjustment] <img1> <img2> [<imgn>] <output>
+cybervision [--scale=<scale>] [--focal-length=<focal-length>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] [--projection=<parallel|perspective>] [--mesh=<plain|vertex-colors|texture-coordinates>] [--no-bundle-adjustment] [--max-points=<max_points>] <img1> <img2> [<imgn>] <output>
 ```
 
 `--scale=<scale>` is an optional argument to specify a depth scale, for example `--scale=-10.0`.
@@ -49,6 +49,10 @@ If not specified, EXIF metadata will be used.
 
 `--no-bundle-adjustment` disables bundle adjustment when reconstructing images with perspective projection.
 Adding this flag can significantly reduce processing time, at the cost of producing incorrect data.
+
+`--max-points=<max_points>` sets a limit on the number of points in the resulting mesh
+Adding this flag will randomly select up to max\_points points if the mesh contains too many points.
+This helps with producing reasonably sized meshes (dense reconstruction produces a lot of data!).
 
 `<img1>` and `<img2>` are input filenames for image 1 and 2; supported formats are `jpg`, `tif` and `png`.
 Although experimental, it's also possible to specify more than one image when using perspective projection.

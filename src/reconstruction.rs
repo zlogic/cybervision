@@ -305,7 +305,7 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
         }
     };
 
-    let surface = reconstruction_task.complete_triangulation(linked_images)?;
+    let surface = reconstruction_task.complete_triangulation(linked_images, args.max_points)?;
     let img_filenames = reconstruction_task.img_filenames.to_owned();
     reconstruction_task.output_surface(
         surface,
@@ -732,12 +732,13 @@ impl ImageReconstruction {
     fn complete_triangulation(
         &mut self,
         linked_images: Vec<usize>,
+        max_points: Option<usize>,
     ) -> Result<triangulation::Surface, triangulation::TriangulationError> {
         let start_time = SystemTime::now();
 
         let pb = new_progress_bar(false);
 
-        let surface = self.triangulation.triangulate_all(Some(&pb))?;
+        let surface = self.triangulation.triangulate_all(max_points, Some(&pb))?;
         self.triangulation.complete();
 
         pb.finish_and_clear();

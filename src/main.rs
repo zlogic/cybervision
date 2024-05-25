@@ -42,6 +42,7 @@ pub struct Args {
     mode: HardwareMode,
     interpolation: InterpolationMode,
     no_bundle_adjustment: bool,
+    max_points: Option<usize>,
     projection: ProjectionMode,
     mesh: Mesh,
     img_src: Vec<String>,
@@ -58,6 +59,7 @@ Options:\
 \n      --mode=<MODE>                    Hardware mode [default: gpu] [possible values: gpu, gpu-low-power, cpu]\
 \n      --interpolation=<INTERPOLATION>  Interpolation mode [default: delaunay] [possible values: delaunay, none]\
 \n      --no-bundle-adjustment           Skip bundle adjustment [if unspecified, bundle adjustment will be applied]\
+\n      --max-points=<MAX_POINTS>        Limit number of points in the resulting mesh\
 \n      --projection=<PROJECTION>        Projection mode [default: perspective] [possible values: parallel, perspective]\
 \n      --mesh=<MESH>                    Mesh options [default: vertex-colors] [possible values: plain, vertex-colors, texture-coordinates]\
 \n      --help                           Print help";
@@ -69,6 +71,7 @@ impl Args {
             mode: HardwareMode::Gpu,
             interpolation: InterpolationMode::Delaunay,
             no_bundle_adjustment: false,
+            max_points: None,
             projection: ProjectionMode::Perspective,
             mesh: Mesh::VertexColors,
             img_src: vec![],
@@ -131,6 +134,11 @@ impl Args {
                             println!("{}", USAGE_INSTRUCTIONS);
                             exit(2);
                         }
+                    };
+                } else if name == "--max-points" {
+                    match value.parse() {
+                        Ok(max_points) => args.max_points = Some(max_points),
+                        Err(err) => fail_with_error(name, value, &err),
                     };
                 } else if name == "--projection" {
                     match value {
