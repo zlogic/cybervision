@@ -12,6 +12,7 @@ use rayon::prelude::*;
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 100;
 const EXTEND_TRACKS_SEARCH_RADIUS: usize = 5;
 const MERGE_TRACKS_SEARCH_RADIUS: usize = 5;
+const MERGE_TRACKS_MAX_DISTANCE: usize = 25;
 const TRACKS_RADIUS_DENOMINATOR: usize = 1000;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
@@ -490,6 +491,105 @@ impl Camera {
     }
 }
 
+#[derive(Clone, Debug)]
+struct AverageTrack {
+    points: Vec<Option<(Point2D<f64>, usize)>>,
+    count: usize,
+}
+
+impl AverageTrack {
+    fn from_track(track: &Track) -> AverageTrack {
+        AverageTrack {
+            points: track
+                .points
+                .iter()
+                .map(|point| {
+                    if let Some(point) = point {
+                        Some((Point2D::new(point.x as f64, point.y as f64), 1))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>(),
+            count: 1,
+        }
+    }
+
+    fn can_merge(&self, other: &AverageTrack, max_distance_sqr: f64) -> bool {
+        for i in 0..self.points.len() {
+            let p1 = if let Some(point) = self.points[i] {
+                point
+            } else {
+                continue;
+            };
+
+            let p2 = if let Some(point) = other.points[i] {
+                point
+            } else {
+                continue;
+            };
+            if p1.1 == 0 || p2.1 == 0 {
+                continue;
+            }
+            let p1 = Point2D::new(p1.0.x / p1.1 as f64, p1.0.y / p1.1 as f64);
+            let p2 = Point2D::new(p2.0.x / p2.1 as f64, p2.0.y / p2.1 as f64);
+            let dx = p1.x - p2.x;
+            let dy = p1.y - p2.y;
+            let distance = dx * dx + dy * dy;
+            if distance > max_distance_sqr {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn merge(&mut self, src_track_averaged: AverageTrack) {
+        self.points
+            .iter_mut()
+            .enumerate()
+            .for_each(|(point_i, dst_point)| {
+                let src_point = src_track_averaged.points[point_i];
+
+                let merged_point = if let Some(src_point) = src_point {
+                    if let Some(dst_point) = dst_point {
+                        Some((
+                            Point2D::new(
+                                src_point.0.x + dst_point.0.x,
+                                src_point.0.y + dst_point.0.y,
+                            ),
+                            src_point.1 + dst_point.1,
+                        ))
+                    } else {
+                        Some(src_point)
+                    }
+                } else {
+                    return;
+                };
+                *dst_point = merged_point;
+            });
+        self.count += src_track_averaged.count;
+    }
+
+    fn to_track(&self) -> Track {
+        let points = self
+            .points
+            .iter()
+            .map(|point| {
+                point.map(|(point, count)| {
+                    Point2D::new(
+                        (point.x / count as f64) as u32,
+                        (point.y / count as f64) as u32,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        Track {
+            points,
+            point3d: None,
+        }
+    }
+}
+
 struct PerspectiveTriangulation {
     images_count: usize,
     calibration: Vec<Option<Matrix3<f64>>>,
@@ -587,7 +687,7 @@ impl PerspectiveTriangulation {
             image2_index,
             correlated_points,
             progress_listener,
-        )
+        );
     }
 
     fn set_image_data(&mut self, img_index: usize, k: &Matrix3<f64>, image_shape: (usize, usize)) {
@@ -677,7 +777,12 @@ impl PerspectiveTriangulation {
         };
         self.remaining_images.retain(|i| *i != best_candidate);
 
-        self.merge_tracks(best_candidate, progress_listener);
+        self.merge_tracks(best_candidate, |percent| {
+            if let Some(pl) = progress_listener {
+                pl.report_status(0.02 * percent);
+            }
+        });
+        self.triangulate_tracks();
 
         let k2 = if let Some(calibration) = self.calibration[best_candidate] {
             calibration
@@ -709,6 +814,31 @@ impl PerspectiveTriangulation {
         max_points: Option<usize>,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
+        {
+            let valid_cameras = self
+                .cameras
+                .iter()
+                .enumerate()
+                .filter_map(|(camera_i, camera)| {
+                    if camera.is_some() {
+                        Some(camera_i)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+            let cameras_len = valid_cameras.len() as f32;
+            valid_cameras.into_iter().for_each(|camera_i| {
+                let percent_complete = camera_i as f32 / cameras_len;
+                let percent_multiplier = 1.0 as f32 / cameras_len;
+                self.merge_tracks(camera_i, |percent| {
+                    if let Some(pl) = progress_listener {
+                        let value = percent_complete + percent * percent_multiplier;
+                        pl.report_status(0.2 * value);
+                    }
+                });
+            });
+        }
         self.triangulate_tracks();
         self.prune_projections();
 
@@ -1275,45 +1405,48 @@ impl PerspectiveTriangulation {
             EXTEND_TRACKS_SEARCH_RADIUS
         };
 
-        self.tracks.iter_mut().for_each(|track| {
-            if let Some(pl) = progress_listener {
-                let value =
-                    counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / total_iterations as f32;
-                pl.report_status(value * 0.98);
-            }
-            let point1 = if let Some(point) = track.get(image1_index) {
-                point
-            } else {
-                return;
-            };
-            let min_x = (point1.x as usize).saturating_sub(search_radius);
-            let min_y = (point1.y as usize).saturating_sub(search_radius);
-            let max_x = (point1.x as usize + search_radius).min(correlated_points.width());
-            let max_y = (point1.y as usize + search_radius).min(correlated_points.height());
-            let mut min_distance = None;
-            let mut best_match = None;
-            for y in min_y..max_y {
-                for x in min_x..max_x {
-                    let next_point = if let Some(point) = correlated_points.val(x, y) {
-                        point
-                    } else {
-                        continue;
-                    };
-                    let dx = x.max(point1.x as usize) - x.min(point1.x as usize);
-                    let dy = y.max(point1.y as usize) - y.min(point1.y as usize);
-                    let distance = dx * dx + dy * dy;
-                    if min_distance.map_or(true, |min_distance| distance < min_distance) {
-                        min_distance = Some(distance);
-                        best_match = Some(next_point);
+        let merged_points = self
+            .tracks
+            .par_iter_mut()
+            .filter_map(|track| {
+                if let Some(pl) = progress_listener {
+                    let value = counter.fetch_add(1, AtomicOrdering::Relaxed) as f32
+                        / total_iterations as f32;
+                    pl.report_status(value * 0.98);
+                }
+                let point1 = track.get(image1_index)?;
+                let min_x = (point1.x as usize).saturating_sub(search_radius);
+                let min_y = (point1.y as usize).saturating_sub(search_radius);
+                let max_x = (point1.x as usize + search_radius).min(correlated_points.width());
+                let max_y = (point1.y as usize + search_radius).min(correlated_points.height());
+                let mut min_distance = None;
+                let mut best_match = None;
+                for y in min_y..max_y {
+                    for x in min_x..max_x {
+                        let next_point = if let Some(point) = correlated_points.val(x, y) {
+                            point
+                        } else {
+                            continue;
+                        };
+                        let dx = x.max(point1.x as usize) - x.min(point1.x as usize);
+                        let dy = y.max(point1.y as usize) - y.min(point1.y as usize);
+                        let distance = dx * dx + dy * dy;
+                        if min_distance.map_or(true, |min_distance| distance < min_distance) {
+                            min_distance = Some(distance);
+                            best_match = Some(next_point);
+                        }
                     }
                 }
-            }
 
-            if let Some(best_match) = best_match {
+                let best_match = best_match?;
                 let track_point = best_match.0;
                 track.add(image2_index, track_point);
-                *remaining_points.val_mut(track_point.x as usize, track_point.y as usize) = None;
-            };
+
+                Some(track_point)
+            })
+            .collect::<Vec<_>>();
+        merged_points.into_iter().for_each(|track_point| {
+            *remaining_points.val_mut(track_point.x as usize, track_point.y as usize) = None;
         });
 
         let counter = AtomicUsize::new(0);
@@ -1341,18 +1474,15 @@ impl PerspectiveTriangulation {
         self.tracks.append(&mut new_tracks);
     }
 
-    fn merge_tracks<PL: ProgressListener>(
-        &mut self,
-        image_i: usize,
-        progress_listener: Option<&PL>,
-    ) {
+    fn merge_tracks<PL>(&mut self, image_i: usize, report_progress: PL)
+    where
+        PL: Fn(f32) + Sync,
+    {
         let shape = if let Some(shape) = self.image_shapes[image_i] {
             shape
         } else {
             return;
         };
-        let tracks_count = self.tracks.len();
-        let mut tracks_index = Grid::<Option<usize>>::new(shape.0, shape.1, None);
         let max_dimension = shape.0.max(shape.1);
         let search_radius = if max_dimension > TRACKS_RADIUS_DENOMINATOR {
             MERGE_TRACKS_SEARCH_RADIUS * max_dimension / TRACKS_RADIUS_DENOMINATOR
@@ -1360,63 +1490,164 @@ impl PerspectiveTriangulation {
             MERGE_TRACKS_SEARCH_RADIUS
         };
         let max_distance_sqr = if max_dimension > TRACKS_RADIUS_DENOMINATOR {
-            MERGE_TRACKS_SEARCH_RADIUS * MERGE_TRACKS_SEARCH_RADIUS * max_dimension
+            MERGE_TRACKS_MAX_DISTANCE * MERGE_TRACKS_MAX_DISTANCE * max_dimension
                 / TRACKS_RADIUS_DENOMINATOR
         } else {
-            MERGE_TRACKS_SEARCH_RADIUS * MERGE_TRACKS_SEARCH_RADIUS
+            MERGE_TRACKS_MAX_DISTANCE * MERGE_TRACKS_MAX_DISTANCE
         };
+        let mut tracks_index = Grid::<Vec<usize>>::new(shape.0, shape.1, vec![]);
+        self.tracks.iter().enumerate().for_each(|(track_i, track)| {
+            if let Some(point) = track.points[image_i] {
+                tracks_index
+                    .val_mut(point.x as usize, point.y as usize)
+                    .push(track_i);
+            }
+        });
+        let conflicting_tracks = tracks_index
+            .par_iter_mut()
+            .filter_map(|(_x, _y, tracks)| {
+                let can_merge = tracks.iter().enumerate().all(|(track_i, track)| {
+                    let check_track = &self.tracks[*track];
+                    tracks.iter().skip(track_i + 1).all(|other_track| {
+                        check_track.can_merge(&self.tracks[*other_track], max_distance_sqr)
+                    })
+                });
+                if !can_merge {
+                    tracks.clear();
+                    Some(tracks)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        conflicting_tracks.into_iter().for_each(|tracks| {
+            tracks
+                .iter()
+                .for_each(|track_i| self.tracks[*track_i].points.clear())
+        });
+        report_progress(0.1);
 
-        for track_i in 0..self.tracks.len() {
-            let point = if let Some(point) = self.tracks[track_i].get(image_i) {
-                point
-            } else {
-                continue;
-            };
-            if let Some(pl) = progress_listener {
-                let value = track_i as f32 / tracks_count as f32;
-                pl.report_status(value * 0.02);
-            }
-            let min_x = (point.x as usize).saturating_sub(search_radius);
-            let min_y = (point.y as usize).saturating_sub(search_radius);
-            let max_x = (point.x as usize + search_radius).min(tracks_index.width());
-            let max_y = (point.y as usize + search_radius).min(tracks_index.height());
-            let mut min_distance = None;
-            let mut best_match = None;
-            for y in min_y..max_y {
-                for x in min_x..max_x {
-                    let potential_match = if let Some(track_j) = tracks_index.val(x, y) {
-                        *track_j
+        let points_count = (tracks_index.width() * tracks_index.height()) as f32;
+        let counter = AtomicUsize::new(0);
+        let merge_tracks = tracks_index
+            .par_iter()
+            .flat_map(|(point_x, point_y, point_tracks)| {
+                report_progress(
+                    0.1 + 0.8
+                        * (counter.fetch_add(1, AtomicOrdering::Relaxed) as f32
+                            / points_count as f32),
+                );
+                point_tracks
+                    .iter()
+                    .filter_map(|track_i| {
+                        let track = &self.tracks[*track_i];
+                        if track.points.is_empty() {
+                            return None;
+                        }
+                        let min_x = point_x.saturating_sub(search_radius);
+                        let min_y = point_y.saturating_sub(search_radius);
+                        let max_x = (point_x + search_radius).min(tracks_index.width());
+                        let max_y = (point_y + search_radius).min(tracks_index.height());
+                        let mut min_distance = None;
+                        let mut best_match = None;
+                        for y in min_y..max_y {
+                            for x in min_x..max_x {
+                                (min_distance, best_match) = tracks_index
+                                    .val(x, y)
+                                    .iter()
+                                    .filter_map(|potential_match| {
+                                        if potential_match == track_i {
+                                            return None;
+                                        }
+                                        let potential_match_track = &self.tracks[*potential_match];
+                                        if potential_match_track.points.is_empty() {
+                                            return None;
+                                        }
+                                        if !track.can_merge(potential_match_track, max_distance_sqr)
+                                        {
+                                            return None;
+                                        }
+                                        let dx = x.max(point_x as usize) - x.min(point_x as usize);
+                                        let dy = y.max(point_y as usize) - y.min(point_y as usize);
+                                        let distance = dx * dx + dy * dy;
+                                        Some((distance, *potential_match))
+                                    })
+                                    .fold((min_distance, best_match), |a, b| {
+                                        if a.0.map_or(true, |min_distance| b.0 < min_distance) {
+                                            (Some(b.0), Some(b.1))
+                                        } else {
+                                            a
+                                        }
+                                    });
+                            }
+                        }
+                        let src_track = track_i;
+                        let dst_track = best_match?;
+                        let (src_track, dst_track) =
+                            (*src_track.min(&dst_track), *src_track.max(&dst_track));
+                        Some((src_track, dst_track))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        drop(tracks_index);
+
+        let mut averaged_tracks = self
+            .tracks
+            .par_iter()
+            .map(|track| AverageTrack::from_track(track))
+            .collect::<Vec<_>>();
+        let mut remapped_tracks = vec![None; self.tracks.len()];
+
+        merge_tracks
+            .into_iter()
+            .for_each(|(src_track_i, dst_track_i)| {
+                let src_track = averaged_tracks[src_track_i].to_owned();
+                if src_track.points.is_empty() {
+                    return;
+                }
+                let mut dst_track_i = dst_track_i;
+                while averaged_tracks[dst_track_i].points.is_empty() {
+                    // Can this enter an infinite loop?
+                    if let Some(new_dst) = remapped_tracks[dst_track_i] {
+                        dst_track_i = new_dst;
                     } else {
-                        continue;
-                    };
-                    if potential_match == track_i
-                        || !self.tracks[track_i]
-                            .can_merge(&self.tracks[potential_match], max_distance_sqr)
-                    {
-                        continue;
+                        break;
                     }
-                    let dx = x.max(point.x as usize) - x.min(point.x as usize);
-                    let dy = y.max(point.y as usize) - y.min(point.y as usize);
-                    let distance = dx * dx + dy * dy;
-                    if min_distance.map_or(true, |min_distance| distance < min_distance) {
-                        min_distance = Some(distance);
-                        best_match = Some(potential_match);
+                    remapped_tracks[src_track_i] = Some(dst_track_i);
+                }
+                if src_track_i == dst_track_i {
+                    return;
+                }
+                let dst_track = &mut averaged_tracks[dst_track_i];
+                if dst_track.points.is_empty() {
+                    return;
+                }
+                // TODO: keep all points and decide if can merge later?
+                if dst_track.can_merge(&src_track, max_distance_sqr as f64) {
+                    dst_track.merge(src_track);
+                } else {
+                    self.tracks[dst_track_i].points.clear();
+                    dst_track.points.clear();
+                }
+                self.tracks[src_track_i].points.clear();
+                averaged_tracks[src_track_i].points.clear();
+            });
+        self.tracks
+            .iter_mut()
+            .enumerate()
+            .for_each(|(track_i, track)| {
+                let averaged_track = &averaged_tracks[track_i];
+                if averaged_track.count > 1 {
+                    // After this is completed, need to re-triangulate points.
+                    let averaged_track = averaged_track.to_track();
+                    if track.can_merge(&averaged_track, max_distance_sqr) {
+                        *track = averaged_track;
+                    } else {
+                        track.points.clear();
                     }
                 }
-            }
-            if let Some(best_match) = best_match {
-                let src_track = self.tracks[track_i].to_owned();
-                let dst_track = &mut self.tracks[best_match];
-                for (i, point) in src_track.points().iter().enumerate() {
-                    if let Some(point) = point {
-                        dst_track.add(i, *point);
-                    }
-                }
-                self.tracks[track_i].points.clear();
-            } else {
-                *tracks_index.val_mut(point.x as usize, point.y as usize) = Some(track_i);
-            }
-        }
+            });
         self.tracks.retain(|track| !track.points.is_empty());
     }
 
@@ -1955,7 +2186,7 @@ impl BundleAdjustment<'_> {
         for iter in 0..BUNDLE_ADJUSTMENT_MAX_ITERATIONS {
             if let Some(pl) = progress_listener {
                 let value = iter as f32 / BUNDLE_ADJUSTMENT_MAX_ITERATIONS as f32;
-                pl.report_status(value);
+                pl.report_status(0.2 + 0.8 * value);
             }
             let delta = if let Some(delta) = self.calculate_delta_step() {
                 delta
