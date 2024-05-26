@@ -670,6 +670,9 @@ impl ImageReconstruction {
 
             for (img2_index, img2_filename) in img_filenames.iter().skip(img1_index + 1).enumerate()
             {
+                if !linked_images.contains(&img2_index) {
+                    continue;
+                }
                 let img2 = match SourceImage::load(img2_filename) {
                     Ok(img1) => img1,
                     Err(err) => {
