@@ -503,13 +503,7 @@ impl AverageTrack {
             points: track
                 .points
                 .iter()
-                .map(|point| {
-                    if let Some(point) = point {
-                        Some((Point2D::new(point.x as f64, point.y as f64), 1))
-                    } else {
-                        None
-                    }
-                })
+                .map(|point| point.map(|point| (Point2D::new(point.x as f64, point.y as f64), 1)))
                 .collect::<Vec<_>>(),
             count: 1,
         }
@@ -802,7 +796,7 @@ impl PerspectiveTriangulation {
             let cameras_len = valid_cameras.len() as f32;
             valid_cameras.into_iter().for_each(|camera_i| {
                 let percent_complete = camera_i as f32 / cameras_len;
-                let percent_multiplier = 1.0 as f32 / cameras_len;
+                let percent_multiplier = 1.0_f32 / cameras_len;
                 self.merge_tracks(camera_i, |percent| {
                     if let Some(pl) = progress_listener {
                         let value = percent_complete + percent * percent_multiplier;
@@ -1506,8 +1500,7 @@ impl PerspectiveTriangulation {
             .flat_map(|(point_x, point_y, point_tracks)| {
                 report_progress(
                     0.1 + 0.8
-                        * (counter.fetch_add(1, AtomicOrdering::Relaxed) as f32
-                            / points_count as f32),
+                        * (counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / points_count),
                 );
                 point_tracks
                     .iter()
@@ -1539,8 +1532,8 @@ impl PerspectiveTriangulation {
                                         {
                                             return None;
                                         }
-                                        let dx = x.max(point_x as usize) - x.min(point_x as usize);
-                                        let dy = y.max(point_y as usize) - y.min(point_y as usize);
+                                        let dx = x.max(point_x) - x.min(point_x);
+                                        let dy = y.max(point_y) - y.min(point_y);
                                         let distance = dx * dx + dy * dy;
                                         Some((distance, *potential_match))
                                     })
@@ -1567,7 +1560,7 @@ impl PerspectiveTriangulation {
         let mut averaged_tracks = self
             .tracks
             .par_iter()
-            .map(|track| AverageTrack::from_track(track))
+            .map(AverageTrack::from_track)
             .collect::<Vec<_>>();
         let mut remapped_tracks = vec![None; self.tracks.len()];
 
