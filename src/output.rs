@@ -17,6 +17,8 @@ use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 
 use rayon::prelude::*;
 
+const DELAUNAY_PROJECTION_CLOSEST_DISTANCE: f64 = 0.5;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum InterpolationMode {
     Delaunay,
@@ -384,7 +386,7 @@ impl Mesh {
 
         let affine_projection = self.points.cameras_len() == 0;
 
-        let camera_points = self
+        let mut camera_points = self
             .points
             .iter_tracks()
             .enumerate()
@@ -402,6 +404,25 @@ impl Mesh {
                 Some(Point { track_i, point })
             })
             .collect::<Vec<_>>();
+
+        {
+            // Delete projections that are too close together.
+            let threshold = DELAUNAY_PROJECTION_CLOSEST_DISTANCE;
+            camera_points.sort_unstable_by(|a, b| {
+                let a_x = (a.point.x / threshold).round();
+                let a_y = (a.point.y / threshold).round();
+                let b_x = (b.point.x / threshold).round();
+                let b_y = (b.point.y / threshold).round();
+                a_x.total_cmp(&b_x).then(a_y.total_cmp(&b_y))
+            });
+            let threshold =
+                DELAUNAY_PROJECTION_CLOSEST_DISTANCE * DELAUNAY_PROJECTION_CLOSEST_DISTANCE;
+            camera_points.dedup_by(|a, b| {
+                let dx = a.point.x - b.point.x;
+                let dy = a.point.y - b.point.y;
+                dx * dx + dy * dy < threshold
+            });
+        }
 
         let triangulated_surface = DelaunayTriangulation::<Point>::bulk_load(camera_points)?;
 
