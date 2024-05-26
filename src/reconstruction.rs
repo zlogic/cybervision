@@ -651,10 +651,8 @@ impl ImageReconstruction {
     ) -> Result<(), triangulation::TriangulationError> {
         let mut gpu_device = gpu_device;
         let img_filenames = self.img_filenames.clone();
-        for (img1_index, img1_filename) in img_filenames
-            .iter()
-            .take(img_filenames.len() - 1)
-            .enumerate()
+        for (img1_index, img1_filename) in
+            img_filenames.iter().take(img_filenames.len()).enumerate()
         {
             if !linked_images.contains(&img1_index) {
                 continue;
@@ -666,7 +664,6 @@ impl ImageReconstruction {
                     continue;
                 }
             };
-            let f_matrices_i = f_matrices[img1_index].to_owned();
 
             for (img2_index, img2_filename) in img_filenames.iter().skip(img1_index + 1).enumerate()
             {
@@ -681,6 +678,7 @@ impl ImageReconstruction {
                     }
                 };
 
+                let f_matrices_i = f_matrices[img1_index].to_owned();
                 let f = if let Some(f) = f_matrices_i[img2_index] {
                     f
                 } else {
@@ -704,6 +702,20 @@ impl ImageReconstruction {
                         eprintln!("Failed to perform dense correlation of images: {}", err)
                     }
                 }
+            }
+
+            let start_time = SystemTime::now();
+
+            let pb = new_progress_bar(true);
+            let _ = self.triangulation.merge_tracks(img1_index, Some(&pb));
+            pb.finish_and_clear();
+
+            if let Ok(t) = start_time.elapsed() {
+                println!(
+                    "Merged tracks for {} in {:.3} seconds",
+                    img1_filename,
+                    t.as_secs_f32()
+                );
             }
         }
 

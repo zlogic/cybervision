@@ -200,6 +200,21 @@ impl Triangulation {
         }
     }
 
+    pub fn merge_tracks<PL: ProgressListener>(
+        &mut self,
+        image_index: usize,
+        progress_listener: Option<&PL>,
+    ) -> Result<(), TriangulationError> {
+        if self.affine.is_some() {
+            Ok(())
+        } else if let Some(perspective) = &mut self.perspective {
+            perspective.merge_tracks(image_index, progress_listener);
+            Ok(())
+        } else {
+            Err("Triangulation not initialized".into())
+        }
+    }
+
     pub fn recover_next_cameras<PL: ProgressListener>(
         &mut self,
         progress_listener: Option<&PL>,
@@ -693,7 +708,11 @@ impl PerspectiveTriangulation {
             let p2 = k2 * p2;
             self.projections[initial_images.1] = Some(p2);
             self.cameras[initial_images.1] = Some(camera2);
-            self.triangulate_tracks();
+
+            [initial_images.0, initial_images.1].iter().for_each(|img| {
+                self.merge_tracks::<PL>(*img, None);
+            });
+
             self.remaining_images
                 .retain(|i| *i != initial_images.0 && *i != initial_images.1);
 
@@ -743,12 +762,7 @@ impl PerspectiveTriangulation {
         };
         self.remaining_images.retain(|i| *i != best_candidate);
 
-        self.merge_tracks(best_candidate, |percent| {
-            if let Some(pl) = progress_listener {
-                pl.report_status(0.02 * percent);
-            }
-        });
-        self.triangulate_tracks();
+        self.merge_tracks::<PL>(best_candidate, None);
 
         let k2 = if let Some(calibration) = self.calibration[best_candidate] {
             calibration
@@ -780,31 +794,6 @@ impl PerspectiveTriangulation {
         max_points: Option<usize>,
         progress_listener: Option<&PL>,
     ) -> Result<Surface, TriangulationError> {
-        {
-            let valid_cameras = self
-                .cameras
-                .iter()
-                .enumerate()
-                .filter_map(|(camera_i, camera)| {
-                    if camera.is_some() {
-                        Some(camera_i)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>();
-            let cameras_len = valid_cameras.len() as f32;
-            valid_cameras.into_iter().for_each(|camera_i| {
-                let percent_complete = camera_i as f32 / cameras_len;
-                let percent_multiplier = 1.0_f32 / cameras_len;
-                self.merge_tracks(camera_i, |percent| {
-                    if let Some(pl) = progress_listener {
-                        let value = percent_complete + percent * percent_multiplier;
-                        pl.report_status(0.2 * value);
-                    }
-                });
-            });
-        }
         self.triangulate_tracks();
         self.prune_projections();
 
@@ -1440,10 +1429,11 @@ impl PerspectiveTriangulation {
         self.tracks.append(&mut new_tracks);
     }
 
-    fn merge_tracks<PL>(&mut self, image_i: usize, report_progress: PL)
-    where
-        PL: Fn(f32) + Sync,
-    {
+    fn merge_tracks<PL: ProgressListener>(
+        &mut self,
+        image_i: usize,
+        progress_listener: Option<&PL>,
+    ) {
         let shape = if let Some(shape) = self.image_shapes[image_i] {
             shape
         } else {
@@ -1491,17 +1481,21 @@ impl PerspectiveTriangulation {
                 .iter()
                 .for_each(|track_i| self.tracks[*track_i].points.clear())
         });
-        report_progress(0.1);
+        if let Some(pl) = progress_listener {
+            pl.report_status(0.1);
+        }
 
         let points_count = (tracks_index.width() * tracks_index.height()) as f32;
         let counter = AtomicUsize::new(0);
         let merge_tracks = tracks_index
             .par_iter()
             .flat_map(|(point_x, point_y, point_tracks)| {
-                report_progress(
-                    0.1 + 0.8
-                        * (counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / points_count),
-                );
+                if let Some(pl) = progress_listener {
+                    let value = 0.1
+                        + 0.8
+                            * (counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / points_count);
+                    pl.report_status(value);
+                }
                 point_tracks
                     .iter()
                     .filter_map(|track_i| {
@@ -1564,9 +1558,18 @@ impl PerspectiveTriangulation {
             .collect::<Vec<_>>();
         let mut remapped_tracks = vec![None; self.tracks.len()];
 
+        let merge_tracks_count = merge_tracks.len() as f32;
+        let counter = AtomicUsize::new(0);
         merge_tracks
             .into_iter()
             .for_each(|(src_track_i, dst_track_i)| {
+                if let Some(pl) = progress_listener {
+                    let value = 0.9
+                        + 0.1
+                            * (counter.fetch_add(1, AtomicOrdering::Relaxed) as f32
+                                / merge_tracks_count);
+                    pl.report_status(value);
+                }
                 let src_track = averaged_tracks[src_track_i].to_owned();
                 if src_track.points.is_empty() {
                     return;
@@ -1608,6 +1611,8 @@ impl PerspectiveTriangulation {
                 }
             });
         self.tracks.retain(|track| !track.points.is_empty());
+
+        self.triangulate_tracks();
     }
 
     fn bundle_adjustment<PL: ProgressListener>(
@@ -2144,8 +2149,7 @@ impl BundleAdjustment<'_> {
         let mut found = false;
         for iter in 0..BUNDLE_ADJUSTMENT_MAX_ITERATIONS {
             if let Some(pl) = progress_listener {
-                let value = iter as f32 / BUNDLE_ADJUSTMENT_MAX_ITERATIONS as f32;
-                pl.report_status(0.2 + 0.8 * value);
+                pl.report_status(iter as f32 / BUNDLE_ADJUSTMENT_MAX_ITERATIONS as f32);
             }
             let delta = if let Some(delta) = self.calculate_delta_step() {
                 delta
