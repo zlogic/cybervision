@@ -111,7 +111,7 @@ fn find_fast_keypoints<PL: ProgressListener>(
     // Add scores
     let counter = AtomicUsize::new(0);
     let scores: Vec<u8> = keypoints
-        .iter()
+        .par_iter()
         .map(|p| {
             if let Some(pl) = progress_listener {
                 let value = 0.20

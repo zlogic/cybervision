@@ -259,6 +259,7 @@ impl DepthBuffer {
     fn new(surface: &triangulation::Surface, camera_j: usize) -> DepthBuffer {
         let camera_points = surface
             .iter_tracks()
+            .par_bridge()
             .filter_map(|track| {
                 track.get(camera_j)?;
                 let point3d = track.get_point3d()?;
@@ -387,6 +388,7 @@ impl Mesh {
             .points
             .iter_tracks()
             .enumerate()
+            .par_bridge()
             .filter_map(|(track_i, track)| {
                 // Do not include invisible points to build point index.
                 let point_in_image = track.get(camera_i)?;
