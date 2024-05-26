@@ -10,9 +10,9 @@ use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
 use rayon::prelude::*;
 
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 100;
-const EXTEND_TRACKS_SEARCH_RADIUS: usize = 5;
-const MERGE_TRACKS_SEARCH_RADIUS: usize = 5;
-const MERGE_TRACKS_MAX_DISTANCE: usize = 25;
+const EXTEND_TRACKS_SEARCH_RADIUS: usize = 3;
+const MERGE_TRACKS_SEARCH_RADIUS: usize = 1;
+const MERGE_TRACKS_MAX_DISTANCE: usize = 15;
 const TRACKS_RADIUS_DENOMINATOR: usize = 1000;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
@@ -513,34 +513,6 @@ impl AverageTrack {
                 .collect::<Vec<_>>(),
             count: 1,
         }
-    }
-
-    fn can_merge(&self, other: &AverageTrack, max_distance_sqr: f64) -> bool {
-        for i in 0..self.points.len() {
-            let p1 = if let Some(point) = self.points[i] {
-                point
-            } else {
-                continue;
-            };
-
-            let p2 = if let Some(point) = other.points[i] {
-                point
-            } else {
-                continue;
-            };
-            if p1.1 == 0 || p2.1 == 0 {
-                continue;
-            }
-            let p1 = Point2D::new(p1.0.x / p1.1 as f64, p1.0.y / p1.1 as f64);
-            let p2 = Point2D::new(p2.0.x / p2.1 as f64, p2.0.y / p2.1 as f64);
-            let dx = p1.x - p2.x;
-            let dy = p1.y - p2.y;
-            let distance = dx * dx + dy * dy;
-            if distance > max_distance_sqr {
-                return false;
-            }
-        }
-        true
     }
 
     fn merge(&mut self, src_track_averaged: AverageTrack) {
@@ -1614,8 +1586,8 @@ impl PerspectiveTriangulation {
                     } else {
                         break;
                     }
-                    remapped_tracks[src_track_i] = Some(dst_track_i);
                 }
+                remapped_tracks[src_track_i] = Some(dst_track_i);
                 if src_track_i == dst_track_i {
                     return;
                 }
@@ -1623,13 +1595,7 @@ impl PerspectiveTriangulation {
                 if dst_track.points.is_empty() {
                     return;
                 }
-                // TODO: keep all points and decide if can merge later?
-                if dst_track.can_merge(&src_track, max_distance_sqr as f64) {
-                    dst_track.merge(src_track);
-                } else {
-                    self.tracks[dst_track_i].points.clear();
-                    dst_track.points.clear();
-                }
+                dst_track.merge(src_track);
                 self.tracks[src_track_i].points.clear();
                 averaged_tracks[src_track_i].points.clear();
             });
