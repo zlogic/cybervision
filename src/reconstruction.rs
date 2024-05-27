@@ -651,9 +651,7 @@ impl ImageReconstruction {
     ) -> Result<(), triangulation::TriangulationError> {
         let mut gpu_device = gpu_device;
         let img_filenames = self.img_filenames.clone();
-        for (img1_index, img1_filename) in
-            img_filenames.iter().take(img_filenames.len()).enumerate()
-        {
+        for (img1_index, img1_filename) in img_filenames.iter().enumerate() {
             if !linked_images.contains(&img1_index) {
                 continue;
             }

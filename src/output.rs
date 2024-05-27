@@ -7,6 +7,7 @@ use std::{
     cmp::Ordering,
     fs::File,
     io::{BufWriter, Write},
+    ops::Range,
     path::Path,
     sync::atomic::{AtomicUsize, Ordering as AtomicOrdering},
 };
@@ -17,7 +18,7 @@ use spade::{DelaunayTriangulation, HasPosition, Point2, Triangulation};
 
 use rayon::prelude::*;
 
-const DELAUNAY_PROJECTION_CLOSEST_DISTANCE: f64 = 0.5;
+const MAX_CENTER_DISTANCE: f64 = 4.0;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum InterpolationMode {
@@ -258,15 +259,24 @@ struct DepthBuffer {
 }
 
 impl DepthBuffer {
-    fn new(surface: &triangulation::Surface, camera_j: usize) -> DepthBuffer {
+    fn new(
+        surface: &triangulation::Surface,
+        camera_j: usize,
+        image_size: (u32, u32),
+    ) -> DepthBuffer {
+        let (range_x, range_y) = img_range(image_size);
         let camera_points = surface
             .iter_tracks()
             .par_bridge()
             .filter_map(|track| {
+                // Do not include invisible points to build point index.
                 track.get(camera_j)?;
                 let point3d = track.get_point3d()?;
-                let point_depth = surface.point_depth(camera_j, &point3d);
                 let projection = surface.project_point(camera_j, &point3d);
+                if !range_x.contains(&projection.x) || !range_y.contains(&projection.y) {
+                    return None;
+                }
+                let point_depth = surface.point_depth(camera_j, &point3d);
 
                 Some(Vector3::new(projection.x, projection.y, point_depth))
             })
@@ -352,6 +362,7 @@ struct Mesh {
 impl Mesh {
     fn create<PL: ProgressListener>(
         surface: triangulation::Surface,
+        image_dimensions: &[(u32, u32)],
         configuration: MeshConfiguration,
         progress_listener: Option<&PL>,
     ) -> Result<Mesh, OutputError> {
@@ -362,10 +373,10 @@ impl Mesh {
         };
 
         if surface.points.cameras_len() == 0 {
-            surface.process_camera(0, progress_listener)?;
+            surface.process_camera(0, image_dimensions, progress_listener)?;
         } else {
             for camera_i in 0..surface.points.cameras_len() {
-                surface.process_camera(camera_i, progress_listener)?;
+                surface.process_camera(camera_i, image_dimensions, progress_listener)?;
             }
         }
 
@@ -378,6 +389,7 @@ impl Mesh {
     fn process_camera<PL: ProgressListener>(
         &mut self,
         camera_i: usize,
+        image_dimensions: &[(u32, u32)],
         progress_listener: Option<&PL>,
     ) -> Result<(), OutputError> {
         if self.interpolation != InterpolationMode::Delaunay {
@@ -386,43 +398,29 @@ impl Mesh {
 
         let affine_projection = self.points.cameras_len() == 0;
 
-        let mut camera_points = self
+        let (range_x, range_y) = img_range(image_dimensions[camera_i]);
+        let camera_points = self
             .points
             .iter_tracks()
             .enumerate()
             .par_bridge()
             .filter_map(|(track_i, track)| {
                 // Do not include invisible points to build point index.
-                let point_in_image = track.get(camera_i)?;
+                let orig_projection = track.get(camera_i)?;
                 let point3d = track.get_point3d()?;
-                let point = if affine_projection {
-                    Point2::new(point_in_image.x as f64, point_in_image.y as f64)
+                let projection = if affine_projection {
+                    Point2D::new(orig_projection.x as f64, orig_projection.y as f64)
                 } else {
                     let projection = self.points.project_point(camera_i, &point3d);
-                    Point2::new(projection.x, projection.y)
+                    Point2D::new(projection.x, projection.y)
                 };
+                if !range_x.contains(&projection.x) || !range_y.contains(&projection.y) {
+                    return None;
+                }
+                let point = Point2::new(projection.x, projection.y);
                 Some(Point { track_i, point })
             })
             .collect::<Vec<_>>();
-
-        {
-            // Delete projections that are too close together.
-            let threshold = DELAUNAY_PROJECTION_CLOSEST_DISTANCE;
-            camera_points.sort_unstable_by(|a, b| {
-                let a_x = (a.point.x / threshold).round();
-                let a_y = (a.point.y / threshold).round();
-                let b_x = (b.point.x / threshold).round();
-                let b_y = (b.point.y / threshold).round();
-                a_x.total_cmp(&b_x).then(a_y.total_cmp(&b_y))
-            });
-            let threshold =
-                DELAUNAY_PROJECTION_CLOSEST_DISTANCE * DELAUNAY_PROJECTION_CLOSEST_DISTANCE;
-            camera_points.dedup_by(|a, b| {
-                let dx = a.point.x - b.point.x;
-                let dy = a.point.y - b.point.y;
-                dx * dx + dy * dy < threshold
-            });
-        }
 
         let triangulated_surface = DelaunayTriangulation::<Point>::bulk_load(camera_points)?;
 
@@ -458,7 +456,7 @@ impl Mesh {
 
         if self.points.cameras_len() > 0 && !affine_projection {
             let mut processed_cameras = 0usize;
-            for camera_j in 0..cameras_len {
+            for (camera_j, image_dimensions) in image_dimensions.iter().enumerate() {
                 if camera_i == camera_j {
                     continue;
                 }
@@ -474,7 +472,7 @@ impl Mesh {
                     pl.report_status(0.9 * percent_complete);
                 }
 
-                let depth_buffer = DepthBuffer::new(&self.points, camera_j);
+                let depth_buffer = DepthBuffer::new(&self.points, camera_j, *image_dimensions);
                 if let Some(pl) = progress_listener {
                     let camera_percent = 0.05;
                     let value = percent_complete + percent_multiplier * camera_percent;
@@ -575,6 +573,10 @@ pub fn output<PL: ProgressListener>(
     configuration: MeshConfiguration,
     progress_listener: Option<&PL>,
 ) -> Result<(), OutputError> {
+    let image_dimensions = images
+        .iter()
+        .map(|image| image.dimensions())
+        .collect::<Vec<_>>();
     let writer: Box<dyn MeshWriter> = if path.to_lowercase().ends_with(".obj") {
         Box::new(ObjWriter::new(
             path,
@@ -593,13 +595,30 @@ pub fn output<PL: ProgressListener>(
         Box::new(ImageWriter::new(
             path,
             &surface,
+            image_dimensions.as_slice(),
             project_to_image,
             out_scale.2.signum(),
         )?)
     };
 
-    let mesh = Mesh::create(surface, configuration, progress_listener)?;
+    let mesh = Mesh::create(
+        surface,
+        image_dimensions.as_slice(),
+        configuration,
+        progress_listener,
+    )?;
     mesh.output(writer, progress_listener)
+}
+
+fn img_range(image_size: (u32, u32)) -> (Range<f64>, Range<f64>) {
+    let center_x = image_size.0 as f64 / 2.0;
+    let center_y = image_size.1 as f64 / 2.0;
+    (
+        center_x - image_size.0 as f64 * MAX_CENTER_DISTANCE
+            ..center_x + image_size.0 as f64 * MAX_CENTER_DISTANCE,
+        center_y - image_size.1 as f64 * MAX_CENTER_DISTANCE
+            ..center_y + image_size.1 as f64 * MAX_CENTER_DISTANCE,
+    )
 }
 
 type Track = [Option<Point2D<u32>>];
@@ -997,16 +1016,21 @@ impl ImageWriter {
     fn new(
         path: &str,
         surface: &triangulation::Surface,
+        image_dimensions: &[(u32, u32)],
         project_to_image: usize,
         scale: f64,
     ) -> Result<ImageWriter, OutputError> {
+        let (range_x, range_y) = img_range(image_dimensions[project_to_image]);
         // Project all points onto the first image.
         let camera_points = surface
             .iter_tracks()
             .map(|track| {
                 let point3d = track.get_point3d()?;
-                let point_depth = surface.point_depth(project_to_image, &point3d);
                 let projection = surface.project_point(project_to_image, &point3d);
+                if !range_x.contains(&projection.x) || !range_y.contains(&projection.y) {
+                    return None;
+                }
+                let point_depth = surface.point_depth(project_to_image, &point3d);
 
                 Some(Vector3::new(projection.x, projection.y, point_depth))
             })

@@ -60,7 +60,7 @@ impl Surface {
     }
 
     #[inline]
-    pub fn project_point(&self, camera_i: usize, point3d: &Vector3<f64>) -> Vector2<f64> {
+    pub fn project_point(&self, camera_i: usize, point3d: &Vector3<f64>) -> Point2D<f64> {
         let camera = &self.cameras[camera_i];
         let point4d = point3d.insert_row(3, 1.0);
         let projection = camera.projection() * point4d;
@@ -70,7 +70,7 @@ impl Surface {
         } else {
             projection.z
         };
-        projection.remove_row(2).unscale(scale)
+        Point2D::new(projection.x / scale, projection.y / scale)
     }
 
     pub fn cameras_len(&self) -> usize {
