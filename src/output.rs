@@ -302,7 +302,7 @@ impl DepthBuffer {
             let point_y = point.y.round() as usize;
             let current_value = points_projection.val_mut(point_x, point_y);
             let better_value = if let Some(val) = current_value {
-                point.z < *val
+                *val - point.z > f64::EPSILON
             } else {
                 true
             };
@@ -347,7 +347,7 @@ impl DepthBuffer {
             // TODO: check if polygon obstructs other polygons?
             self.points_projection
                 .val(point.x, point.y)
-                .map(|point_depth| depth < point_depth)
+                .map(|point_depth| point_depth - depth > f64::EPSILON)
                 .unwrap_or(false)
         })
     }
@@ -1060,7 +1060,7 @@ impl ImageWriter {
                 let dst_y = (projection.y.round() as usize).clamp(0, height - 1);
                 let current_value = output_map.val_mut(dst_x, dst_y);
                 let better_value = if let Some(val) = current_value {
-                    point_depth > *val
+                    point_depth - *val > f64::EPSILON
                 } else {
                     true
                 };
@@ -1103,7 +1103,7 @@ impl MeshWriter for ImageWriter {
         polygon_projection.iter().for_each(|(point, new_value)| {
             let current_value = self.output_map.val_mut(point.x, point.y);
             let better_value = if let Some(val) = current_value {
-                new_value > *val
+                new_value - *val > f64::EPSILON
             } else {
                 true
             };
