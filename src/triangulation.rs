@@ -1,11 +1,7 @@
 use crate::data::{Grid, Point2D};
 use std::{
     fmt,
-    sync::{
-        atomic::{AtomicUsize, Ordering as AtomicOrdering},
-        mpsc::channel,
-    },
-    thread,
+    sync::atomic::{AtomicUsize, Ordering as AtomicOrdering},
 };
 
 use nalgebra::{
@@ -513,35 +509,63 @@ impl Camera {
 
 #[derive(Clone, Debug)]
 struct AverageTrack {
-    points: Vec<Option<(Point2D<f64>, usize)>>,
+    points: Vec<Option<(Point2D<u64>, usize)>>,
     count: usize,
 }
 
 impl AverageTrack {
-    fn from_track(track: &Track) -> AverageTrack {
+    fn new(images_count: usize) -> AverageTrack {
         AverageTrack {
-            points: track
-                .points
-                .iter()
-                .map(|point| point.map(|point| (Point2D::new(point.x as f64, point.y as f64), 1)))
-                .collect::<Vec<_>>(),
-            count: 1,
+            points: vec![None; images_count],
+            count: 0,
         }
     }
 
-    fn merge(&mut self, src_track_averaged: AverageTrack) {
-        self.points
+    fn add_track(&self, src_track: &Track) -> AverageTrack {
+        let mut points: Vec<Option<(Point2D<u64>, usize)>> = vec![None; self.points.len()];
+        points
             .iter_mut()
             .enumerate()
             .for_each(|(point_i, dst_point)| {
-                let src_point = src_track_averaged.points[point_i];
+                let src_point = src_track.points[point_i];
 
                 let merged_point = if let Some(src_point) = src_point {
                     if let Some(dst_point) = dst_point {
                         Some((
                             Point2D::new(
-                                src_point.0.x + dst_point.0.x,
-                                src_point.0.y + dst_point.0.y,
+                                dst_point.0.x + src_point.x as u64,
+                                dst_point.0.y + src_point.y as u64,
+                            ),
+                            dst_point.1 + 1,
+                        ))
+                    } else {
+                        Some((Point2D::new(src_point.x as u64, src_point.y as u64), 1))
+                    }
+                } else {
+                    return;
+                };
+                *dst_point = merged_point;
+            });
+        AverageTrack {
+            points,
+            count: self.count + 1,
+        }
+    }
+
+    fn add_average_track(&self, src_track: &AverageTrack) -> AverageTrack {
+        let mut points: Vec<Option<(Point2D<u64>, usize)>> = vec![None; self.points.len()];
+        points
+            .iter_mut()
+            .enumerate()
+            .for_each(|(point_i, dst_point)| {
+                let src_point = src_track.points[point_i];
+
+                let merged_point = if let Some(src_point) = src_point {
+                    if let Some(dst_point) = dst_point {
+                        Some((
+                            Point2D::new(
+                                dst_point.0.x + src_point.0.x,
+                                dst_point.0.y + src_point.0.y,
                             ),
                             src_point.1 + dst_point.1,
                         ))
@@ -553,7 +577,10 @@ impl AverageTrack {
                 };
                 *dst_point = merged_point;
             });
-        self.count += src_track_averaged.count;
+        AverageTrack {
+            points,
+            count: self.count + src_track.count,
+        }
     }
 
     fn to_track(&self) -> Track {
@@ -563,8 +590,8 @@ impl AverageTrack {
             .map(|point| {
                 point.map(|(point, count)| {
                     Point2D::new(
-                        (point.x / count as f64) as u32,
-                        (point.y / count as f64) as u32,
+                        (point.x / count as u64) as u32,
+                        (point.y / count as u64) as u32,
                     )
                 })
             })
@@ -1443,7 +1470,8 @@ impl PerspectiveTriangulation {
         } else {
             return Ok(());
         };
-        let max_dimension = shape.0.max(shape.1);
+        let (width, height) = shape;
+        let max_dimension = width.max(height);
         let search_radius = if max_dimension > TRACKS_RADIUS_DENOMINATOR {
             MERGE_TRACKS_SEARCH_RADIUS * max_dimension / TRACKS_RADIUS_DENOMINATOR
         } else {
@@ -1469,108 +1497,86 @@ impl PerspectiveTriangulation {
 
         let points_count = (tracks_index.width() * tracks_index.height()) as f32;
         let counter = AtomicUsize::new(0);
-        let (width, height) = (tracks_index.width(), tracks_index.height());
+        let mut average_tracks_vertical = Grid::new(width, height, None);
 
-        let (sender, receiver) = channel();
-        let collect_handle = thread::spawn(move || {
-            receiver
-                .into_iter()
-                .filter_map(|merged_track: Track| {
-                    if merged_track.points().iter().any(|point| point.is_some()) {
-                        Some(merged_track)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>()
-        });
-        tracks_index.par_iter().try_for_each(
-            |(point_x, point_y, point_tracks)| -> Result<(), TriangulationError> {
+        average_tracks_vertical
+            .par_iter_mut()
+            .for_each(|(point_x, point_y, average_vertical)| {
                 if let Some(pl) = progress_listener {
-                    let value = 0.1
-                        + 0.8
+                    let value = 0.05
+                        + 0.6
+                            * (counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / points_count);
+                    pl.report_status(value);
+                }
+                let min_y = point_y.saturating_sub(search_radius);
+                let max_y = (point_y + search_radius).min(height);
+                let area_tracks_vertical = (min_y..max_y)
+                    .map(|y| {
+                        tracks_index
+                            .val(point_x, y)
+                            .iter()
+                            .filter_map(|point_track| {
+                                let track = &self.tracks[*point_track];
+                                if track.points.is_empty() {
+                                    return None;
+                                }
+                                Some(track)
+                            })
+                            .fold(AverageTrack::new(self.images_count), |a, b| a.add_track(b))
+                    })
+                    .fold(AverageTrack::new(self.images_count), |a, b| {
+                        a.add_average_track(&b)
+                    });
+                *average_vertical = if area_tracks_vertical.count > 0 {
+                    Some(area_tracks_vertical)
+                } else {
+                    None
+                };
+            });
+
+        let counter = AtomicUsize::new(0);
+        self.tracks = tracks_index
+            .par_iter()
+            .filter_map(|(point_x, point_y, point_tracks)| {
+                if let Some(pl) = progress_listener {
+                    let value = 0.65
+                        + 0.35
                             * (counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / points_count);
                     pl.report_status(value);
                 }
                 let min_x = point_x.saturating_sub(search_radius);
-                let min_y = point_y.saturating_sub(search_radius);
                 let max_x = (point_x + search_radius).min(width);
-                let max_y = (point_y + search_radius).min(height);
-                // TODO 0.20: precompute averages vertically, then horizontally (like gauss blur)
-                let area_tracks = (min_y..max_y)
-                    .flat_map(|y| {
-                        (min_x..max_x)
-                            .flat_map(|x| {
-                                tracks_index
-                                    .val(x, y)
-                                    .iter()
-                                    .filter_map(|point_track| {
-                                        if self.tracks[*point_track].points.is_empty() {
-                                            return None;
-                                        }
-                                        Some(*point_track)
-                                    })
-                                    .collect::<Vec<_>>()
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                    .collect::<Vec<_>>();
-                let average_area_track = self.average_tracks(area_tracks.as_slice());
+                let average_area_track = (min_x..max_x)
+                    .flat_map(|x| average_tracks_vertical.val(x, point_y))
+                    .fold(AverageTrack::new(self.images_count), |a, b| {
+                        a.add_average_track(&b)
+                    });
+                if average_area_track.count == 0 {
+                    return None;
+                }
+                let average_area_track = average_area_track.to_track();
                 let can_merge = point_tracks.iter().all(|track_i| {
                     let track = &self.tracks[*track_i];
                     !track.points.is_empty()
                         && track.can_merge(&average_area_track, max_distance_sqr)
-                });
+                }) && !point_tracks.is_empty();
 
-                let average_point_track = self.average_tracks(&point_tracks);
+                let average_point_track = point_tracks
+                    .iter()
+                    .map(|track_i| &self.tracks[*track_i])
+                    .fold(AverageTrack::new(self.images_count), |a, b| a.add_track(b))
+                    .to_track();
                 if can_merge {
-                    sender
-                        .send(average_point_track)
-                        .map_err(|_| "Failed to send result")?;
+                    Some(average_point_track)
+                } else {
+                    None
                 }
-                Ok(())
-            },
-        )?;
-        drop(sender);
-
-        self.tracks = collect_handle.join().map_err(|_| "Failed to join thread")?;
+            })
+            .collect::<Vec<_>>();
 
         self.triangulate_tracks();
 
         Ok(())
-    }
-
-    fn average_tracks(&self, tracks: &[usize]) -> Track {
-        let mut result = Track::new(self.images_count);
-        result
-            .points
-            .iter_mut()
-            .enumerate()
-            .for_each(|(camera_i, sum_point)| {
-                let sum = tracks
-                    .iter()
-                    .filter_map(|track_i| {
-                        let track = &self.tracks[*track_i];
-                        let point = track.points[camera_i]?;
-                        let point = Point2D::new(point.x as usize, point.y as usize);
-                        Some((point, 1))
-                    })
-                    .reduce(|acc, point| {
-                        (
-                            Point2D::new(acc.0.x + point.0.x, acc.0.y + point.0.y),
-                            acc.1 + point.1,
-                        )
-                    });
-
-                if let Some((point, count)) = sum {
-                    if count > 0 {
-                        let average_point =
-                            Point2D::new((point.x / count) as u32, (point.y / count) as u32);
-                        *sum_point = Some(average_point);
-                    }
-                }
-            });
-        result
     }
 
     fn bundle_adjustment<PL: ProgressListener>(
