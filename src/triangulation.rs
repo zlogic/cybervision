@@ -18,8 +18,8 @@ use rayon::prelude::*;
 
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 100;
 const EXTEND_TRACKS_SEARCH_RADIUS: usize = 3;
-const MERGE_TRACKS_SEARCH_RADIUS: usize = 1;
-const MERGE_TRACKS_MAX_DISTANCE: usize = 5;
+const MERGE_TRACKS_SEARCH_RADIUS: usize = 2;
+const MERGE_TRACKS_MAX_DISTANCE: usize = 10;
 const TRACKS_RADIUS_DENOMINATOR: usize = 1000;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
@@ -27,13 +27,13 @@ const RANSAC_K: usize = 100_000;
 const MIN_INLIER_DISTANCE_SQR: usize = 400;
 const MIN_INLIER_DISTANCE_DENOMINATOR: usize = 1000;
 const RANSAC_INLIERS_T: f64 = 25.0 / 1000.0;
-const RANSAC_T: f64 = 150.0 / 1000.0;
-const RANSAC_D: usize = 200;
+const RANSAC_T: f64 = 75.0 / 1000.0;
+const RANSAC_D: usize = 100;
 const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 1000;
 // Lower this value to get more points (especially on far distance).
 const MIN_ANGLE_BETWEEN_RAYS: f64 = (0.5 / 180.0) * std::f64::consts::PI;
-const MIN_TRACK_POINTS: usize = 3;
+const MIN_TRACK_POINTS: usize = 2;
 
 pub struct Surface {
     tracks: Vec<Track>,
@@ -1523,9 +1523,10 @@ impl PerspectiveTriangulation {
                         && track.can_merge(&average_area_track, max_distance_sqr)
                 });
 
+                let average_point_track = self.average_tracks(&point_tracks);
                 if can_merge {
                     sender
-                        .send(average_area_track)
+                        .send(average_point_track)
                         .map_err(|_| "Failed to send result")?;
                 }
                 Ok(())
