@@ -1,5 +1,12 @@
 use crate::data::{Grid, Point2D};
-use std::{fmt, sync::atomic::AtomicUsize, sync::atomic::Ordering as AtomicOrdering};
+use std::{
+    fmt,
+    sync::{
+        atomic::{AtomicUsize, Ordering as AtomicOrdering},
+        mpsc::channel,
+    },
+    thread,
+};
 
 use nalgebra::{
     DMatrix, Matrix2x3, Matrix2x6, Matrix3, Matrix3x4, Matrix3x6, Matrix6, MatrixXx1, MatrixXx4,
@@ -12,7 +19,7 @@ use rayon::prelude::*;
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 100;
 const EXTEND_TRACKS_SEARCH_RADIUS: usize = 3;
 const MERGE_TRACKS_SEARCH_RADIUS: usize = 1;
-const MERGE_TRACKS_MAX_DISTANCE: usize = 15;
+const MERGE_TRACKS_MAX_DISTANCE: usize = 5;
 const TRACKS_RADIUS_DENOMINATOR: usize = 1000;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
@@ -208,8 +215,7 @@ impl Triangulation {
         if self.affine.is_some() {
             Ok(())
         } else if let Some(perspective) = &mut self.perspective {
-            perspective.merge_tracks(image_index, progress_listener);
-            Ok(())
+            perspective.merge_tracks(image_index, progress_listener)
         } else {
             Err("Triangulation not initialized".into())
         }
@@ -709,9 +715,8 @@ impl PerspectiveTriangulation {
             self.projections[initial_images.1] = Some(p2);
             self.cameras[initial_images.1] = Some(camera2);
 
-            [initial_images.0, initial_images.1].iter().for_each(|img| {
-                self.merge_tracks::<PL>(*img, None);
-            });
+            self.merge_tracks(initial_images.0, progress_listener)?;
+            self.merge_tracks(initial_images.1, progress_listener)?;
 
             self.remaining_images
                 .retain(|i| *i != initial_images.0 && *i != initial_images.1);
@@ -762,7 +767,7 @@ impl PerspectiveTriangulation {
         };
         self.remaining_images.retain(|i| *i != best_candidate);
 
-        self.merge_tracks::<PL>(best_candidate, None);
+        self.merge_tracks(best_candidate, progress_listener)?;
 
         let k2 = if let Some(calibration) = self.calibration[best_candidate] {
             calibration
@@ -1433,11 +1438,11 @@ impl PerspectiveTriangulation {
         &mut self,
         image_i: usize,
         progress_listener: Option<&PL>,
-    ) {
+    ) -> Result<(), TriangulationError> {
         let shape = if let Some(shape) = self.image_shapes[image_i] {
             shape
         } else {
-            return;
+            return Ok(());
         };
         let max_dimension = shape.0.max(shape.1);
         let search_radius = if max_dimension > TRACKS_RADIUS_DENOMINATOR {
@@ -1459,160 +1464,113 @@ impl PerspectiveTriangulation {
                     .push(track_i);
             }
         });
-        let conflicting_tracks = tracks_index
-            .par_iter_mut()
-            .filter_map(|(_x, _y, tracks)| {
-                let can_merge = tracks.iter().enumerate().all(|(track_i, track)| {
-                    let check_track = &self.tracks[*track];
-                    tracks.iter().skip(track_i + 1).all(|other_track| {
-                        check_track.can_merge(&self.tracks[*other_track], max_distance_sqr)
-                    })
-                });
-                if !can_merge {
-                    tracks.clear();
-                    Some(tracks)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-        conflicting_tracks.into_iter().for_each(|tracks| {
-            tracks
-                .iter()
-                .for_each(|track_i| self.tracks[*track_i].points.clear())
-        });
         if let Some(pl) = progress_listener {
-            pl.report_status(0.1);
+            pl.report_status(0.05);
         }
 
         let points_count = (tracks_index.width() * tracks_index.height()) as f32;
         let counter = AtomicUsize::new(0);
-        let merge_tracks = tracks_index
-            .par_iter()
-            .flat_map(|(point_x, point_y, point_tracks)| {
+        let (width, height) = (tracks_index.width(), tracks_index.height());
+
+        let (sender, receiver) = channel();
+        let collect_handle = thread::spawn(move || {
+            receiver
+                .into_iter()
+                .filter_map(|merged_track: Track| {
+                    if merged_track.points().iter().any(|point| point.is_some()) {
+                        Some(merged_track)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        });
+        tracks_index.par_iter().try_for_each(
+            |(point_x, point_y, point_tracks)| -> Result<(), TriangulationError> {
                 if let Some(pl) = progress_listener {
                     let value = 0.1
                         + 0.8
                             * (counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / points_count);
                     pl.report_status(value);
                 }
-                point_tracks
+                let min_x = point_x.saturating_sub(search_radius);
+                let min_y = point_y.saturating_sub(search_radius);
+                let max_x = (point_x + search_radius).min(width);
+                let max_y = (point_y + search_radius).min(height);
+                // TODO 0.20: precompute averages vertically, then horizontally (like gauss blur)
+                let area_tracks = (min_y..max_y)
+                    .flat_map(|y| {
+                        (min_x..max_x)
+                            .flat_map(|x| {
+                                tracks_index
+                                    .val(x, y)
+                                    .iter()
+                                    .filter_map(|point_track| {
+                                        if self.tracks[*point_track].points.is_empty() {
+                                            return None;
+                                        }
+                                        Some(*point_track)
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+                let average_area_track = self.average_tracks(area_tracks.as_slice());
+                let can_merge = point_tracks.iter().all(|track_i| {
+                    let track = &self.tracks[*track_i];
+                    !track.points.is_empty()
+                        && track.can_merge(&average_area_track, max_distance_sqr)
+                });
+
+                if can_merge {
+                    sender
+                        .send(average_area_track)
+                        .map_err(|_| "Failed to send result")?;
+                }
+                Ok(())
+            },
+        )?;
+        drop(sender);
+
+        self.tracks = collect_handle.join().map_err(|_| "Failed to join thread")?;
+
+        self.triangulate_tracks();
+
+        Ok(())
+    }
+
+    fn average_tracks(&self, tracks: &[usize]) -> Track {
+        let mut result = Track::new(self.images_count);
+        result
+            .points
+            .iter_mut()
+            .enumerate()
+            .for_each(|(camera_i, sum_point)| {
+                let sum = tracks
                     .iter()
                     .filter_map(|track_i| {
                         let track = &self.tracks[*track_i];
-                        if track.points.is_empty() {
-                            return None;
-                        }
-                        let min_x = point_x.saturating_sub(search_radius);
-                        let min_y = point_y.saturating_sub(search_radius);
-                        let max_x = (point_x + search_radius).min(tracks_index.width());
-                        let max_y = (point_y + search_radius).min(tracks_index.height());
-                        let mut min_distance = None;
-                        let mut best_match = None;
-                        for y in min_y..max_y {
-                            for x in min_x..max_x {
-                                (min_distance, best_match) = tracks_index
-                                    .val(x, y)
-                                    .iter()
-                                    .filter_map(|potential_match| {
-                                        if potential_match == track_i {
-                                            return None;
-                                        }
-                                        let potential_match_track = &self.tracks[*potential_match];
-                                        if potential_match_track.points.is_empty() {
-                                            return None;
-                                        }
-                                        if !track.can_merge(potential_match_track, max_distance_sqr)
-                                        {
-                                            return None;
-                                        }
-                                        let dx = x.max(point_x) - x.min(point_x);
-                                        let dy = y.max(point_y) - y.min(point_y);
-                                        let distance = dx * dx + dy * dy;
-                                        Some((distance, *potential_match))
-                                    })
-                                    .fold((min_distance, best_match), |a, b| {
-                                        if a.0.map_or(true, |min_distance| b.0 < min_distance) {
-                                            (Some(b.0), Some(b.1))
-                                        } else {
-                                            a
-                                        }
-                                    });
-                            }
-                        }
-                        let src_track = track_i;
-                        let dst_track = best_match?;
-                        let (src_track, dst_track) =
-                            (*src_track.min(&dst_track), *src_track.max(&dst_track));
-                        Some((src_track, dst_track))
+                        let point = track.points[camera_i]?;
+                        let point = Point2D::new(point.x as usize, point.y as usize);
+                        Some((point, 1))
                     })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        drop(tracks_index);
+                    .reduce(|acc, point| {
+                        (
+                            Point2D::new(acc.0.x + point.0.x, acc.0.y + point.0.y),
+                            acc.1 + point.1,
+                        )
+                    });
 
-        let mut averaged_tracks = self
-            .tracks
-            .par_iter()
-            .map(AverageTrack::from_track)
-            .collect::<Vec<_>>();
-        let mut remapped_tracks = vec![None; self.tracks.len()];
-
-        let merge_tracks_count = merge_tracks.len() as f32;
-        let counter = AtomicUsize::new(0);
-        merge_tracks
-            .into_iter()
-            .for_each(|(src_track_i, dst_track_i)| {
-                if let Some(pl) = progress_listener {
-                    let value = 0.9
-                        + 0.1
-                            * (counter.fetch_add(1, AtomicOrdering::Relaxed) as f32
-                                / merge_tracks_count);
-                    pl.report_status(value);
-                }
-                let src_track = averaged_tracks[src_track_i].to_owned();
-                if src_track.points.is_empty() {
-                    return;
-                }
-                let mut dst_track_i = dst_track_i;
-                while averaged_tracks[dst_track_i].points.is_empty() {
-                    // Can this enter an infinite loop?
-                    if let Some(new_dst) = remapped_tracks[dst_track_i] {
-                        dst_track_i = new_dst;
-                    } else {
-                        break;
-                    }
-                }
-                remapped_tracks[src_track_i] = Some(dst_track_i);
-                if src_track_i == dst_track_i {
-                    return;
-                }
-                let dst_track = &mut averaged_tracks[dst_track_i];
-                if dst_track.points.is_empty() {
-                    return;
-                }
-                dst_track.merge(src_track);
-                self.tracks[src_track_i].points.clear();
-                averaged_tracks[src_track_i].points.clear();
-            });
-        self.tracks
-            .iter_mut()
-            .enumerate()
-            .for_each(|(track_i, track)| {
-                let averaged_track = &averaged_tracks[track_i];
-                if averaged_track.count > 1 {
-                    // After this is completed, need to re-triangulate points.
-                    let averaged_track = averaged_track.to_track();
-                    if track.can_merge(&averaged_track, max_distance_sqr) {
-                        *track = averaged_track;
-                    } else {
-                        track.points.clear();
+                if let Some((point, count)) = sum {
+                    if count > 0 {
+                        let average_point =
+                            Point2D::new((point.x / count) as u32, (point.y / count) as u32);
+                        *sum_point = Some(average_point);
                     }
                 }
             });
-        self.tracks.retain(|track| !track.points.is_empty());
-
-        self.triangulate_tracks();
+        result
     }
 
     fn bundle_adjustment<PL: ProgressListener>(
