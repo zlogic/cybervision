@@ -33,7 +33,6 @@ const RANSAC_D_EARLY_EXIT: usize = 100_000;
 const RANSAC_CHECK_INTERVAL: usize = 1000;
 // Lower this value to get more points (especially on far distance).
 const MIN_ANGLE_BETWEEN_RAYS: f64 = (0.5 / 180.0) * std::f64::consts::PI;
-const MIN_TRACK_POINTS: usize = 2;
 
 pub struct Surface {
     tracks: Vec<Track>,
@@ -1596,24 +1595,12 @@ impl PerspectiveTriangulation {
         // For an angle to be larger than a threshold, its cosine needs to be smaller than the
         // threshold.
         let angle_cos_threshold = MIN_ANGLE_BETWEEN_RAYS.cos();
-        let min_matches_count = cameras.len().min(MIN_TRACK_POINTS);
         self.tracks.par_iter_mut().for_each(|track| {
             let point3d = if let Some(point3d) = track.point3d {
                 point3d
             } else {
                 return;
             };
-            // Clear points which don't have enough matches.
-            if track
-                .points()
-                .iter()
-                .filter(|point| point.is_some())
-                .count()
-                < min_matches_count
-            {
-                track.point3d = None;
-                return;
-            }
             // Clear points which are in the back of the camers.
             if track
                 .points()
