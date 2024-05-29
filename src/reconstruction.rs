@@ -276,7 +276,16 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
             f_matrices_i.push(f);
         }
         f_matrices.push(f_matrices_i);
+
+        reconstruction_task.merge_tracks(img_i, img1_filename.as_str())?;
     }
+    reconstruction_task.merge_tracks(
+        images_count - 1,
+        reconstruction_task.img_filenames[images_count - 1]
+            .to_owned()
+            .as_str(),
+    )?;
+
     let linked_images = match reconstruction_task.recover_camera_poses() {
         Ok(img_index) => img_index,
         Err(err) => {
@@ -603,6 +612,28 @@ impl ImageReconstruction {
         Ok(result?)
     }
 
+    fn merge_tracks(
+        &mut self,
+        img_i: usize,
+        img_filename: &str,
+    ) -> Result<(), triangulation::TriangulationError> {
+        let start_time = SystemTime::now();
+
+        let pb = new_progress_bar(true);
+        self.triangulation.merge_tracks(img_i, Some(&pb))?;
+        pb.finish_and_clear();
+
+        if let Ok(t) = start_time.elapsed() {
+            println!(
+                "Merged tracks for {} in {:.3} seconds",
+                img_filename,
+                t.as_secs_f32()
+            );
+        }
+
+        Ok(())
+    }
+
     fn recover_camera_poses(&mut self) -> Result<Vec<usize>, triangulation::TriangulationError> {
         let mut camera_order = vec![];
         loop {
@@ -702,19 +733,7 @@ impl ImageReconstruction {
                 }
             }
 
-            let start_time = SystemTime::now();
-
-            let pb = new_progress_bar(true);
-            let _ = self.triangulation.merge_tracks(img1_index, Some(&pb));
-            pb.finish_and_clear();
-
-            if let Ok(t) = start_time.elapsed() {
-                println!(
-                    "Merged tracks for {} in {:.3} seconds",
-                    img1_filename,
-                    t.as_secs_f32()
-                );
-            }
+            self.merge_tracks(img1_index, img1_filename)?;
         }
 
         Ok(())

@@ -210,7 +210,8 @@ impl Triangulation {
         if self.affine.is_some() {
             Ok(())
         } else if let Some(perspective) = &mut self.perspective {
-            perspective.merge_tracks(image_index, progress_listener)
+            perspective.merge_tracks(image_index, progress_listener);
+            Ok(())
         } else {
             Err("Triangulation not initialized".into())
         }
@@ -741,9 +742,6 @@ impl PerspectiveTriangulation {
             self.projections[initial_images.1] = Some(p2);
             self.cameras[initial_images.1] = Some(camera2);
 
-            self.merge_tracks(initial_images.0, progress_listener)?;
-            self.merge_tracks(initial_images.1, progress_listener)?;
-
             self.remaining_images
                 .retain(|i| *i != initial_images.0 && *i != initial_images.1);
 
@@ -792,8 +790,6 @@ impl PerspectiveTriangulation {
             return Ok(vec![]);
         };
         self.remaining_images.retain(|i| *i != best_candidate);
-
-        self.merge_tracks(best_candidate, progress_listener)?;
 
         let k2 = if let Some(calibration) = self.calibration[best_candidate] {
             calibration
@@ -1464,11 +1460,11 @@ impl PerspectiveTriangulation {
         &mut self,
         image_i: usize,
         progress_listener: Option<&PL>,
-    ) -> Result<(), TriangulationError> {
+    ) {
         let shape = if let Some(shape) = self.image_shapes[image_i] {
             shape
         } else {
-            return Ok(());
+            return;
         };
         let (width, height) = shape;
         let max_dimension = width.max(height);
@@ -1549,7 +1545,7 @@ impl PerspectiveTriangulation {
                 let average_area_track = (min_x..max_x)
                     .flat_map(|x| average_tracks_vertical.val(x, point_y))
                     .fold(AverageTrack::new(self.images_count), |a, b| {
-                        a.add_average_track(&b)
+                        a.add_average_track(b)
                     });
                 if average_area_track.count == 0 {
                     return None;
@@ -1575,8 +1571,6 @@ impl PerspectiveTriangulation {
             .collect::<Vec<_>>();
 
         self.triangulate_tracks();
-
-        Ok(())
     }
 
     fn bundle_adjustment<PL: ProgressListener>(
