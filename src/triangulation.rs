@@ -1540,6 +1540,9 @@ impl PerspectiveTriangulation {
                             * (counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / points_count);
                     pl.report_status(value);
                 }
+                if point_tracks.is_empty() {
+                    return None;
+                }
                 let min_x = point_x.saturating_sub(search_radius);
                 let max_x = (point_x + search_radius).min(width);
                 let average_area_track = (min_x..max_x)
