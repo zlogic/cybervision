@@ -808,7 +808,6 @@ impl PerspectiveTriangulation {
         self.cameras[best_candidate] = Some(camera2);
         self.projections[best_candidate] = Some(projection2);
 
-        self.triangulate_tracks();
         Ok(vec![best_candidate])
     }
 

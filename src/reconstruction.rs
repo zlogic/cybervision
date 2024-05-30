@@ -276,15 +276,7 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
             f_matrices_i.push(f);
         }
         f_matrices.push(f_matrices_i);
-
-        reconstruction_task.merge_tracks(img_i, img1_filename.as_str())?;
     }
-    reconstruction_task.merge_tracks(
-        images_count - 1,
-        reconstruction_task.img_filenames[images_count - 1]
-            .to_owned()
-            .as_str(),
-    )?;
 
     let linked_images = match reconstruction_task.recover_camera_poses() {
         Ok(img_index) => img_index,
@@ -665,6 +657,15 @@ impl ImageReconstruction {
                     t.as_secs_f32()
                 );
             }
+
+            images.iter().try_for_each(
+                |img_i| -> Result<(), triangulation::TriangulationError> {
+                    let img_filename = self.img_filenames[*img_i].to_owned();
+                    self.merge_tracks(*img_i, img_filename.as_str())?;
+                    Ok(())
+                },
+            )?;
+
             camera_order.append(&mut images);
         }
 
