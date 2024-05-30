@@ -20,8 +20,6 @@ const TRACKS_RADIUS_DENOMINATOR: usize = 1000;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 100_000;
-const MIN_INLIER_DISTANCE_SQR: usize = 400;
-const MIN_INLIER_DISTANCE_DENOMINATOR: usize = 1000;
 const RANSAC_INLIERS_T: f64 = 25.0 / 1000.0;
 const RANSAC_T: f64 = 75.0 / 1000.0;
 const RANSAC_D: usize = 100;
@@ -1096,11 +1094,8 @@ impl PerspectiveTriangulation {
                         pl.report_status(0.02 + 0.98 * value);
                     }
 
-                    let inliers = PerspectiveTriangulation::choose_inliers(
-                        linked_tracks.as_slice(),
-                        image_index,
-                        max_dimension,
-                    );
+                    let inliers =
+                        PerspectiveTriangulation::choose_inliers(linked_tracks.as_slice());
 
                     PerspectiveTriangulation::recover_pose_from_points(
                         image_index,
@@ -1285,39 +1280,13 @@ impl PerspectiveTriangulation {
             .collect()
     }
 
-    fn choose_inliers(
-        linked_tracks: &[Track],
-        image_index: usize,
-        max_dimension: usize,
-    ) -> Vec<Track> {
+    fn choose_inliers(linked_tracks: &[Track]) -> Vec<Track> {
         let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
         let mut inliers: Vec<Track> = Vec::with_capacity(RANSAC_N);
-        let min_inlier_distance = if max_dimension > MIN_INLIER_DISTANCE_DENOMINATOR {
-            MIN_INLIER_DISTANCE_SQR * max_dimension / MIN_INLIER_DISTANCE_DENOMINATOR
-        } else {
-            MIN_INLIER_DISTANCE_SQR
-        };
         while inliers.len() < RANSAC_N {
             let next_index = rng.gen_range(0..linked_tracks.len());
             let next_match = &linked_tracks[next_index];
-            let p1 = if let Some(point2d) = next_match.get(image_index) {
-                point2d
-            } else {
-                continue;
-            };
-            let close_to_existing = inliers.iter().any(|check_match| {
-                let p2 = if let Some(point2d) = check_match.get(image_index) {
-                    point2d
-                } else {
-                    return false;
-                };
-                let dx = p1.x.max(p2.x).saturating_sub(p1.x.min(p2.x)) as usize;
-                let dy = p1.y.max(p2.y).saturating_sub(p1.y.min(p2.y)) as usize;
-                (dx * dx + dy * dy) < min_inlier_distance
-            });
-            if !close_to_existing {
-                inliers.push(next_match.to_owned());
-            }
+            inliers.push(next_match.to_owned());
         }
         inliers
     }
