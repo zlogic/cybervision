@@ -658,14 +658,6 @@ impl ImageReconstruction {
                 );
             }
 
-            images.iter().try_for_each(
-                |img_i| -> Result<(), triangulation::TriangulationError> {
-                    let img_filename = self.img_filenames[*img_i].to_owned();
-                    self.merge_tracks(*img_i, img_filename.as_str())?;
-                    Ok(())
-                },
-            )?;
-
             camera_order.append(&mut images);
         }
 

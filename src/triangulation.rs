@@ -741,7 +741,7 @@ impl PerspectiveTriangulation {
             let p2 = k2 * p2;
             self.projections[initial_images.1] = Some(p2);
             self.cameras[initial_images.1] = Some(camera2);
-
+            self.triangulate_tracks();
             self.remaining_images
                 .retain(|i| *i != initial_images.0 && *i != initial_images.1);
 
@@ -808,6 +808,7 @@ impl PerspectiveTriangulation {
         self.cameras[best_candidate] = Some(camera2);
         self.projections[best_candidate] = Some(projection2);
 
+        self.triangulate_tracks();
         Ok(vec![best_candidate])
     }
 
