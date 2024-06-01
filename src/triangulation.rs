@@ -20,10 +20,10 @@ const TRACKS_RADIUS_DENOMINATOR: usize = 1000;
 const PERSPECTIVE_SCALE_THRESHOLD: f64 = 0.0001;
 const RANSAC_N: usize = 3;
 const RANSAC_K: usize = 100_000;
-const RANSAC_INLIERS_T: f64 = 25.0 / 1000.0;
-const RANSAC_T: f64 = 75.0 / 1000.0;
-const RANSAC_D: usize = 100;
-const RANSAC_D_EARLY_EXIT: usize = 100_000;
+const RANSAC_INLIERS_T: f64 = 50.0 / 1000.0;
+const RANSAC_T: f64 = 50.0 / 1000.0;
+const RANSAC_D_PERCENT: usize = 70;
+const RANSAC_D_PERCENT_EARLY_EXIT: usize = 95;
 const RANSAC_CHECK_INTERVAL: usize = 1000;
 // Lower this value to get more points (especially on far distance).
 const MIN_ANGLE_BETWEEN_RAYS: f64 = (0.5 / 180.0) * std::f64::consts::PI;
@@ -1084,6 +1084,9 @@ impl PerspectiveTriangulation {
             }
         };
 
+        let ransac_d = RANSAC_D_PERCENT * linked_tracks.len() / 100;
+        let ransac_d_early_exit = RANSAC_D_PERCENT_EARLY_EXIT * linked_tracks.len() / 100;
+
         for _ in 0..ransac_outer {
             let (camera, count, error) = (0..RANSAC_CHECK_INTERVAL)
                 .par_bridge()
@@ -1133,13 +1136,13 @@ impl PerspectiveTriangulation {
                 .reduce(|| best_result.to_owned(), reduce_best_result);
 
             best_result = (camera, count, error);
-            if count >= RANSAC_D_EARLY_EXIT {
+            if count >= ransac_d_early_exit {
                 break;
             }
         }
 
         let count = best_result.1;
-        if count > RANSAC_D {
+        if count > ransac_d {
             Some(best_result.0)
         } else {
             None
