@@ -687,7 +687,7 @@ impl ImageReconstruction {
                 }
             };
 
-            for (img2_index, img2_filename) in img_filenames.iter().skip(img1_index + 1).enumerate()
+            for (img2_index, img2_filename) in img_filenames.iter().enumerate().skip(img1_index + 1)
             {
                 if !linked_images.contains(&img2_index) {
                     continue;
@@ -701,7 +701,7 @@ impl ImageReconstruction {
                 };
 
                 let f_matrices_i = f_matrices[img1_index].to_owned();
-                let f = if let Some(f) = f_matrices_i[img2_index] {
+                let f = if let Some(f) = f_matrices_i[img2_index - 1 - img1_index] {
                     f
                 } else {
                     // No matches between images, skip correlation.
@@ -716,7 +716,7 @@ impl ImageReconstruction {
                     &img1,
                     &img2,
                     img1_index,
-                    img1_index + 1 + img2_index,
+                    img2_index,
                     f,
                 ) {
                     Ok(_) => {}
