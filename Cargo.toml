@@ -15,7 +15,7 @@ indicatif = { version = "0.17", default_features = false }
 rayon = "*"
 rand = { version = "0.8", default_features = false, features = ["std", "std_rng", "small_rng"] }
 nalgebra = { version = "0.32", default_features = false, features = ["std", "macros"] }
-spade = { version = "2.8", default_features = false, features = ["std"] }
+spade = { version = "2.9", default_features = false, features = ["std"] }
 roots = { version = "0.0.8", default-features = false }
 kamadak-exif = { version = "0.5", default-features = false }
 
