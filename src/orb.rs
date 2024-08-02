@@ -120,7 +120,7 @@ fn find_fast_keypoints<PL: ProgressListener>(
                 pl.report_status(value);
             }
             let mut threshold_min = FAST_THRESHOLD as i16;
-            let mut threshold_max = std::u8::MAX as i16;
+            let mut threshold_max = u8::MAX as i16;
             let mut threshold = (threshold_max + threshold_min) / 2;
             while threshold_max > threshold_min + 1 {
                 if is_keypoint(img, threshold, p.x, p.y) {
@@ -453,8 +453,8 @@ fn is_keypoint(img: &Grid<u8>, threshold: i16, x: usize, y: usize) -> bool {
 }
 
 fn adjust_contrast(img: &mut Grid<u8>) {
-    let mut min: u8 = core::u8::MAX;
-    let mut max: u8 = core::u8::MIN;
+    let mut min: u8 = u8::MAX;
+    let mut max: u8 = u8::MIN;
 
     for (_x, _y, p) in img.iter() {
         min = min.min(*p);
@@ -465,7 +465,7 @@ fn adjust_contrast(img: &mut Grid<u8>) {
         return;
     }
 
-    let coeff = core::u8::MAX as f32 / ((max - min) as f32);
+    let coeff = u8::MAX as f32 / ((max - min) as f32);
     for (_x, _y, p) in img.iter_mut() {
         *p = (coeff * ((*p - min) as f32)).round() as u8;
     }
