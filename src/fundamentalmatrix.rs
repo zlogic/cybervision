@@ -526,13 +526,13 @@ where
     NP: Dim + DimMin<NR> + DimMin<NP, Output = NP>,
     RF: Fn(&OVector<f64, NP>) -> OVector<f64, NR>,
     JF: Fn(&OVector<f64, NP>) -> OMatrix<f64, NR, NP>,
-    DefaultAllocator: Allocator<f64, NR, NP>
-        + Allocator<f64, NP>
-        + Allocator<f64, DimMinimum<NP, NP>>
-        + Allocator<f64, DimMinimum<NP, NP>, NP>
-        + Allocator<f64, NR>
-        + Allocator<f64, NR, NP>
-        + Allocator<(usize, usize), NP>,
+    DefaultAllocator: Allocator<NR, NP>
+        + Allocator<NP>
+        + Allocator<DimMinimum<NP, NP>>
+        + Allocator<DimMinimum<NP, NP>, NP>
+        + Allocator<NR>
+        + Allocator<NR, NP>
+        + Allocator<NP>,
 {
     const MAX_ITERATIONS: usize = 1000;
     const TAU: f64 = 1E-3;
