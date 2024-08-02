@@ -192,30 +192,30 @@ impl Drop for DeviceContext {
 impl Device {
     fn new(entry: &ash::Entry, max_buffer_size: usize) -> Result<Device, GpuError> {
         // Init adapter.
-        let instance = unsafe { Device::init_vk(entry)? };
+        let instance = unsafe { Self::init_vk(entry)? };
         let instance = ScopeRollback::new(instance, |instance| unsafe {
             instance.destroy_instance(None)
         });
         let (physical_device, name, compute_queue_index) =
-            unsafe { Device::find_device(&instance, max_buffer_size)? };
+            unsafe { Self::find_device(&instance, max_buffer_size)? };
         let name = name.to_string();
         let device =
-            unsafe { Device::create_device(&instance, physical_device, compute_queue_index)? };
+            unsafe { Self::create_device(&instance, physical_device, compute_queue_index)? };
         let device = ScopeRollback::new(device, |device| unsafe { device.destroy_device(None) });
         let memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
         // Init pipelines and shaders.
-        let descriptor_sets = unsafe { Device::create_descriptor_sets(&device)? };
+        let descriptor_sets = unsafe { Self::create_descriptor_sets(&device)? };
         let descriptor_sets = ScopeRollback::new(descriptor_sets, |descriptor_sets| unsafe {
             descriptor_sets.destroy(&device)
         });
-        let pipelines = unsafe { Device::create_pipelines(&device, &descriptor_sets)? };
+        let pipelines = unsafe { Self::create_pipelines(&device, &descriptor_sets)? };
         let pipelines = ScopeRollback::new(pipelines, |pipelines| unsafe {
             destroy_pipelines(&device, &pipelines)
         });
         let direction = CorrelationDirection::Forward;
         // Init control struct - queues, fences, command buffer.
-        let control = unsafe { Device::create_control(&device, compute_queue_index)? };
+        let control = unsafe { Self::create_control(&device, compute_queue_index)? };
 
         // All is good - consume instances and defuse the scope rollback.
         let pipelines = pipelines.consume();
@@ -277,7 +277,7 @@ impl Device {
             return Ok(());
         }
 
-        let temp_buffer = Device::create_buffer(
+        let temp_buffer = Self::create_buffer(
             &self.device,
             &self.memory_properties,
             size_bytes,
@@ -362,7 +362,7 @@ impl Device {
             return Ok(());
         }
 
-        let temp_buffer = Device::create_buffer(
+        let temp_buffer = Self::create_buffer(
             &self.device,
             &self.memory_properties,
             size_bytes,
@@ -411,7 +411,7 @@ impl Device {
                 {
                     return None;
                 }
-                let queue_index = Device::find_compute_queue(instance, device)?;
+                let queue_index = Self::find_compute_queue(instance, device)?;
 
                 let device_name = props
                     .device_name_as_c_str()
@@ -500,7 +500,7 @@ impl Device {
                 device.destroy_buffer(buffer.buffer, None)
             });
         });
-        let buffer_img = Device::create_buffer(
+        let buffer_img = Self::create_buffer(
             device,
             memory_properties,
             (img1_pixels + img2_pixels) * std::mem::size_of::<f32>(),
@@ -508,7 +508,7 @@ impl Device {
         )?;
         buffers.push(buffer_img);
 
-        let buffer_internal_img1 = Device::create_buffer(
+        let buffer_internal_img1 = Self::create_buffer(
             device,
             memory_properties,
             (img1_pixels * 2) * std::mem::size_of::<f32>(),
@@ -516,7 +516,7 @@ impl Device {
         )?;
         buffers.push(buffer_internal_img1);
 
-        let buffer_internal_img2 = Device::create_buffer(
+        let buffer_internal_img2 = Self::create_buffer(
             device,
             memory_properties,
             (img2_pixels * 2) * std::mem::size_of::<f32>(),
@@ -524,7 +524,7 @@ impl Device {
         )?;
         buffers.push(buffer_internal_img2);
 
-        let buffer_internal_int = Device::create_buffer(
+        let buffer_internal_int = Self::create_buffer(
             device,
             memory_properties,
             max_pixels * 4 * std::mem::size_of::<i32>(),
@@ -532,7 +532,7 @@ impl Device {
         )?;
         buffers.push(buffer_internal_int);
 
-        let buffer_out = Device::create_buffer(
+        let buffer_out = Self::create_buffer(
             device,
             memory_properties,
             img1_pixels * 2 * std::mem::size_of::<i32>(),
@@ -540,7 +540,7 @@ impl Device {
         )?;
         buffers.push(buffer_out);
 
-        let buffer_out_reverse = Device::create_buffer(
+        let buffer_out_reverse = Self::create_buffer(
             device,
             memory_properties,
             img2_pixels * 2 * std::mem::size_of::<i32>(),
@@ -548,7 +548,7 @@ impl Device {
         )?;
         buffers.push(buffer_out_reverse);
 
-        let buffer_out_corr = Device::create_buffer(
+        let buffer_out_corr = Self::create_buffer(
             device,
             memory_properties,
             max_pixels * std::mem::size_of::<f32>(),
@@ -735,7 +735,7 @@ impl Device {
         device: &ash::Device,
         descriptor_sets: &DescriptorSets,
     ) -> Result<HashMap<ShaderModuleType, ShaderPipeline>, GpuError> {
-        let shader_modules = Device::load_shaders(device)?;
+        let shader_modules = Self::load_shaders(device)?;
 
         let main_module_name = c"main";
 
@@ -1079,14 +1079,12 @@ impl ShaderModuleType {
         const SHADER_CROSS_CHECK_FILTER: &[u8] = include_bytes!("shaders/cross_check_filter.spv");
 
         let shader_module_spv = match self {
-            ShaderModuleType::InitOutData => SHADER_INIT_OUT_DATA,
-            ShaderModuleType::PrepareInitialdataSearchdata => SHADER_PREPARE_INITIALDATA_SEARCHDATA,
-            ShaderModuleType::PrepareInitialdataCorrelation => {
-                SHADER_PREPARE_INITIALDATA_CORRELATION
-            }
-            ShaderModuleType::PrepareSearchdata => SHADER_PREPARE_SEARCHDATA,
-            ShaderModuleType::CrossCorrelate => SHADER_CROSS_CORRELATE,
-            ShaderModuleType::CrossCheckFilter => SHADER_CROSS_CHECK_FILTER,
+            Self::InitOutData => SHADER_INIT_OUT_DATA,
+            Self::PrepareInitialdataSearchdata => SHADER_PREPARE_INITIALDATA_SEARCHDATA,
+            Self::PrepareInitialdataCorrelation => SHADER_PREPARE_INITIALDATA_CORRELATION,
+            Self::PrepareSearchdata => SHADER_PREPARE_SEARCHDATA,
+            Self::CrossCorrelate => SHADER_CROSS_CORRELATE,
+            Self::CrossCheckFilter => SHADER_CROSS_CHECK_FILTER,
         };
         let shader_code = ash::util::read_spv(&mut std::io::Cursor::new(shader_module_spv))?;
         let shader_module = device.create_shader_module(
@@ -1192,18 +1190,18 @@ pub enum GpuError {
 impl fmt::Display for GpuError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            GpuError::Internal(msg) => f.write_str(msg),
-            GpuError::Vk(msg, ref e) => {
+            Self::Internal(msg) => f.write_str(msg),
+            Self::Vk(msg, ref e) => {
                 if !msg.is_empty() {
                     write!(f, "Vulkan error: {} ({})", msg, e)
                 } else {
                     write!(f, "Vulkan error: {}", e)
                 }
             }
-            GpuError::Loading(ref e) => {
+            Self::Loading(ref e) => {
                 write!(f, "Failed to init GPU: {}", e)
             }
-            GpuError::Io(ref e) => {
+            Self::Io(ref e) => {
                 write!(f, "IO error: {}", e)
             }
         }
@@ -1213,40 +1211,40 @@ impl fmt::Display for GpuError {
 impl std::error::Error for GpuError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
-            GpuError::Internal(_msg) => None,
-            GpuError::Vk(_msg, ref e) => Some(e),
-            GpuError::Loading(ref e) => Some(e),
-            GpuError::Io(ref e) => Some(e),
+            Self::Internal(_msg) => None,
+            Self::Vk(_msg, ref e) => Some(e),
+            Self::Loading(ref e) => Some(e),
+            Self::Io(ref e) => Some(e),
         }
     }
 }
 
 impl From<&'static str> for GpuError {
     fn from(msg: &'static str) -> GpuError {
-        GpuError::Internal(msg)
+        Self::Internal(msg)
     }
 }
 
 impl From<(&'static str, vk::Result)> for GpuError {
     fn from(e: (&'static str, vk::Result)) -> GpuError {
-        GpuError::Vk(e.0, e.1)
+        Self::Vk(e.0, e.1)
     }
 }
 
 impl From<vk::Result> for GpuError {
     fn from(err: vk::Result) -> GpuError {
-        GpuError::Vk("", err)
+        Self::Vk("", err)
     }
 }
 
 impl From<ash::LoadingError> for GpuError {
     fn from(err: ash::LoadingError) -> GpuError {
-        GpuError::Loading(err)
+        Self::Loading(err)
     }
 }
 
 impl From<io::Error> for GpuError {
     fn from(err: io::Error) -> GpuError {
-        GpuError::Io(err)
+        Self::Io(err)
     }
 }

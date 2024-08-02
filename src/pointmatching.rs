@@ -36,8 +36,7 @@ impl KeypointMatching {
             ProjectionMode::Affine => THRESHOLD_AFFINE,
             ProjectionMode::Perspective => THRESHOLD_PERSPECTIVE,
         };
-        let matches =
-            KeypointMatching::match_points::<PL>(points1, points2, threshold, progress_listener);
+        let matches = Self::match_points::<PL>(points1, points2, threshold, progress_listener);
         KeypointMatching { matches }
     }
 

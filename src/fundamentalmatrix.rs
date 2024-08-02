@@ -162,13 +162,10 @@ impl FundamentalMatrix {
             let next_index = rng.gen_range(0..inliers_limit);
             let next_match = point_matches[next_index];
             let close_to_existing = inliers.iter().any(|check_match| {
-                FundamentalMatrix::dist(next_match.0.x, check_match.0.x) < MIN_INLIER_DISTANCE
-                    || FundamentalMatrix::dist(next_match.0.y, check_match.0.y)
-                        < MIN_INLIER_DISTANCE
-                    || FundamentalMatrix::dist(next_match.1.x, check_match.1.x)
-                        < MIN_INLIER_DISTANCE
-                    || FundamentalMatrix::dist(next_match.1.y, check_match.1.y)
-                        < MIN_INLIER_DISTANCE
+                Self::dist(next_match.0.x, check_match.0.x) < MIN_INLIER_DISTANCE
+                    || Self::dist(next_match.0.y, check_match.0.y) < MIN_INLIER_DISTANCE
+                    || Self::dist(next_match.1.x, check_match.1.x) < MIN_INLIER_DISTANCE
+                    || Self::dist(next_match.1.y, check_match.1.y) < MIN_INLIER_DISTANCE
             });
             if !close_to_existing {
                 inliers.push(next_match);
@@ -184,8 +181,8 @@ impl FundamentalMatrix {
         }
 
         let f = match self.projection {
-            ProjectionMode::Affine => FundamentalMatrix::calculate_model_affine(&inliers),
-            ProjectionMode::Perspective => FundamentalMatrix::calculate_model_perspective(&inliers),
+            ProjectionMode::Affine => Self::calculate_model_affine(&inliers),
+            ProjectionMode::Perspective => Self::calculate_model_perspective(&inliers),
         };
         f.iter()
             .filter_map(|f| self.validate_f(f.to_owned(), &inliers, point_matches))
@@ -202,7 +199,7 @@ impl FundamentalMatrix {
             return None;
         }
         let f = if self.projection == ProjectionMode::Perspective {
-            FundamentalMatrix::optimize_perspective_f(&f, inliers)?
+            Self::optimize_perspective_f(&f, inliers)?
         } else {
             f
         };
@@ -244,8 +241,7 @@ impl FundamentalMatrix {
             return FundamentalMatrixResult { f: res.f, inliers };
         }
 
-        let optimal_f =
-            FundamentalMatrix::optimize_perspective_f(&res.f, inliers.as_slice()).unwrap_or(res.f);
+        let optimal_f = Self::optimize_perspective_f(&res.f, inliers.as_slice()).unwrap_or(res.f);
 
         let inliers = point_matches
             .iter()
@@ -393,20 +389,20 @@ impl FundamentalMatrix {
     }
 
     fn optimize_perspective_f(f: &Matrix3<f64>, inliers: &[Match]) -> Option<Matrix3<f64>> {
-        let f_params = FundamentalMatrix::params_from_perspective_f(f);
+        let f_params = Self::params_from_perspective_f(f);
         let f_residuals = |p: &Vector7<f64>| {
-            let f = FundamentalMatrix::f_from_perspective_params(p);
+            let f = Self::f_from_perspective_params(p);
             let mut residuals = DVector::<f64>::zeros(inliers.len());
             for i in 0..inliers.len() {
-                residuals[i] = FundamentalMatrix::reprojection_error(&f, &inliers[i]);
+                residuals[i] = Self::reprojection_error(&f, &inliers[i]);
             }
             residuals
         };
         let f_jacobian = |p: &Vector7<f64>| {
             let mut jacobian = MatrixXx7::zeros(inliers.len());
-            let f = FundamentalMatrix::f_from_perspective_params(p);
+            let f = Self::f_from_perspective_params(p);
             for (inlier_i, inlier) in inliers.iter().enumerate() {
-                let inlier_jacobian = FundamentalMatrix::f_jacobian(&f, inlier);
+                let inlier_jacobian = Self::f_jacobian(&f, inlier);
                 jacobian
                     .row_mut(inlier_i)
                     .copy_from(&inlier_jacobian.transpose());
@@ -415,7 +411,7 @@ impl FundamentalMatrix {
         };
 
         let f = match least_squares(f_params, f_residuals, f_jacobian) {
-            Ok(f_params) => FundamentalMatrix::f_from_perspective_params(&f_params),
+            Ok(f_params) => Self::f_from_perspective_params(&f_params),
             Err(_) => return None,
         };
 
@@ -454,7 +450,7 @@ impl FundamentalMatrix {
 
     #[inline]
     fn fits_model(&self, f: &Matrix3<f64>, m: &Match) -> Option<f64> {
-        let err = FundamentalMatrix::reprojection_error(f, m);
+        let err = Self::reprojection_error(f, m);
         if !err.is_finite() || err.abs() > self.ransac_t {
             return None;
         }

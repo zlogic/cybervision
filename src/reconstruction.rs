@@ -38,7 +38,7 @@ struct ImageMeta {
 
 impl SourceImage {
     fn load(path: &str) -> Result<SourceImage, image::ImageError> {
-        let metadata = SourceImage::get_metadata(path);
+        let metadata = Self::get_metadata(path);
         let img = image::open(path)?.into_luma8();
         let img = img.view(0, 0, img.width(), img.height() - metadata.databar_height);
 
@@ -52,7 +52,7 @@ impl SourceImage {
     }
 
     fn load_rgb(path: &str) -> Result<RgbImage, image::ImageError> {
-        let metadata = SourceImage::get_metadata(path);
+        let metadata = Self::get_metadata(path);
         let img = image::open(path)?.into_rgb8();
         Ok(img
             .view(0, 0, img.width(), img.height() - metadata.databar_height)
@@ -66,7 +66,7 @@ impl SourceImage {
             databar_height: 0,
             focal_length_35mm: None,
         };
-        match SourceImage::get_metadata_exif(path) {
+        match Self::get_metadata_exif(path) {
             Ok(metadata) => metadata,
             Err(_) => default_metadata,
         }
@@ -116,17 +116,17 @@ impl SourceImage {
                 }
                 if section.eq("[Scan]") {
                     if line.starts_with("PixelWidth") {
-                        scale_width = scale_width.or(SourceImage::tag_value(line));
+                        scale_width = scale_width.or(Self::tag_value(line));
                     } else if line.starts_with("PixelHeight") {
-                        scale_height = scale_height.or(SourceImage::tag_value(line));
+                        scale_height = scale_height.or(Self::tag_value(line));
                     }
                 } else if section.eq("[Stage]") {
                     if line.starts_with("StageT=") {
                         // TODO: use rotation (see "Real scale (Tomasi) stuff.pdf")
-                        result_metadata.tilt_angle = SourceImage::tag_value(line)
+                        result_metadata.tilt_angle = Self::tag_value(line)
                     }
                 } else if section.eq("[PrivateFei]") && line.starts_with("DatabarHeight=") {
-                    if let Some(databar_height) = SourceImage::tag_value(line) {
+                    if let Some(databar_height) = Self::tag_value(line) {
                         result_metadata.databar_height = databar_height;
                     }
                 }
@@ -920,12 +920,12 @@ pub enum ReconstructionError {
 impl fmt::Display for ReconstructionError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ReconstructionError::Internal(msg) => f.write_str(msg),
-            ReconstructionError::Image(ref err) => err.fmt(f),
-            ReconstructionError::Ransac(ref err) => err.fmt(f),
-            ReconstructionError::Correlation(ref err) => err.fmt(f),
-            ReconstructionError::Triangulation(ref err) => err.fmt(f),
-            ReconstructionError::Output(ref err) => err.fmt(f),
+            Self::Internal(msg) => f.write_str(msg),
+            Self::Image(ref err) => err.fmt(f),
+            Self::Ransac(ref err) => err.fmt(f),
+            Self::Correlation(ref err) => err.fmt(f),
+            Self::Triangulation(ref err) => err.fmt(f),
+            Self::Output(ref err) => err.fmt(f),
         }
     }
 }
@@ -933,48 +933,48 @@ impl fmt::Display for ReconstructionError {
 impl std::error::Error for ReconstructionError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
-            ReconstructionError::Internal(_msg) => None,
-            ReconstructionError::Image(ref err) => err.source(),
-            ReconstructionError::Ransac(ref err) => err.source(),
-            ReconstructionError::Correlation(ref err) => err.source(),
-            ReconstructionError::Triangulation(ref err) => err.source(),
-            ReconstructionError::Output(ref err) => err.source(),
+            Self::Internal(_msg) => None,
+            Self::Image(ref err) => err.source(),
+            Self::Ransac(ref err) => err.source(),
+            Self::Correlation(ref err) => err.source(),
+            Self::Triangulation(ref err) => err.source(),
+            Self::Output(ref err) => err.source(),
         }
     }
 }
 
 impl From<image::ImageError> for ReconstructionError {
     fn from(e: image::ImageError) -> ReconstructionError {
-        ReconstructionError::Image(e)
+        Self::Image(e)
     }
 }
 
 impl From<fundamentalmatrix::RansacError> for ReconstructionError {
     fn from(e: fundamentalmatrix::RansacError) -> ReconstructionError {
-        ReconstructionError::Ransac(e)
+        Self::Ransac(e)
     }
 }
 
 impl From<correlation::CorrelationError> for ReconstructionError {
     fn from(e: correlation::CorrelationError) -> ReconstructionError {
-        ReconstructionError::Correlation(e)
+        Self::Correlation(e)
     }
 }
 
 impl From<triangulation::TriangulationError> for ReconstructionError {
     fn from(e: triangulation::TriangulationError) -> ReconstructionError {
-        ReconstructionError::Triangulation(e)
+        Self::Triangulation(e)
     }
 }
 
 impl From<output::OutputError> for ReconstructionError {
     fn from(e: output::OutputError) -> ReconstructionError {
-        ReconstructionError::Output(e)
+        Self::Output(e)
     }
 }
 
 impl From<&'static str> for ReconstructionError {
     fn from(msg: &'static str) -> ReconstructionError {
-        ReconstructionError::Internal(msg)
+        Self::Internal(msg)
     }
 }

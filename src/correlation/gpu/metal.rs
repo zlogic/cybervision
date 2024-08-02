@@ -124,7 +124,7 @@ impl Device {
             };
             let direction = CorrelationDirection::Forward;
             let unified_memory = device.has_unified_memory();
-            let pipelines = Device::create_pipelines(&device)?;
+            let pipelines = Self::create_pipelines(&device)?;
             let command_queue = device.new_command_queue();
             Ok(Device {
                 device,
@@ -446,12 +446,12 @@ impl ShaderModuleType {
 
     fn load(&self, library: &metal::Library) -> Result<metal::Function, GpuError> {
         let function_name = match self {
-            ShaderModuleType::InitOutData => "init_out_data",
-            ShaderModuleType::PrepareInitialdataSearchdata => "prepare_initialdata_searchdata",
-            ShaderModuleType::PrepareInitialdataCorrelation => "prepare_initialdata_correlation",
-            ShaderModuleType::PrepareSearchdata => "prepare_searchdata",
-            ShaderModuleType::CrossCorrelate => "cross_correlate",
-            ShaderModuleType::CrossCheckFilter => "cross_check_filter",
+            Self::InitOutData => "init_out_data",
+            Self::PrepareInitialdataSearchdata => "prepare_initialdata_searchdata",
+            Self::PrepareInitialdataCorrelation => "prepare_initialdata_correlation",
+            Self::PrepareSearchdata => "prepare_searchdata",
+            Self::CrossCorrelate => "cross_correlate",
+            Self::CrossCheckFilter => "cross_check_filter",
         };
         let function = library.get_function(function_name, None)?;
 
@@ -468,8 +468,8 @@ pub enum GpuError {
 impl fmt::Display for GpuError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            GpuError::Internal(msg) => f.write_str(msg),
-            GpuError::Metal(ref msg) => f.write_str(msg),
+            Self::Internal(msg) => f.write_str(msg),
+            Self::Metal(ref msg) => f.write_str(msg),
         }
     }
 }
@@ -477,20 +477,20 @@ impl fmt::Display for GpuError {
 impl std::error::Error for GpuError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
-            GpuError::Internal(_msg) => None,
-            GpuError::Metal(ref _msg) => None,
+            Self::Internal(_msg) => None,
+            Self::Metal(ref _msg) => None,
         }
     }
 }
 
 impl From<String> for GpuError {
     fn from(e: String) -> GpuError {
-        GpuError::Metal(e)
+        Self::Metal(e)
     }
 }
 
 impl From<&'static str> for GpuError {
     fn from(msg: &'static str) -> GpuError {
-        GpuError::Internal(msg)
+        Self::Internal(msg)
     }
 }

@@ -1247,10 +1247,10 @@ pub enum OutputError {
 impl fmt::Display for OutputError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            OutputError::Internal(msg) => f.write_str(msg),
-            OutputError::Triangulation(ref err) => err.fmt(f),
-            OutputError::Io(ref err) => err.fmt(f),
-            OutputError::Image(ref err) => err.fmt(f),
+            Self::Internal(msg) => f.write_str(msg),
+            Self::Triangulation(ref err) => err.fmt(f),
+            Self::Io(ref err) => err.fmt(f),
+            Self::Image(ref err) => err.fmt(f),
         }
     }
 }
@@ -1258,34 +1258,34 @@ impl fmt::Display for OutputError {
 impl std::error::Error for OutputError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match *self {
-            OutputError::Internal(_msg) => None,
-            OutputError::Triangulation(ref err) => err.source(),
-            OutputError::Io(ref err) => err.source(),
-            OutputError::Image(ref err) => err.source(),
+            Self::Internal(_msg) => None,
+            Self::Triangulation(ref err) => err.source(),
+            Self::Io(ref err) => err.source(),
+            Self::Image(ref err) => err.source(),
         }
     }
 }
 
 impl From<&'static str> for OutputError {
     fn from(msg: &'static str) -> OutputError {
-        OutputError::Internal(msg)
+        Self::Internal(msg)
     }
 }
 
 impl From<spade::InsertionError> for OutputError {
     fn from(e: spade::InsertionError) -> OutputError {
-        OutputError::Triangulation(e)
+        Self::Triangulation(e)
     }
 }
 
 impl From<std::io::Error> for OutputError {
     fn from(e: std::io::Error) -> OutputError {
-        OutputError::Io(e)
+        Self::Io(e)
     }
 }
 
 impl From<image::ImageError> for OutputError {
     fn from(e: image::ImageError) -> OutputError {
-        OutputError::Image(e)
+        Self::Image(e)
     }
 }

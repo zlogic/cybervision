@@ -278,7 +278,7 @@ impl AffineTriangulation {
             .flat_map(|(x, y, matched_point)| {
                 let point1 = Point2D::new(x as u32, y as u32);
                 let point2 = matched_point.map(|p| p.0);
-                AffineTriangulation::triangulate_point(&point1, &point2)
+                Self::triangulate_point(&point1, &point2)
             })
             .collect::<Vec<_>>();
 
@@ -454,8 +454,8 @@ impl Camera {
             u * theta
         };
 
-        let r_matrix = Camera::matrix_r(&r);
-        let center = Camera::center(&r_matrix, t);
+        let r_matrix = Self::matrix_r(&r);
+        let center = Self::center(&r_matrix, t);
         Camera {
             k: k.to_owned(),
             r,
@@ -468,8 +468,8 @@ impl Camera {
     fn update_params(&mut self, delta_r: &Vector3<f64>, delta_t: &Vector3<f64>) {
         self.r += delta_r;
         self.t += delta_t;
-        self.r_matrix = Camera::matrix_r(&self.r);
-        self.center = Camera::center(&self.r_matrix, &self.t);
+        self.r_matrix = Self::matrix_r(&self.r);
+        self.center = Self::center(&self.r_matrix, &self.t);
     }
 
     fn matrix_r(r: &Vector3<f64>) -> Matrix3<f64> {
@@ -665,7 +665,7 @@ impl PerspectiveTriangulation {
                 Some(short_track)
             })
             .collect::<Vec<_>>();
-        let (p2, score) = match PerspectiveTriangulation::find_projection_matrix(
+        let (p2, score) = match Self::find_projection_matrix(
             fundamental_matrix,
             &k1,
             &k2,
@@ -905,7 +905,7 @@ impl PerspectiveTriangulation {
     fn triangulate_tracks(&mut self) {
         self.tracks.par_iter_mut().for_each(|track| {
             // All existing triangulated points will be overwritten.
-            track.point3d = PerspectiveTriangulation::triangulate_track(track, &self.projections)
+            track.point3d = Self::triangulate_track(track, &self.projections)
                 .map(|point4d| point4d.remove_row(3).unscale(point4d.w));
         });
     }
@@ -977,8 +977,7 @@ impl PerspectiveTriangulation {
                 let points_count: usize = tracks
                     .par_iter()
                     .filter(|track| {
-                        let point4d =
-                            PerspectiveTriangulation::triangulate_track(track, projections);
+                        let point4d = Self::triangulate_track(track, projections);
                         let point4d = if let Some(point4d) = point4d {
                             point4d
                         } else {
@@ -1097,41 +1096,36 @@ impl PerspectiveTriangulation {
                         pl.report_status(0.02 + 0.98 * value);
                     }
 
-                    let inliers =
-                        PerspectiveTriangulation::choose_inliers(linked_tracks.as_slice());
+                    let inliers = Self::choose_inliers(linked_tracks.as_slice());
 
-                    PerspectiveTriangulation::recover_pose_from_points(
-                        image_index,
-                        k_inv,
-                        inliers.as_slice(),
-                    )
-                    .into_iter()
-                    .filter_map(|(r, t)| {
-                        let camera = Camera::from_matrix(k, &r, &t);
-                        let projection = camera.projection();
+                    Self::recover_pose_from_points(image_index, k_inv, inliers.as_slice())
+                        .into_iter()
+                        .filter_map(|(r, t)| {
+                            let camera = Camera::from_matrix(k, &r, &t);
+                            let projection = camera.projection();
 
-                        let mut projections = self.projections.clone();
-                        projections[image_index] = Some(projection);
+                            let mut projections = self.projections.clone();
+                            projections[image_index] = Some(projection);
 
-                        let (count, _) = PerspectiveTriangulation::tracks_reprojection_error(
-                            inliers.as_slice(),
-                            &projections,
-                            inlier_projections.as_slice(),
-                            inliers_reprojection_threshold,
-                        );
-                        if count != RANSAC_N {
-                            return None;
-                        }
+                            let (count, _) = Self::tracks_reprojection_error(
+                                inliers.as_slice(),
+                                &projections,
+                                inlier_projections.as_slice(),
+                                inliers_reprojection_threshold,
+                            );
+                            if count != RANSAC_N {
+                                return None;
+                            }
 
-                        let (count, error) = PerspectiveTriangulation::tracks_reprojection_error(
-                            &linked_tracks,
-                            &projections,
-                            validate_projections.as_slice(),
-                            points_reprojection_threshold,
-                        );
-                        Some((camera, count, error / (count as f64)))
-                    })
-                    .reduce(reduce_best_result)
+                            let (count, error) = Self::tracks_reprojection_error(
+                                &linked_tracks,
+                                &projections,
+                                validate_projections.as_slice(),
+                                points_reprojection_threshold,
+                            );
+                            Some((camera, count, error / (count as f64)))
+                        })
+                        .reduce(reduce_best_result)
                 })
                 .reduce(|| best_result.to_owned(), reduce_best_result);
 
@@ -1303,12 +1297,8 @@ impl PerspectiveTriangulation {
         tracks
             .iter()
             .filter_map(|track| {
-                PerspectiveTriangulation::point_reprojection_error(
-                    track,
-                    projections,
-                    include_projections,
-                )
-                .filter(|error| *error < threshold)
+                Self::point_reprojection_error(track, projections, include_projections)
+                    .filter(|error| *error < threshold)
             })
             .fold((0, 0.0f64), |(count, error), match_error| {
                 (count + 1, error.max(match_error))
@@ -1321,7 +1311,7 @@ impl PerspectiveTriangulation {
         projections: &[Option<Matrix3x4<f64>>],
         include_projections: &[usize],
     ) -> Option<f64> {
-        let point4d = PerspectiveTriangulation::triangulate_track(track, projections)?;
+        let point4d = Self::triangulate_track(track, projections)?;
         include_projections
             .iter()
             .filter_map(|i| {
@@ -1589,8 +1579,7 @@ impl PerspectiveTriangulation {
                 return;
             }
             // Clear points where the maximum angle between rays is too low.
-            if let Some(min_angle_cos) = PerspectiveTriangulation::min_ray_angle_cos(cameras, track)
-            {
+            if let Some(min_angle_cos) = Self::min_ray_angle_cos(cameras, track) {
                 if min_angle_cos > angle_cos_threshold {
                     track.point3d = None;
                 }

@@ -573,7 +573,7 @@ impl PointCorrelations<'_> {
             .par_iter_mut()
             .for_each(|(x, y, out_point)| {
                 if let Some(m) = out_point {
-                    if !PointCorrelations::cross_check_point(
+                    if !Self::cross_check_point(
                         correlated_points_reverse,
                         search_area,
                         Point2D::new(x, y),
@@ -743,7 +743,7 @@ pub enum CorrelationError {
 impl fmt::Display for CorrelationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            CorrelationError::Gpu(ref err) => err.fmt(f),
+            Self::Gpu(ref err) => err.fmt(f),
         }
     }
 }
@@ -751,13 +751,13 @@ impl fmt::Display for CorrelationError {
 impl std::error::Error for CorrelationError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
-            CorrelationError::Gpu(ref err) => err.source(),
+            Self::Gpu(ref err) => err.source(),
         }
     }
 }
 
 impl From<GpuError> for CorrelationError {
     fn from(e: GpuError) -> CorrelationError {
-        CorrelationError::Gpu(e)
+        Self::Gpu(e)
     }
 }
