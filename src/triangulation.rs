@@ -835,7 +835,7 @@ impl PerspectiveTriangulation {
         }
 
         if let Some(max_points) = max_points {
-            let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
+            let rng = &mut SmallRng::from_rng(&mut rand::rng());
             if self.tracks.len() > max_points {
                 self.tracks.shuffle(rng);
                 self.tracks.truncate(max_points);
@@ -1278,10 +1278,10 @@ impl PerspectiveTriangulation {
     }
 
     fn choose_inliers(linked_tracks: &[Track]) -> Vec<Track> {
-        let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
+        let rng = &mut SmallRng::from_rng(&mut rand::rng());
         let mut inliers: Vec<Track> = Vec::with_capacity(RANSAC_N);
         while inliers.len() < RANSAC_N {
-            let next_index = rng.gen_range(0..linked_tracks.len());
+            let next_index = rng.random_range(0..linked_tracks.len());
             let next_match = &linked_tracks[next_index];
             inliers.push(next_match.to_owned());
         }

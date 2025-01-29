@@ -164,7 +164,7 @@ struct ProjectedPolygonIterator<'a> {
     scanline_max_x: usize,
 }
 
-impl<'a> ProjectedPolygonIterator<'a> {
+impl ProjectedPolygonIterator<'_> {
     fn update_scanline(&mut self, y: usize) -> bool {
         const EPSILON: f64 = f64::EPSILON;
         let scanline_ready = if let Some(scanline_y) = self.scanline_y {
@@ -232,7 +232,7 @@ impl<'a> ProjectedPolygonIterator<'a> {
     }
 }
 
-impl<'a> Iterator for ProjectedPolygonIterator<'a> {
+impl Iterator for ProjectedPolygonIterator<'_> {
     type Item = (Point2D<usize>, f64);
 
     fn next(&mut self) -> Option<Self::Item> {

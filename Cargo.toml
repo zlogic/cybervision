@@ -13,7 +13,7 @@ rust-version = "1.77"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tiff", "rayon"] }
 indicatif = { version = "0.17", default-features = false }
 rayon = "*"
-rand = { version = "0.8", default-features = false, features = ["std", "std_rng", "small_rng"] }
+rand = { version = "0.9", default-features = false, features = ["std", "std_rng", "small_rng", "thread_rng"] }
 nalgebra = { version = "0.33", default-features = false, features = ["std", "macros"] }
 spade = { version = "2.12", default-features = false, features = ["std"] }
 roots = { version = "0.0.8", default-features = false }
@@ -23,7 +23,7 @@ kamadak-exif = { version = "0.6", default-features = false }
 ash = { version = "0.38", default-features = false, features = ["loaded"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-metal = { version = "0.30", default-features = false, features = ["link"] }
+metal = { version = "0.31", default-features = false, features = ["link"] }
 
 [profile.release]
 strip = true

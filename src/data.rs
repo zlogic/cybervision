@@ -152,7 +152,7 @@ where
     }
 }
 
-impl<'a, T> Clone for GridStorageConst<'a, T>
+impl<T> Clone for GridStorageConst<'_, T>
 where
     T: Send + Sync,
 {
@@ -165,7 +165,7 @@ where
     }
 }
 
-impl<'a, T> Clone for GridStorageMut<'a, T>
+impl<T> Clone for GridStorageMut<'_, T>
 where
     T: Send + Sync,
 {

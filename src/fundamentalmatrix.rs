@@ -153,13 +153,13 @@ impl FundamentalMatrix {
 
     #[inline]
     fn choose_inliers(&self, point_matches: &[Match]) -> Vec<Match> {
-        let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
+        let rng = &mut SmallRng::from_rng(&mut rand::rng());
         let mut inliers: Vec<Match> = vec![];
 
         let inliers_limit = point_matches.len().min(TOP_INLIERS);
 
         while inliers.len() < self.ransac_n {
-            let next_index = rng.gen_range(0..inliers_limit);
+            let next_index = rng.random_range(0..inliers_limit);
             let next_match = point_matches[next_index];
             let close_to_existing = inliers.iter().any(|check_match| {
                 Self::dist(next_match.0.x, check_match.0.x) < MIN_INLIER_DISTANCE
