@@ -22,8 +22,8 @@ use crate::data::Grid;
 use nalgebra::Matrix3;
 
 use crate::correlation::{
-    CorrelationDirection, CorrelationParameters, HardwareMode, ProjectionMode,
-    CROSS_CHECK_SEARCH_AREA, KERNEL_SIZE, NEIGHBOR_DISTANCE,
+    CROSS_CHECK_SEARCH_AREA, CorrelationDirection, CorrelationParameters, HardwareMode,
+    KERNEL_SIZE, NEIGHBOR_DISTANCE, ProjectionMode,
 };
 
 use super::Match;
@@ -37,28 +37,28 @@ const SEARCH_AREA_SEGMENT_LENGTH_LOWPOWER: usize = 128;
 trait Device {
     fn set_buffer_direction(&mut self, direction: &CorrelationDirection) -> Result<(), GpuError>;
 
-    unsafe fn run_shader(
+    fn run_shader(
         &mut self,
         dimensions: (usize, usize),
         shader_type: ShaderModuleType,
         shader_params: ShaderParams,
     ) -> Result<(), GpuError>;
 
-    unsafe fn transfer_in_images(&self, img1: &Grid<u8>, img2: &Grid<u8>) -> Result<(), GpuError>;
+    fn transfer_in_images(&self, img1: &Grid<u8>, img2: &Grid<u8>) -> Result<(), GpuError>;
 
-    unsafe fn save_corr(
+    fn save_corr(
         &self,
         correlation_values: &mut Grid<Option<f32>>,
         correlation_threshold: f32,
     ) -> Result<(), GpuError>;
 
-    unsafe fn save_result(
+    fn save_result(
         &self,
         out_image: &mut Grid<Option<Match>>,
         correlation_values: &Grid<Option<f32>>,
     ) -> Result<(), GpuError>;
 
-    unsafe fn destroy_buffers(&mut self);
+    fn destroy_buffers(&mut self);
 }
 
 trait DeviceContext<D>
@@ -204,19 +204,14 @@ impl GpuContext<'_> {
             extend_range: 0.0,
             min_range: 0.0,
         };
-        unsafe {
-            device.run_shader(out_dimensions, ShaderModuleType::CrossCheckFilter, params)?;
-        }
-        Ok(())
+        device.run_shader(out_dimensions, ShaderModuleType::CrossCheckFilter, params)
     }
 
     pub fn complete_process(&mut self) -> Result<Grid<Option<super::Match>>, GpuError> {
         let device = self.device_context.device_mut()?;
         let mut out_image = Grid::new(self.img1_dimensions.0, self.img1_dimensions.1, None);
-        unsafe {
-            device.save_result(&mut out_image, &self.correlation_values)?;
-            device.destroy_buffers();
-        }
+        device.save_result(&mut out_image, &self.correlation_values)?;
+        device.destroy_buffers();
         Ok(out_image)
     }
 
@@ -276,20 +271,16 @@ impl GpuContext<'_> {
 
         let device = self.device_context.device_mut()?;
 
-        unsafe { device.transfer_in_images(img1, img2)? };
+        device.transfer_in_images(img1, img2)?;
 
         if first_pass {
-            unsafe {
-                device.run_shader(out_dimensions, ShaderModuleType::InitOutData, params)?;
-            }
+            device.run_shader(out_dimensions, ShaderModuleType::InitOutData, params)?;
         } else {
-            unsafe {
-                device.run_shader(
-                    out_dimensions,
-                    ShaderModuleType::PrepareInitialdataSearchdata,
-                    params,
-                )?;
-            }
+            device.run_shader(
+                out_dimensions,
+                ShaderModuleType::PrepareInitialdataSearchdata,
+                params,
+            )?;
             progressbar_completed_percentage = 0.02;
             send_progress(progressbar_completed_percentage);
 
@@ -305,13 +296,7 @@ impl GpuContext<'_> {
                 if params.corridor_end > neighbor_pixels as u32 {
                     params.corridor_end = neighbor_pixels as u32;
                 }
-                unsafe {
-                    device.run_shader(
-                        img1_dimensions,
-                        ShaderModuleType::PrepareSearchdata,
-                        params,
-                    )?;
-                }
+                device.run_shader(img1_dimensions, ShaderModuleType::PrepareSearchdata, params)?;
 
                 let percent_complete =
                     progressbar_completed_percentage + 0.09 * (l as f32 / neighbor_segments as f32);
@@ -327,13 +312,7 @@ impl GpuContext<'_> {
                 if params.corridor_end > neighbor_pixels as u32 {
                     params.corridor_end = neighbor_pixels as u32;
                 }
-                unsafe {
-                    device.run_shader(
-                        img1_dimensions,
-                        ShaderModuleType::PrepareSearchdata,
-                        params,
-                    )?;
-                }
+                device.run_shader(img1_dimensions, ShaderModuleType::PrepareSearchdata, params)?;
 
                 let percent_complete =
                     progressbar_completed_percentage + 0.09 * (l as f32 / neighbor_segments as f32);
@@ -345,13 +324,11 @@ impl GpuContext<'_> {
         send_progress(progressbar_completed_percentage);
         params.iteration_pass = if first_pass { 0 } else { 1 };
 
-        unsafe {
-            device.run_shader(
-                max_dimensions,
-                ShaderModuleType::PrepareInitialdataCorrelation,
-                params,
-            )?;
-        }
+        device.run_shader(
+            max_dimensions,
+            ShaderModuleType::PrepareInitialdataCorrelation,
+            params,
+        )?;
 
         let corridor_size = self.corridor_size;
         let corridor_stripes = 2 * corridor_size + 1;
@@ -367,9 +344,7 @@ impl GpuContext<'_> {
                 if params.corridor_end > corridor_length as u32 {
                     params.corridor_end = corridor_length as u32;
                 }
-                unsafe {
-                    device.run_shader(img1_dimensions, ShaderModuleType::CrossCorrelate, params)?;
-                }
+                device.run_shader(img1_dimensions, ShaderModuleType::CrossCorrelate, params)?;
 
                 let corridor_complete = params.corridor_end as f32 / corridor_length as f32;
                 let percent_complete = progressbar_completed_percentage
@@ -381,7 +356,7 @@ impl GpuContext<'_> {
         }
 
         if matches!(dir, CorrelationDirection::Forward) {
-            unsafe { device.save_corr(&mut self.correlation_values, self.correlation_threshold)? };
+            device.save_corr(&mut self.correlation_values, self.correlation_threshold)?;
         }
         Ok(())
     }

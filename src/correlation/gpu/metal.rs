@@ -4,7 +4,7 @@ use metal::objc::rc::autoreleasepool;
 use rayon::iter::ParallelIterator;
 
 use crate::{
-    correlation::{gpu::ShaderParams, Match},
+    correlation::{Match, gpu::ShaderParams},
     data::{Grid, Point2D},
 };
 
@@ -196,7 +196,7 @@ impl Device {
         }
     }
 
-    unsafe fn create_buffer(&self, size: usize, buffer_type: BufferType) -> metal::Buffer {
+    fn create_buffer(&self, size: usize, buffer_type: BufferType) -> metal::Buffer {
         let size = size as u64;
         let options = match buffer_type {
             BufferType::GpuOnly => metal::MTLResourceOptions::StorageModePrivate,
@@ -292,7 +292,7 @@ impl super::Device for Device {
         Ok(())
     }
 
-    unsafe fn run_shader(
+    fn run_shader(
         &mut self,
         dimensions: (usize, usize),
         shader_type: ShaderModuleType,
@@ -306,10 +306,12 @@ impl super::Device for Device {
             let compute_encoder = command_buffer.new_compute_command_encoder();
             compute_encoder.set_compute_pipeline_state(pipeline);
 
-            let push_constants_data = slice::from_raw_parts(
-                &shader_params as *const ShaderParams as *const u8,
-                std::mem::size_of::<ShaderParams>(),
-            );
+            let push_constants_data = unsafe {
+                slice::from_raw_parts(
+                    &shader_params as *const ShaderParams as *const u8,
+                    std::mem::size_of::<ShaderParams>(),
+                )
+            };
             compute_encoder.set_bytes(
                 0,
                 push_constants_data.len() as u64,
@@ -338,14 +340,17 @@ impl super::Device for Device {
         })
     }
 
-    unsafe fn transfer_in_images(&self, img1: &Grid<u8>, img2: &Grid<u8>) -> Result<(), GpuError> {
+    fn transfer_in_images(&self, img1: &Grid<u8>, img2: &Grid<u8>) -> Result<(), GpuError> {
         autoreleasepool(|| {
             let buffers = self.buffers()?;
             let buffer = &buffers.buffer_img;
             let buffer_contents = buffer.contents();
             let img2_offset = img1.width() * img1.height();
             let size = img1.width() * img1.height() + img2.width() * img2.height();
-            let img_slice = slice::from_raw_parts_mut(buffer_contents as *mut f32, size);
+            if buffer.length() < size as u64 {
+                return Err("Image buffer is smaller than expected".into());
+            }
+            let img_slice = unsafe { slice::from_raw_parts_mut(buffer_contents as *mut f32, size) };
             img1.iter()
                 .for_each(|(x, y, val)| img_slice[y * img1.width() + x] = *val as f32);
             img2.iter().for_each(|(x, y, val)| {
@@ -357,7 +362,7 @@ impl super::Device for Device {
         })
     }
 
-    unsafe fn save_corr(
+    fn save_corr(
         &self,
         correlation_values: &mut Grid<Option<f32>>,
         correlation_threshold: f32,
@@ -369,7 +374,10 @@ impl super::Device for Device {
             let buffer_contents = buffer.contents();
             let size = correlation_values.width() * correlation_values.height();
             let width = correlation_values.width();
-            let out_corr = slice::from_raw_parts_mut(buffer_contents as *mut f32, size);
+            if buffer.length() < size as u64 {
+                return Err("Output correlation buffer is smaller than expected".into());
+            }
+            let out_corr = unsafe { slice::from_raw_parts_mut(buffer_contents as *mut f32, size) };
             correlation_values
                 .par_iter_mut()
                 .for_each(|(x, y, out_point)| {
@@ -383,7 +391,7 @@ impl super::Device for Device {
         })
     }
 
-    unsafe fn save_result(
+    fn save_result(
         &self,
         out_image: &mut Grid<Option<Match>>,
         correlation_values: &Grid<Option<f32>>,
@@ -395,7 +403,10 @@ impl super::Device for Device {
             let buffer_contents = buffer.contents();
             let size = out_image.width() * out_image.height() * 2;
             let width = out_image.width();
-            let out_data = slice::from_raw_parts_mut(buffer_contents as *mut i32, size);
+            if buffer.length() < size as u64 {
+                return Err("Output buffer is smaller than expected".into());
+            }
+            let out_data = unsafe { slice::from_raw_parts_mut(buffer_contents as *mut i32, size) };
             out_image.par_iter_mut().for_each(|(x, y, out_point)| {
                 let pos = 2 * (y * width + x);
                 let (match_x, match_y) = (out_data[pos], out_data[pos + 1]);
@@ -415,7 +426,7 @@ impl super::Device for Device {
         })
     }
 
-    unsafe fn destroy_buffers(&mut self) {
+    fn destroy_buffers(&mut self) {
         autoreleasepool(|| {
             self.buffers = None;
         })

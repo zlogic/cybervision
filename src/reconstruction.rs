@@ -1,13 +1,13 @@
+use crate::Args;
 use crate::correlation::PointCorrelations;
 use crate::data::{Grid, Point2D};
 use crate::orb;
 use crate::output;
 use crate::pointmatching;
 use crate::triangulation;
-use crate::Args;
 use crate::{correlation, fundamentalmatrix};
 
-use image::{imageops::FilterType, GenericImageView, GrayImage, RgbImage};
+use image::{GenericImageView, GrayImage, RgbImage, imageops::FilterType};
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use nalgebra::Matrix3;
 use std::fmt::Write;

@@ -455,7 +455,7 @@ impl PointCorrelations<'_> {
             corr /= p1_data.stdev * stdev2 * KERNEL_POINT_COUNT as f32;
 
             if corr >= self.correlation_threshold
-                && best_match.corr.map_or(true, |best_corr| corr > best_corr)
+                && best_match.corr.is_none_or(|best_corr| corr > best_corr)
             {
                 best_match.pos = Some(Point2D::new(
                     (x2 as f32 / scale).round() as u32,

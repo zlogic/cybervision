@@ -11,7 +11,7 @@ use ash::{prelude::VkResult, vk};
 use rayon::iter::ParallelIterator;
 
 use crate::{
-    correlation::{gpu::ShaderParams, Match},
+    correlation::{Match, gpu::ShaderParams},
     data::{Grid, Point2D},
 };
 
@@ -47,6 +47,7 @@ pub struct Device {
 struct Buffer {
     buffer: vk::Buffer,
     buffer_memory: vk::DeviceMemory,
+    size: usize,
     host_visible: bool,
     host_coherent: bool,
 }
@@ -149,20 +150,16 @@ impl super::DeviceContext<Device> for DeviceContext {
             self.device = Some(Device::new(&self.entry, max_buffer_size)?);
         }
         let device = self.device_mut()?;
-        unsafe {
-            if let Some(buffers) = device.buffers.as_ref() {
-                buffers.destroy(&device.device);
-                device.buffers = None;
-            }
+        if let Some(buffers) = device.buffers.as_ref() {
+            buffers.destroy(&device.device);
+            device.buffers = None;
         }
-        let buffers = unsafe {
-            Device::create_buffers(
-                &device.device,
-                &device.memory_properties,
-                img1_pixels,
-                img2_pixels,
-            )?
-        };
+        let buffers = Device::create_buffers(
+            &device.device,
+            &device.memory_properties,
+            img1_pixels,
+            img2_pixels,
+        )?;
         device.buffers = Some(buffers);
         device.set_buffer_direction(&CorrelationDirection::Forward)?;
         Ok(())
@@ -192,30 +189,29 @@ impl Drop for DeviceContext {
 impl Device {
     fn new(entry: &ash::Entry, max_buffer_size: usize) -> Result<Device, GpuError> {
         // Init adapter.
-        let instance = unsafe { Self::init_vk(entry)? };
+        let instance = Self::init_vk(entry)?;
         let instance = ScopeRollback::new(instance, |instance| unsafe {
             instance.destroy_instance(None)
         });
         let (physical_device, name, compute_queue_index) =
-            unsafe { Self::find_device(&instance, max_buffer_size)? };
+            Self::find_device(&instance, max_buffer_size)?;
         let name = name.to_string();
-        let device =
-            unsafe { Self::create_device(&instance, physical_device, compute_queue_index)? };
+        let device = Self::create_device(&instance, physical_device, compute_queue_index)?;
         let device = ScopeRollback::new(device, |device| unsafe { device.destroy_device(None) });
         let memory_properties =
             unsafe { instance.get_physical_device_memory_properties(physical_device) };
         // Init pipelines and shaders.
-        let descriptor_sets = unsafe { Self::create_descriptor_sets(&device)? };
-        let descriptor_sets = ScopeRollback::new(descriptor_sets, |descriptor_sets| unsafe {
+        let descriptor_sets = Self::create_descriptor_sets(&device)?;
+        let descriptor_sets = ScopeRollback::new(descriptor_sets, |descriptor_sets| {
             descriptor_sets.destroy(&device)
         });
-        let pipelines = unsafe { Self::create_pipelines(&device, &descriptor_sets)? };
-        let pipelines = ScopeRollback::new(pipelines, |pipelines| unsafe {
+        let pipelines = Self::create_pipelines(&device, &descriptor_sets)?;
+        let pipelines = ScopeRollback::new(pipelines, |pipelines| {
             destroy_pipelines(&device, &pipelines)
         });
         let direction = CorrelationDirection::Forward;
         // Init control struct - queues, fences, command buffer.
-        let control = unsafe { Self::create_control(&device, compute_queue_index)? };
+        let control = Self::create_control(&device, compute_queue_index)?;
 
         // All is good - consume instances and defuse the scope rollback.
         let pipelines = pipelines.consume();
@@ -235,27 +231,27 @@ impl Device {
         Ok(result)
     }
 
-    unsafe fn map_buffer_write<F, T>(
-        &self,
-        dst_buffer: &Buffer,
-        size: usize,
-        f: F,
-    ) -> Result<(), GpuError>
+    fn map_buffer_write<F, T>(&self, dst_buffer: &Buffer, size: usize, f: F) -> Result<(), GpuError>
     where
         F: FnOnce(&mut [T]),
     {
         // Not all code paths here are fully tested - some actions like flushing memory if memory
         // is not host_coherent might not work as expected.
         let size_bytes = size * std::mem::size_of::<T>();
+        if dst_buffer.size < size_bytes {
+            return Err("Mapped write buffer is smaller than expected".into());
+        }
         let handle_buffer = |buffer: &Buffer| -> VkResult<()> {
             {
-                let memory = self.device.map_memory(
-                    buffer.buffer_memory,
-                    0,
-                    size_bytes as u64,
-                    vk::MemoryMapFlags::empty(),
-                )?;
-                let mapped_slice = slice::from_raw_parts_mut(memory as *mut T, size);
+                let mapped_slice = unsafe {
+                    let memory = self.device.map_memory(
+                        buffer.buffer_memory,
+                        0,
+                        size_bytes as u64,
+                        vk::MemoryMapFlags::empty(),
+                    )?;
+                    slice::from_raw_parts_mut(memory as *mut T, size)
+                };
                 f(mapped_slice);
             }
 
@@ -264,10 +260,12 @@ impl Device {
                     .memory(buffer.buffer_memory)
                     .offset(0)
                     .size(size_bytes as u64);
-                self.device
-                    .flush_mapped_memory_ranges(&[flush_memory_ranges])?;
+                unsafe {
+                    self.device
+                        .flush_mapped_memory_ranges(&[flush_memory_ranges])?
+                };
             }
-            self.device.unmap_memory(buffer.buffer_memory);
+            unsafe { self.device.unmap_memory(buffer.buffer_memory) };
             Ok(())
         };
 
@@ -292,67 +290,78 @@ impl Device {
         Ok(())
     }
 
-    unsafe fn copy_buffer_to_buffer(
+    fn copy_buffer_to_buffer(
         &self,
         src: &Buffer,
         dst: &Buffer,
         size_bytes: usize,
-    ) -> VkResult<()> {
-        let command_buffer = self.control.command_buffer;
-        self.device.reset_fences(&[self.control.fence])?;
-        self.device
-            .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
+    ) -> Result<(), GpuError> {
+        if src.size < size_bytes {
+            return Err("Copy source buffer is smaller than expected".into());
+        }
+        if dst.size < size_bytes {
+            return Err("Copy destination buffer is smaller than expected".into());
+        }
+        unsafe {
+            let command_buffer = self.control.command_buffer;
+            self.device.reset_fences(&[self.control.fence])?;
+            self.device
+                .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
 
-        let info = vk::CommandBufferBeginInfo::default()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            let info = vk::CommandBufferBeginInfo::default()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
-        self.device.begin_command_buffer(command_buffer, &info)?;
-        let regions = vk::BufferCopy::default().size(size_bytes as u64);
-        self.device
-            .cmd_copy_buffer(command_buffer, src.buffer, dst.buffer, &[regions]);
-        self.device.end_command_buffer(command_buffer)?;
+            self.device.begin_command_buffer(command_buffer, &info)?;
+            let regions = vk::BufferCopy::default().size(size_bytes as u64);
+            self.device
+                .cmd_copy_buffer(command_buffer, src.buffer, dst.buffer, &[regions]);
+            self.device.end_command_buffer(command_buffer)?;
 
-        let command_buffers = [command_buffer];
-        let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
-        self.device
-            .queue_submit(self.control.queue, &[submit_info], self.control.fence)?;
-        self.device
-            .wait_for_fences(&[self.control.fence], true, u64::MAX)
+            let command_buffers = [command_buffer];
+            let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
+            self.device
+                .queue_submit(self.control.queue, &[submit_info], self.control.fence)?;
+            Ok(self
+                .device
+                .wait_for_fences(&[self.control.fence], true, u64::MAX)?)
+        }
     }
 
-    unsafe fn map_buffer_read<F, T>(
-        &self,
-        buffer: &Buffer,
-        size: usize,
-        f: F,
-    ) -> Result<(), GpuError>
+    fn map_buffer_read<F, T>(&self, buffer: &Buffer, size: usize, f: F) -> Result<(), GpuError>
     where
         F: FnOnce(&[T]),
     {
         // Not all code paths here are fully tested - some actions like flushing memory if memory
         // is not host_coherent might not work as expected.
         let size_bytes = size * std::mem::size_of::<T>();
+        if buffer.size < size_bytes {
+            return Err("Mapped read buffer is smaller than expected".into());
+        }
         let handle_buffer = |buffer: &Buffer| -> VkResult<()> {
-            let memory = self.device.map_memory(
-                buffer.buffer_memory,
-                0,
-                size_bytes as u64,
-                vk::MemoryMapFlags::empty(),
-            )?;
+            let memory = unsafe {
+                self.device.map_memory(
+                    buffer.buffer_memory,
+                    0,
+                    size_bytes as u64,
+                    vk::MemoryMapFlags::empty(),
+                )?
+            };
             if !buffer.host_coherent {
                 let invalidate_memory_ranges = vk::MappedMemoryRange::default()
                     .memory(buffer.buffer_memory)
                     .offset(0)
                     .size(size_bytes as u64);
-                self.device
-                    .invalidate_mapped_memory_ranges(&[invalidate_memory_ranges])?;
+                unsafe {
+                    self.device
+                        .invalidate_mapped_memory_ranges(&[invalidate_memory_ranges])?
+                };
             }
             {
-                let mapped_slice = slice::from_raw_parts(memory as *const T, size);
+                let mapped_slice = unsafe { slice::from_raw_parts(memory as *const T, size) };
                 f(mapped_slice);
             }
 
-            self.device.unmap_memory(buffer.buffer_memory);
+            unsafe { self.device.unmap_memory(buffer.buffer_memory) };
             Ok(())
         };
 
@@ -377,7 +386,7 @@ impl Device {
         Ok(())
     }
 
-    unsafe fn init_vk(entry: &ash::Entry) -> VkResult<ash::Instance> {
+    fn init_vk(entry: &ash::Entry) -> VkResult<ash::Instance> {
         let app_name = c"Cybervision";
         let engine_name = c"cybervision";
         let appinfo = vk::ApplicationInfo::default()
@@ -391,19 +400,19 @@ impl Device {
         let create_info = vk::InstanceCreateInfo::default()
             .application_info(&appinfo)
             .flags(create_flags);
-        entry.create_instance(&create_info, None)
+        unsafe { entry.create_instance(&create_info, None) }
     }
 
-    unsafe fn find_device(
+    fn find_device(
         instance: &ash::Instance,
         max_buffer_size: usize,
     ) -> Result<(vk::PhysicalDevice, String, u32), GpuError> {
-        let devices = instance.enumerate_physical_devices()?;
+        let devices = unsafe { instance.enumerate_physical_devices()? };
         let device = devices
             .iter()
             .filter_map(|device| {
                 let device = *device;
-                let props = instance.get_physical_device_properties(device);
+                let props = unsafe { instance.get_physical_device_properties(device) };
                 if props.limits.max_push_constants_size < std::mem::size_of::<ShaderParams>() as u32
                     || props.limits.max_bound_descriptor_sets < 2
                     || props.limits.max_per_stage_descriptor_storage_buffers < MAX_BINDINGS
@@ -449,29 +458,28 @@ impl Device {
         Ok((device, name, queue_index))
     }
 
-    unsafe fn find_compute_queue(
-        instance: &ash::Instance,
-        device: vk::PhysicalDevice,
-    ) -> Option<u32> {
-        instance
-            .get_physical_device_queue_family_properties(device)
-            .iter()
-            .enumerate()
-            .flat_map(|(index, queue)| {
-                if queue
-                    .queue_flags
-                    .contains(vk::QueueFlags::COMPUTE | vk::QueueFlags::TRANSFER)
-                    && queue.queue_count > 0
-                {
-                    Some(index as u32)
-                } else {
-                    None
-                }
-            })
-            .next()
+    fn find_compute_queue(instance: &ash::Instance, device: vk::PhysicalDevice) -> Option<u32> {
+        unsafe {
+            instance
+                .get_physical_device_queue_family_properties(device)
+                .iter()
+                .enumerate()
+                .flat_map(|(index, queue)| {
+                    if queue
+                        .queue_flags
+                        .contains(vk::QueueFlags::COMPUTE | vk::QueueFlags::TRANSFER)
+                        && queue.queue_count > 0
+                    {
+                        Some(index as u32)
+                    } else {
+                        None
+                    }
+                })
+                .next()
+        }
     }
 
-    unsafe fn create_device(
+    fn create_device(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
         compute_queue_index: u32,
@@ -481,20 +489,22 @@ impl Device {
             .queue_priorities(&[1.0f32]);
         let device_create_info =
             vk::DeviceCreateInfo::default().queue_create_infos(std::slice::from_ref(&queue_info));
-        match instance.create_device(physical_device, &device_create_info, None) {
-            Ok(device) => Ok(device),
-            Err(err) => Err(err.into()),
+        unsafe {
+            match instance.create_device(physical_device, &device_create_info, None) {
+                Ok(device) => Ok(device),
+                Err(err) => Err(err.into()),
+            }
         }
     }
 
-    unsafe fn create_buffers(
+    fn create_buffers(
         device: &ash::Device,
         memory_properties: &vk::PhysicalDeviceMemoryProperties,
         img1_pixels: usize,
         img2_pixels: usize,
     ) -> Result<DeviceBuffers, GpuError> {
         let max_pixels = img1_pixels.max(img2_pixels);
-        let mut buffers = ScopeRollback::new(vec![], |buffers: Vec<Buffer>| {
+        let mut buffers = ScopeRollback::new(vec![], |buffers: Vec<Buffer>| unsafe {
             buffers.iter().for_each(|buffer| {
                 device.free_memory(buffer.buffer_memory, None);
                 device.destroy_buffer(buffer.buffer, None)
@@ -576,13 +586,12 @@ impl Device {
         }
     }
 
-    unsafe fn create_buffer(
+    fn create_buffer(
         device: &ash::Device,
         memory_properties: &vk::PhysicalDeviceMemoryProperties,
         size: usize,
         buffer_type: BufferType,
     ) -> Result<Buffer, GpuError> {
-        let size = size as u64;
         let required_memory_properties = match buffer_type {
             BufferType::GpuOnly | BufferType::GpuDestination | BufferType::GpuSource => {
                 vk::MemoryPropertyFlags::DEVICE_LOCAL
@@ -603,11 +612,11 @@ impl Device {
             }
         };
         let buffer_create_info = vk::BufferCreateInfo::default()
-            .size(size)
+            .size(size as u64)
             .usage(extra_usage_flags)
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
-        let buffer = device.create_buffer(&buffer_create_info, None)?;
-        let memory_requirements = device.get_buffer_memory_requirements(buffer);
+        let buffer = unsafe { device.create_buffer(&buffer_create_info, None)? };
+        let memory_requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
         // Most vendors provide a sorted list - with less features going first.
         // As soon as the right flag is found, this search will stop, so it should pick a memory
         // type with the closest match.
@@ -634,7 +643,7 @@ impl Device {
                     .allocation_size(memory_requirements.size)
                     .memory_type_index(memory_type_index as u32);
                 // Some buffers may fill up, in this case allocating memory can fail.
-                let mem = device.allocate_memory(&allocate_info, None).ok()?;
+                let mem = unsafe { device.allocate_memory(&allocate_info, None).ok()? };
 
                 Some((mem, host_visible, host_coherent))
             })
@@ -643,20 +652,21 @@ impl Device {
         let (buffer_memory, host_visible, host_coherent) = if let Some(mem) = buffer_memory {
             mem
         } else {
-            device.destroy_buffer(buffer, None);
+            unsafe { device.destroy_buffer(buffer, None) };
             return Err("Cannot find suitable memory".into());
         };
         let result = Buffer {
             buffer,
             buffer_memory,
+            size,
             host_visible,
             host_coherent,
         };
-        device.bind_buffer_memory(buffer, buffer_memory, 0)?;
+        unsafe { device.bind_buffer_memory(buffer, buffer_memory, 0)? };
         Ok(result)
     }
 
-    unsafe fn create_descriptor_sets(device: &ash::Device) -> Result<DescriptorSets, GpuError> {
+    fn create_descriptor_sets(device: &ash::Device) -> Result<DescriptorSets, GpuError> {
         let create_layout_bindings = |count| {
             let bindings = (0..count)
                 .map(|i| {
@@ -669,7 +679,7 @@ impl Device {
                 .collect::<Vec<_>>();
             let layout_info =
                 vk::DescriptorSetLayoutCreateInfo::default().bindings(bindings.as_slice());
-            device.create_descriptor_set_layout(&layout_info, None)
+            unsafe { device.create_descriptor_set_layout(&layout_info, None) }
         };
         let descriptor_pool_size = [vk::DescriptorPoolSize::default()
             .ty(vk::DescriptorType::STORAGE_BUFFER)
@@ -677,12 +687,13 @@ impl Device {
         let descriptor_pool_info = vk::DescriptorPoolCreateInfo::default()
             .max_sets(1)
             .pool_sizes(&descriptor_pool_size);
-        let descriptor_pool = device.create_descriptor_pool(&descriptor_pool_info, None)?;
-        let descriptor_pool = ScopeRollback::new(descriptor_pool, |descriptor_pool| {
+        let descriptor_pool =
+            unsafe { device.create_descriptor_pool(&descriptor_pool_info, None)? };
+        let descriptor_pool = ScopeRollback::new(descriptor_pool, |descriptor_pool| unsafe {
             device.destroy_descriptor_pool(descriptor_pool, None)
         });
         let layout = create_layout_bindings(6)?;
-        let layout = ScopeRollback::new(layout, |layout| {
+        let layout = ScopeRollback::new(layout, |layout| unsafe {
             device.destroy_descriptor_set_layout(layout, None)
         });
         let layouts = [*layout.deref()];
@@ -690,19 +701,22 @@ impl Device {
             .offset(0)
             .size(std::mem::size_of::<ShaderParams>() as u32)
             .stage_flags(vk::ShaderStageFlags::COMPUTE);
-        let pipeline_layout = device.create_pipeline_layout(
-            &vk::PipelineLayoutCreateInfo::default()
-                .set_layouts(&layouts)
-                .push_constant_ranges(&[push_constant_ranges]),
-            None,
-        )?;
-        let pipeline_layout = ScopeRollback::new(pipeline_layout, |pipeline_layout| {
+        let pipeline_layout = unsafe {
+            device.create_pipeline_layout(
+                &vk::PipelineLayoutCreateInfo::default()
+                    .set_layouts(&layouts)
+                    .push_constant_ranges(&[push_constant_ranges]),
+                None,
+            )?
+        };
+        let pipeline_layout = ScopeRollback::new(pipeline_layout, |pipeline_layout| unsafe {
             device.destroy_pipeline_layout(pipeline_layout, None)
         });
         let descriptor_set_allocate_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(*descriptor_pool.deref())
             .set_layouts(&layouts);
-        let descriptor_sets = device.allocate_descriptor_sets(&descriptor_set_allocate_info)?;
+        let descriptor_sets =
+            unsafe { device.allocate_descriptor_sets(&descriptor_set_allocate_info)? };
 
         Ok(DescriptorSets {
             descriptor_pool: descriptor_pool.consume(),
@@ -712,15 +726,16 @@ impl Device {
         })
     }
 
-    unsafe fn load_shaders(
+    fn load_shaders(
         device: &ash::Device,
     ) -> Result<Vec<(ShaderModuleType, vk::ShaderModule)>, GpuError> {
         let mut shader_modules = ShaderModuleType::VALUES
             .iter()
             .map(|module_type| {
                 let shader = module_type.load(device)?;
-                let shader =
-                    ScopeRollback::new(shader, |shader| device.destroy_shader_module(shader, None));
+                let shader = ScopeRollback::new(shader, |shader| unsafe {
+                    device.destroy_shader_module(shader, None)
+                });
                 Ok((module_type, shader))
             })
             .collect::<Result<Vec<_>, GpuError>>()?;
@@ -731,7 +746,7 @@ impl Device {
         Ok(shader_modules)
     }
 
-    unsafe fn create_pipelines(
+    fn create_pipelines(
         device: &ash::Device,
         descriptor_sets: &DescriptorSets,
     ) -> Result<HashMap<ShaderModuleType, ShaderPipeline>, GpuError> {
@@ -751,20 +766,22 @@ impl Device {
                     .layout(descriptor_sets.pipeline_layout)
             })
             .collect::<Vec<_>>();
-        let pipelines = match device.create_compute_pipelines(
-            vk::PipelineCache::null(),
-            pipeline_create_info.as_slice(),
-            None,
-        ) {
-            Ok(pipelines) => pipelines,
-            Err(err) => {
-                err.0
-                    .iter()
-                    .for_each(|pipeline| device.destroy_pipeline(*pipeline, None));
-                shader_modules
-                    .iter()
-                    .for_each(|(_shader_type, module)| device.destroy_shader_module(*module, None));
-                return Err(err.1.into());
+        let pipelines = unsafe {
+            match device.create_compute_pipelines(
+                vk::PipelineCache::null(),
+                pipeline_create_info.as_slice(),
+                None,
+            ) {
+                Ok(pipelines) => pipelines,
+                Err(err) => {
+                    err.0
+                        .iter()
+                        .for_each(|pipeline| device.destroy_pipeline(*pipeline, None));
+                    shader_modules.iter().for_each(|(_shader_type, module)| {
+                        device.destroy_shader_module(*module, None)
+                    });
+                    return Err(err.1.into());
+                }
             }
         };
         let mut result = HashMap::new();
@@ -834,26 +851,23 @@ impl Device {
         Ok(())
     }
 
-    unsafe fn create_control(
-        device: &ash::Device,
-        queue_family_index: u32,
-    ) -> Result<Control, GpuError> {
-        let queue = device.get_device_queue(queue_family_index, 0);
+    fn create_control(device: &ash::Device, queue_family_index: u32) -> Result<Control, GpuError> {
+        let queue = unsafe { device.get_device_queue(queue_family_index, 0) };
         let command_pool_info = vk::CommandPoolCreateInfo::default()
             .queue_family_index(queue_family_index)
             .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
-        let command_pool = device.create_command_pool(&command_pool_info, None)?;
-        let command_pool = ScopeRollback::new(command_pool, |command_pool| {
+        let command_pool = unsafe { device.create_command_pool(&command_pool_info, None)? };
+        let command_pool = ScopeRollback::new(command_pool, |command_pool| unsafe {
             device.destroy_command_pool(command_pool, None)
         });
         let fence_create_info = vk::FenceCreateInfo::default();
-        let fence = device.create_fence(&fence_create_info, None)?;
-        let fence = ScopeRollback::new(fence, |fence| device.destroy_fence(fence, None));
+        let fence = unsafe { device.create_fence(&fence_create_info, None)? };
+        let fence = ScopeRollback::new(fence, |fence| unsafe { device.destroy_fence(fence, None) });
         let command_buffers_info = vk::CommandBufferAllocateInfo::default()
             .command_buffer_count(1)
             .command_pool(*command_pool.deref())
             .level(vk::CommandBufferLevel::PRIMARY);
-        let command_buffer = device.allocate_command_buffers(&command_buffers_info)?[0];
+        let command_buffer = unsafe { device.allocate_command_buffers(&command_buffers_info)?[0] };
         Ok(Control {
             queue,
             command_pool: command_pool.consume(),
@@ -869,7 +883,7 @@ impl super::Device for Device {
         Ok(())
     }
 
-    unsafe fn run_shader(
+    fn run_shader(
         &mut self,
         dimensions: (usize, usize),
         shader_type: ShaderModuleType,
@@ -879,63 +893,65 @@ impl super::Device for Device {
         let command_buffer = self.control.command_buffer;
 
         let workgroup_size = ((dimensions.0 + 15) / 16, ((dimensions.1 + 15) / 16));
-        self.device.reset_fences(&[self.control.fence])?;
-        self.device
-            .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
-        let info = vk::CommandBufferBeginInfo::default()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-        self.device.begin_command_buffer(command_buffer, &info)?;
+        unsafe {
+            self.device.reset_fences(&[self.control.fence])?;
+            self.device
+                .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
+            let info = vk::CommandBufferBeginInfo::default()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            self.device.begin_command_buffer(command_buffer, &info)?;
 
-        self.device.cmd_bind_pipeline(
-            self.control.command_buffer,
-            vk::PipelineBindPoint::COMPUTE,
-            pipeline_config.pipeline,
-        );
-        self.set_buffer_layout(&shader_type)?;
-        // It's way easier to map all descriptor sets identically, instead of ensuring that every
-        // kernel gets to use set = 0.
-        // The cross correlation kernel will need to switch to descriptor set = 1.
-        self.device.cmd_bind_descriptor_sets(
-            command_buffer,
-            vk::PipelineBindPoint::COMPUTE,
-            self.descriptor_sets.pipeline_layout,
-            0,
-            &self.descriptor_sets.descriptor_sets,
-            &[],
-        );
+            self.device.cmd_bind_pipeline(
+                self.control.command_buffer,
+                vk::PipelineBindPoint::COMPUTE,
+                pipeline_config.pipeline,
+            );
+            self.set_buffer_layout(&shader_type)?;
+            // It's way easier to map all descriptor sets identically, instead of ensuring that every
+            // kernel gets to use set = 0.
+            // The cross correlation kernel will need to switch to descriptor set = 1.
+            self.device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::COMPUTE,
+                self.descriptor_sets.pipeline_layout,
+                0,
+                &self.descriptor_sets.descriptor_sets,
+                &[],
+            );
 
-        let push_constants_data = slice::from_raw_parts(
-            &shader_params as *const ShaderParams as *const u8,
-            std::mem::size_of::<ShaderParams>(),
-        );
-        self.device.cmd_push_constants(
-            command_buffer,
-            self.descriptor_sets.pipeline_layout,
-            vk::ShaderStageFlags::COMPUTE,
-            0,
-            push_constants_data,
-        );
-        self.device.cmd_dispatch(
-            command_buffer,
-            workgroup_size.0 as u32,
-            workgroup_size.1 as u32,
-            1,
-        );
+            let push_constants_data = slice::from_raw_parts(
+                &shader_params as *const ShaderParams as *const u8,
+                std::mem::size_of::<ShaderParams>(),
+            );
+            self.device.cmd_push_constants(
+                command_buffer,
+                self.descriptor_sets.pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                push_constants_data,
+            );
+            self.device.cmd_dispatch(
+                command_buffer,
+                workgroup_size.0 as u32,
+                workgroup_size.1 as u32,
+                1,
+            );
 
-        self.device.end_command_buffer(command_buffer)?;
+            self.device.end_command_buffer(command_buffer)?;
 
-        let command_buffers = [command_buffer];
-        let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
-        self.device
-            .queue_submit(self.control.queue, &[submit_info], self.control.fence)?;
+            let command_buffers = [command_buffer];
+            let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
+            self.device
+                .queue_submit(self.control.queue, &[submit_info], self.control.fence)?;
 
-        self.device
-            .wait_for_fences(&[self.control.fence], true, u64::MAX)?;
+            self.device
+                .wait_for_fences(&[self.control.fence], true, u64::MAX)?;
+        }
 
         Ok(())
     }
 
-    unsafe fn transfer_in_images(&self, img1: &Grid<u8>, img2: &Grid<u8>) -> Result<(), GpuError> {
+    fn transfer_in_images(&self, img1: &Grid<u8>, img2: &Grid<u8>) -> Result<(), GpuError> {
         let buffers = self.buffers()?;
         let img2_offset = img1.width() * img1.height();
         let size = img1.width() * img1.height() + img2.width() * img2.height();
@@ -952,7 +968,7 @@ impl super::Device for Device {
         Ok(())
     }
 
-    unsafe fn save_corr(
+    fn save_corr(
         &self,
         correlation_values: &mut Grid<Option<f32>>,
         correlation_threshold: f32,
@@ -976,7 +992,7 @@ impl super::Device for Device {
         Ok(())
     }
 
-    unsafe fn save_result(
+    fn save_result(
         &self,
         out_image: &mut Grid<Option<Match>>,
         correlation_values: &Grid<Option<f32>>,
@@ -1006,7 +1022,7 @@ impl super::Device for Device {
         Ok(())
     }
 
-    unsafe fn destroy_buffers(&mut self) {
+    fn destroy_buffers(&mut self) {
         if let Some(buffers) = self.buffers.as_ref() {
             buffers.destroy(&self.device)
         }
@@ -1015,14 +1031,16 @@ impl super::Device for Device {
 }
 
 impl Buffer {
-    unsafe fn destroy(&self, device: &ash::Device) {
-        device.free_memory(self.buffer_memory, None);
-        device.destroy_buffer(self.buffer, None);
+    fn destroy(&self, device: &ash::Device) {
+        unsafe {
+            device.free_memory(self.buffer_memory, None);
+            device.destroy_buffer(self.buffer, None);
+        }
     }
 }
 
 impl DeviceBuffers {
-    unsafe fn destroy(&self, device: &ash::Device) {
+    fn destroy(&self, device: &ash::Device) {
         [
             self.buffer_img,
             self.buffer_internal_img1,
@@ -1040,19 +1058,19 @@ impl DeviceBuffers {
 }
 
 impl DescriptorSets {
-    unsafe fn destroy(&self, device: &ash::Device) {
-        let _ = device.free_descriptor_sets(self.descriptor_pool, self.descriptor_sets.as_slice());
-        device.destroy_pipeline_layout(self.pipeline_layout, None);
-        device.destroy_descriptor_set_layout(self.layout, None);
-        device.destroy_descriptor_pool(self.descriptor_pool, None);
+    fn destroy(&self, device: &ash::Device) {
+        unsafe {
+            let _ =
+                device.free_descriptor_sets(self.descriptor_pool, self.descriptor_sets.as_slice());
+            device.destroy_pipeline_layout(self.pipeline_layout, None);
+            device.destroy_descriptor_set_layout(self.layout, None);
+            device.destroy_descriptor_pool(self.descriptor_pool, None);
+        }
     }
 }
 
-unsafe fn destroy_pipelines(
-    device: &ash::Device,
-    pipelines: &HashMap<ShaderModuleType, ShaderPipeline>,
-) {
-    pipelines.values().for_each(|shader_pipeline| {
+fn destroy_pipelines(device: &ash::Device, pipelines: &HashMap<ShaderModuleType, ShaderPipeline>) {
+    pipelines.values().for_each(|shader_pipeline| unsafe {
         device.destroy_shader_module(shader_pipeline.shader_module, None);
         device.destroy_pipeline(shader_pipeline.pipeline, None);
     });
@@ -1068,7 +1086,7 @@ impl ShaderModuleType {
         Self::CrossCheckFilter,
     ];
 
-    unsafe fn load(&self, device: &ash::Device) -> Result<vk::ShaderModule, GpuError> {
+    fn load(&self, device: &ash::Device) -> Result<vk::ShaderModule, GpuError> {
         const SHADER_INIT_OUT_DATA: &[u8] = include_bytes!("shaders/init_out_data.spv");
         const SHADER_PREPARE_INITIALDATA_SEARCHDATA: &[u8] =
             include_bytes!("shaders/prepare_initialdata_searchdata.spv");
@@ -1087,22 +1105,26 @@ impl ShaderModuleType {
             Self::CrossCheckFilter => SHADER_CROSS_CHECK_FILTER,
         };
         let shader_code = ash::util::read_spv(&mut std::io::Cursor::new(shader_module_spv))?;
-        let shader_module = device.create_shader_module(
-            &vk::ShaderModuleCreateInfo::default()
-                .flags(vk::ShaderModuleCreateFlags::empty())
-                .code(shader_code.as_slice()),
-            None,
-        )?;
+        let shader_module = unsafe {
+            device.create_shader_module(
+                &vk::ShaderModuleCreateInfo::default()
+                    .flags(vk::ShaderModuleCreateFlags::empty())
+                    .code(shader_code.as_slice()),
+                None,
+            )?
+        };
 
         Ok(shader_module)
     }
 }
 
 impl Control {
-    unsafe fn destroy(&self, device: &ash::Device) {
-        device.free_command_buffers(self.command_pool, &[self.command_buffer]);
-        device.destroy_command_pool(self.command_pool, None);
-        device.destroy_fence(self.fence, None);
+    fn destroy(&self, device: &ash::Device) {
+        unsafe {
+            device.free_command_buffers(self.command_pool, &[self.command_buffer]);
+            device.destroy_command_pool(self.command_pool, None);
+            device.destroy_fence(self.fence, None);
+        }
     }
 }
 

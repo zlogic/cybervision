@@ -1,7 +1,7 @@
 use std::{marker::PhantomData, ops::Range};
 
 use rayon::{
-    iter::plumbing::{bridge, Consumer, Producer, ProducerCallback, UnindexedConsumer},
+    iter::plumbing::{Consumer, Producer, ProducerCallback, UnindexedConsumer, bridge},
     prelude::{IndexedParallelIterator, ParallelIterator},
 };
 
@@ -132,7 +132,7 @@ where
         let width = self.width;
         let x = i % width;
         let y = i / width;
-        let val = &(*self.grid).data[i];
+        let val = unsafe { &(*self.grid).data[i] };
         (x, y, val)
     }
 }
@@ -147,7 +147,7 @@ where
         let width = self.width;
         let x = i % width;
         let y = i / width;
-        let val = &mut (*self.grid).data[i];
+        let val = unsafe { &mut (*self.grid).data[i] };
         (x, y, val)
     }
 }

@@ -9,7 +9,7 @@ use nalgebra::{
     Vector2, Vector3, Vector4,
 };
 
-use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::SmallRng, seq::SliceRandom};
 use rayon::prelude::*;
 
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 100;
@@ -677,7 +677,7 @@ impl PerspectiveTriangulation {
 
         if self
             .best_initial_score
-            .map_or(true, |current_score| score > current_score)
+            .is_none_or(|current_score| score > current_score)
         {
             self.best_initial_p2 = Some(p2);
             self.best_initial_pair = Some((image1_index, image2_index));
@@ -1375,7 +1375,7 @@ impl PerspectiveTriangulation {
                         let dx = x.max(point1.x as usize) - x.min(point1.x as usize);
                         let dy = y.max(point1.y as usize) - y.min(point1.y as usize);
                         let distance = dx * dx + dy * dy;
-                        if min_distance.map_or(true, |min_distance| distance < min_distance) {
+                        if min_distance.is_none_or(|min_distance| distance < min_distance) {
                             min_distance = Some(distance);
                             best_match = Some(next_point);
                         }

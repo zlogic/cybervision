@@ -177,7 +177,11 @@ impl Args {
             exit(2);
         };
         if filenames.len() < 2 {
-            eprintln!("Not enough source images (need at least 2 to create a stereopair), but only {} were specified: {:?}", filenames.len(), filenames);
+            eprintln!(
+                "Not enough source images (need at least 2 to create a stereopair), but only {} were specified: {:?}",
+                filenames.len(),
+                filenames
+            );
             println!("{}", USAGE_INSTRUCTIONS);
             exit(2);
         }

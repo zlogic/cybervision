@@ -2,9 +2,9 @@ use crate::data::Point2D;
 use nalgebra::allocator::Allocator;
 use nalgebra::{
     ArrayStorage, DVector, DefaultAllocator, Dim, DimMin, DimMinimum, Dyn, Matrix, Matrix3,
-    OMatrix, OVector, SMatrix, SVector, VecStorage, Vector3, U1, U7,
+    OMatrix, OVector, SMatrix, SVector, U1, U7, VecStorage, Vector3,
 };
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::SmallRng};
 use rayon::prelude::*;
 use roots::find_roots_cubic;
 use std::cmp::Ordering;
