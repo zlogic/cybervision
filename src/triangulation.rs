@@ -1794,10 +1794,7 @@ impl BundleAdjustment<'_> {
             let b = self.jacobian_b(&point3d, view_j);
             v += b.tr_mul(&b) * self.covariance;
         }
-        match v.pseudo_inverse(f64::EPSILON) {
-            Ok(v_inv) => Some(v_inv),
-            Err(_) => None,
-        }
+        v.pseudo_inverse(f64::EPSILON).ok()
     }
 
     fn calculate_residual_vector(&self) -> MatrixXx1<f64> {

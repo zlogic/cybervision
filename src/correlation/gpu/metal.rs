@@ -298,7 +298,7 @@ impl super::Device for Device {
         shader_type: ShaderModuleType,
         shader_params: ShaderParams,
     ) -> Result<(), GpuError> {
-        let workgroup_size = ((dimensions.0 + 15) / 16, ((dimensions.1 + 15) / 16));
+        let workgroup_size = (dimensions.0.div_ceil(16), dimensions.1.div_ceil(16));
         autoreleasepool(|| {
             let pipeline = self.pipelines.get(&shader_type).unwrap();
             let command_buffer = self.command_queue.new_command_buffer();
