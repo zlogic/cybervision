@@ -34,7 +34,7 @@ jobs:
 
   build-linux:
     # Older Ubuntu versions will link with an older GLIBC and provide better compatibility
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: validate
     strategy:
       fail-fast: true
