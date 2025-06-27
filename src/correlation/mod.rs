@@ -168,7 +168,7 @@ impl PointCorrelations<'_> {
                     Some(gpu_context)
                 }
                 Err(err) => {
-                    selected_hardware = format!("CPU fallback ({})", err);
+                    selected_hardware = format!("CPU fallback ({err})");
                     None
                 }
             }

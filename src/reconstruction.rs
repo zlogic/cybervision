@@ -266,10 +266,7 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
             let f = match reconstruction_task.reconstruct_sparse(img_i, img_j) {
                 Ok(f) => f,
                 Err(err) => {
-                    eprintln!(
-                        "Failed to match images {} and {} ({})",
-                        img1_filename, img2_filename, err
-                    );
+                    eprintln!("Failed to match images {img1_filename} and {img2_filename} ({err})");
                     None
                 }
             };
@@ -281,7 +278,7 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
     let linked_images = match reconstruction_task.recover_camera_poses() {
         Ok(img_index) => img_index,
         Err(err) => {
-            eprintln!("Failed to recover camera poses: {}", err);
+            eprintln!("Failed to recover camera poses: {err}");
             return Err(err.into());
         }
     };
@@ -294,14 +291,14 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
     let gpu_device = match correlation::create_gpu_context(hardware_mode) {
         Ok(gpu_device) => Some(gpu_device),
         Err(err) => {
-            eprintln!("Failed to obtain GPU device: {}", err);
+            eprintln!("Failed to obtain GPU device: {err}");
             None
         }
     };
     match reconstruction_task.reconstruct_dense(gpu_device, &linked_images, f_matrices) {
         Ok(_) => {}
         Err(err) => {
-            eprintln!("Failed to recover image poses: {}", err);
+            eprintln!("Failed to recover image poses: {err}");
             return Err(err.into());
         }
     };
@@ -330,7 +327,7 @@ impl ImageReconstruction {
     ) -> Result<Option<Matrix3<f64>>, ReconstructionError> {
         let img1_filename = &self.img_filenames[img1_index];
         let img2_filename = &self.img_filenames[img2_index];
-        println!("Processing images {} and {}", img1_filename, img2_filename);
+        println!("Processing images {img1_filename} and {img2_filename}");
         let img1 = SourceImage::load(img1_filename)?;
         let img2 = SourceImage::load(img2_filename)?;
         println!(
@@ -361,7 +358,7 @@ impl ImageReconstruction {
             .tilt_angle
             .and_then(|a1| img2.tilt_angle.map(|a2| a2 - a1));
         if let Some(tilt_angle) = tilt_angle {
-            println!("Relative tilt angle is {}", tilt_angle);
+            println!("Relative tilt angle is {tilt_angle}");
         }
 
         self.triangulation.set_image_data(
@@ -384,7 +381,7 @@ impl ImageReconstruction {
         ) {
             Ok(f) => (f.f, f.inliers),
             Err(err) => {
-                eprintln!("Failed to complete RANSAC task: {}", err);
+                eprintln!("Failed to complete RANSAC task: {err}");
                 return Err(err.into());
             }
         };
@@ -393,7 +390,7 @@ impl ImageReconstruction {
         match self.triangulate_sparse(img1_index, img2_index, f, inliers) {
             Ok(()) => Ok(Some(f)),
             Err(err) => {
-                eprintln!("Failed to add image pair: {}", err);
+                eprintln!("Failed to add image pair: {err}");
                 Err(err.into())
             }
         }
@@ -637,7 +634,7 @@ impl ImageReconstruction {
             let mut images = match result {
                 Ok(images) => images,
                 Err(err) => {
-                    eprintln!("Failed to recover pose for next image: {}", err);
+                    eprintln!("Failed to recover pose for next image: {err}");
                     continue;
                 }
             };
@@ -682,7 +679,7 @@ impl ImageReconstruction {
             let img1 = match SourceImage::load(img1_filename) {
                 Ok(img1) => img1,
                 Err(err) => {
-                    eprintln!("Failed to load image: {}", err);
+                    eprintln!("Failed to load image: {err}");
                     continue;
                 }
             };
@@ -695,7 +692,7 @@ impl ImageReconstruction {
                 let img2 = match SourceImage::load(img2_filename) {
                     Ok(img1) => img1,
                     Err(err) => {
-                        eprintln!("Failed to load image: {}", err);
+                        eprintln!("Failed to load image: {err}");
                         continue;
                     }
                 };
@@ -708,8 +705,7 @@ impl ImageReconstruction {
                     continue;
                 };
                 println!(
-                    "Performing dense correlation of images {} and {}",
-                    img1_filename, img2_filename
+                    "Performing dense correlation of images {img1_filename} and {img2_filename}"
                 );
                 match self.correlate_dense(
                     gpu_device.as_mut(),
@@ -721,7 +717,7 @@ impl ImageReconstruction {
                 ) {
                     Ok(_) => {}
                     Err(err) => {
-                        eprintln!("Failed to perform dense correlation of images: {}", err)
+                        eprintln!("Failed to perform dense correlation of images: {err}")
                     }
                 }
             }
@@ -827,7 +823,7 @@ impl ImageReconstruction {
         match result {
             Ok(_) => {}
             Err(err) => {
-                eprintln!("Failed to save image: {}", err);
+                eprintln!("Failed to save image: {err}");
                 return Err(err.into());
             }
         }
@@ -861,7 +857,7 @@ impl fundamentalmatrix::ProgressListener for ProgressBar {
     }
     fn report_matches(&self, matches_count: usize) {
         if matches_count > 0 {
-            self.set_message(format!(", {} matches", matches_count));
+            self.set_message(format!(", {matches_count} matches"));
         }
     }
 }

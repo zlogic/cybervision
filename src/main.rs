@@ -78,11 +78,8 @@ impl Args {
             img_out: "".to_string(),
         };
         let fail_with_error = |name: &str, value: &str, err: &dyn Display| {
-            eprintln!(
-                "Argument {} has an unsupported value {}: {}",
-                name, value, err
-            );
-            println!("{}", USAGE_INSTRUCTIONS);
+            eprintln!("Argument {name} has an unsupported value {value}: {err}");
+            println!("{USAGE_INSTRUCTIONS}");
             exit(2)
         };
         let mut filenames = vec![];
@@ -94,14 +91,14 @@ impl Args {
                     continue;
                 }
                 if arg == "--help" {
-                    println!("{}", USAGE_INSTRUCTIONS);
+                    println!("{USAGE_INSTRUCTIONS}");
                     exit(0);
                 }
                 let (name, value) = if let Some(arg) = arg.split_once('=') {
                     arg
                 } else {
-                    eprintln!("Option flag {} has no value", arg);
-                    println!("{}", USAGE_INSTRUCTIONS);
+                    eprintln!("Option flag {arg} has no value");
+                    println!("{USAGE_INSTRUCTIONS}");
                     exit(2);
                 };
                 if name == "--scale" {
@@ -120,8 +117,8 @@ impl Args {
                         "gpu-low-power" => args.mode = HardwareMode::GpuLowPower,
                         "cpu" => args.mode = HardwareMode::Cpu,
                         _ => {
-                            eprintln!("Unsupported hardware mode {}", value);
-                            println!("{}", USAGE_INSTRUCTIONS);
+                            eprintln!("Unsupported hardware mode {value}");
+                            println!("{USAGE_INSTRUCTIONS}");
                             exit(2);
                         }
                     };
@@ -130,8 +127,8 @@ impl Args {
                         "delaunay" => args.interpolation = InterpolationMode::Delaunay,
                         "none" => args.interpolation = InterpolationMode::None,
                         _ => {
-                            eprintln!("Unsupported interpolation {}", value);
-                            println!("{}", USAGE_INSTRUCTIONS);
+                            eprintln!("Unsupported interpolation {value}");
+                            println!("{USAGE_INSTRUCTIONS}");
                             exit(2);
                         }
                     };
@@ -145,8 +142,8 @@ impl Args {
                         "perspective" => args.projection = ProjectionMode::Perspective,
                         "parallel" => args.projection = ProjectionMode::Parallel,
                         _ => {
-                            eprintln!("Unsupported projection {}", value);
-                            println!("{}", USAGE_INSTRUCTIONS);
+                            eprintln!("Unsupported projection {value}");
+                            println!("{USAGE_INSTRUCTIONS}");
                             exit(2);
                         }
                     };
@@ -156,13 +153,13 @@ impl Args {
                         "vertex-colors" => args.mesh = Mesh::VertexColors,
                         "texture-coordinates" => args.mesh = Mesh::TextureCoordinates,
                         _ => {
-                            eprintln!("Unsupported mesh vertex output mode {}", value);
-                            println!("{}", USAGE_INSTRUCTIONS);
+                            eprintln!("Unsupported mesh vertex output mode {value}");
+                            println!("{USAGE_INSTRUCTIONS}");
                             exit(2);
                         }
                     };
                 } else {
-                    eprintln!("Unsupported argument {}", arg);
+                    eprintln!("Unsupported argument {arg}");
                 }
             } else {
                 filenames.push(arg);
@@ -173,7 +170,7 @@ impl Args {
             img_out
         } else {
             eprintln!("No filenames provided");
-            println!("{}", USAGE_INSTRUCTIONS);
+            println!("{USAGE_INSTRUCTIONS}");
             exit(2);
         };
         if filenames.len() < 2 {
@@ -182,7 +179,7 @@ impl Args {
                 filenames.len(),
                 filenames
             );
-            println!("{}", USAGE_INSTRUCTIONS);
+            println!("{USAGE_INSTRUCTIONS}");
             exit(2);
         }
         args.img_src = filenames;
@@ -199,7 +196,7 @@ fn main() {
     let args = Args::parse();
 
     if let Err(err) = reconstruction::reconstruct(&args) {
-        println!("Reconstruction failed, root cause is {}", err);
+        println!("Reconstruction failed, root cause is {err}");
         exit(1);
     };
 }

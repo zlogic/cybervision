@@ -690,7 +690,7 @@ impl MeshWriter for PlyWriter {
         writeln!(w, "ply")?;
         writeln!(w, "format binary_big_endian 1.0")?;
         writeln!(w, "comment Cybervision 3D surface")?;
-        writeln!(w, "element vertex {}", nvertices)?;
+        writeln!(w, "element vertex {nvertices}")?;
         writeln!(w, "property double x")?;
         writeln!(w, "property double y")?;
         writeln!(w, "property double z")?;
@@ -704,7 +704,7 @@ impl MeshWriter for PlyWriter {
                 writeln!(w, "property uchar blue")?;
             }
         }
-        writeln!(w, "element face {}", nfaces)?;
+        writeln!(w, "element face {nfaces}")?;
         writeln!(w, "property list uchar int vertex_indices")?;
         writeln!(w, "end_header")
     }
@@ -836,7 +836,7 @@ impl ObjWriter {
         match self.vertex_mode {
             VertexMode::Plain | VertexMode::Color => {}
             VertexMode::Texture => {
-                writeln!(w, "usemtl Textured{}", img_i)?;
+                writeln!(w, "usemtl Textured{img_i}")?;
             }
         }
         Ok(())
@@ -850,20 +850,20 @@ impl ObjWriter {
 
         let destination_path = Path::new(&self.path).parent().unwrap();
         let mut w = BufWriter::new(File::create(
-            destination_path.join(format!("{}.mtl", out_filename)),
+            destination_path.join(format!("{out_filename}.mtl")),
         )?);
 
         for (img_i, img) in self.images.iter().enumerate() {
-            let image_filename = format!("{}-{}.png", out_filename, img_i);
+            let image_filename = format!("{out_filename}-{img_i}.png");
 
-            writeln!(w, "newmtl Textured{}", img_i)?;
+            writeln!(w, "newmtl Textured{img_i}")?;
             writeln!(w, "Ka 0.2 0.2 0.2")?;
             writeln!(w, "Kd 0.8 0.8 0.8")?;
             writeln!(w, "Ks 1.0 1.0 1.0")?;
             writeln!(w, "illum 2")?;
             writeln!(w, "Ns 0.000500")?;
-            writeln!(w, "map_Ka {}", image_filename)?;
-            writeln!(w, "map_Kd {}", image_filename)?;
+            writeln!(w, "map_Ka {image_filename}")?;
+            writeln!(w, "map_Kd {image_filename}")?;
             writeln!(w)?;
 
             img.save(destination_path.join(image_filename))?;
@@ -882,7 +882,7 @@ impl MeshWriter for ObjWriter {
         match self.vertex_mode {
             VertexMode::Plain | VertexMode::Color => {}
             VertexMode::Texture => {
-                writeln!(w, "mtllib {}.mtl", out_filename)?;
+                writeln!(w, "mtllib {out_filename}.mtl")?;
             }
         }
         Ok(())
@@ -920,7 +920,7 @@ impl MeshWriter for ObjWriter {
             -p.y * self.out_scale.1,
             p.z * self.out_scale.2,
         );
-        write!(w, "v {} {} {}", x, y, z)?;
+        write!(w, "v {x} {y} {z}")?;
         if let Some(color) = color {
             write!(
                 w,
@@ -983,12 +983,12 @@ impl MeshWriter for ObjWriter {
             let index = indices[i] + 1;
             match self.vertex_mode {
                 VertexMode::Plain | VertexMode::Color => {
-                    write!(self.buffer, " {}", index)?;
+                    write!(self.buffer, " {index}")?;
                 }
                 VertexMode::Texture => {
                     let uv_index =
                         self.get_uv_index(polygon.camera_i, polygon.vertices[i], tracks[i]) + 1;
-                    write!(self.buffer, " {}/{}", index, uv_index)?;
+                    write!(self.buffer, " {index}/{uv_index}")?;
                 }
             }
         }
