@@ -125,10 +125,11 @@ impl SourceImage {
                         // TODO: use rotation (see "Real scale (Tomasi) stuff.pdf")
                         result_metadata.tilt_angle = Self::tag_value(line)
                     }
-                } else if section.eq("[PrivateFei]") && line.starts_with("DatabarHeight=") {
-                    if let Some(databar_height) = Self::tag_value(line) {
-                        result_metadata.databar_height = databar_height;
-                    }
+                } else if section.eq("[PrivateFei]")
+                    && line.starts_with("DatabarHeight=")
+                    && let Some(databar_height) = Self::tag_value(line)
+                {
+                    result_metadata.databar_height = databar_height;
                 }
             }
             result_metadata.scale = (scale_width.unwrap_or(1.0), scale_height.unwrap_or(1.0));

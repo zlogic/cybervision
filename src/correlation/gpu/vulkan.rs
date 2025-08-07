@@ -892,7 +892,7 @@ impl super::Device for Device {
         let pipeline_config = self.pipelines.get(&shader_type).unwrap();
         let command_buffer = self.control.command_buffer;
 
-        let workgroup_size = ((dimensions.0 + 15) / 16, ((dimensions.1 + 15) / 16));
+        let workgroup_size = (dimensions.0.div_ceil(16), dimensions.1.div_ceil(16));
         unsafe {
             self.device.reset_fences(&[self.control.fence])?;
             self.device
@@ -1193,10 +1193,10 @@ where
     F: FnOnce(T),
 {
     fn drop(&mut self) {
-        if let Some(val) = self.val.take() {
-            if let Some(rb) = self.rollback.take() {
-                rb(val)
-            }
+        if let Some(val) = self.val.take()
+            && let Some(rb) = self.rollback.take()
+        {
+            rb(val)
         }
     }
 }

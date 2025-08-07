@@ -128,7 +128,7 @@ impl ProjectedPolygon {
         }
     }
 
-    fn iter(&self) -> ProjectedPolygonIterator {
+    fn iter(&self) -> ProjectedPolygonIterator<'_> {
         let min_y = self.projections[0].y.floor().clamp(0.0, self.max_y as f64) as usize;
         let max_y = (self.projections[2].y + 1.0)
             .ceil()

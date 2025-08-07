@@ -35,7 +35,7 @@ pub struct Surface {
 }
 
 impl Surface {
-    pub fn iter_tracks(&self) -> std::slice::Iter<Track> {
+    pub fn iter_tracks(&self) -> std::slice::Iter<'_, Track> {
         self.tracks.iter()
     }
 
@@ -1398,12 +1398,12 @@ impl PerspectiveTriangulation {
         let mut new_tracks = remaining_points
             .par_iter()
             .flat_map(|(x, y, m)| {
-                if x == 0 {
-                    if let Some(pl) = progress_listener {
-                        let value = counter.fetch_add(1, AtomicOrdering::Relaxed) as f32
-                            / total_rows as f32;
-                        pl.report_status(0.98 + value * 0.02);
-                    }
+                if x == 0
+                    && let Some(pl) = progress_listener
+                {
+                    let value =
+                        counter.fetch_add(1, AtomicOrdering::Relaxed) as f32 / total_rows as f32;
+                    pl.report_status(0.98 + value * 0.02);
                 }
                 let track_point1 = Point2D::new(x as u32, y as u32);
                 let track_point2 = (*m)?.0;

@@ -128,7 +128,7 @@ impl GpuContext<'_> {
         img2_dimensions: (usize, usize),
         projection_mode: ProjectionMode,
         fundamental_matrix: Matrix3<f64>,
-    ) -> Result<GpuContext, GpuError> {
+    ) -> Result<GpuContext<'_>, GpuError> {
         let (search_area_segment_length, corridor_segment_length) = if device_context.is_low_power()
         {
             (

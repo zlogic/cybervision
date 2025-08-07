@@ -153,7 +153,7 @@ impl PointCorrelations<'_> {
         img2_dimensions: (u32, u32),
         fundamental_matrix: Matrix3<f64>,
         projection_mode: ProjectionMode,
-    ) -> PointCorrelations {
+    ) -> PointCorrelations<'_> {
         let selected_hardware;
         let gpu_context = if let Some(device_context) = device_context {
             match GpuContext::new(
@@ -286,15 +286,15 @@ impl PointCorrelations<'_> {
             out_data.height() - KERNEL_SIZE,
         );
         out_data.par_iter_mut().for_each(|(x, y, out_point)| {
-            if x == 0 {
-                if let Some(pl) = progress_listener {
-                    let value = counter.fetch_add(1, Ordering::Relaxed) as f32 / out_data_height;
-                    let value = match dir {
-                        CorrelationDirection::Forward => value / 2.0,
-                        CorrelationDirection::Reverse => 0.5 + value / 2.0,
-                    };
-                    pl.report_status(value);
-                }
+            if x == 0
+                && let Some(pl) = progress_listener
+            {
+                let value = counter.fetch_add(1, Ordering::Relaxed) as f32 / out_data_height;
+                let value = match dir {
+                    CorrelationDirection::Forward => value / 2.0,
+                    CorrelationDirection::Reverse => 0.5 + value / 2.0,
+                };
+                pl.report_status(value);
             }
             if x < KERNEL_SIZE || y < KERNEL_SIZE || x >= max_width || y >= max_height {
                 return;
@@ -572,15 +572,15 @@ impl PointCorrelations<'_> {
         correlated_points
             .par_iter_mut()
             .for_each(|(x, y, out_point)| {
-                if let Some(m) = out_point {
-                    if !Self::cross_check_point(
+                if let Some(m) = out_point
+                    && !Self::cross_check_point(
                         correlated_points_reverse,
                         search_area,
                         Point2D::new(x, y),
                         *m,
-                    ) {
-                        *out_point = None;
-                    }
+                    )
+                {
+                    *out_point = None;
                 }
             });
         Ok(())
