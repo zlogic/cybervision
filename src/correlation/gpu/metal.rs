@@ -1,6 +1,15 @@
-use std::{collections::HashMap, error, ffi::c_void, fmt, slice};
+use std::{collections::HashMap, error, fmt, ptr::NonNull, slice};
 
-use metal::objc::rc::autoreleasepool;
+use objc2::{
+    rc::{Retained, autoreleasepool},
+    runtime::ProtocolObject,
+};
+use objc2_foundation::{NSRange, NSString};
+use objc2_metal::{
+    MTLBlitCommandEncoder as _, MTLBuffer, MTLCommandBuffer as _, MTLCommandEncoder as _,
+    MTLCommandQueue, MTLComputeCommandEncoder, MTLComputePipelineState, MTLDevice, MTLFunction,
+    MTLLibrary, MTLResourceOptions, MTLSize,
+};
 use rayon::iter::ParallelIterator;
 
 use crate::{
@@ -15,13 +24,15 @@ use super::{CorrelationDirection, HardwareMode};
 // AMD64 devices are no longer available for sale, and testing/validating would require too much
 // effort.
 pub struct Device {
-    device: metal::Device,
+    device: Retained<ProtocolObject<dyn MTLDevice>>,
     buffers: Option<DeviceBuffers>,
     direction: CorrelationDirection,
     unified_memory: bool,
-    pipelines: HashMap<ShaderModuleType, metal::ComputePipelineState>,
-    command_queue: metal::CommandQueue,
+    pipelines: HashMap<ShaderModuleType, Retained<ProtocolObject<dyn MTLComputePipelineState>>>,
+    command_queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
 }
+
+unsafe impl Sync for Device {}
 
 enum BufferType {
     GpuOnly,
@@ -29,13 +40,13 @@ enum BufferType {
 }
 
 struct DeviceBuffers {
-    buffer_img: metal::Buffer,
-    buffer_internal_img1: metal::Buffer,
-    buffer_internal_img2: metal::Buffer,
-    buffer_internal_int: metal::Buffer,
-    buffer_out: metal::Buffer,
-    buffer_out_reverse: metal::Buffer,
-    buffer_out_corr: metal::Buffer,
+    buffer_img: Retained<ProtocolObject<dyn MTLBuffer>>,
+    buffer_internal_img1: Retained<ProtocolObject<dyn MTLBuffer>>,
+    buffer_internal_img2: Retained<ProtocolObject<dyn MTLBuffer>>,
+    buffer_internal_int: Retained<ProtocolObject<dyn MTLBuffer>>,
+    buffer_out: Retained<ProtocolObject<dyn MTLBuffer>>,
+    buffer_out_reverse: Retained<ProtocolObject<dyn MTLBuffer>>,
+    buffer_out_corr: Retained<ProtocolObject<dyn MTLBuffer>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -55,7 +66,7 @@ pub struct DeviceContext {
 
 impl DeviceContext {
     pub fn new(hardware_mode: HardwareMode) -> Result<DeviceContext, GpuError> {
-        autoreleasepool(|| {
+        autoreleasepool(|_| {
             if !matches!(hardware_mode, HardwareMode::Gpu | HardwareMode::GpuLowPower) {
                 return Err("GPU mode is not enabled".into());
             };
@@ -75,10 +86,10 @@ impl super::DeviceContext<Device> for DeviceContext {
     }
 
     fn get_device_name(&self) -> Option<String> {
-        autoreleasepool(|| {
+        autoreleasepool(|_| {
             self.device()
                 .ok()
-                .map(|device| device.device.name().to_owned())
+                .map(|device| device.device.name().to_string())
         })
     }
 
@@ -90,7 +101,7 @@ impl super::DeviceContext<Device> for DeviceContext {
         let img1_pixels = img1_dimensions.0 * img1_dimensions.1;
         let img2_pixels = img2_dimensions.0 * img2_dimensions.1;
 
-        autoreleasepool(|| {
+        autoreleasepool(|_| {
             let device = self.device_mut()?;
             device.buffers = None;
             let buffers = unsafe { device.create_buffers(img1_pixels, img2_pixels)? };
@@ -117,15 +128,18 @@ impl super::DeviceContext<Device> for DeviceContext {
 
 impl Device {
     fn new() -> Result<Device, GpuError> {
-        autoreleasepool(|| {
-            let device = match metal::Device::system_default() {
+        autoreleasepool(|_| {
+            let device = match objc2_metal::MTLCreateSystemDefaultDevice() {
                 Some(device) => device,
                 None => return Err("GPU mode is not enabled".into()),
             };
             let direction = CorrelationDirection::Forward;
-            let unified_memory = device.has_unified_memory();
+            let unified_memory = device.hasUnifiedMemory();
             let pipelines = Self::create_pipelines(&device)?;
-            let command_queue = device.new_command_queue();
+            let command_queue = match device.newCommandQueue() {
+                Some(command_queue) => command_queue,
+                None => return Err("Command queue is not available".into()),
+            };
             Ok(Device {
                 device,
                 buffers: None,
@@ -146,37 +160,37 @@ impl Device {
         let buffer_img = self.create_buffer(
             (img1_pixels + img2_pixels) * std::mem::size_of::<f32>(),
             BufferType::HostVisible,
-        );
+        )?;
 
         let buffer_internal_img1 = self.create_buffer(
             (img1_pixels * 2) * std::mem::size_of::<f32>(),
             BufferType::GpuOnly,
-        );
+        )?;
 
         let buffer_internal_img2 = self.create_buffer(
             (img2_pixels * 2) * std::mem::size_of::<f32>(),
             BufferType::GpuOnly,
-        );
+        )?;
 
         let buffer_internal_int = self.create_buffer(
             max_pixels * 4 * std::mem::size_of::<i32>(),
             BufferType::GpuOnly,
-        );
+        )?;
 
         let buffer_out = self.create_buffer(
             img1_pixels * 2 * std::mem::size_of::<i32>(),
             BufferType::HostVisible,
-        );
+        )?;
 
         let buffer_out_reverse = self.create_buffer(
             img2_pixels * 2 * std::mem::size_of::<i32>(),
             BufferType::GpuOnly,
-        );
+        )?;
 
         let buffer_out_corr = self.create_buffer(
             max_pixels * std::mem::size_of::<f32>(),
             BufferType::HostVisible,
-        );
+        )?;
 
         Ok(DeviceBuffers {
             buffer_img,
@@ -196,52 +210,79 @@ impl Device {
         }
     }
 
-    fn create_buffer(&self, size: usize, buffer_type: BufferType) -> metal::Buffer {
-        let size = size as u64;
+    fn create_buffer(
+        &self,
+        size: usize,
+        buffer_type: BufferType,
+    ) -> Result<Retained<ProtocolObject<dyn MTLBuffer>>, GpuError> {
         let options = match buffer_type {
-            BufferType::GpuOnly => metal::MTLResourceOptions::StorageModePrivate,
+            BufferType::GpuOnly => MTLResourceOptions::StorageModePrivate,
             BufferType::HostVisible => {
                 if self.unified_memory {
-                    metal::MTLResourceOptions::StorageModeShared
+                    MTLResourceOptions::StorageModeShared
                 } else {
-                    metal::MTLResourceOptions::StorageModeManaged
+                    MTLResourceOptions::StorageModeManaged
                 }
             }
         };
-        autoreleasepool(|| self.device.new_buffer(size, options))
+        autoreleasepool(
+            |_| match self.device.newBufferWithLength_options(size, options) {
+                Some(buffer) => Ok(buffer),
+                None => Err("Failed to create buffer".into()),
+            },
+        )
     }
 
-    fn flush_buffer_to_device(&self, buffer: &metal::Buffer, size: usize) {
+    fn flush_buffer_to_device(
+        &self,
+        buffer: &Retained<ProtocolObject<dyn MTLBuffer>>,
+        size: usize,
+    ) {
         if !self.unified_memory {
-            let range = metal::NSRange {
+            let range = NSRange {
                 location: 0,
-                length: size as u64,
+                length: size,
             };
-            buffer.did_modify_range(range);
+            buffer.didModifyRange(range);
         }
     }
 
-    fn flush_buffer_to_host(&self, buffer: &metal::Buffer) {
+    fn flush_buffer_to_host(
+        &self,
+        buffer: &Retained<ProtocolObject<dyn MTLBuffer>>,
+    ) -> Result<(), GpuError> {
         if !&self.unified_memory {
-            let command_buffer = self.command_queue.new_command_buffer();
-            let blit_encoder = command_buffer.new_blit_command_encoder();
-            blit_encoder.synchronize_resource(buffer);
-            blit_encoder.end_encoding();
+            let command_buffer = match self.command_queue.commandBuffer() {
+                Some(command_buffer) => command_buffer,
+                None => return Err("Command queue has no command buffer".into()),
+            };
+            let blit_encoder = match command_buffer.blitCommandEncoder() {
+                Some(blit_encoder) => blit_encoder,
+                None => return Err("Command buffer has no blit command encoder".into()),
+            };
+            blit_encoder.synchronizeResource(buffer.as_ref());
+            blit_encoder.endEncoding();
             command_buffer.commit();
-            command_buffer.wait_until_completed();
+            unsafe { command_buffer.waitUntilCompleted() };
         }
+        Ok(())
     }
 
     fn create_pipelines(
-        device: &metal::Device,
-    ) -> Result<HashMap<ShaderModuleType, metal::ComputePipelineState>, GpuError> {
-        autoreleasepool(|| {
+        device: &Retained<ProtocolObject<dyn MTLDevice>>,
+    ) -> Result<
+        HashMap<ShaderModuleType, Retained<ProtocolObject<dyn MTLComputePipelineState>>>,
+        GpuError,
+    > {
+        autoreleasepool(|_| {
             let mut result = HashMap::new();
             let source = include_bytes!("shaders/correlation.metallib");
-            let library = device.new_library_with_data(source)?;
+            let library = unsafe {
+                device.newLibraryWithData_error(&dispatch2::DispatchData::from_bytes(source))?
+            };
             for module_type in ShaderModuleType::VALUES {
                 let function = module_type.load(&library)?;
-                let pipeline = device.new_compute_pipeline_state_with_function(&function)?;
+                let pipeline = device.newComputePipelineStateWithFunction_error(&function)?;
                 result.insert(module_type, pipeline);
             }
             Ok(result)
@@ -251,7 +292,7 @@ impl Device {
     fn set_buffer_layout(
         &self,
         shader: &ShaderModuleType,
-        command_encoder: &metal::ComputeCommandEncoderRef,
+        command_encoder: &Retained<ProtocolObject<dyn MTLComputeCommandEncoder>>,
     ) -> Result<(), GpuError> {
         let buffers = &self.buffers()?;
         let (buffer_internal_img1, buffer_internal_img2, buffer_out, buffer_out_reverse) =
@@ -271,17 +312,21 @@ impl Device {
             };
         // Index 0 is reserved for push_constants.
         if matches!(shader, ShaderModuleType::CrossCheckFilter) {
-            command_encoder.set_buffer(1, Some(buffer_out), 0);
-            command_encoder.set_buffer(2, Some(buffer_out_reverse), 0);
+            unsafe {
+                command_encoder.setBuffer_offset_atIndex(Some(buffer_out), 0, 1);
+                command_encoder.setBuffer_offset_atIndex(Some(buffer_out_reverse), 0, 2);
+            }
             return Ok(());
         }
 
-        command_encoder.set_buffer(1, Some(&buffers.buffer_img), 0);
-        command_encoder.set_buffer(2, Some(buffer_internal_img1), 0);
-        command_encoder.set_buffer(3, Some(buffer_internal_img2), 0);
-        command_encoder.set_buffer(4, Some(&buffers.buffer_internal_int), 0);
-        command_encoder.set_buffer(5, Some(buffer_out), 0);
-        command_encoder.set_buffer(6, Some(&buffers.buffer_out_corr), 0);
+        unsafe {
+            command_encoder.setBuffer_offset_atIndex(Some(&buffers.buffer_img), 0, 1);
+            command_encoder.setBuffer_offset_atIndex(Some(buffer_internal_img1), 0, 2);
+            command_encoder.setBuffer_offset_atIndex(Some(buffer_internal_img2), 0, 3);
+            command_encoder.setBuffer_offset_atIndex(Some(&buffers.buffer_internal_int), 0, 4);
+            command_encoder.setBuffer_offset_atIndex(Some(buffer_out), 0, 5);
+            command_encoder.setBuffer_offset_atIndex(Some(&buffers.buffer_out_corr), 0, 6);
+        }
         Ok(())
     }
 }
@@ -299,58 +344,63 @@ impl super::Device for Device {
         shader_params: ShaderParams,
     ) -> Result<(), GpuError> {
         let workgroup_size = (dimensions.0.div_ceil(16), dimensions.1.div_ceil(16));
-        autoreleasepool(|| {
+        autoreleasepool(|_| {
             let pipeline = self.pipelines.get(&shader_type).unwrap();
-            let command_buffer = self.command_queue.new_command_buffer();
-
-            let compute_encoder = command_buffer.new_compute_command_encoder();
-            compute_encoder.set_compute_pipeline_state(pipeline);
-
-            let push_constants_data = unsafe {
-                slice::from_raw_parts(
-                    &shader_params as *const ShaderParams as *const u8,
-                    std::mem::size_of::<ShaderParams>(),
-                )
+            let command_buffer = match self.command_queue.commandBuffer() {
+                Some(command_buffer) => command_buffer,
+                None => return Err("Command queue has no command buffer".into()),
             };
-            compute_encoder.set_bytes(
-                0,
-                push_constants_data.len() as u64,
-                push_constants_data.as_ptr() as *const c_void,
-            );
-            self.set_buffer_layout(&shader_type, compute_encoder)?;
 
-            let thread_group_count = metal::MTLSize {
-                width: workgroup_size.0 as u64,
-                height: workgroup_size.1 as u64,
+            let compute_encoder = match command_buffer.computeCommandEncoder() {
+                Some(command_encoder) => command_encoder,
+                None => return Err("Command buffer has no command encoder".into()),
+            };
+            compute_encoder.setComputePipelineState(pipeline);
+
+            let push_constants_data = NonNull::from_ref(&shader_params);
+            unsafe {
+                compute_encoder.setBytes_length_atIndex(
+                    push_constants_data.cast(),
+                    std::mem::size_of::<ShaderParams>(),
+                    0,
+                );
+            }
+            self.set_buffer_layout(&shader_type, &compute_encoder)?;
+
+            let thread_group_count = MTLSize {
+                width: workgroup_size.0,
+                height: workgroup_size.1,
                 depth: 1,
             };
-            let thread_group_size = metal::MTLSize {
+            let thread_group_size = MTLSize {
                 width: 16,
                 height: 16,
                 depth: 1,
             };
 
-            compute_encoder.dispatch_thread_groups(thread_group_count, thread_group_size);
-            compute_encoder.end_encoding();
+            compute_encoder
+                .dispatchThreadgroups_threadsPerThreadgroup(thread_group_count, thread_group_size);
+            compute_encoder.endEncoding();
 
             command_buffer.commit();
-            command_buffer.wait_until_completed();
+            unsafe { command_buffer.waitUntilCompleted() };
 
             Ok(())
         })
     }
 
     fn transfer_in_images(&self, img1: &Grid<u8>, img2: &Grid<u8>) -> Result<(), GpuError> {
-        autoreleasepool(|| {
+        autoreleasepool(|_| {
             let buffers = self.buffers()?;
             let buffer = &buffers.buffer_img;
             let buffer_contents = buffer.contents();
             let img2_offset = img1.width() * img1.height();
             let size = img1.width() * img1.height() + img2.width() * img2.height();
-            if buffer.length() < size as u64 {
+            if buffer.length() < size {
                 return Err("Image buffer is smaller than expected".into());
             }
-            let img_slice = unsafe { slice::from_raw_parts_mut(buffer_contents as *mut f32, size) };
+            let img_slice =
+                unsafe { slice::from_raw_parts_mut(buffer_contents.cast::<f32>().as_ptr(), size) };
             img1.iter()
                 .for_each(|(x, y, val)| img_slice[y * img1.width() + x] = *val as f32);
             img2.iter().for_each(|(x, y, val)| {
@@ -367,17 +417,18 @@ impl super::Device for Device {
         correlation_values: &mut Grid<Option<f32>>,
         correlation_threshold: f32,
     ) -> Result<(), GpuError> {
-        autoreleasepool(|| {
+        autoreleasepool(|_| {
             let buffers = self.buffers()?;
             let buffer = &buffers.buffer_out_corr;
-            self.flush_buffer_to_host(buffer);
+            self.flush_buffer_to_host(buffer)?;
             let buffer_contents = buffer.contents();
             let size = correlation_values.width() * correlation_values.height();
             let width = correlation_values.width();
-            if buffer.length() < size as u64 {
+            if buffer.length() < size {
                 return Err("Output correlation buffer is smaller than expected".into());
             }
-            let out_corr = unsafe { slice::from_raw_parts_mut(buffer_contents as *mut f32, size) };
+            let out_corr =
+                unsafe { slice::from_raw_parts_mut(buffer_contents.cast::<f32>().as_ptr(), size) };
             correlation_values
                 .par_iter_mut()
                 .for_each(|(x, y, out_point)| {
@@ -396,17 +447,18 @@ impl super::Device for Device {
         out_image: &mut Grid<Option<Match>>,
         correlation_values: &Grid<Option<f32>>,
     ) -> Result<(), GpuError> {
-        autoreleasepool(|| {
+        autoreleasepool(|_| {
             let buffers = self.buffers()?;
             let buffer = &buffers.buffer_out;
-            self.flush_buffer_to_host(buffer);
+            self.flush_buffer_to_host(buffer)?;
             let buffer_contents = buffer.contents();
             let size = out_image.width() * out_image.height() * 2;
             let width = out_image.width();
-            if buffer.length() < size as u64 {
+            if buffer.length() < size {
                 return Err("Output buffer is smaller than expected".into());
             }
-            let out_data = unsafe { slice::from_raw_parts_mut(buffer_contents as *mut i32, size) };
+            let out_data =
+                unsafe { slice::from_raw_parts_mut(buffer_contents.cast::<i32>().as_ptr(), size) };
             out_image.par_iter_mut().for_each(|(x, y, out_point)| {
                 let pos = 2 * (y * width + x);
                 let (match_x, match_y) = (out_data[pos], out_data[pos + 1]);
@@ -427,7 +479,7 @@ impl super::Device for Device {
     }
 
     fn destroy_buffers(&mut self) {
-        autoreleasepool(|| {
+        autoreleasepool(|_| {
             self.buffers = None;
         })
     }
@@ -435,7 +487,7 @@ impl super::Device for Device {
 
 impl Drop for DeviceContext {
     fn drop(&mut self) {
-        autoreleasepool(|| {
+        autoreleasepool(|_| {
             if let Some(device) = self.device.as_mut() {
                 device.pipelines.clear();
                 device.buffers = None;
@@ -455,7 +507,10 @@ impl ShaderModuleType {
         Self::CrossCheckFilter,
     ];
 
-    fn load(&self, library: &metal::Library) -> Result<metal::Function, GpuError> {
+    fn load(
+        &self,
+        library: &Retained<ProtocolObject<dyn MTLLibrary>>,
+    ) -> Result<Retained<ProtocolObject<dyn MTLFunction>>, GpuError> {
         let function_name = match self {
             Self::InitOutData => "init_out_data",
             Self::PrepareInitialdataSearchdata => "prepare_initialdata_searchdata",
@@ -464,9 +519,10 @@ impl ShaderModuleType {
             Self::CrossCorrelate => "cross_correlate",
             Self::CrossCheckFilter => "cross_check_filter",
         };
-        let function = library.get_function(function_name, None)?;
-
-        Ok(function)
+        match library.newFunctionWithName(&NSString::from_str(function_name)) {
+            Some(function) => Ok(function),
+            None => Err("Function not found in library".into()),
+        }
     }
 }
 
@@ -497,6 +553,12 @@ impl std::error::Error for GpuError {
 impl From<String> for GpuError {
     fn from(e: String) -> GpuError {
         Self::Metal(e)
+    }
+}
+
+impl From<Retained<objc2_foundation::NSError>> for GpuError {
+    fn from(e: Retained<objc2_foundation::NSError>) -> GpuError {
+        Self::Metal(e.to_string())
     }
 }
 

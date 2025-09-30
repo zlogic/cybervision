@@ -23,7 +23,11 @@ kamadak-exif = { version = "0.6", default-features = false }
 ash = { version = "0.38", default-features = false, features = ["loaded"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-metal = { version = "0.32", default-features = false, features = ["link"] }
+objc2-metal = { version = "0.3", default-features = false, features = ["MTLDevice", "MTLCommandQueue", "MTLCommandBuffer", "MTLComputePipeline", "MTLAllocation", "MTLResource", "MTLBuffer", "MTLLibrary", "MTLTypes", "MTLCommandEncoder", "MTLComputeCommandEncoder", "MTLBlitCommandEncoder", "dispatch2"] }
+objc2-core-graphics = { version = "0.3", default-features = false }
+objc2-foundation = { version = "*", default-features = false }
+objc2 = { version = "*", default-features = false }
+dispatch2 = { version = "*", default-features = false, features = ["block2"] }
 
 [profile.release]
 strip = true
