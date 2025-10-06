@@ -263,7 +263,7 @@ impl Device {
             blit_encoder.synchronizeResource(buffer.as_ref());
             blit_encoder.endEncoding();
             command_buffer.commit();
-            unsafe { command_buffer.waitUntilCompleted() };
+            command_buffer.waitUntilCompleted();
         }
         Ok(())
     }
@@ -277,9 +277,8 @@ impl Device {
         autoreleasepool(|_| {
             let mut result = HashMap::new();
             let source = include_bytes!("shaders/correlation.metallib");
-            let library = unsafe {
-                device.newLibraryWithData_error(&dispatch2::DispatchData::from_bytes(source))?
-            };
+            let library =
+                device.newLibraryWithData_error(&dispatch2::DispatchData::from_bytes(source))?;
             for module_type in ShaderModuleType::VALUES {
                 let function = module_type.load(&library)?;
                 let pipeline = device.newComputePipelineStateWithFunction_error(&function)?;
@@ -383,7 +382,7 @@ impl super::Device for Device {
             compute_encoder.endEncoding();
 
             command_buffer.commit();
-            unsafe { command_buffer.waitUntilCompleted() };
+            command_buffer.waitUntilCompleted();
 
             Ok(())
         })
