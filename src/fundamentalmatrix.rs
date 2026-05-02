@@ -4,7 +4,7 @@ use nalgebra::{
     ArrayStorage, DVector, DefaultAllocator, Dim, DimMin, DimMinimum, Dyn, Matrix, Matrix3,
     OMatrix, OVector, SMatrix, SVector, U1, U7, VecStorage, Vector3,
 };
-use rand::{Rng, SeedableRng, rngs::SmallRng};
+use rand::{RngExt, SeedableRng, rngs::SmallRng};
 use rayon::prelude::*;
 use roots::find_roots_cubic;
 use std::cmp::Ordering;

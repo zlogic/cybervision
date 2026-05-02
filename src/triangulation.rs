@@ -9,7 +9,7 @@ use nalgebra::{
     Vector2, Vector3, Vector4,
 };
 
-use rand::{Rng, SeedableRng, rngs::SmallRng, seq::SliceRandom};
+use rand::{RngExt, SeedableRng, rngs::SmallRng, seq::SliceRandom};
 use rayon::prelude::*;
 
 const BUNDLE_ADJUSTMENT_MAX_ITERATIONS: usize = 100;
