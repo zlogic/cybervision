@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: true
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Get current Rust version
       id: get-rust-version
@@ -20,7 +20,7 @@ jobs:
 
     - name: Cache Rust dependencies and artifacts
       id: cache-rust
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cargo/registry/index
@@ -46,7 +46,7 @@ jobs:
           os: ubuntu
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Get current Rust version
       id: get-rust-version
@@ -54,7 +54,7 @@ jobs:
 
     - name: Cache Rust dependencies and artifacts
       id: cache-rust
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cargo/registry/index
@@ -83,7 +83,7 @@ jobs:
       run: tar -cvjf cybervision-${{ matrix.os }}-${{ matrix.arch }}.tar.bz2 -C target/${{ matrix.arch }}-unknown-linux-gnu/release cybervision
 
     - name: Upload application
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: cybervision-${{ matrix.os }}-${{ matrix.arch }}
         path: cybervision-*.tar.bz2
@@ -97,7 +97,7 @@ jobs:
         arch: [aarch64, x86_64]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Get current Rust version
       id: get-rust-version
@@ -107,7 +107,7 @@ jobs:
 
     - name: Cache Rust dependencies and artifacts
       id: cache-rust
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~\.cargo\registry\index
@@ -129,7 +129,7 @@ jobs:
       run: Compress-Archive -Path .\target\${{ matrix.arch }}-pc-windows-msvc\release\cybervision.exe -DestinationPath cybervision-${{ runner.os }}-${{ matrix.arch }}.zip
 
     - name: Upload application
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: cybervision-${{ runner.os }}-${{ matrix.arch }}
         path: cybervision-*.zip
@@ -142,7 +142,7 @@ jobs:
         arch: [aarch64, x86_64]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Get current Rust version
       id: get-rust-version
@@ -150,7 +150,7 @@ jobs:
 
     - name: Cache Rust dependencies and artifacts
       id: cache-rust
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cargo/registry/index
@@ -176,13 +176,13 @@ jobs:
 
     - name: Upload metallib shaders
       if: matrix.arch == 'aarch64'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: shaders-metallib
         path: src/correlation/gpu/shaders/correlation.metallib
 
     - name: Upload application
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: cybervision-${{ runner.os }}-${{ matrix.arch }}
         path: cybervision-*.tar.bz2
@@ -192,7 +192,7 @@ jobs:
     needs: [ "build-linux", "build-windows", "build-macos" ]
     steps:
       - name: Merge all applications
-        uses: actions/upload-artifact/merge@v4
+        uses: actions/upload-artifact/merge@v7
         with:
           name: cybervision-all
           pattern: cybervision-*
