@@ -71,7 +71,7 @@ impl KeypointMatching {
                     .min_by(|(_, distance1), (_, distance2)| distance1.cmp(distance2))
             })
             .collect::<Vec<_>>();
-        point_matches.sort_by(|(_, distance1), (_, distance2)| distance1.cmp(distance2));
+        point_matches.sort_by_key(|(_, distance1)| *distance1);
 
         point_matches.iter().map(|(p, _)| *p).collect()
     }

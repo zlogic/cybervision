@@ -380,8 +380,7 @@ impl PointCorrelations<'_> {
             );
         }
         *out_point = best_match
-            .pos
-            .and_then(|m| best_match.corr.map(|corr| (m, corr)))
+            .pos.zip(best_match.corr)
     }
 
     fn get_epipolar_line(

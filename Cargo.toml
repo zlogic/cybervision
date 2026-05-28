@@ -14,7 +14,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 indicatif = { version = "0.18", default-features = false }
 rayon = "*"
 rand = { version = "0.10", default-features = false, features = ["std", "std_rng", "thread_rng"] }
-nalgebra = { version = "0.34", default-features = false, features = ["std", "macros"] }
+nalgebra = { version = "0.35", default-features = false, features = ["std", "macros"] }
 spade = { version = "2.15", default-features = false, features = ["std"] }
 roots = { version = "0.0.8", default-features = false }
 kamadak-exif = { version = "0.6", default-features = false }
