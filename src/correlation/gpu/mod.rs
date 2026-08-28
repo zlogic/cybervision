@@ -163,10 +163,9 @@ impl GpuContext<'_> {
     }
 
     pub fn get_device_name(&self) -> String {
-        self.device_context.get_device_name().map_or(
-            String::from("Error: device not initialized"),
-            |device_name| device_name,
-        )
+        self.device_context
+            .get_device_name()
+            .unwrap_or(String::from("Error: device not initialized"))
     }
 
     pub fn cross_check_filter(
