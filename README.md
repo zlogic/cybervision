@@ -25,7 +25,7 @@ Download a release distribution from [releases](/zlogic/cybervision/releases).
 Run cybervision:
 
 ```shell
-cybervision [--scale=<scale>] [--focal-length=<focal-length>] [--mode=<cpu|gpu>] [--interpolation=<none|delaunay>] [--projection=<parallel|perspective>] [--mesh=<plain|vertex-colors|texture-coordinates>] [--no-bundle-adjustment] [--max-points=<max_points>] <img1> <img2> [<imgn>] <output>
+cybervision [--scale=<scale>] [--focal-length=<focal-length>] [--mode=<cpu|gpu|gpu-low-power>] [--interpolation=<none|delaunay>] [--projection=<parallel|perspective>] [--mesh=<plain|vertex-colors|texture-coordinates>] [--no-bundle-adjustment] [--max-points=<max_points>] <img1> <img2> [<imgn>] <output>
 ```
 
 `--scale=<scale>` is an optional argument to specify a depth scale, for example `--scale=-10.0`.
@@ -34,7 +34,7 @@ cybervision [--scale=<scale>] [--focal-length=<focal-length>] [--mode=<cpu|gpu>]
 this should be the image's focal length in 35mm equivalent.
 If not specified, EXIF metadata will be used.
 
-`--mode=<cpu|gpu|gpu-low-power>` is an optional argument to specify a depth scale, for example `--mode=cpu` or `--mode=gpu`
+`--mode=<cpu|gpu|gpu-low-power>` is an optional argument to specify the hardware mode, for example `--mode=cpu` or `--mode=gpu`
  Results might be slightly different between modes because the implementation is not completely identical.
  `gpu-low-power` will prefer a low-power GPU (like an integrated one) and will reduce the batch size to prevent errors (at the cost of reduced performance).
 

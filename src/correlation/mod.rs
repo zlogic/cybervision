@@ -379,8 +379,7 @@ impl PointCorrelations<'_> {
                 corridor_range.clone(),
             );
         }
-        *out_point = best_match
-            .pos.zip(best_match.corr)
+        *out_point = best_match.pos.zip(best_match.corr)
     }
 
     fn get_epipolar_line(

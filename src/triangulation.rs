@@ -5,8 +5,8 @@ use std::{
 };
 
 use nalgebra::{
-    DMatrix, Matrix2x3, Matrix2x6, Matrix3, Matrix3x4, Matrix3x6, Matrix6, MatrixXx1, MatrixXx4,
-    Vector2, Vector3, Vector4,
+    DMatrix, DVector, Matrix1x2, Matrix2x3, Matrix2x6, Matrix3, Matrix3x4, Matrix3x6, Matrix6,
+    MatrixXx1, MatrixXx2, MatrixXx4, Vector2, Vector3, Vector4,
 };
 
 use rand::{RngExt, SeedableRng, rngs::SmallRng, seq::SliceRandom};
@@ -116,6 +116,8 @@ impl Triangulation {
             ProjectionMode::Affine => (
                 Some(AffineTriangulation {
                     surface,
+                    fundamental_matrix: None,
+                    tilt_angles: vec![None; 2],
                     remaining_images: vec![0, 1],
                 }),
                 None,
@@ -149,9 +151,13 @@ impl Triangulation {
         image_index: usize,
         k: &Matrix3<f64>,
         image_shape: (usize, usize),
+        tilt_angle: Option<f32>,
     ) {
         if let Some(perspective) = &mut self.perspective {
             perspective.set_image_data(image_index, k, image_shape)
+        }
+        if let Some(affine) = &mut self.affine {
+            affine.set_image_data(image_index, tilt_angle)
         }
     }
 
@@ -163,7 +169,8 @@ impl Triangulation {
         inliers: Vec<InlierMatch>,
         progress_listener: Option<&PL>,
     ) -> Result<(), TriangulationError> {
-        if self.affine.is_some() {
+        if let Some(affine) = &mut self.affine {
+            affine.set_fundamental_matrix(fundamental_matrix);
             Ok(())
         } else if let Some(perspective) = &mut self.perspective {
             perspective.add_image_pair_sparse(
@@ -261,10 +268,20 @@ impl Triangulation {
 
 struct AffineTriangulation {
     surface: Surface,
+    tilt_angles: Vec<Option<f32>>,
+    fundamental_matrix: Option<Matrix3<f64>>,
     remaining_images: Vec<usize>,
 }
 
 impl AffineTriangulation {
+    fn set_fundamental_matrix(&mut self, fundamental_matrix: &Matrix3<f64>) {
+        self.fundamental_matrix = Some(*fundamental_matrix);
+    }
+
+    fn set_image_data(&mut self, img_index: usize, tilt_angle: Option<f32>) {
+        self.tilt_angles[img_index] = tilt_angle;
+    }
+
     fn triangulate(
         &mut self,
         correlated_points: &CorrelatedPoints,
@@ -272,15 +289,34 @@ impl AffineTriangulation {
         if !self.surface.tracks.is_empty() {
             return Err("Triangulation of multiple affine image is not supported".into());
         }
+        let fundamental_matrix = if let Some(fundamental_matrix) = self.fundamental_matrix {
+            fundamental_matrix
+        } else {
+            return Err("Triangulation of affine projections requires a fundamental matrix".into());
+        };
 
-        let points3d = correlated_points
+        // Corridor is vertical when x>y in F*p1 (x has bigger impact in equation).
+        let corridor_vertical = fundamental_matrix[(0, 2)].abs() > fundamental_matrix[(1, 2)].abs();
+        let mut points3d = correlated_points
             .par_iter()
             .flat_map(|(x, y, matched_point)| {
                 let point1 = Point2D::new(x as u32, y as u32);
-                let point2 = matched_point.map(|p| p.0);
-                Self::triangulate_point(&point1, &point2)
+                let point2 = (*matched_point)?.0;
+                let point3d = Self::triangulate_point(&point1, &point2, corridor_vertical);
+
+                Some(Track {
+                    points: vec![Some(point1), Some(point2)],
+                    point3d: Some(point3d),
+                })
             })
             .collect::<Vec<_>>();
+
+        let scale = self.estimate_scale(points3d.as_slice())?;
+        points3d.iter_mut().for_each(|track| {
+            if let Some(point3d) = &mut track.point3d {
+                point3d.z *= scale;
+            }
+        });
 
         self.surface.tracks = points3d;
 
@@ -311,22 +347,78 @@ impl AffineTriangulation {
     }
 
     #[inline]
-    fn triangulate_point(p1: &Point2D<u32>, p2: &Option<Match>) -> Option<Track> {
-        if let Some(p2) = p2 {
-            let dx = p1.x as f64 - p2.x as f64;
-            let dy = p1.y as f64 - p2.y as f64;
-            let distance = (dx * dx + dy * dy).sqrt();
-            let point3d = Vector3::new(p1.x as f64, p1.y as f64, distance);
-
-            let track = Track {
-                points: vec![Some(*p1), Some(*p2)],
-                point3d: Some(point3d),
-            };
-
-            Some(track)
+    fn triangulate_point(p1: &Point2D<u32>, p2: &Match, corridor_vertical: bool) -> Vector3<f64> {
+        let dx = p2.x as f64 - p1.x as f64;
+        let dy = p2.y as f64 - p1.y as f64;
+        let distance = (dx * dx + dy * dy).sqrt();
+        let sign = if corridor_vertical {
+            dy.signum()
         } else {
-            None
-        }
+            dx.signum()
+        };
+        Vector3::new(p1.x as f64, p1.y as f64, sign * distance)
+    }
+
+    fn estimate_scale(&self, points3d: &[Track]) -> Result<f64, TriangulationError> {
+        // Detect scale based on tilt angle, as described in "Real scale (Tomasi) stuff.pdf".
+        let tilt_angle = match self.tilt_angles.as_slice() {
+            [Some(angle1), Some(angle2)] => *angle2 as f64 - *angle1 as f64,
+            _ => return Ok(1.0),
+        };
+
+        let tilt_angle_sin = tilt_angle.sin();
+        let tilt_angle_cos = tilt_angle.cos();
+
+        let fundamental_matrix = if let Some(fundamental_matrix) = self.fundamental_matrix {
+            fundamental_matrix
+        } else {
+            return Err(
+                "Estimation of affine projection scale requires a fundamental matrix".into(),
+            );
+        };
+
+        // Dense correlation only happens inside a narrow corridor (defined via fundamental matrix),
+        // so the surface only has points projected onto a common axis (RANSAC not necessary).
+        // Tilt axis is orthogonal to the epipole.
+        let ep1 = Vector2::new(-fundamental_matrix[(1, 2)], fundamental_matrix[(0, 2)]).normalize();
+        let point_projections = points3d
+            .par_iter()
+            .flat_map(|track| {
+                let (point1, point2) = if let [Some(p1), Some(p2)] = track.points.as_slice() {
+                    Some((p1, p2))
+                } else {
+                    None
+                }?;
+                let point3d = track.point3d?;
+                let point1 = Vector2::new(point1.x as f64, point1.y as f64);
+                let point2 = Vector2::new(point2.x as f64, point2.y as f64);
+                // Project both points onto epipole (single coordinate).
+                let proj1 = ep1.dot(&point1);
+                let proj2 = ep1.dot(&point2);
+                Some((point3d.z * tilt_angle_sin, proj2 - proj1 * tilt_angle_cos))
+            })
+            .collect::<Vec<_>>();
+
+        // Solve [1-cos(alpha) -z_i*sin(alpha)]'*[x_0 scale]=[x2_i-x1_i*cos(alpha)], to get the
+        // scale. x_0 shows the rotation axis, but is not used here.
+        let mut a = MatrixXx2::<f64>::zeros(point_projections.len());
+        a.row_iter_mut()
+            .zip(point_projections.iter())
+            .for_each(|(mut a_row, (z_sin_alpha, _))| {
+                a_row.copy_from(&Matrix1x2::new(1.0 - tilt_angle_cos, *z_sin_alpha));
+            });
+        let mut b = DVector::<f64>::zeros(point_projections.len());
+        b.row_iter_mut()
+            .zip(point_projections)
+            .for_each(|(mut b_row, (_, delta_x))| {
+                b_row[0] = delta_x;
+            });
+        let res = match a.svd(true, true).solve(&b, f64::EPSILON) {
+            Ok(res) => res,
+            Err(_) => return Err("Failed to solve scale equation with SVD".into()),
+        };
+
+        Ok(res.y.copysign(tilt_angle))
     }
 }
 

@@ -122,7 +122,6 @@ impl SourceImage {
                     }
                 } else if section.eq("[Stage]") {
                     if line.starts_with("StageT=") {
-                        // TODO: use rotation (see "Real scale (Tomasi) stuff.pdf")
                         result_metadata.tilt_angle = Self::tag_value(line)
                     }
                 } else if section.eq("[PrivateFei]")
@@ -220,17 +219,6 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
         crate::Mesh::TextureCoordinates => output::VertexMode::Texture,
     };
 
-    // Most 3D viewers don't display coordinates below 0, reset to default 1.0 - instead of image metadata
-    //let out_scale = img1.scale;
-    let out_scale = (1.0, 1.0, args.scale as f64);
-    let out_scale = match args.projection {
-        crate::ProjectionMode::Parallel => (
-            out_scale.0,
-            out_scale.1,
-            out_scale.2 * ((out_scale.0 + out_scale.1) / 2.0),
-        ),
-        crate::ProjectionMode::Perspective => out_scale,
-    };
     let focal_length = args.focal_length;
 
     let triangulation_projection = match args.projection {
@@ -306,6 +294,11 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
 
     let surface = reconstruction_task.complete_triangulation(linked_images, args.max_points)?;
     let img_filenames = reconstruction_task.img_filenames.to_owned();
+    let out_scale = match args.projection {
+        // Most 3D viewers don't display coordinates below 0, normalize to default 1.0 - instead of image metadata
+        crate::ProjectionMode::Parallel => (1.0, 1.0, args.scale as f64),
+        crate::ProjectionMode::Perspective => (1.0, 1.0, -1.0),
+    };
     reconstruction_task.output_surface(
         surface,
         out_scale,
@@ -366,11 +359,13 @@ impl ImageReconstruction {
             img1_index,
             &img1.calibration_matrix(self.focal_length),
             (img1.img.width() as usize, img1.img.height() as usize),
+            img1.tilt_angle,
         );
         self.triangulation.set_image_data(
             img2_index,
             &img2.calibration_matrix(self.focal_length),
             (img2.img.width() as usize, img2.img.height() as usize),
+            img2.tilt_angle,
         );
 
         let point_matches = self.match_keypoints(&img1, &img2);
