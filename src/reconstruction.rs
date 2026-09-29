@@ -294,11 +294,8 @@ pub fn reconstruct(args: &Args) -> Result<(), ReconstructionError> {
 
     let surface = reconstruction_task.complete_triangulation(linked_images, args.max_points)?;
     let img_filenames = reconstruction_task.img_filenames.to_owned();
-    let out_scale = match args.projection {
-        // Most 3D viewers don't display coordinates below 0, normalize to default 1.0 - instead of image metadata
-        crate::ProjectionMode::Parallel => (1.0, 1.0, args.scale as f64),
-        crate::ProjectionMode::Perspective => (1.0, 1.0, -1.0),
-    };
+    // Most 3D viewers don't display coordinates below 0, normalize to default 1.0 - instead of image metadata
+    let out_scale = 1.0;
     reconstruction_task.output_surface(
         surface,
         out_scale,
@@ -787,7 +784,7 @@ impl ImageReconstruction {
     fn output_surface(
         &mut self,
         surface: triangulation::Surface,
-        out_scale: (f64, f64, f64),
+        out_scale: f64,
         texture_filenames: &[String],
         output_filename: &str,
     ) -> Result<(), ReconstructionError> {

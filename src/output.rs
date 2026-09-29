@@ -566,7 +566,7 @@ pub struct MeshConfiguration {
 
 pub fn output<PL: ProgressListener>(
     surface: triangulation::Surface,
-    out_scale: (f64, f64, f64),
+    out_scale: f64,
     project_to_image: usize,
     images: Vec<RgbImage>,
     path: &str,
@@ -597,7 +597,6 @@ pub fn output<PL: ProgressListener>(
             &surface,
             image_dimensions.as_slice(),
             project_to_image,
-            out_scale.2.signum(),
         )?)
     };
 
@@ -649,7 +648,7 @@ struct PlyWriter {
     writer: BufWriter<File>,
     buffer: Vec<u8>,
     vertex_mode: VertexMode,
-    out_scale: (f64, f64, f64),
+    out_scale: f64,
     images: Vec<RgbImage>,
 }
 
@@ -658,7 +657,7 @@ impl PlyWriter {
         path: &str,
         images: Vec<RgbImage>,
         vertex_mode: VertexMode,
-        out_scale: (f64, f64, f64),
+        out_scale: f64,
     ) -> Result<PlyWriter, OutputError> {
         let writer = BufWriter::new(File::create(path)?);
         let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
@@ -736,9 +735,9 @@ impl MeshWriter for PlyWriter {
             return Err("Point has no 3D coordinates".into());
         };
         let (x, y, z) = (
-            p.x * self.out_scale.0,
-            -p.y * self.out_scale.1,
-            p.z * self.out_scale.2,
+            p.x * self.out_scale,
+            -p.y * self.out_scale,
+            -p.z * self.out_scale,
         );
         w.write_all(&x.to_be_bytes())?;
         w.write_all(&y.to_be_bytes())?;
@@ -777,7 +776,7 @@ struct ObjWriter {
     current_image: Option<usize>,
     buffer: Vec<u8>,
     vertex_mode: VertexMode,
-    out_scale: (f64, f64, f64),
+    out_scale: f64,
     images: Vec<RgbImage>,
     path: String,
 }
@@ -787,7 +786,7 @@ impl ObjWriter {
         path: &str,
         images: Vec<RgbImage>,
         vertex_mode: VertexMode,
-        out_scale: (f64, f64, f64),
+        out_scale: f64,
     ) -> Result<ObjWriter, OutputError> {
         let writer = BufWriter::new(File::create(path)?);
         let buffer = Vec::with_capacity(WRITE_BUFFER_SIZE);
@@ -916,9 +915,9 @@ impl MeshWriter for ObjWriter {
             return Err("Point has no 3D coordinates".into());
         };
         let (x, y, z) = (
-            p.x * self.out_scale.0,
-            -p.y * self.out_scale.1,
-            p.z * self.out_scale.2,
+            p.x * self.out_scale,
+            -p.y * self.out_scale,
+            -p.z * self.out_scale,
         );
         write!(w, "v {x} {y} {z}")?;
         if let Some(color) = color {
@@ -1018,7 +1017,6 @@ impl ImageWriter {
         surface: &triangulation::Surface,
         image_dimensions: &[(u32, u32)],
         project_to_image: usize,
-        scale: f64,
     ) -> Result<ImageWriter, OutputError> {
         let (range_x, range_y) = img_range(image_dimensions[project_to_image]);
         // Project all points onto the first image.
@@ -1053,7 +1051,7 @@ impl ImageWriter {
             .into_iter()
             .map(|projection| {
                 let projection = projection?;
-                let point_depth = projection.z * scale;
+                let point_depth = projection.z;
                 let projection =
                     Vector3::new(projection.x - min_x, projection.y - min_y, point_depth);
                 let dst_x = (projection.x.round() as usize).clamp(0, width - 1);
@@ -1136,7 +1134,7 @@ impl MeshWriter for ImageWriter {
                 } else {
                     return;
                 };
-                *value = map_depth((depth - min_depth) / (max_depth - min_depth))
+                *value = map_depth((max_depth - depth) / (max_depth - min_depth))
             });
         output_image.save(&self.path)?;
         Ok(())

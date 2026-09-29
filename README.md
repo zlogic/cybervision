@@ -25,10 +25,8 @@ Download a release distribution from [releases](/zlogic/cybervision/releases).
 Run cybervision:
 
 ```shell
-cybervision [--scale=<scale>] [--focal-length=<focal-length>] [--mode=<cpu|gpu|gpu-low-power>] [--interpolation=<none|delaunay>] [--projection=<parallel|perspective>] [--mesh=<plain|vertex-colors|texture-coordinates>] [--no-bundle-adjustment] [--max-points=<max_points>] <img1> <img2> [<imgn>] <output>
+cybervision [--focal-length=<focal-length>] [--mode=<cpu|gpu|gpu-low-power>] [--interpolation=<none|delaunay>] [--projection=<parallel|perspective>] [--mesh=<plain|vertex-colors|texture-coordinates>] [--no-bundle-adjustment] [--max-points=<max_points>] <img1> <img2> [<imgn>] <output>
 ```
-
-`--scale=<scale>` is an optional argument to specify a depth scale, for example `--scale=-10.0`.
 
 `--focal-length=<focal-length>` is an optional argument to specify a custom focal length for images with perspective projection, for example, `--focal-length=26`;
 this should be the image's focal length in 35mm equivalent.

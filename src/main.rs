@@ -37,7 +37,6 @@ pub enum Mesh {
 
 #[derive(Debug)]
 pub struct Args {
-    scale: f32,
     focal_length: Option<u32>,
     mode: HardwareMode,
     interpolation: InterpolationMode,
@@ -54,7 +53,6 @@ Arguments:\
 \n  <IMG_SRC>...  Source image(s)\
 \n  <IMG_OUT>     Output image\n\n\
 Options:\
-\n      --scale=<SCALE>                  Depth scale [default: -1]\
 \n      --focal-length=<FOCAL_LENGTH>    Focal length in 35mm equivalent\
 \n      --mode=<MODE>                    Hardware mode [default: gpu] [possible values: gpu, gpu-low-power, cpu]\
 \n      --interpolation=<INTERPOLATION>  Interpolation mode [default: delaunay] [possible values: delaunay, none]\
@@ -66,7 +64,6 @@ Options:\
 impl Args {
     fn parse() -> Args {
         let mut args = Args {
-            scale: -1.0,
             focal_length: None,
             mode: HardwareMode::Gpu,
             interpolation: InterpolationMode::Delaunay,
@@ -101,12 +98,7 @@ impl Args {
                     println!("{USAGE_INSTRUCTIONS}");
                     exit(2);
                 };
-                if name == "--scale" {
-                    match value.parse() {
-                        Ok(scale) => args.scale = scale,
-                        Err(err) => fail_with_error(name, value, &err),
-                    };
-                } else if name == "--focal-length" {
+                if name == "--focal-length" {
                     match value.parse() {
                         Ok(focal_length) => args.focal_length = Some(focal_length),
                         Err(err) => fail_with_error(name, value, &err),
